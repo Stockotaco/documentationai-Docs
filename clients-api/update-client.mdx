@@ -1,0 +1,111 @@
+---
+title: "Update Client"
+description: >-
+  Partially update fields on an existing Mythic Analytics client tenant.
+---
+
+## Update client: PATCH /clients/:id
+
+Partially update client fields. Only include the fields you want to change.
+
+### Path parameters
+
+<ParamField path="id" param-type="string" required="true" deprecated="false">
+  Client identifier.
+</ParamField>
+
+### Body fields
+
+<ParamField body="name" param-type="string" required="false" deprecated="false">
+  New display name (1-255 characters).
+</ParamField>
+
+<ParamField body="status" param-type="boolean" required="false" deprecated="false">
+  Set to `false` to disable the client.
+</ParamField>
+
+<ParamField body="domain" param-type="string" required="false" deprecated="false">
+  Updated embed domain. Pass `null` or `""` to clear.
+</ParamField>
+
+<ParamField body="email" param-type="string" required="false" deprecated="false">
+  Updated contact email. Pass `null` or `""` to clear.
+</ParamField>
+
+<ParamField body="phone" param-type="string" required="false" deprecated="false">
+  Updated phone number.
+</ParamField>
+
+<ParamField body="website" param-type="string" required="false" deprecated="false">
+  Updated website URL.
+</ParamField>
+
+<ParamField body="timezone" param-type="string" required="false" deprecated="false">
+  Updated IANA timezone.
+</ParamField>
+
+<ParamField body="global_name" param-type="string" required="false" deprecated="false">
+  Updated SDK global variable name. Must be a valid JS identifier. Pass `null` or `""` to clear.
+</ParamField>
+
+<ParamField body="company_id" param-type="string" required="false" deprecated="false">
+  Updated company identifier.
+</ParamField>
+
+<ParamField body="agency_id" param-type="string" required="false" deprecated="false">
+  Updated agency identifier.
+</ParamField>
+
+<ParamField body="api_metadata" param-type="object" required="false" deprecated="false">
+  Replace the metadata object.
+</ParamField>
+
+<ParamField body="ghl_location_id" param-type="string" required="false" deprecated="false">
+  Updated GoHighLevel location ID.
+</ParamField>
+
+<ParamField body="proxy_api_key" param-type="string" required="false" deprecated="false">
+  Updated proxy API key.
+</ParamField>
+
+### Example
+
+<Request show-lines="true">
+  ```bash
+  curl -X PATCH "https://api.mythic-analytics.com/api/v1/clients/acme-retail" \
+    -H "Authorization: Bearer YOUR_ADMIN_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "status": false,
+      "api_metadata": {
+        "plan": "enterprise",
+        "billingSuspended": true
+      }
+    }'
+  ```
+</Request>
+
+<Response show-lines="true" tabs="200">
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": "acme-retail",
+      "name": "Acme Retail",
+      "status": false,
+      "publishable_key": "pk_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+      "secret_key": "sk_f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3",
+      "domain": "acme-retail.com",
+      "email": "ops@acme-retail.com",
+      "api_metadata": {
+        "plan": "enterprise",
+        "billingSuspended": true
+      },
+      "created_at": "2024-03-21T18:42:15.291Z",
+      "updated_at": "2024-04-01T10:03:27.842Z"
+    }
+  }
+  ```
+</Response>
+
+Returns `400` if no valid fields are provided or validation fails. Returns `404` if client not found.

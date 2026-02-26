@@ -1,0 +1,87 @@
+---
+title: "Replace Tags"
+description: >-
+  Replace the entire tag set for a Mythic Analytics client, referencing
+  predefined tag templates with per-client parameters and trigger rules.
+---
+
+## Replace tags: PUT /clients/:id/tags
+
+Replace the entire tag set for a client. Tags reference predefined tag templates (GA4, Hotjar, custom scripts, etc.) and can include per-client parameters and trigger rules. After updating, the API rebuilds the client's remote configuration in KV.
+
+### Path parameters
+
+<ParamField path="id" param-type="string" required="true" deprecated="false">
+  Client identifier.
+</ParamField>
+
+### Body fields
+
+<ParamField body="tags" param-type="array of objects" required="true" deprecated="false">
+  Array of tag assignment objects. Replaces all existing tags.
+</ParamField>
+
+<ParamField body="tags[].tag_id" param-type="string" required="true" deprecated="false">
+  UUID of the predefined tag template to assign.
+</ParamField>
+
+<ParamField body="tags[].enabled" param-type="boolean" required="false" deprecated="false">
+  Whether the tag is active. Defaults to `true`.
+</ParamField>
+
+<ParamField body="tags[].params" param-type="object" required="false" deprecated="false">
+  Per-client parameters to pass to the tag template (e.g., measurement IDs). Defaults to `{}`.
+</ParamField>
+
+<ParamField body="tags[].trigger_rules" param-type="object" required="false" deprecated="false">
+  Conditional rules controlling when the tag fires. Defaults to `null` (always fires).
+</ParamField>
+
+### Example
+
+<Request show-lines="true">
+  ```bash
+  curl -X PUT "https://api.mythic-analytics.com/api/v1/clients/acme-retail/tags" \
+    -H "Authorization: Bearer YOUR_ADMIN_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "tags": [
+        {
+          "tag_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+          "enabled": true,
+          "params": { "measurement_id": "G-XXXXXXXXXX" }
+        },
+        {
+          "tag_id": "a23bc45d-67ef-8901-2345-6789abcdef01",
+          "enabled": true,
+          "params": {},
+          "trigger_rules": {
+            "url_contains": "/checkout"
+          }
+        }
+      ]
+    }'
+  ```
+</Request>
+
+<Response show-lines="true" tabs="200">
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "tag_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+        "enabled": true,
+        "params": { "measurement_id": "G-XXXXXXXXXX" },
+        "trigger_rules": null
+      },
+      {
+        "tag_id": "a23bc45d-67ef-8901-2345-6789abcdef01",
+        "enabled": true,
+        "params": {},
+        "trigger_rules": { "url_contains": "/checkout" }
+      }
+    ]
+  }
+  ```
+</Response>

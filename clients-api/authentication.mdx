@@ -1,0 +1,22 @@
+---
+title: Authentication
+description: >-
+  Authenticate requests to the Clients Management API using an admin API key
+  passed as a bearer token or query parameter.
+---
+
+## Authentication
+
+Every endpoint requires an admin API key. Pass it as a bearer token or query parameter.
+
+<ParamField header="Authorization" param-type="string" required="true" deprecated="false">
+  Bearer token. Format: `Bearer YOUR_ADMIN_KEY`.
+</ParamField>
+
+<ParamField query="admin_key" param-type="string" required="false" deprecated="false">
+  Alternative to the header for server-to-server or tooling scenarios. Do not expose in client-side code.
+</ParamField>
+
+<Callout kind="alert">
+  Never expose the admin key in client-side JavaScript, public repositories, or logs. Restrict access to trusted backend services and operations staff.
+</Callout>

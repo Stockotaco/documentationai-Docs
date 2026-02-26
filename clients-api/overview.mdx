@@ -1,0 +1,75 @@
+---
+title: Clients Management API
+description: >-
+  Create, list, update, and delete Mythic Analytics client tenants, manage tags
+  and snippets, and retrieve loader embed code via the Clients Management API.
+---
+
+## Overview
+
+Use the Clients Management API to manage Mythic Analytics client tenants. You can create tenants with auto-generated credentials, configure tags and snippets for remote injection, and retrieve loader snippets for embedding the SDK.
+
+## Base URL
+
+All endpoints share the same base URL and version prefix.
+
+```text
+https://api.mythic-analytics.com/api/v1
+```
+
+## Response envelope
+
+All endpoints return a JSON envelope.
+
+<ResponseField name="success" field-type="boolean" required="true" deprecated="false">
+  Whether the request succeeded.
+</ResponseField>
+
+<ResponseField name="data" field-type="object|array|null" required="false" deprecated="false">
+  Resource payload. Shape depends on the endpoint.
+</ResponseField>
+
+<ResponseField name="count" field-type="integer" required="false" deprecated="false">
+  Total number of matching resources. Present on list endpoints.
+</ResponseField>
+
+<ResponseField name="error" field-type="string|null" required="false" deprecated="false">
+  Error message on failed requests.
+</ResponseField>
+
+Example error response:
+
+```json
+{
+  "success": false,
+  "data": null,
+  "error": "Unauthorized",
+  "count": 0
+}
+```
+
+## Validation rules
+
+The API enforces the following formats:
+
+| Field | Pattern | Description |
+|-------|---------|-------------|
+| `id` | `^[a-zA-Z0-9_-]{1,255}$` | Alphanumeric, hyphens, underscores |
+| `name` | 1-255 characters | Required display name |
+| `domain` | Valid domain format | e.g., `acme-retail.com` |
+| `email` | Standard email format | e.g., `ops@acme.com` |
+| `global_name` | Valid JS identifier | e.g., `acmeRetail`, `_myApp` |
+
+## Error handling
+
+| Status | Meaning |
+|--------|---------|
+| `400` | Invalid JSON, missing required fields, or validation error |
+| `401` | Admin key missing or invalid |
+| `404` | Client not found |
+| `409` | Conflict — duplicate `id`, `global_name`, or `domain` |
+| `500` | Internal server error |
+
+<Callout kind="info">
+  Check both the HTTP status code and the `error` field in the response body for programmatic error handling.
+</Callout>
