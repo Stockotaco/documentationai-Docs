@@ -1,0 +1,459 @@
+---
+title: JavaScript SDK
+description: Integrate the Mythic Analytics JavaScript SDK in your frontend, initialize tracking, configure options, and use core methods like capture and identify.
+---
+
+## Overview
+
+Use the Mythic Analytics JavaScript SDK in your frontend to send events, page views, and user identity data from the browser. The SDK wraps the Mythic ingestion APIs and manages batching, session details, and remote configuration.
+
+Key capabilities:
+
+- Initialize with a publishable key.
+- Track events with `capture` and `pageview`.
+- Associate events with users using `identify` and `alias`.
+- Manage sessions, super properties, and consent.
+- Control behavior via configuration and runtime methods.
+
+<Callout kind="info">
+
+The JavaScript SDK uses a publishable key that starts with `pk_`. This key is safe to expose in client-side code. Do not use any server-side or admin keys in the browser.
+
+</Callout>
+
+## Install or load the SDK
+
+Load the SDK either via a script tag or by installing from npm and bundling it with your app.
+
+<Steps>
+
+  <Step title="Load the script or install from npm" icon="download">
+
+  Use a script tag for quick embeds:
+
+  ```html
+  <script
+    src="https://cdn.mythic-analytics.com/sdk/latest/mythic.min.js"
+    crossorigin="anonymous"
+  ></script>
+  ```
+
+  Or install from npm for bundlers:
+
+  ```bash
+  npm install @mythic/analytics
+  # or
+  yarn add @mythic/analytics
+  ```
+
+  Success looks like `window.Mythic` being defined (for the script tag) or a successful import in your JavaScript bundle.
+
+  </Step>
+
+  <Step title="Import or reference the global" icon="code">
+
+  Use the pattern that matches your setup.
+
+  <CodeGroup tabs="Script tag,ES module,CommonJS">
+
+  ```html
+  <!-- Script tag: Mythic is available as window.Mythic -->
+  <script>
+    window.mythic = window.Mythic.init("pk_live_4eC39HqLyjWDarjtT1zdp7dc");
+  </script>
+  ```
+
+  ```javascript
+  // ES module bundler
+  import { init } from "@mythic/analytics";
+
+  const mythic = init("pk_live_4eC39HqLyjWDarjtT1zdp7dc");
+  ```
+
+  ```javascript
+  // CommonJS
+  const { init } = require("@mythic/analytics");
+
+  const mythic = init("pk_live_4eC39HqLyjWDarjtT1zdp7dc");
+  ```
+
+  </CodeGroup>
+
+  After this step, you should have a `mythic` instance you can call methods on, such as `mythic.capture(...)`.
+
+  </Step>
+
+</Steps>
+
+## Initialize the SDK
+
+Initialize the SDK with your publishable key and an optional configuration object.
+
+```javascript
+import { init } from "@mythic/analytics";
+
+const mythic = init("pk_live_4eC39HqLyjWDarjtT1zdp7dc", {
+  api_host: "https://mythic-analytics.gulp.workers.dev",
+  debug: true,
+  batch_size: 20,
+  autocapture: true,
+  allowReidentification: false,
+  hipaa: true,
+});
+```
+
+### `init(key, config?)`
+
+Use `init` to create a configured Mythic client instance.
+
+<ParamField body="key" param-type="string" required="true" show-location="false">
+
+Publishable project key starting with `pk_`. The SDK includes this key in ingestion and config requests.
+
+</ParamField>
+
+<ParamField body="config" param-type="object" required="false" show-location="false">
+
+Optional configuration overrides for network endpoints, batching, consent behavior, and other runtime flags.
+
+</ParamField>
+
+Success looks like:
+
+- No thrown errors during initialization.
+- Network calls to `/decide?key=pk_...&v=2` for remote config.
+- Subsequent calls like `mythic.capture` enqueue and send events to `/e?key=pk_...`.
+
+## Core tracking methods
+
+This section covers the most commonly used methods on the Mythic instance. Each example assumes you have already created `const mythic = init(...)`.
+
+### `capture(event, properties?)`
+
+Track a custom event with optional properties.
+
+<ParamField body="event" param-type="string" required="true" show-location="false">
+
+Event name, such as `Signup started` or `Checkout completed`.
+
+</ParamField>
+
+<ParamField body="properties" param-type="object" required="false" show-location="false">
+
+Additional event properties. Use primitive values, arrays, or nested objects that can be serialized to JSON.
+
+</ParamField>
+
+```javascript
+mythic.capture("Signup started", {
+  plan: "pro_monthly",
+  referrer: document.referrer,
+  experiment_variant: "landing_b",
+});
+```
+
+### `pageview(properties?)`
+
+Send a page view event, typically on route changes or initial load.
+
+<ParamField body="properties" param-type="object" required="false" show-location="false">
+
+Optional properties describing the page view. The SDK also infers context such as URL and title.
+
+</ParamField>
+
+```javascript
+// On initial load
+mythic.pageview({
+  page: "/pricing",
+  campaign: "spring_promo",
+});
+
+// In a SPA router hook
+router.afterEach((to) => {
+  mythic.pageview({ page: to.fullPath });
+});
+```
+
+### `identify(userId, properties?)`
+
+Associate the current browser with a known user id and optional traits.
+
+<ParamField body="userId" param-type="string" required="true" show-location="false">
+
+Stable identifier for the authenticated user, for example `usr_a1b2c3d4`.
+
+</ParamField>
+
+<ParamField body="properties" param-type="object" required="false" show-location="false">
+
+User properties such as email, plan, or role. The SDK sends these as part of subsequent events.
+
+</ParamField>
+
+```javascript
+// After login or when user info becomes available
+mythic.identify("usr_7f3c92d8", {
+  email: "jane@acme.com",
+  full_name: "Jane Chen",
+  plan: "enterprise",
+  team_id: "team_b84f21e7",
+});
+```
+
+### `reset(options?)`
+
+Clear local user and session state, for example on logout. This typically resets the distinct id and clears super properties.
+
+<ParamField body="options" param-type="object" required="false" show-location="false">
+
+Optional flags controlling what to reset. When omitted, Mythic clears user and super property state for the current device/session.
+
+</ParamField>
+
+```javascript
+// On logout
+mythic.reset();
+
+// Or with options if available in your SDK version
+mythic.reset({
+  clear_super_properties: true,
+  preserve_device_id: true,
+});
+```
+
+After `reset`, calls to `capture` use a new anonymous distinct id until you call `identify` again.
+
+### `flush()`
+
+Force sending any queued events immediately. Use this before unloading the page when you need to minimize data loss.
+
+```javascript
+window.addEventListener("beforeunload", () => {
+  mythic.flush();
+});
+```
+
+### `opt_in()` and `opt_out()`
+
+Control whether the SDK sends events for the current user. When opted out, Mythic stops sending events until you opt in again.
+
+```javascript
+// User accepts analytics tracking
+mythic.opt_in();
+
+// User declines analytics tracking
+mythic.opt_out();
+```
+
+<Callout kind="info">
+
+Use `opt_out` together with consent dialogs to respect user privacy choices. Combined with `grantConsent` and `revokeConsent`, this lets you coordinate app-level and SDK-level consent.
+
+</Callout>
+
+## Configuration highlights
+
+The `config` object you pass to `init` controls network behavior, logging, consent defaults, and auto-capture.
+
+### Network and batching
+
+<ParamField body="api_host" param-type="string" required="false" show-location="false">
+
+Base URL for network calls. Defaults to `https://mythic-analytics.gulp.workers.dev`. Change this if you run Mythic behind a proxy or custom domain.
+
+</ParamField>
+
+<ParamField body="batch_size" param-type="number" required="false" show-location="false">
+
+Approximate number of events to batch before sending to the `/e` endpoint. Smaller values send more frequently; larger values reduce network overhead.
+
+</ParamField>
+
+```javascript
+const mythic = init("pk_live_4eC39HqLyjWDarjtT1zdp7dc", {
+  api_host: "https://analytics.acme.com",
+  batch_size: 10,
+});
+```
+
+### Debugging
+
+<ParamField body="debug" param-type="boolean" required="false" show-location="false">
+
+Enable verbose logging in the console, including queued events, network requests, and configuration decisions. Useful while integrating or debugging ingestion issues.
+
+</ParamField>
+
+```javascript
+const mythic = init("pk_live_4eC39HqLyjWDarjtT1zdp7dc", {
+  debug: true,
+});
+```
+
+### Autocapture
+
+<ParamField body="autocapture" param-type="boolean" required="false" show-location="false">
+
+Toggle automatic capture of built-in events, such as page views and common DOM interactions, depending on your Mythic project configuration. When `false`, only explicit calls like `capture` and `pageview` are sent.
+
+</ParamField>
+
+```javascript
+const mythic = init("pk_live_4eC39HqLyjWDarjtT1zdp7dc", {
+  autocapture: false,
+});
+```
+
+### Identity and re-identification
+
+<ParamField body="allowReidentification" param-type="boolean" required="false" show-location="false">
+
+Control whether calling `identify` with a new user id on the same device is allowed to create a new identity link. When `false`, the SDK preserves the first identity to avoid accidental merges.
+
+</ParamField>
+
+```javascript
+const mythic = init("pk_live_4eC39HqLyjWDarjtT1zdp7dc", {
+  allowReidentification: false,
+});
+```
+
+### Global namespace
+
+<ParamField body="global_name" param-type="string" required="false" show-location="false">
+
+Global variable name to attach the SDK instance to when loaded via script tag. Defaults to something like `Mythic`. Override to avoid conflicts with other libraries.
+
+</ParamField>
+
+```html
+<script
+  src="https://cdn.mythic-analytics.com/sdk/latest/mythic.min.js"
+  crossorigin="anonymous"
+></script>
+<script>
+  // Attach to window.analytics instead of window.Mythic
+  window.analytics = window.Mythic.init("pk_live_4eC39HqLyjWDarjtT1zdp7dc", {
+    global_name: "analytics",
+  });
+</script>
+```
+
+### HIPAA filtering
+
+<ParamField body="hipaa" param-type="boolean" required="false" show-location="false">
+
+Enable built-in filtering intended to help avoid sending protected health information (PHI) from the browser. When `true`, Mythic applies a `hipaaFilter` to outgoing events.
+
+</ParamField>
+
+```javascript
+const mythic = init("pk_live_4eC39HqLyjWDarjtT1zdp7dc", {
+  hipaa: true,
+});
+```
+
+<Callout kind="alert">
+
+HIPAA filtering reduces the risk of sending sensitive data but does not guarantee compliance. Review your event schemas and legal requirements with your compliance team.
+
+</Callout>
+
+## Consent and privacy controls
+
+Coordinate SDK-level consent with your own UI to meet privacy requirements.
+
+### `grantConsent()` and `revokeConsent()`
+
+Use these methods to record consent decisions and adjust SDK behavior according to your project's consent model.
+
+```javascript
+// User accepts analytics in your cookie banner
+mythic.grantConsent();
+
+// User withdraws consent later
+mythic.revokeConsent();
+```
+
+### Combining with `opt_out()`
+
+`opt_out` stops event delivery; `grantConsent` and `revokeConsent` track consent state. Combine them for stricter behavior:
+
+```javascript
+function onConsentAccepted() {
+  mythic.grantConsent();
+  mythic.opt_in();
+}
+
+function onConsentDeclined() {
+  mythic.revokeConsent();
+  mythic.opt_out();
+}
+```
+
+When configured this way:
+
+- No events are sent until the user accepts.
+- If the user later revokes consent, Mythic stops sending events.
+
+## Troubleshooting
+
+Use this section to debug common issues when events do not appear in Mythic.
+
+### No events appearing in Mythic
+
+- Confirm `init` is called with a valid publishable key:
+
+  ```javascript
+  const mythic = init("pk_live_4eC39HqLyjWDarjtT1zdp7dc");
+  ```
+
+- Enable debug logs and check the console:
+
+  ```javascript
+  const mythic = init("pk_live_4eC39HqLyjWDarjtT1zdp7dc", { debug: true });
+  ```
+
+  You should see logs when you call `capture` or `pageview` and when events are sent.
+
+- Verify that `mythic.capture` is actually invoked in response to user actions or route changes.
+
+### Network requests blocked or failing
+
+- Open your browser network panel and filter by `mythic` or `/e?key=`:
+
+  - You should see requests to `/decide?key=pk_...&v=2` and `/e?key=pk_...`.
+  - If requests fail with `4xx`, check that the key is correct and not expired.
+  - If requests fail with `5xx`, retry later or contact support with request ids.
+
+- If requests are blocked by ad blockers or CSP:
+
+  - Serve Mythic via a custom subdomain allowed by your CSP.
+  - Update the `api_host` config to match your custom endpoint.
+
+### Wrong host or key
+
+If you accidentally configured the wrong `api_host` or key:
+
+```javascript
+// Wrong
+const mythic = init("pk_test_wrong_key", {
+  api_host: "https://localhost:3000",
+});
+```
+
+- Fix the configuration and redeploy:
+
+  ```javascript
+  const mythic = init("pk_live_4eC39HqLyjWDarjtT1zdp7dc", {
+    api_host: "https://mythic-analytics.gulp.workers.dev",
+  });
+  ```
+
+- In the browser, confirm:
+
+  - Requests go to the expected host.
+  - The `key` query parameter in `/e` and `/decide` matches your Mythic project key.
+
+Once configured correctly, you should see events arriving in Mythic within a few seconds of triggering `capture` or `pageview`.

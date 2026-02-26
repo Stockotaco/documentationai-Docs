@@ -148,6 +148,40 @@
             "icon": "history"
           }
         ]
+      },
+      {
+        "tab": "Clients management api v2",
+        "icon": "building-2",
+        "groups": [
+          {
+            "group": "Overview",
+            "icon": "file-text",
+            "pages": [
+              {
+                "title": "Clients management API v2",
+                "path": "clients-api-v2",
+                "icon": "file-text"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "JavaScript SDK",
+        "icon": "braces",
+        "groups": [
+          {
+            "group": "Overview",
+            "icon": "file-text",
+            "pages": [
+              {
+                "title": "JavaScript SDK",
+                "path": "javascript-sdk",
+                "icon": "braces"
+              }
+            ]
+          }
+        ]
       }
     ]
   }
