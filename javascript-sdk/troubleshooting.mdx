@@ -1,0 +1,49 @@
+---
+title: Troubleshooting
+description: >-
+  Debug common issues with the Mythic Analytics JavaScript SDK including
+  missing events, blocked requests, and configuration problems.
+---
+
+## Troubleshooting
+
+### No events appearing
+
+<Steps>
+  <Step title="Verify initialization" icon="check-circle" titleType="p">
+    Confirm `init` is called with a valid publishable key:
+
+    ```javascript
+    const mythic = init("pk_your_publishable_key");
+    ```
+  </Step>
+
+  <Step title="Enable debug logging" icon="terminal" titleType="p">
+    ```javascript
+    const mythic = init("pk_your_publishable_key", { debug: true });
+    ```
+
+    You should see logs when `capture` or `pageview` fires and when events are sent.
+  </Step>
+
+  <Step title="Check network requests" icon="globe" titleType="p">
+    Open the browser network panel and filter by `/e?key=` or `/decide?key=`. Verify requests reach the expected `api_host`.
+  </Step>
+</Steps>
+
+### Network requests blocked
+
+- If blocked by ad blockers or CSP, serve Mythic via a custom subdomain and update `api_host`.
+- If requests fail with `4xx`, check that the key is correct and not expired.
+- If requests fail with `5xx`, retry later or contact support.
+
+### Wrong host or key
+
+```javascript
+// Fix the configuration and redeploy
+const mythic = init("pk_your_correct_key", {
+  api_host: "https://analytics.yourdomain.com",
+});
+```
+
+Verify in the network panel that the `key` query parameter matches your Mythic project key.

@@ -1,0 +1,58 @@
+---
+title: Super Properties
+description: >-
+  Manage super properties that are automatically merged into every event
+  captured by the Mythic Analytics SDK.
+---
+
+## Super properties
+
+Super properties are automatically merged into every event. Use them for values that should be attached to all subsequent events, like a user's subscription plan or A/B test variant.
+
+### `set(properties)`
+
+Set one or more super properties. Overwrites existing values.
+
+```javascript
+mythic.set({ plan: "enterprise", team_size: 50 });
+```
+
+### `set_once(properties)`
+
+Set super properties only if they do not already exist.
+
+```javascript
+mythic.set_once({ first_seen_campaign: "spring_2024" });
+```
+
+### `unset(property)`
+
+Remove a single super property.
+
+```javascript
+mythic.unset("temporary_flag");
+```
+
+### `get_property(property)`
+
+Retrieve a single super property value.
+
+```javascript
+const plan = mythic.get_property("plan"); // "enterprise"
+```
+
+### `get_super_properties()`
+
+Retrieve all super properties as an object.
+
+```javascript
+const allProps = mythic.get_super_properties();
+```
+
+### `clear_super_properties()`
+
+Remove all super properties.
+
+```javascript
+mythic.clear_super_properties();
+```

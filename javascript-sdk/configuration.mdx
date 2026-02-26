@@ -1,0 +1,224 @@
+---
+title: Configuration Reference
+description: >-
+  Complete reference for all Mythic Analytics JavaScript SDK configuration
+  options including network, auto-capture, privacy, consent, HIPAA, and more.
+---
+
+## Configuration reference
+
+The full set of options you can pass to `init(key, config)`.
+
+### Network and batching
+
+<ParamField body="api_host" param-type="string" required="false" show-location="false" deprecated="false">
+  Base URL for API calls. Default: `https://mythic-analytics.gulp.workers.dev`. Change this if you use a custom domain or proxy.
+</ParamField>
+
+<ParamField body="batch_size" param-type="number" required="false" show-location="false" deprecated="false">
+  Number of events to queue before sending. Default: `10`.
+</ParamField>
+
+<ParamField body="flush_interval" param-type="number" required="false" show-location="false" deprecated="false">
+  Milliseconds between automatic flushes. Default: `2000`.
+</ParamField>
+
+<ParamField body="xhr_headers" param-type="object" required="false" show-location="false" deprecated="false">
+  Custom headers to include with every network request.
+</ParamField>
+
+### Auto-capture
+
+<ParamField body="autocapture" param-type="boolean|object" required="false" show-location="false" deprecated="false">
+  Enable automatic capture of clicks, form submissions, and DOM interactions. Default: `true`. Pass an object to limit to specific element types: `{ elements: ['links', 'buttons', 'forms'] }`.
+</ParamField>
+
+<ParamField body="capture_pageview" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Auto-capture a `$pageview` event on page load. Default: `true`.
+</ParamField>
+
+<ParamField body="capture_spa_pageview" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Auto-capture page views on SPA navigation (History API pushState/replaceState). Default: `true`.
+</ParamField>
+
+<ParamField body="capture_pageleave" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Auto-capture a `$pageleave` event with time-on-page and exit intent data. Default: `true`.
+</ParamField>
+
+<ParamField body="capture_utm" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Auto-capture UTM parameters and advertising click IDs from the URL. Default: `true`.
+</ParamField>
+
+<ParamField body="capture_copied_text" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Track text copied to clipboard. Default: `false`.
+</ParamField>
+
+### Privacy and persistence
+
+<ParamField body="persistence" param-type="string" required="false" show-location="false" deprecated="false">
+  Storage strategy. Options: `'localStorage'`, `'cookie'`, `'memory'`, `'localStorage+cookie'`. Default: `'localStorage+cookie'`.
+</ParamField>
+
+<ParamField body="persistence_name" param-type="string" required="false" show-location="false" deprecated="false">
+  Custom prefix for storage keys. Defaults to `{globalName}_{key}_`.
+</ParamField>
+
+<ParamField body="cookie_name" param-type="string" required="false" show-location="false" deprecated="false">
+  Custom cookie name when using cookie persistence.
+</ParamField>
+
+<ParamField body="cookie_expiration" param-type="number" required="false" show-location="false" deprecated="false">
+  Cookie lifetime in days. Default: `365`.
+</ParamField>
+
+<ParamField body="cross_subdomain_cookie" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Share cookies across subdomains. Default: `true`.
+</ParamField>
+
+<ParamField body="secure_cookie" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Set the `Secure` flag on cookies. Default: `true` on HTTPS.
+</ParamField>
+
+<ParamField body="respect_dnt" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Honor the browser's Do Not Track setting. Default: `false`.
+</ParamField>
+
+<ParamField body="opt_out_capturing_by_default" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Start with tracking disabled. Requires explicit `opt_in()`. Default: `false`.
+</ParamField>
+
+### Consent
+
+<ParamField body="requireConsent" param-type="boolean" required="false" show-location="false" deprecated="false">
+  When `true`, no events are sent until `grantConsent()` is called. Default: `false`.
+</ParamField>
+
+<ParamField body="autoConsentMode" param-type="boolean|object" required="false" show-location="false" deprecated="false">
+  Automatically sync consent from Google Consent Mode v2 via the `dataLayer`. When enabled, forces `requireConsent: true`. Pass an object for custom settings: `{ enabled: true, consentParam: 'analytics_storage', dataLayerName: 'dataLayer' }`.
+</ParamField>
+
+### Identity
+
+<ParamField body="allowReidentification" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Allow calling `identify` with a different user ID on the same device. Default: `true`. Set to `false` to preserve the first identity and prevent accidental merges.
+</ParamField>
+
+### Session
+
+<ParamField body="session_timeout" param-type="number" required="false" show-location="false" deprecated="false">
+  Session timeout in milliseconds. After this period of inactivity, a new session starts. Default: 30 minutes.
+</ParamField>
+
+### Debugging
+
+<ParamField body="debug" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Enable verbose console logging. Default: `false`.
+</ParamField>
+
+<ParamField body="verbose" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Even more detailed logging (includes internal state). Default: `false`.
+</ParamField>
+
+<ParamField body="test_mode" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Log events to console instead of sending them. Useful for development. Default: `false`.
+</ParamField>
+
+### HIPAA compliance
+
+<ParamField body="hipaa" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Enable HIPAA mode. Applies a `hipaaFilter` to all outgoing events and force-disables autocapture, form identification, geolocation, cross-domain tracking, cookies, AI chat, and other features that could expose PHI. Default: `false`.
+</ParamField>
+
+<ParamField body="max_storage_duration" param-type="number" required="false" show-location="false" deprecated="false">
+  Maximum hours to retain data in local storage. Only relevant in HIPAA mode. Default: `24` (in HIPAA mode).
+</ParamField>
+
+<Callout kind="alert">
+  HIPAA mode reduces the risk of sending sensitive data but does not guarantee compliance. Review your event schemas and legal requirements with your compliance team.
+</Callout>
+
+### Masking
+
+<ParamField body="mask_all_text" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Mask text content in autocaptured events. Force-enabled in HIPAA mode.
+</ParamField>
+
+<ParamField body="mask_all_element_attributes" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Mask element attributes in autocaptured events. Force-enabled in HIPAA mode.
+</ParamField>
+
+### Callbacks
+
+<ParamField body="loaded" param-type="function" required="false" show-location="false" deprecated="false">
+  Called with the Mythic instance after initialization completes. Signature: `(instance) => void`.
+</ParamField>
+
+<ParamField body="before_send" param-type="function" required="false" show-location="false" deprecated="false">
+  Transform or filter events before sending. Return the event to send it, or `null` to drop it. Signature: `(event) => event | null`.
+</ParamField>
+
+<ParamField body="sanitize_properties" param-type="function" required="false" show-location="false" deprecated="false">
+  Modify properties before they are attached to an event. Signature: `(properties, eventName) => properties`.
+</ParamField>
+
+<ParamField body="on_xhr_error" param-type="function" required="false" show-location="false" deprecated="false">
+  Called when a network request fails. Signature: `(error) => void`.
+</ParamField>
+
+### Advanced auto-tracking
+
+<ParamField body="auto_form_identify" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Automatically identify users from email fields on form submission. Default: `true`.
+</ParamField>
+
+<ParamField body="auto_input_capture" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Capture email addresses as they are typed into input fields. Default: `true`.
+</ParamField>
+
+<ParamField body="auto_booking_listener" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Automatically detect and track booking widget interactions (Calendly, etc.). Default: `false`.
+</ParamField>
+
+<ParamField body="auto_survey_tracking" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Automatically track survey widget responses. Default: `false`.
+</ParamField>
+
+<ParamField body="auto_network_intercept" param-type="boolean|object" required="false" show-location="false" deprecated="false">
+  Intercept fetch/XHR requests to specified endpoints and capture them as events. Default: `false`.
+</ParamField>
+
+<ParamField body="auto_framework_extract" param-type="boolean|object" required="false" show-location="false" deprecated="false">
+  Extract page metadata from frameworks (Nuxt, Next.js, React, Vue, Angular). Default: `false`. Pass `{ framework: 'auto' }` for auto-detection.
+</ParamField>
+
+<ParamField body="auto_gtm_sync" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Sync events to Google Tag Manager's `dataLayer`. Default: `true`.
+</ParamField>
+
+<ParamField body="wait_for_page_data" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Buffer events until framework extraction completes. Default: `false`.
+</ParamField>
+
+### Web Vitals
+
+<ParamField body="web_vitals" param-type="boolean|object" required="false" show-location="false" deprecated="false">
+  Capture Core Web Vitals (LCP, FID, CLS, FCP, TTFB, INP). Default: `false`. Pass an object for fine-grained control: `{ enabled: true, metrics: ['LCP', 'CLS', 'INP'], sample_rate: 0.5 }`.
+</ParamField>
+
+### Geolocation
+
+<ParamField body="geolocation" param-type="boolean|object" required="false" show-location="false" deprecated="false">
+  Enrich events with geolocation data. Default: enabled at city level. Pass an object for control: `{ enabled: true, level: 'country' | 'region' | 'city', cache_duration: 3600 }`. Set to `false` to disable.
+</ParamField>
+
+### Cross-domain tracking
+
+<ParamField body="cross_domain_tracking" param-type="boolean|object" required="false" show-location="false" deprecated="false">
+  Track users across domains by decorating links with session IDs. Opt-in only. Default: `false`. Pass `{ enabled: true, domains: ['app.example.com', 'docs.example.com'] }`.
+</ParamField>
+
+### Rate limiting
+
+<ParamField body="rate_limiting" param-type="object" required="false" show-location="false" deprecated="false">
+  Client-side rate limiting. Example: `{ events_per_second: 10, events_burst_limit: 50 }`.
+</ParamField>

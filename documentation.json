@@ -228,13 +228,60 @@
         "icon": "braces",
         "groups": [
           {
-            "group": "Overview",
-            "icon": "file-text",
+            "group": "Getting Started",
+            "icon": "rocket",
             "pages": [
               {
-                "title": "JavaScript SDK",
-                "path": "javascript-sdk",
+                "title": "Overview",
+                "path": "javascript-sdk/overview",
                 "icon": "braces"
+              },
+              {
+                "title": "Tracking Methods",
+                "path": "javascript-sdk/tracking-methods",
+                "icon": "activity"
+              }
+            ]
+          },
+          {
+            "group": "Methods",
+            "icon": "code",
+            "pages": [
+              {
+                "title": "Super Properties",
+                "path": "javascript-sdk/super-properties",
+                "icon": "layers"
+              },
+              {
+                "title": "Consent & Privacy",
+                "path": "javascript-sdk/consent-privacy",
+                "icon": "shield"
+              },
+              {
+                "title": "Utility Methods",
+                "path": "javascript-sdk/utility-methods",
+                "icon": "wrench"
+              }
+            ]
+          },
+          {
+            "group": "Reference",
+            "icon": "book-open",
+            "pages": [
+              {
+                "title": "Configuration",
+                "path": "javascript-sdk/configuration",
+                "icon": "settings"
+              },
+              {
+                "title": "Auto-captured Events",
+                "path": "javascript-sdk/auto-captured-events",
+                "icon": "zap"
+              },
+              {
+                "title": "Troubleshooting",
+                "path": "javascript-sdk/troubleshooting",
+                "icon": "alert-triangle"
               }
             ]
           }

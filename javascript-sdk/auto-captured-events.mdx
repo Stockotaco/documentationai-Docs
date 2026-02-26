@@ -1,0 +1,42 @@
+---
+title: Auto-captured Events
+description: >-
+  Reference for all events automatically captured by the Mythic Analytics SDK
+  including page views, attribution tracking, and auto-included context properties.
+---
+
+## Auto-captured events
+
+The SDK automatically captures these events when the corresponding config options are enabled:
+
+| Event | Description | Config |
+|-------|-------------|--------|
+| `$pageview` | Page load with URL, title, referrer, and performance metrics | `capture_pageview` |
+| `$pageleave` | Page exit with `$time_on_page`, `$exit_intent`, scroll depth | `capture_pageleave` |
+| `$engagement` | Fires 10 seconds after page load | Always on |
+| `$identify` | User identification (via `identify()`) | Always on |
+| `$create_alias` | Alias creation (via `alias()`) | Always on |
+| Click events | Auto-captured link clicks, button clicks | `autocapture` |
+| Form submissions | Auto-captured form submit events | `autocapture` |
+
+## Attribution tracking
+
+When `capture_utm` is enabled (default), the SDK captures UTM parameters and advertising click IDs from the URL:
+
+- **UTM**: `$utm_source`, `$utm_medium`, `$utm_campaign`, `$utm_term`, `$utm_content`
+- **Google Ads**: `$gclid`, `$gbraid`, `$wbraid`
+- **Facebook**: `$fbclid`, `$fbc`, `$fbp`
+- **Twitter/X**: `$twclid`
+- **LinkedIn**: `$li_fat_id`
+- **Mythic Click ID**: `$iiid` (from link redirect tracking)
+
+## Auto-included context
+
+Every event automatically includes:
+
+- `$lib`, `$lib_version` — SDK identifier and version
+- `$current_url`, `$referrer`, `$host`, `$pathname` — Page context
+- `$browser`, `$browser_version`, `$os`, `$os_version` — User agent
+- `$device_type` — `mobile`, `tablet`, or `desktop`
+- `$screen_width`, `$screen_height`, `$viewport_width`, `$viewport_height`
+- `$session_id`, `$device_id`, `distinct_id` — Identity context

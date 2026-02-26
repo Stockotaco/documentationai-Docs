@@ -1,0 +1,113 @@
+---
+title: Tracking Methods
+description: >-
+  Track custom events, page views, user identity, and manage session state
+  with the Mythic Analytics SDK core methods.
+---
+
+## Core tracking methods
+
+All examples assume you have created `const mythic = init(...)`.
+
+### `capture(event, properties?)`
+
+Track a custom event with optional properties.
+
+<ParamField body="event" param-type="string" required="true" show-location="false" deprecated="false">
+  Event name, such as `Signup started` or `Checkout completed`.
+</ParamField>
+
+<ParamField body="properties" param-type="object" required="false" show-location="false" deprecated="false">
+  Additional properties. Merged with super properties and auto-captured context.
+</ParamField>
+
+```javascript
+mythic.capture("Signup started", {
+  plan: "pro_monthly",
+  referrer: document.referrer,
+  experiment_variant: "landing_b",
+});
+```
+
+### `pageview(properties?)`
+
+Send a page view event. The SDK auto-includes URL, title, referrer, and performance metrics.
+
+<ParamField body="properties" param-type="object" required="false" show-location="false" deprecated="false">
+  Optional additional properties.
+</ParamField>
+
+```javascript
+// On initial load
+mythic.pageview({ page: "/pricing", campaign: "spring_promo" });
+
+// In a SPA router hook
+router.afterEach((to) => {
+  mythic.pageview({ page: to.fullPath });
+});
+```
+
+<Callout kind="tip">
+  By default the SDK auto-captures page views on load and SPA navigation (History API). You only need to call `pageview()` manually if you disable `capture_pageview` or `capture_spa_pageview`.
+</Callout>
+
+### `identify(userId, properties?)`
+
+Associate the current session with a known user ID.
+
+<ParamField body="userId" param-type="string" required="true" show-location="false" deprecated="false">
+  Stable identifier for the user, e.g., `usr_a1b2c3d4`.
+</ParamField>
+
+<ParamField body="properties" param-type="object" required="false" show-location="false" deprecated="false">
+  User properties such as email, plan, or role. Sent as a `$identify` event.
+</ParamField>
+
+```javascript
+mythic.identify("usr_7f3c92d8", {
+  email: "jane@acme.com",
+  full_name: "Jane Chen",
+  plan: "enterprise",
+  team_id: "team_b84f21e7",
+});
+```
+
+### `alias(alias)`
+
+Create an alias linking the current distinct ID to another identifier.
+
+<ParamField body="alias" param-type="string" required="true" show-location="false" deprecated="false">
+  The alias to create. Sends a `$create_alias` event.
+</ParamField>
+
+```javascript
+mythic.alias("user_email@acme.com");
+```
+
+### `reset(options?)`
+
+Clear local user identity and session state. Typically called on logout.
+
+<ParamField body="options" param-type="object" required="false" show-location="false" deprecated="false">
+  Optional flags. Pass `{ resetInitialAttribution: true }` to also clear first-touch attribution data.
+</ParamField>
+
+```javascript
+// Standard reset on logout
+mythic.reset();
+
+// Full reset including attribution
+mythic.reset({ resetInitialAttribution: true });
+```
+
+After `reset`, calls to `capture` use a new anonymous distinct ID until you call `identify` again.
+
+### `flush()`
+
+Force-send all queued events immediately. Use before page unload.
+
+```javascript
+window.addEventListener("beforeunload", () => {
+  mythic.flush();
+});
+```

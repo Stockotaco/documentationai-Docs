@@ -1,0 +1,74 @@
+---
+title: Utility Methods
+description: >-
+  Access device, session, and configuration state with the Mythic Analytics
+  SDK utility methods.
+---
+
+## Utility methods
+
+### `getDistinctId()`
+
+Returns the current distinct ID (anonymous or identified).
+
+```javascript
+const distinctId = mythic.getDistinctId();
+```
+
+### `getSessionId()`
+
+Returns the current session ID.
+
+```javascript
+const sessionId = mythic.getSessionId();
+```
+
+### `getDeviceId()`
+
+Returns the persistent device ID (5-year expiration).
+
+```javascript
+const deviceId = mythic.getDeviceId();
+```
+
+### `isBot()`
+
+Returns `true` if the current user agent is detected as a bot.
+
+```javascript
+if (mythic.isBot()) return; // Skip tracking for bots
+```
+
+### `debug(enabled?)`
+
+Toggle debug logging. When enabled, the SDK logs queued events, network requests, and configuration decisions to the console.
+
+```javascript
+mythic.debug(true);  // Enable verbose logging
+mythic.debug(false); // Disable
+```
+
+### `getConfig()`
+
+Returns the current SDK configuration object.
+
+```javascript
+const config = mythic.getConfig();
+console.log(config.api_host);
+```
+
+### `updateConfig(newConfig)`
+
+Dynamically update configuration options at runtime.
+
+```javascript
+mythic.updateConfig({ debug: true, batch_size: 5 });
+```
+
+### `refreshConfig()`
+
+Re-fetch remote configuration from the server.
+
+```javascript
+await mythic.refreshConfig();
+```

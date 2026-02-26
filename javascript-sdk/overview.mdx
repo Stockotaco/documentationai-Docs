@@ -1,0 +1,97 @@
+---
+title: JavaScript SDK
+description: >-
+  Integrate the Mythic Analytics JavaScript SDK to track events, page views,
+  and user identity from the browser with automatic batching, session management,
+  and privacy controls.
+---
+
+## Overview
+
+The Mythic Analytics JavaScript SDK captures events, page views, and user identity data from the browser. It manages batching, sessions, attribution, and remote configuration automatically.
+
+Key capabilities:
+
+- Initialize with a publishable key (`pk_` prefix, safe for client-side use)
+- Track custom events with `capture` and page views with `pageview`
+- Identify users with `identify` and create aliases with `alias`
+- Manage super properties that attach to every event
+- Control consent, opt-in/opt-out, and HIPAA compliance
+- Auto-capture page views, page leaves, UTM parameters, and click IDs
+- Remote configuration for tags, snippets, and transformers
+
+<Callout kind="info">
+  The SDK uses a publishable key starting with `pk_`. This key is safe to expose in client-side code. Never use admin or secret keys in the browser.
+</Callout>
+
+## Install or load the SDK
+
+<Steps>
+  <Step title="Load the script or install from npm" icon="download" titleType="p">
+    Use a script tag for quick embeds:
+
+    ```html
+    <script
+      src="https://cdn.mythic-analytics.com/sdk/latest/mythic.min.js"
+      crossorigin="anonymous"
+    ></script>
+    ```
+
+    Or install from npm for bundlers:
+
+    ```bash
+    npm install @mythic/analytics
+    # or
+    yarn add @mythic/analytics
+    ```
+  </Step>
+
+  <Step title="Import or reference the global" icon="code" titleType="p">
+    <CodeGroup tabs="Script tag,ES module,CommonJS">
+      ```html
+      <script>
+        window.mythic = window.Mythic.init("pk_your_publishable_key");
+      </script>
+      ```
+
+      ```javascript
+      import { init } from "@mythic/analytics";
+      const mythic = init("pk_your_publishable_key");
+      ```
+
+      ```javascript
+      const { init } = require("@mythic/analytics");
+      const mythic = init("pk_your_publishable_key");
+      ```
+    </CodeGroup>
+
+    After this step, you have a `mythic` instance you can call methods on.
+  </Step>
+</Steps>
+
+## Initialize the SDK
+
+### `init(key, config?)`
+
+Create a configured Mythic client instance.
+
+<ParamField body="key" param-type="string" required="true" show-location="false" deprecated="false">
+  Publishable project key starting with `pk_`.
+</ParamField>
+
+<ParamField body="config" param-type="object" required="false" show-location="false" deprecated="false">
+  Optional configuration overrides. See the full config reference below.
+</ParamField>
+
+```javascript
+import { init } from "@mythic/analytics";
+
+const mythic = init("pk_your_publishable_key", {
+  api_host: "https://analytics.yourdomain.com",
+  debug: true,
+  batch_size: 20,
+  autocapture: true,
+  capture_pageview: true,
+  hipaa: false,
+});
+```

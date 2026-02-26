@@ -1,0 +1,47 @@
+---
+title: Consent & Privacy
+description: >-
+  Control user consent, opt-in/opt-out tracking, and manage privacy settings
+  with the Mythic Analytics SDK.
+---
+
+## Consent and privacy
+
+### `opt_in()` / `opt_out()`
+
+Control whether the SDK sends events.
+
+```javascript
+mythic.opt_in();   // Enable tracking
+mythic.opt_out();  // Disable tracking (no events sent)
+```
+
+### `has_opted_out()`
+
+Check the current opt-out status.
+
+```javascript
+if (mythic.has_opted_out()) {
+  showConsentBanner();
+}
+```
+
+### `grantConsent()` / `revokeConsent()`
+
+For consent-gated setups where `requireConsent: true`. No events are sent until `grantConsent()` is called.
+
+```javascript
+// User accepts analytics in your cookie banner
+function onConsentAccepted() {
+  mythic.grantConsent();
+}
+
+// User withdraws consent — clears all stored data
+function onConsentDeclined() {
+  mythic.revokeConsent();
+}
+```
+
+<Callout kind="info">
+  When `requireConsent` is `true`, the SDK initializes but does not track any events until `grantConsent()` is called. `revokeConsent()` stops tracking and clears all local storage.
+</Callout>
