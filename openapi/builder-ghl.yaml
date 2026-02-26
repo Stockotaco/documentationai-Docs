@@ -1,0 +1,307 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: GHL Integration & Dashboard Generation
+  description: GoHighLevel integration and AI-powered dashboard generation for the Mythic Analytics Builder.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /ghl/funnels:
+    get:
+      summary: List GHL funnels
+      operationId: listGhlFunnels
+      description: >
+        Retrieve funnels from a connected GoHighLevel location. Requires
+        a valid GHL integration configured for the account.
+      parameters:
+        - name: location_id
+          in: query
+          description: GoHighLevel location identifier.
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of GHL funnels
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GhlFunnelListResponse"
+        "400":
+          description: Missing location_id or invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: GHL API unavailable or integration error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /ghl/funnels/import:
+    post:
+      summary: Import GHL funnel
+      operationId: importGhlFunnel
+      description: >
+        Import a GoHighLevel funnel as a canvas with nodes automatically
+        mapped to funnel steps. Creates a new canvas and populates it with
+        the funnel's page structure.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportFunnelRequest"
+      responses:
+        "201":
+          description: Funnel imported as canvas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportFunnelResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Funnel not found in GHL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: GHL API unavailable or integration error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /generate-dashboard:
+    post:
+      summary: Generate dashboard
+      operationId: generateDashboard
+      description: >
+        Use AI to automatically generate a dashboard with insights based on
+        a natural language prompt. The generated dashboard includes relevant
+        metrics, visualizations, and layout.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateDashboardRequest"
+      responses:
+        "201":
+          description: Dashboard generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateDashboardResponse"
+        "400":
+          description: Invalid JSON or missing prompt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /platform-config:
+    get:
+      summary: Get platform config
+      operationId: getPlatformConfig
+      description: >
+        Retrieve the current platform configuration including enabled
+        features, limits, and integration settings.
+      responses:
+        "200":
+          description: Platform configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformConfigResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  schemas:
+    GhlFunnel:
+      type: object
+      properties:
+        id:
+          type: string
+          example: fnl_8kN2mPqR
+        name:
+          type: string
+          example: Product Launch Funnel
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              url:
+                type: string
+                format: uri
+        location_id:
+          type: string
+          example: loc_5kN2mPqR
+    ImportFunnelRequest:
+      type: object
+      required:
+        - funnel_id
+        - location_id
+      properties:
+        funnel_id:
+          type: string
+          description: GHL funnel identifier to import.
+          example: fnl_8kN2mPqR
+        location_id:
+          type: string
+          description: GHL location identifier.
+          example: loc_5kN2mPqR
+        canvas_name:
+          type: string
+          description: Optional name for the generated canvas. Defaults to the funnel name.
+    GenerateDashboardRequest:
+      type: object
+      required:
+        - prompt
+        - client_id
+      properties:
+        prompt:
+          type: string
+          description: Natural language description of the desired dashboard.
+          example: Create a marketing overview dashboard showing traffic sources, conversion rates, and top landing pages.
+        client_id:
+          type: string
+          description: Client identifier to generate the dashboard for.
+          example: acme-retail
+    PlatformConfig:
+      type: object
+      properties:
+        features:
+          type: object
+          description: Feature flags and enabled capabilities.
+          example:
+            canvases: true
+            ai_generation: true
+            ghl_integration: true
+        limits:
+          type: object
+          description: Platform-level limits.
+          example:
+            max_canvases: 50
+            max_insights: 200
+            max_dashboards: 25
+        integrations:
+          type: object
+          description: Configured integration settings.
+          example:
+            ghl_connected: true
+    GhlFunnelListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/GhlFunnel"
+        count:
+          type: integer
+          example: 5
+    ImportFunnelResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            canvas_id:
+              type: string
+              description: ID of the newly created canvas.
+              example: cvs_9xP3qLmN
+            nodes_created:
+              type: integer
+              example: 5
+            edges_created:
+              type: integer
+              example: 4
+    GenerateDashboardResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            dashboard_id:
+              type: string
+              example: dsh_4mK9pLrT
+            insights_created:
+              type: integer
+              example: 6
+    PlatformConfigResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/PlatformConfig"
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0

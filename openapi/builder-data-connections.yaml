@@ -1,0 +1,112 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Data Connections
+  description: Retrieve available data connections for the Mythic Analytics Builder.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /data-connections:
+    get:
+      summary: List data connections
+      operationId: listDataConnections
+      description: >
+        Retrieve all available data connections. Data connections define
+        external data sources (databases, APIs, warehouses) that can be
+        used in queries and insights.
+      parameters:
+        - name: type
+          in: query
+          description: Filter by connection type (e.g., `postgres`, `bigquery`, `api`).
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter by connection status.
+          required: false
+          schema:
+            type: string
+            enum: ["active", "inactive", "error"]
+      responses:
+        "200":
+          description: List of data connections
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataConnectionListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  schemas:
+    DataConnection:
+      type: object
+      properties:
+        id:
+          type: string
+          example: dc_7kH3nPqR
+        name:
+          type: string
+          example: Production PostgreSQL
+        type:
+          type: string
+          description: Connection type.
+          example: postgres
+        status:
+          type: string
+          enum: ["active", "inactive", "error"]
+          example: active
+        last_checked:
+          type: string
+          format: date-time
+          description: Last health check timestamp.
+          example: "2024-06-15T12:00:00.000Z"
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-03-01T10:00:00.000Z"
+    DataConnectionListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataConnection"
+        count:
+          type: integer
+          example: 3
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0

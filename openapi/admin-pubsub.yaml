@@ -1,0 +1,551 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Pub/Sub
+  description: Manage Pub/Sub subscriptions and pull messages in the Mythic Analytics platform.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /admin/pubsub/subscriptions:
+    post:
+      summary: Create subscription
+      operationId: createSubscription
+      description: >
+        Create a new Pub/Sub subscription. Subscriptions receive messages
+        published to a topic and can deliver them via pull or push mechanisms.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubscriptionRequest"
+      responses:
+        "201":
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Subscription name already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      summary: List subscriptions
+      operationId: listSubscriptions
+      description: Retrieve all Pub/Sub subscriptions.
+      parameters:
+        - name: topic
+          in: query
+          description: Filter by topic name.
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of subscriptions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/pubsub/subscriptions/{id}:
+    get:
+      summary: Retrieve subscription
+      operationId: getSubscription
+      description: Fetch a single subscription with its configuration and metrics.
+      parameters:
+        - $ref: "#/components/parameters/SubscriptionId"
+      responses:
+        "200":
+          description: Subscription details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionDetailResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      summary: Update subscription
+      operationId: updateSubscription
+      description: Partially update subscription configuration.
+      parameters:
+        - $ref: "#/components/parameters/SubscriptionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSubscriptionRequest"
+      responses:
+        "200":
+          description: Subscription updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Delete subscription
+      operationId: deleteSubscription
+      description: Permanently delete a subscription. Undelivered messages are lost.
+      parameters:
+        - $ref: "#/components/parameters/SubscriptionId"
+      responses:
+        "200":
+          description: Subscription deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/pubsub/subscriptions/{id}/metrics:
+    get:
+      summary: Get subscription metrics
+      operationId: getSubscriptionMetrics
+      description: Retrieve delivery metrics for a subscription.
+      parameters:
+        - $ref: "#/components/parameters/SubscriptionId"
+      responses:
+        "200":
+          description: Subscription metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetricsResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/pubsub/subscriptions/{id}/pull:
+    post:
+      summary: Pull messages
+      operationId: pullMessages
+      description: >
+        Pull messages from a subscription. Returns up to `max_messages`
+        messages. Messages must be acknowledged after processing or they
+        will be redelivered.
+      parameters:
+        - $ref: "#/components/parameters/SubscriptionId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PullRequest"
+      responses:
+        "200":
+          description: Pulled messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PullResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/pubsub/subscriptions/{id}/acknowledge:
+    post:
+      summary: Acknowledge messages
+      operationId: acknowledgeMessages
+      description: Acknowledge receipt and processing of pulled messages.
+      parameters:
+        - $ref: "#/components/parameters/SubscriptionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcknowledgeRequest"
+      responses:
+        "200":
+          description: Messages acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/pubsub/subscriptions/{id}/pause:
+    post:
+      summary: Pause subscription
+      operationId: pauseSubscription
+      description: Pause message delivery for a subscription. Messages continue to queue.
+      parameters:
+        - $ref: "#/components/parameters/SubscriptionId"
+      responses:
+        "200":
+          description: Subscription paused
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/pubsub/subscriptions/{id}/resume:
+    post:
+      summary: Resume subscription
+      operationId: resumeSubscription
+      description: Resume message delivery for a paused subscription.
+      parameters:
+        - $ref: "#/components/parameters/SubscriptionId"
+      responses:
+        "200":
+          description: Subscription resumed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Subscription not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  parameters:
+    SubscriptionId:
+      name: id
+      in: path
+      required: true
+      description: Subscription identifier.
+      schema:
+        type: string
+  schemas:
+    CreateSubscriptionRequest:
+      type: object
+      required:
+        - name
+        - topic
+      properties:
+        name:
+          type: string
+          description: Unique subscription name.
+          example: analytics-events-processor
+        topic:
+          type: string
+          description: Topic to subscribe to.
+          example: analytics.events
+        push_endpoint:
+          type: string
+          format: uri
+          description: Optional push delivery URL. If omitted, use pull delivery.
+        ack_deadline_seconds:
+          type: integer
+          description: Time in seconds to acknowledge a message before redelivery. Default `60`.
+          default: 60
+        max_delivery_attempts:
+          type: integer
+          description: Maximum delivery attempts before dead-lettering. Default `5`.
+          default: 5
+        filter:
+          type: object
+          description: Message attribute filter.
+          example:
+            event_type: pageview
+    UpdateSubscriptionRequest:
+      type: object
+      properties:
+        push_endpoint:
+          type: string
+          format: uri
+          nullable: true
+        ack_deadline_seconds:
+          type: integer
+        max_delivery_attempts:
+          type: integer
+        filter:
+          type: object
+          nullable: true
+    PullRequest:
+      type: object
+      properties:
+        max_messages:
+          type: integer
+          description: Maximum messages to return. Default `10`, max `100`.
+          default: 10
+          maximum: 100
+    AcknowledgeRequest:
+      type: object
+      required:
+        - ack_ids
+      properties:
+        ack_ids:
+          type: array
+          description: Acknowledgment IDs from pulled messages.
+          items:
+            type: string
+          example:
+            - ack_3xL7nBcD
+            - ack_9mK4pLrT
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: string
+          example: sub_5kN2mPqR
+        name:
+          type: string
+          example: analytics-events-processor
+        topic:
+          type: string
+          example: analytics.events
+        status:
+          type: string
+          enum: ["active", "paused"]
+          example: active
+        push_endpoint:
+          type: string
+          format: uri
+          nullable: true
+        ack_deadline_seconds:
+          type: integer
+          example: 60
+        max_delivery_attempts:
+          type: integer
+          example: 5
+        filter:
+          type: object
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-04-01T10:00:00.000Z"
+    SubscriptionWithMetrics:
+      allOf:
+        - $ref: "#/components/schemas/Subscription"
+        - type: object
+          properties:
+            metrics:
+              $ref: "#/components/schemas/SubscriptionMetrics"
+    SubscriptionMetrics:
+      type: object
+      properties:
+        messages_delivered:
+          type: integer
+          example: 15230
+        messages_acknowledged:
+          type: integer
+          example: 15200
+        messages_pending:
+          type: integer
+          example: 30
+        dead_lettered:
+          type: integer
+          example: 5
+        avg_delivery_latency_ms:
+          type: integer
+          example: 45
+    PulledMessage:
+      type: object
+      properties:
+        ack_id:
+          type: string
+          example: ack_3xL7nBcD
+        message:
+          type: object
+          properties:
+            id:
+              type: string
+              example: msg_7kH3nPqR
+            data:
+              type: object
+              description: Message payload.
+            attributes:
+              type: object
+              description: Message attributes for filtering.
+            published_at:
+              type: string
+              format: date-time
+        delivery_attempt:
+          type: integer
+          example: 1
+    SubscriptionResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/Subscription"
+    SubscriptionDetailResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/SubscriptionWithMetrics"
+    SubscriptionListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Subscription"
+        count:
+          type: integer
+          example: 4
+    MetricsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/SubscriptionMetrics"
+    PullResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/PulledMessage"
+        count:
+          type: integer
+          example: 10
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0

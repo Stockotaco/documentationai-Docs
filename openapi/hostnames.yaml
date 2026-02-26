@@ -1,0 +1,211 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Hostnames
+  description: Manage custom hostnames for Mythic Analytics client tenants.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /clients/{id}/hostnames:
+    post:
+      summary: Add hostname
+      operationId: addHostname
+      description: >
+        Add a custom hostname to a client tenant. The hostname is verified
+        asynchronously via DNS lookup. Returns `409 Conflict` if the hostname
+        is already associated with another client.
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddHostnameRequest"
+      responses:
+        "201":
+          description: Hostname added successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HostnameResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Hostname already in use by another client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      summary: List hostnames
+      operationId: listHostnames
+      description: Retrieve all custom hostnames associated with a client tenant.
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      responses:
+        "200":
+          description: List of hostnames
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HostnameListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Remove hostname
+      operationId: removeHostname
+      description: >
+        Remove a custom hostname from a client tenant. Pass the hostname
+        value in the request body.
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemoveHostnameRequest"
+      responses:
+        "200":
+          description: Hostname removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client or hostname not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  parameters:
+    ClientId:
+      name: id
+      in: path
+      required: true
+      description: Client identifier.
+      schema:
+        type: string
+        pattern: "^[a-zA-Z0-9_-]{1,255}$"
+  schemas:
+    AddHostnameRequest:
+      type: object
+      required:
+        - hostname
+      properties:
+        hostname:
+          type: string
+          description: Fully-qualified domain name to associate with the client.
+          example: analytics.acme-retail.com
+    RemoveHostnameRequest:
+      type: object
+      required:
+        - hostname
+      properties:
+        hostname:
+          type: string
+          description: Hostname to remove from the client.
+          example: analytics.acme-retail.com
+    Hostname:
+      type: object
+      properties:
+        hostname:
+          type: string
+          example: analytics.acme-retail.com
+        verified:
+          type: boolean
+          description: Whether DNS verification has passed.
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-06-15T10:30:00.000Z"
+    HostnameResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/Hostname"
+    HostnameListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Hostname"
+        count:
+          type: integer
+          example: 2
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0

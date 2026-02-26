@@ -1,0 +1,30 @@
+---
+title: Authentication
+description: >-
+  Authenticate requests to the Builder API using an admin API key or
+  publishable key for public query endpoints.
+---
+
+## Authentication
+
+Most Builder API endpoints require an admin API key. Pass it as a bearer token or query parameter.
+
+<ParamField header="Authorization" param-type="string" required="true" deprecated="false">
+  Bearer token. Format: `Bearer YOUR_ADMIN_KEY`.
+</ParamField>
+
+<ParamField query="admin_key" param-type="string" required="false" deprecated="false">
+  Alternative to the header for server-to-server or tooling scenarios. Do not expose in client-side code.
+</ParamField>
+
+## Public query endpoint
+
+The `POST /public/query` endpoint accepts a client publishable key instead of an admin key. This allows client-side dashboards to query their own data.
+
+<ParamField header="X-Publishable-Key" param-type="string" required="true" deprecated="false">
+  Client publishable key. Format: `pk_...`. Scopes the query to the associated client.
+</ParamField>
+
+<Callout kind="alert">
+  Never expose the admin key in client-side JavaScript, public repositories, or logs. Use the publishable key for client-facing dashboards.
+</Callout>

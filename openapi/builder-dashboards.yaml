@@ -1,0 +1,438 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Dashboards
+  description: Create, read, update, and delete dashboards and manage insight links in the Mythic Analytics Builder.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /dashboards:
+    post:
+      summary: Create dashboard
+      operationId: createDashboard
+      description: >
+        Create a new dashboard. Dashboards are containers for insights arranged
+        in a configurable grid layout.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDashboardRequest"
+      responses:
+        "201":
+          description: Dashboard created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      summary: List dashboards
+      operationId: listDashboards
+      description: Retrieve a paginated list of dashboards.
+      parameters:
+        - name: search
+          in: query
+          description: Case-insensitive search on dashboard name.
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum results per page. Default `50`, max `500`.
+          required: false
+          schema:
+            type: integer
+            default: 50
+            maximum: 500
+        - name: offset
+          in: query
+          description: Number of results to skip. Default `0`.
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Paginated list of dashboards
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /dashboards/{id}:
+    get:
+      summary: Retrieve dashboard
+      operationId: getDashboard
+      description: Fetch a single dashboard with its linked insights and layout configuration.
+      parameters:
+        - $ref: "#/components/parameters/DashboardId"
+      responses:
+        "200":
+          description: Dashboard with insights
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardDetailResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Dashboard not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      summary: Update dashboard
+      operationId: updateDashboard
+      description: Partially update dashboard fields including name and settings.
+      parameters:
+        - $ref: "#/components/parameters/DashboardId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDashboardRequest"
+      responses:
+        "200":
+          description: Dashboard updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Dashboard not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Delete dashboard
+      operationId: deleteDashboard
+      description: Permanently delete a dashboard. Linked insights are not deleted.
+      parameters:
+        - $ref: "#/components/parameters/DashboardId"
+      responses:
+        "200":
+          description: Dashboard deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Dashboard not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /dashboards/{id}/insights:
+    put:
+      summary: Link insights
+      operationId: linkDashboardInsights
+      description: >
+        Replace the set of insights linked to a dashboard. Pass an ordered
+        array of insight IDs. This also controls display order.
+      parameters:
+        - $ref: "#/components/parameters/DashboardId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkInsightsRequest"
+      responses:
+        "200":
+          description: Insights linked successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardDetailResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Dashboard not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /dashboards/{id}/layout:
+    put:
+      summary: Update layout
+      operationId: updateDashboardLayout
+      description: >
+        Replace the grid layout configuration for a dashboard. Each item
+        defines the position and size of an insight card in the grid.
+      parameters:
+        - $ref: "#/components/parameters/DashboardId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLayoutRequest"
+      responses:
+        "200":
+          description: Layout updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardDetailResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Dashboard not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  parameters:
+    DashboardId:
+      name: id
+      in: path
+      required: true
+      description: Dashboard identifier.
+      schema:
+        type: string
+  schemas:
+    CreateDashboardRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Dashboard display name.
+          example: Marketing Overview
+        description:
+          type: string
+          description: Optional description.
+          example: Key marketing metrics at a glance.
+        settings:
+          type: object
+          description: Dashboard-level settings (theme, refresh interval, etc.).
+          example:
+            refresh_interval: 300
+            theme: dark
+    UpdateDashboardRequest:
+      type: object
+      description: Partial update — only include fields you want to change.
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        settings:
+          type: object
+    LinkInsightsRequest:
+      type: object
+      required:
+        - insight_ids
+      properties:
+        insight_ids:
+          type: array
+          description: Ordered array of insight IDs to link to the dashboard.
+          items:
+            type: string
+          example:
+            - ins_8kN2mPqR
+            - ins_3xL7nBcD
+    UpdateLayoutRequest:
+      type: object
+      required:
+        - layout
+      properties:
+        layout:
+          type: array
+          description: Grid layout items defining position and size of each insight.
+          items:
+            $ref: "#/components/schemas/LayoutItem"
+    LayoutItem:
+      type: object
+      properties:
+        insight_id:
+          type: string
+          example: ins_8kN2mPqR
+        x:
+          type: integer
+          description: Column position (0-based).
+          example: 0
+        "y":
+          type: integer
+          description: Row position (0-based).
+          example: 0
+        w:
+          type: integer
+          description: Width in grid columns.
+          example: 6
+        h:
+          type: integer
+          description: Height in grid rows.
+          example: 4
+    Dashboard:
+      type: object
+      properties:
+        id:
+          type: string
+          example: dsh_4mK9pLrT
+        name:
+          type: string
+          example: Marketing Overview
+        description:
+          type: string
+          nullable: true
+        settings:
+          type: object
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-04-15T10:00:00.000Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2024-06-10T16:45:00.000Z"
+    DashboardWithInsights:
+      allOf:
+        - $ref: "#/components/schemas/Dashboard"
+        - type: object
+          properties:
+            insights:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  visualization:
+                    type: object
+            layout:
+              type: array
+              items:
+                $ref: "#/components/schemas/LayoutItem"
+    DashboardResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/Dashboard"
+    DashboardDetailResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/DashboardWithInsights"
+    DashboardListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Dashboard"
+        count:
+          type: integer
+          example: 5
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0

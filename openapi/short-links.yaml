@@ -1,0 +1,457 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Short Links
+  description: Create, read, update, and delete short links with click analytics in Mythic Analytics.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /links:
+    post:
+      summary: Create link
+      operationId: createLink
+      description: >
+        Create a new short link. The link is assigned a unique slug and
+        automatically tracks click analytics including referrers, geography,
+        and device information.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLinkRequest"
+      responses:
+        "201":
+          description: Link created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Slug already in use
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      summary: List links
+      operationId: listLinks
+      description: Retrieve a paginated list of short links with optional filtering.
+      parameters:
+        - name: client_id
+          in: query
+          description: Filter by client identifier.
+          required: false
+          schema:
+            type: string
+        - name: search
+          in: query
+          description: Search on slug or title.
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum results per page. Default `50`, max `500`.
+          required: false
+          schema:
+            type: integer
+            default: 50
+            maximum: 500
+        - name: offset
+          in: query
+          description: Number of results to skip. Default `0`.
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Paginated list of links
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /links/{id}:
+    get:
+      summary: Retrieve link
+      operationId: getLink
+      description: Fetch a single short link by its ID.
+      parameters:
+        - $ref: "#/components/parameters/LinkId"
+      responses:
+        "200":
+          description: Link details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Link not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      summary: Update link
+      operationId: updateLink
+      description: Partially update a short link.
+      parameters:
+        - $ref: "#/components/parameters/LinkId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLinkRequest"
+      responses:
+        "200":
+          description: Link updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Link not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Delete link
+      operationId: deleteLink
+      description: Permanently delete a short link. **This action is irreversible.**
+      parameters:
+        - $ref: "#/components/parameters/LinkId"
+      responses:
+        "200":
+          description: Link deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Link not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /links/{id}/analytics:
+    get:
+      summary: Get link analytics
+      operationId: getLinkAnalytics
+      description: >
+        Retrieve click analytics for a short link including total clicks,
+        unique visitors, referrer breakdown, geographic data, and device
+        statistics.
+      parameters:
+        - $ref: "#/components/parameters/LinkId"
+        - name: period
+          in: query
+          description: "Time period for analytics. Default: `30d`."
+          required: false
+          schema:
+            type: string
+            enum: ["24h", "7d", "30d", "90d", "all"]
+            default: "30d"
+      responses:
+        "200":
+          description: Link analytics data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Link not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  parameters:
+    LinkId:
+      name: id
+      in: path
+      required: true
+      description: Short link identifier.
+      schema:
+        type: string
+  schemas:
+    CreateLinkRequest:
+      type: object
+      required:
+        - destination_url
+      properties:
+        destination_url:
+          type: string
+          format: uri
+          description: Target URL the short link redirects to.
+          example: https://acme-retail.com/summer-sale
+        slug:
+          type: string
+          description: Custom slug. Auto-generated if omitted.
+          example: summer-sale
+        title:
+          type: string
+          description: Human-readable title.
+          example: Summer Sale Campaign
+        client_id:
+          type: string
+          description: Associate the link with a client tenant.
+          example: acme-retail
+        tags:
+          type: array
+          description: Tags for organizing links.
+          items:
+            type: string
+          example:
+            - campaign
+            - summer-2024
+        password:
+          type: string
+          description: Optional password protection for the link.
+        expires_at:
+          type: string
+          format: date-time
+          description: Optional expiration date.
+        metadata:
+          type: object
+          description: Arbitrary JSON metadata.
+    UpdateLinkRequest:
+      type: object
+      properties:
+        destination_url:
+          type: string
+          format: uri
+        title:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+        password:
+          type: string
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        metadata:
+          type: object
+          nullable: true
+    Link:
+      type: object
+      properties:
+        id:
+          type: string
+          example: lnk_9xP3qLmN
+        destination_url:
+          type: string
+          format: uri
+          example: https://acme-retail.com/summer-sale
+        short_url:
+          type: string
+          format: uri
+          example: https://go.mythic-analytics.com/summer-sale
+        slug:
+          type: string
+          example: summer-sale
+        title:
+          type: string
+          nullable: true
+          example: Summer Sale Campaign
+        client_id:
+          type: string
+          nullable: true
+          example: acme-retail
+        clicks:
+          type: integer
+          example: 1247
+        tags:
+          type: array
+          items:
+            type: string
+        has_password:
+          type: boolean
+          example: false
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        metadata:
+          type: object
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-06-01T12:00:00.000Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2024-06-15T08:30:00.000Z"
+    LinkAnalytics:
+      type: object
+      properties:
+        total_clicks:
+          type: integer
+          example: 1247
+        unique_visitors:
+          type: integer
+          example: 892
+        referrers:
+          type: array
+          items:
+            type: object
+            properties:
+              source:
+                type: string
+                example: google.com
+              clicks:
+                type: integer
+                example: 340
+        countries:
+          type: array
+          items:
+            type: object
+            properties:
+              country:
+                type: string
+                example: US
+              clicks:
+                type: integer
+                example: 580
+        devices:
+          type: array
+          items:
+            type: object
+            properties:
+              device:
+                type: string
+                example: mobile
+              clicks:
+                type: integer
+                example: 620
+        daily_clicks:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+                example: "2024-06-15"
+              clicks:
+                type: integer
+                example: 42
+    LinkResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/Link"
+    LinkListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Link"
+        count:
+          type: integer
+          example: 25
+    AnalyticsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/LinkAnalytics"
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0

@@ -74,27 +74,6 @@
         ]
       },
       {
-        "tab": "API Reference",
-        "icon": "code",
-        "groups": [
-          {
-            "group": "Overview",
-            "icon": "file-text",
-            "pages": [
-              {
-                "title": "Authentication",
-                "path": "authentication",
-                "icon": "lock"
-              }
-            ]
-          },
-          {
-            "group": "Sample Endpoints",
-            "openapi": "openapi.yaml"
-          }
-        ]
-      },
-      {
         "tab": "Help Center",
         "icon": "help-circle",
         "pages": [
@@ -183,6 +162,226 @@
             "group": "Snippets",
             "icon": "code",
             "openapi": "openapi/snippets.yaml"
+          },
+          {
+            "group": "Hostnames",
+            "icon": "globe",
+            "openapi": "openapi/hostnames.yaml"
+          },
+          {
+            "group": "Links",
+            "icon": "link",
+            "openapi": "openapi/client-links.yaml"
+          },
+          {
+            "group": "Logs & Trends",
+            "icon": "activity",
+            "openapi": "openapi/logs-trends.yaml"
+          },
+          {
+            "group": "Tag Templates",
+            "icon": "bookmark",
+            "openapi": "openapi/tag-templates.yaml"
+          }
+        ]
+      },
+      {
+        "tab": "Agencies API",
+        "icon": "briefcase",
+        "groups": [
+          {
+            "group": "Overview",
+            "icon": "file-text",
+            "pages": [
+              {
+                "title": "Introduction",
+                "path": "agencies-api/overview",
+                "icon": "file-text"
+              },
+              {
+                "title": "Authentication",
+                "path": "clients-api/authentication",
+                "icon": "lock"
+              }
+            ]
+          },
+          {
+            "group": "Agencies",
+            "icon": "briefcase",
+            "openapi": "openapi/agencies.yaml"
+          }
+        ]
+      },
+      {
+        "tab": "Builder API",
+        "icon": "layout",
+        "groups": [
+          {
+            "group": "Overview",
+            "icon": "file-text",
+            "pages": [
+              {
+                "title": "Introduction",
+                "path": "builder-api/overview",
+                "icon": "file-text"
+              },
+              {
+                "title": "Authentication",
+                "path": "builder-api/authentication",
+                "icon": "lock"
+              }
+            ]
+          },
+          {
+            "group": "Insights",
+            "icon": "bar-chart-2",
+            "openapi": "openapi/builder-insights.yaml"
+          },
+          {
+            "group": "Dashboards",
+            "icon": "layout-dashboard",
+            "openapi": "openapi/builder-dashboards.yaml"
+          },
+          {
+            "group": "Canvases",
+            "icon": "pen-tool",
+            "openapi": "openapi/builder-canvases.yaml"
+          },
+          {
+            "group": "Nodes & Edges",
+            "icon": "git-branch",
+            "openapi": "openapi/builder-canvas-nodes.yaml"
+          },
+          {
+            "group": "Queries",
+            "icon": "database",
+            "openapi": "openapi/builder-queries.yaml"
+          },
+          {
+            "group": "Data Connections",
+            "icon": "plug",
+            "openapi": "openapi/builder-data-connections.yaml"
+          },
+          {
+            "group": "GHL & Generation",
+            "icon": "wand-2",
+            "openapi": "openapi/builder-ghl.yaml"
+          }
+        ]
+      },
+      {
+        "tab": "Client Links API",
+        "icon": "link-2",
+        "groups": [
+          {
+            "group": "Overview",
+            "icon": "file-text",
+            "pages": [
+              {
+                "title": "Introduction",
+                "path": "client-links-api/overview",
+                "icon": "file-text"
+              },
+              {
+                "title": "Authentication",
+                "path": "client-links-api/authentication",
+                "icon": "lock"
+              }
+            ]
+          },
+          {
+            "group": "Links",
+            "icon": "link",
+            "openapi": "openapi/short-links.yaml"
+          },
+          {
+            "group": "Webhooks",
+            "icon": "webhook",
+            "openapi": "openapi/short-links-webhooks.yaml"
+          },
+          {
+            "group": "Uptime Monitoring",
+            "icon": "activity",
+            "openapi": "openapi/short-links-uptime.yaml"
+          }
+        ]
+      },
+      {
+        "tab": "MCP Platform",
+        "icon": "cpu",
+        "groups": [
+          {
+            "group": "Overview",
+            "icon": "file-text",
+            "pages": [
+              {
+                "title": "Introduction",
+                "path": "mcp/overview",
+                "icon": "file-text"
+              },
+              {
+                "title": "Authentication",
+                "path": "mcp/authentication",
+                "icon": "lock"
+              },
+              {
+                "title": "Gateway (JSON-RPC)",
+                "path": "mcp/gateway",
+                "icon": "radio"
+              }
+            ]
+          },
+          {
+            "group": "Servers",
+            "icon": "server",
+            "openapi": "openapi/mcp-servers.yaml"
+          },
+          {
+            "group": "Tools",
+            "icon": "wrench",
+            "openapi": "openapi/mcp-tools.yaml"
+          },
+          {
+            "group": "API Keys",
+            "icon": "key",
+            "openapi": "openapi/mcp-api-keys.yaml"
+          }
+        ]
+      },
+      {
+        "tab": "Admin API",
+        "icon": "shield",
+        "groups": [
+          {
+            "group": "Overview",
+            "icon": "file-text",
+            "pages": [
+              {
+                "title": "Introduction",
+                "path": "admin-api/overview",
+                "icon": "file-text"
+              },
+              {
+                "title": "Authentication",
+                "path": "admin-api/authentication",
+                "icon": "lock"
+              }
+            ]
+          },
+          {
+            "group": "AI Proxy",
+            "icon": "bot",
+            "openapi": "openapi/ai-proxy.yaml"
+          },
+          {
+            "group": "KV Management",
+            "icon": "database",
+            "openapi": "openapi/admin-kv.yaml"
+          },
+          {
+            "group": "Pub/Sub",
+            "icon": "radio",
+            "openapi": "openapi/admin-pubsub.yaml"
           }
         ]
       },

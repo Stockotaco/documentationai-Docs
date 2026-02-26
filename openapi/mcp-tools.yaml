@@ -1,0 +1,323 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: MCP Tools
+  description: Manage MCP tools and tool-level access control in the Mythic Analytics platform.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /mcp/tools:
+    get:
+      summary: List tools
+      operationId: listMcpTools
+      description: >
+        Retrieve all discovered MCP tools across all registered servers.
+        Tools are discovered during server probes.
+      parameters:
+        - name: server_id
+          in: query
+          description: Filter by server identifier.
+          required: false
+          schema:
+            type: string
+        - name: search
+          in: query
+          description: Case-insensitive search on tool name.
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of tools
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /mcp/tools/{id}:
+    patch:
+      summary: Update tool
+      operationId: updateMcpTool
+      description: Update tool metadata such as display name, description, or enabled state.
+      parameters:
+        - $ref: "#/components/parameters/ToolId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateToolRequest"
+      responses:
+        "200":
+          description: Tool updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Tool not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /mcp/tools/{id}/access:
+    get:
+      summary: Get tool access rules
+      operationId: getToolAccess
+      description: Retrieve access control rules for a specific tool.
+      parameters:
+        - $ref: "#/components/parameters/ToolId"
+      responses:
+        "200":
+          description: Tool access rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolAccessResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Tool not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Replace tool access rules
+      operationId: replaceToolAccess
+      description: Replace all access control rules for a tool.
+      parameters:
+        - $ref: "#/components/parameters/ToolId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplaceToolAccessRequest"
+      responses:
+        "200":
+          description: Tool access rules replaced
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolAccessResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Tool not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /mcp/tools/{id}/access/{clientId}:
+    put:
+      summary: Set client tool access
+      operationId: setClientToolAccess
+      description: Set access control for a specific client on a tool.
+      parameters:
+        - $ref: "#/components/parameters/ToolId"
+        - name: clientId
+          in: path
+          required: true
+          description: Client identifier.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetClientToolAccessRequest"
+      responses:
+        "200":
+          description: Client tool access updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Tool or client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  parameters:
+    ToolId:
+      name: id
+      in: path
+      required: true
+      description: MCP tool identifier.
+      schema:
+        type: string
+  schemas:
+    UpdateToolRequest:
+      type: object
+      properties:
+        display_name:
+          type: string
+          description: Custom display name override.
+        description:
+          type: string
+          description: Custom description override.
+        enabled:
+          type: boolean
+          description: Whether the tool is available for use.
+    ReplaceToolAccessRequest:
+      type: object
+      required:
+        - rules
+      properties:
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/ToolAccessRule"
+    SetClientToolAccessRequest:
+      type: object
+      required:
+        - allowed
+      properties:
+        allowed:
+          type: boolean
+          description: Whether the client can use the tool.
+    McpTool:
+      type: object
+      properties:
+        id:
+          type: string
+          example: tool_3xL7nBcD
+        server_id:
+          type: string
+          example: srv_5kN2mPqR
+        name:
+          type: string
+          example: query_analytics
+        display_name:
+          type: string
+          nullable: true
+          example: Query Analytics Data
+        description:
+          type: string
+          nullable: true
+          example: Execute analytics queries against client data.
+        enabled:
+          type: boolean
+          example: true
+        input_schema:
+          type: object
+          description: JSON Schema defining the tool's input parameters.
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-04-01T10:00:00.000Z"
+    ToolAccessRule:
+      type: object
+      properties:
+        client_id:
+          type: string
+          example: acme-retail
+        allowed:
+          type: boolean
+          example: true
+    ToolResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/McpTool"
+    ToolListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/McpTool"
+        count:
+          type: integer
+          example: 12
+    ToolAccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ToolAccessRule"
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0

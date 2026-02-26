@@ -1,0 +1,204 @@
+---
+title: MCP Gateway
+description: >-
+  Execute MCP tool calls via the JSON-RPC 2.0 gateway endpoint.
+---
+
+## Overview
+
+The MCP Gateway provides a JSON-RPC 2.0 interface for executing tool calls on registered MCP servers. The gateway handles authentication, access control enforcement, request routing, and response normalization.
+
+## Gateway endpoint
+
+```text
+POST https://mcp-gateway.mythic-analytics.com/rpc
+```
+
+## Authentication
+
+Include your MCP API key in the `Authorization` header.
+
+```text
+Authorization: Bearer YOUR_MCP_API_KEY
+```
+
+## JSON-RPC 2.0 format
+
+All requests and responses follow the [JSON-RPC 2.0 specification](https://www.jsonrpc.org/specification).
+
+### Request format
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "req-001",
+  "method": "tools/call",
+  "params": {
+    "name": "query_analytics",
+    "arguments": {
+      "client_id": "acme-retail",
+      "metric": "page_views",
+      "period": "30d"
+    }
+  }
+}
+```
+
+<ParamField body="jsonrpc" param-type="string" required="true" deprecated="false">
+  Must be `"2.0"`.
+</ParamField>
+
+<ParamField body="id" param-type="string|number" required="true" deprecated="false">
+  Unique request identifier. Returned in the response for correlation.
+</ParamField>
+
+<ParamField body="method" param-type="string" required="true" deprecated="false">
+  The MCP method to invoke. Use `tools/call` for tool execution.
+</ParamField>
+
+<ParamField body="params" param-type="object" required="true" deprecated="false">
+  Method-specific parameters. For `tools/call`, include `name` and `arguments`.
+</ParamField>
+
+### Success response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "req-001",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"page_views\": 42600, \"period\": \"30d\"}"
+      }
+    ]
+  }
+}
+```
+
+### Error response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "req-001",
+  "error": {
+    "code": -32600,
+    "message": "Invalid request",
+    "data": "Missing required field: method"
+  }
+}
+```
+
+## Standard JSON-RPC error codes
+
+| Code | Meaning |
+|------|---------|
+| `-32700` | Parse error — invalid JSON |
+| `-32600` | Invalid request — missing required fields |
+| `-32601` | Method not found |
+| `-32602` | Invalid params |
+| `-32603` | Internal error |
+
+## MCP-specific error codes
+
+| Code | Meaning |
+|------|---------|
+| `-32001` | Authentication failed — invalid or expired API key |
+| `-32002` | Access denied — client not allowed to use this tool |
+| `-32003` | Tool execution failed — upstream server error |
+| `-32004` | Server unavailable — MCP server is not reachable |
+
+## Available methods
+
+### tools/call
+
+Execute a tool on a registered MCP server.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "req-002",
+  "method": "tools/call",
+  "params": {
+    "name": "generate_report",
+    "arguments": {
+      "client_id": "acme-retail",
+      "report_type": "monthly_summary"
+    }
+  }
+}
+```
+
+### tools/list
+
+List all available tools the API key has access to.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "req-003",
+  "method": "tools/list",
+  "params": {}
+}
+```
+
+### ping
+
+Health check endpoint.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "req-004",
+  "method": "ping",
+  "params": {}
+}
+```
+
+## Batch requests
+
+The gateway supports JSON-RPC batch requests. Send an array of request objects to execute multiple tool calls in a single HTTP request.
+
+```json
+[
+  {
+    "jsonrpc": "2.0",
+    "id": "req-005",
+    "method": "tools/call",
+    "params": {
+      "name": "query_analytics",
+      "arguments": { "client_id": "acme-retail", "metric": "page_views" }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": "req-006",
+    "method": "tools/call",
+    "params": {
+      "name": "query_analytics",
+      "arguments": { "client_id": "acme-retail", "metric": "unique_visitors" }
+    }
+  }
+]
+```
+
+<Callout kind="info">
+  Batch requests are executed concurrently. The response array maintains the same order as the request array.
+</Callout>
+
+## Rate limiting
+
+The gateway enforces rate limits per API key. Current limits:
+
+| Tier | Requests per minute | Concurrent connections |
+|------|--------------------|-----------------------|
+| Standard | 60 | 10 |
+| Enterprise | 600 | 100 |
+
+When rate limited, the gateway returns a `-32603` error with a `Retry-After` header.
+
+<Callout kind="alert">
+  Rate limits are applied per API key, not per client. Create separate API keys for different services to isolate rate limits.
+</Callout>

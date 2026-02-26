@@ -1,0 +1,274 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Uptime Monitoring
+  description: Monitor short link destination uptime and availability in Mythic Analytics.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /links/{id}/uptime/status:
+    get:
+      summary: Get uptime status
+      operationId: getUptimeStatus
+      description: >
+        Retrieve the current uptime monitoring status for a link's
+        destination URL, including current state and response time.
+      parameters:
+        - $ref: "#/components/parameters/LinkId"
+      responses:
+        "200":
+          description: Current uptime status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UptimeStatusResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Link not found or monitoring not enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /links/{id}/uptime/history:
+    get:
+      summary: Get uptime history
+      operationId: getUptimeHistory
+      description: >
+        Retrieve uptime history with response times, status changes,
+        and availability percentage over a given period.
+      parameters:
+        - $ref: "#/components/parameters/LinkId"
+        - name: period
+          in: query
+          description: "Time period for history. Default: `7d`."
+          required: false
+          schema:
+            type: string
+            enum: ["24h", "7d", "30d", "90d"]
+            default: "7d"
+      responses:
+        "200":
+          description: Uptime history data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UptimeHistoryResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Link not found or monitoring not enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /links/{id}/uptime/start:
+    post:
+      summary: Start monitoring
+      operationId: startUptimeMonitoring
+      description: >
+        Enable uptime monitoring for a link's destination URL. The system
+        checks availability at regular intervals and triggers webhook alerts
+        on status changes.
+      parameters:
+        - $ref: "#/components/parameters/LinkId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartMonitoringRequest"
+      responses:
+        "200":
+          description: Monitoring started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UptimeStatusResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Link not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /links/{id}/uptime/stop:
+    post:
+      summary: Stop monitoring
+      operationId: stopUptimeMonitoring
+      description: Disable uptime monitoring for a link. Historical data is preserved.
+      parameters:
+        - $ref: "#/components/parameters/LinkId"
+      responses:
+        "200":
+          description: Monitoring stopped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Link not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  parameters:
+    LinkId:
+      name: id
+      in: path
+      required: true
+      description: Short link identifier.
+      schema:
+        type: string
+  schemas:
+    StartMonitoringRequest:
+      type: object
+      properties:
+        interval:
+          type: integer
+          description: Check interval in seconds. Default `300` (5 minutes). Minimum `60`.
+          default: 300
+          minimum: 60
+          example: 300
+        timeout:
+          type: integer
+          description: Request timeout in seconds. Default `30`.
+          default: 30
+          example: 30
+    UptimeStatus:
+      type: object
+      properties:
+        link_id:
+          type: string
+          example: lnk_9xP3qLmN
+        status:
+          type: string
+          enum: ["up", "down", "unknown"]
+          example: up
+        response_time_ms:
+          type: integer
+          description: Last recorded response time in milliseconds.
+          example: 245
+        last_checked:
+          type: string
+          format: date-time
+          example: "2024-06-15T14:30:00.000Z"
+        monitoring_active:
+          type: boolean
+          example: true
+        interval:
+          type: integer
+          description: Check interval in seconds.
+          example: 300
+    UptimeHistory:
+      type: object
+      properties:
+        link_id:
+          type: string
+          example: lnk_9xP3qLmN
+        availability_percent:
+          type: number
+          format: float
+          description: Uptime percentage over the period.
+          example: 99.85
+        avg_response_time_ms:
+          type: integer
+          example: 230
+        checks:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              status:
+                type: string
+                enum: ["up", "down"]
+              response_time_ms:
+                type: integer
+        incidents:
+          type: array
+          description: Downtime incidents over the period.
+          items:
+            type: object
+            properties:
+              started_at:
+                type: string
+                format: date-time
+              recovered_at:
+                type: string
+                format: date-time
+                nullable: true
+              duration_seconds:
+                type: integer
+    UptimeStatusResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/UptimeStatus"
+    UptimeHistoryResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/UptimeHistory"
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0

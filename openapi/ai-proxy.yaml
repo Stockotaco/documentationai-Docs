@@ -1,0 +1,237 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: AI Proxy
+  description: Proxy AI chat and action requests through the Mythic Analytics platform.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /ai/chat:
+    post:
+      summary: Chat completion
+      operationId: aiChat
+      description: >
+        Proxy a chat completion request through the Mythic Analytics AI
+        gateway. Supports streaming responses and context-aware conversations
+        about analytics data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: Chat completion response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResponse"
+        "400":
+          description: Invalid JSON or missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Upstream AI provider error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /ai/action:
+    post:
+      summary: Execute AI action
+      operationId: aiAction
+      description: >
+        Execute a predefined AI action (e.g., summarize data, generate
+        report, suggest insights). Actions are higher-level operations
+        that combine AI capabilities with platform data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActionRequest"
+      responses:
+        "200":
+          description: Action result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResponse"
+        "400":
+          description: Invalid JSON, missing required fields, or unknown action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Upstream AI provider error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  schemas:
+    ChatRequest:
+      type: object
+      required:
+        - messages
+      properties:
+        messages:
+          type: array
+          description: Conversation message history.
+          items:
+            type: object
+            required:
+              - role
+              - content
+            properties:
+              role:
+                type: string
+                enum: ["system", "user", "assistant"]
+              content:
+                type: string
+          example:
+            - role: user
+              content: Summarize the traffic trends for acme-retail over the last 30 days.
+        client_id:
+          type: string
+          description: Optional client ID to scope the conversation context.
+          example: acme-retail
+        stream:
+          type: boolean
+          default: false
+          description: Whether to stream the response via server-sent events.
+        model:
+          type: string
+          description: AI model to use. Defaults to platform default.
+          example: gpt-4o
+    ChatResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            message:
+              type: object
+              properties:
+                role:
+                  type: string
+                  example: assistant
+                content:
+                  type: string
+                  example: "Over the last 30 days, acme-retail saw 42,600 page views with a 12% increase compared to the previous period..."
+            usage:
+              type: object
+              properties:
+                prompt_tokens:
+                  type: integer
+                  example: 150
+                completion_tokens:
+                  type: integer
+                  example: 280
+                total_tokens:
+                  type: integer
+                  example: 430
+    ActionRequest:
+      type: object
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          description: "Action identifier (e.g., `summarize_data`, `generate_report`, `suggest_insights`)."
+          example: summarize_data
+        client_id:
+          type: string
+          description: Client ID to scope the action.
+          example: acme-retail
+        params:
+          type: object
+          description: Action-specific parameters.
+          example:
+            period: 30d
+            metrics:
+              - page_views
+              - unique_visitors
+    ActionResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            action:
+              type: string
+              example: summarize_data
+            result:
+              type: object
+              description: Action-specific result payload.
+            usage:
+              type: object
+              properties:
+                prompt_tokens:
+                  type: integer
+                completion_tokens:
+                  type: integer
+                total_tokens:
+                  type: integer
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0

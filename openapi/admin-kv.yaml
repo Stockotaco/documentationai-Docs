@@ -1,0 +1,252 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: KV Management
+  description: Manage key-value storage entries in the Mythic Analytics platform.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /admin/kv:
+    get:
+      summary: List KV entries
+      operationId: listKvEntries
+      description: >
+        Retrieve a paginated list of key-value entries. Supports prefix
+        filtering for scoped lookups.
+      parameters:
+        - name: prefix
+          in: query
+          description: Filter keys by prefix (e.g., `client:acme-retail:`).
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum results per page. Default `100`, max `1000`.
+          required: false
+          schema:
+            type: integer
+            default: 100
+            maximum: 1000
+        - name: cursor
+          in: query
+          description: Pagination cursor from a previous response.
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Paginated list of KV entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KvListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/kv/{key}:
+    get:
+      summary: Get KV entry
+      operationId: getKvEntry
+      description: Retrieve a single key-value entry by its key.
+      parameters:
+        - $ref: "#/components/parameters/KvKey"
+      responses:
+        "200":
+          description: KV entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KvEntryResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Delete KV entry
+      operationId: deleteKvEntry
+      description: Delete a single key-value entry.
+      parameters:
+        - $ref: "#/components/parameters/KvKey"
+      responses:
+        "200":
+          description: KV entry deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/kv/bulk-delete:
+    post:
+      summary: Bulk delete KV entries
+      operationId: bulkDeleteKvEntries
+      description: >
+        Delete multiple key-value entries in a single request. Pass an
+        array of keys or a prefix pattern.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkDeleteRequest"
+      responses:
+        "200":
+          description: Entries deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkDeleteResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  parameters:
+    KvKey:
+      name: key
+      in: path
+      required: true
+      description: Key-value entry key. URL-encode keys containing special characters.
+      schema:
+        type: string
+  schemas:
+    BulkDeleteRequest:
+      type: object
+      properties:
+        keys:
+          type: array
+          description: Specific keys to delete.
+          items:
+            type: string
+          example:
+            - "client:acme-retail:config"
+            - "client:acme-retail:loader"
+        prefix:
+          type: string
+          description: Delete all keys matching this prefix. Use with caution.
+          example: "client:acme-retail:"
+    KvEntry:
+      type: object
+      properties:
+        key:
+          type: string
+          example: "client:acme-retail:config"
+        value:
+          type: object
+          description: Stored value (JSON object).
+        metadata:
+          type: object
+          nullable: true
+          description: Optional entry metadata.
+        expiration:
+          type: string
+          format: date-time
+          nullable: true
+          description: Entry expiration timestamp. Null means no expiration.
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-03-21T18:42:15.291Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2024-06-15T10:00:00.000Z"
+    KvEntryResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/KvEntry"
+    KvListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/KvEntry"
+        count:
+          type: integer
+          example: 50
+        cursor:
+          type: string
+          nullable: true
+          description: Pagination cursor for the next page. Null if no more results.
+    BulkDeleteResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        deleted_count:
+          type: integer
+          description: Number of entries deleted.
+          example: 5
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0

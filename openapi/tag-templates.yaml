@@ -1,0 +1,133 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Tag Templates
+  description: Retrieve available tag templates for Mythic Analytics.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /tags:
+    get:
+      summary: List tag templates
+      operationId: listTagTemplates
+      description: >
+        Retrieve all available tag templates. Tag templates define pre-built
+        integrations (GA4, Hotjar, Meta Pixel, custom scripts, etc.) that can
+        be assigned to clients. Each template includes a name, type, code
+        template, and required parameter definitions.
+      parameters:
+        - name: type
+          in: query
+          description: Filter by tag type (e.g., `analytics`, `marketing`, `custom`).
+          required: false
+          schema:
+            type: string
+        - name: search
+          in: query
+          description: Case-insensitive search on tag template name.
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of tag templates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagTemplateListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  schemas:
+    TagTemplate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique tag template identifier.
+          example: f47ac10b-58cc-4372-a567-0e02b2c3d479
+        name:
+          type: string
+          description: Display name of the tag template.
+          example: Google Analytics 4
+        type:
+          type: string
+          description: Tag category.
+          example: analytics
+        src:
+          type: string
+          nullable: true
+          description: External script source URL, if applicable.
+          example: https://www.googletagmanager.com/gtag/js
+        code:
+          type: string
+          description: Code template with parameter placeholders.
+        description:
+          type: string
+          description: Human-readable description of the tag.
+          example: Google Analytics 4 measurement tag with configurable measurement ID.
+        required_params:
+          type: array
+          description: Parameters the tag template expects.
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+                example: measurement_id
+              label:
+                type: string
+                example: Measurement ID
+              placeholder:
+                type: string
+                example: G-XXXXXXXXXX
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-10T09:00:00.000Z"
+    TagTemplateListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/TagTemplate"
+        count:
+          type: integer
+          example: 12
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0

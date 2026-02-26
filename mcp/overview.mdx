@@ -1,0 +1,69 @@
+---
+title: MCP Platform
+description: >-
+  Manage MCP servers, tools, API keys, and access control for the Mythic
+  Analytics Model Context Protocol platform.
+---
+
+## Overview
+
+The MCP Platform API enables you to register and manage Model Context Protocol servers, discover and configure tools, control client-level access, and manage API keys for gateway authentication. The MCP gateway provides a JSON-RPC 2.0 interface for tool execution.
+
+## Base URL
+
+All REST endpoints share the same base URL and version prefix.
+
+```text
+https://api.mythic-analytics.com/api/v1
+```
+
+The MCP gateway uses a separate endpoint for JSON-RPC requests:
+
+```text
+https://mcp-gateway.mythic-analytics.com/rpc
+```
+
+## Response envelope
+
+All REST endpoints return a JSON envelope.
+
+<ResponseField name="success" field-type="boolean" required="true" deprecated="false">
+  Whether the request succeeded.
+</ResponseField>
+
+<ResponseField name="data" field-type="object|array|null" required="false" deprecated="false">
+  Resource payload. Shape depends on the endpoint.
+</ResponseField>
+
+<ResponseField name="count" field-type="integer" required="false" deprecated="false">
+  Total number of matching resources. Present on list endpoints.
+</ResponseField>
+
+<ResponseField name="error" field-type="string|null" required="false" deprecated="false">
+  Error message on failed requests.
+</ResponseField>
+
+## Key concepts
+
+| Concept | Description |
+|---------|-------------|
+| **MCP Server** | A registered server that exposes tools via the Model Context Protocol |
+| **Tool** | A capability discovered on an MCP server, callable via the gateway |
+| **Access Control** | Per-client, per-server, and per-tool permission rules |
+| **API Key** | Authentication credential for the MCP gateway |
+| **Gateway** | JSON-RPC 2.0 endpoint for executing tool calls |
+
+## Error handling
+
+| Status | Meaning |
+|--------|---------|
+| `400` | Invalid JSON, missing required fields, or validation error |
+| `401` | Admin key or API key missing or invalid |
+| `404` | Resource not found |
+| `409` | Conflict — duplicate server name |
+| `502` | Upstream MCP server unreachable |
+| `500` | Internal server error |
+
+<Callout kind="info">
+  Check both the HTTP status code and the `error` field in the response body for programmatic error handling.
+</Callout>

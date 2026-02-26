@@ -1,0 +1,60 @@
+---
+title: Agencies Management API
+description: >-
+  Create, list, update, and delete agencies, and manage GoHighLevel location
+  associations via the Agencies Management API.
+---
+
+## Overview
+
+Use the Agencies Management API to manage agency entities in Mythic Analytics. Agencies group multiple client tenants under a single management entity, enabling multi-tenant operations for resellers and white-label partners.
+
+## Base URL
+
+All endpoints share the same base URL and version prefix.
+
+```text
+https://api.mythic-analytics.com/api/v1
+```
+
+## Response envelope
+
+All endpoints return a JSON envelope.
+
+<ResponseField name="success" field-type="boolean" required="true" deprecated="false">
+  Whether the request succeeded.
+</ResponseField>
+
+<ResponseField name="data" field-type="object|array|null" required="false" deprecated="false">
+  Resource payload. Shape depends on the endpoint.
+</ResponseField>
+
+<ResponseField name="count" field-type="integer" required="false" deprecated="false">
+  Total number of matching resources. Present on list endpoints.
+</ResponseField>
+
+<ResponseField name="error" field-type="string|null" required="false" deprecated="false">
+  Error message on failed requests.
+</ResponseField>
+
+## Key concepts
+
+| Concept | Description |
+|---------|-------------|
+| **Agency** | A management entity that groups related client tenants |
+| **Location** | A GoHighLevel location linked to an agency for CRM integration |
+| **Client count** | Automatically tracked number of clients associated with each agency |
+
+## Error handling
+
+| Status | Meaning |
+|--------|---------|
+| `400` | Invalid JSON, missing required fields, or validation error |
+| `401` | Admin key missing or invalid |
+| `404` | Agency not found |
+| `409` | Conflict — duplicate agency name |
+| `500` | Internal server error |
+
+<Callout kind="info">
+  Check both the HTTP status code and the `error` field in the response body for programmatic error handling.
+</Callout>

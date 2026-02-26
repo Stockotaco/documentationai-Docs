@@ -1,0 +1,34 @@
+---
+title: Authentication
+description: >-
+  Authenticate requests to the MCP Platform API using an admin API key for
+  management endpoints, or an MCP API key for gateway tool execution.
+---
+
+## Management API authentication
+
+Management endpoints (servers, tools, access control, API keys) require an admin API key.
+
+<ParamField header="Authorization" param-type="string" required="true" deprecated="false">
+  Bearer token. Format: `Bearer YOUR_ADMIN_KEY`.
+</ParamField>
+
+<ParamField query="admin_key" param-type="string" required="false" deprecated="false">
+  Alternative to the header for server-to-server or tooling scenarios. Do not expose in client-side code.
+</ParamField>
+
+## Gateway authentication
+
+The MCP gateway JSON-RPC endpoint accepts MCP API keys created via the management API.
+
+<ParamField header="Authorization" param-type="string" required="true" deprecated="false">
+  MCP API key as bearer token. Format: `Bearer YOUR_MCP_API_KEY`.
+</ParamField>
+
+<Callout kind="alert">
+  Never expose admin keys or MCP API keys in client-side JavaScript, public repositories, or logs. MCP API keys should only be used server-side.
+</Callout>
+
+<Callout kind="info">
+  MCP API keys support scoped permissions (`tools:execute`, `tools:read`, `servers:read`). Create keys with the minimum required scopes for your use case.
+</Callout>

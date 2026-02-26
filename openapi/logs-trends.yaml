@@ -1,0 +1,258 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Logs & Trends
+  description: Retrieve event logs and trend analytics for Mythic Analytics client tenants.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /clients/{id}/logs:
+    get:
+      summary: Get event logs
+      operationId: getClientLogs
+      description: >
+        Retrieve a paginated list of event logs for a client tenant. Logs include
+        page views, custom events, and system events. Results are ordered by
+        timestamp descending (newest first).
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - name: event
+          in: query
+          description: Filter by event name (e.g., `pageview`, `click`, `form_submit`).
+          required: false
+          schema:
+            type: string
+        - name: from
+          in: query
+          description: Start date in ISO 8601 format. Default is 24 hours ago.
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: End date in ISO 8601 format. Default is now.
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          description: Maximum results per page. Default `100`, max `1000`.
+          required: false
+          schema:
+            type: integer
+            default: 100
+            maximum: 1000
+        - name: offset
+          in: query
+          description: Number of results to skip. Default `0`.
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Paginated list of event logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /clients/{id}/trends:
+    get:
+      summary: Get trends
+      operationId: getClientTrends
+      description: >
+        Retrieve aggregated trend data for a client tenant over a specified
+        time period. Returns metrics such as total page views, unique visitors,
+        average session duration, and bounce rate.
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - name: period
+          in: query
+          description: "Time period for trend aggregation. Default: `30d`."
+          required: false
+          schema:
+            type: string
+            enum: ["24h", "7d", "30d", "90d"]
+            default: "30d"
+        - name: granularity
+          in: query
+          description: "Data point granularity. Default: `day`."
+          required: false
+          schema:
+            type: string
+            enum: ["hour", "day", "week"]
+            default: "day"
+      responses:
+        "200":
+          description: Trend analytics data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrendsResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  parameters:
+    ClientId:
+      name: id
+      in: path
+      required: true
+      description: Client identifier.
+      schema:
+        type: string
+        pattern: "^[a-zA-Z0-9_-]{1,255}$"
+  schemas:
+    LogEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          example: log_8kN2mPqR
+        event:
+          type: string
+          description: Event name.
+          example: pageview
+        url:
+          type: string
+          format: uri
+          description: Page URL where the event occurred.
+          example: https://acme-retail.com/products
+        referrer:
+          type: string
+          nullable: true
+          example: https://google.com
+        user_agent:
+          type: string
+          nullable: true
+        ip_country:
+          type: string
+          nullable: true
+          example: US
+        properties:
+          type: object
+          nullable: true
+          description: Custom event properties.
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-06-15T14:32:10.000Z"
+    TrendDataPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          description: Data point timestamp.
+          example: "2024-06-15"
+        page_views:
+          type: integer
+          example: 1420
+        unique_visitors:
+          type: integer
+          example: 890
+        sessions:
+          type: integer
+          example: 1050
+        avg_session_duration:
+          type: number
+          format: float
+          description: Average session duration in seconds.
+          example: 182.5
+        bounce_rate:
+          type: number
+          format: float
+          description: Bounce rate as a decimal (0.0 to 1.0).
+          example: 0.42
+    TrendsSummary:
+      type: object
+      properties:
+        total_page_views:
+          type: integer
+          example: 42600
+        total_unique_visitors:
+          type: integer
+          example: 26700
+        avg_session_duration:
+          type: number
+          format: float
+          example: 175.3
+        bounce_rate:
+          type: number
+          format: float
+          example: 0.38
+        data_points:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrendDataPoint"
+    LogListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/LogEntry"
+        count:
+          type: integer
+          example: 250
+    TrendsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/TrendsSummary"
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0

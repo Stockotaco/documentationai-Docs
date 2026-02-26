@@ -1,0 +1,524 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: MCP Servers
+  description: Manage MCP servers and server-level access control in the Mythic Analytics platform.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /mcp/servers:
+    post:
+      summary: Create server
+      operationId: createMcpServer
+      description: >
+        Register a new MCP server. The server is probed for available tools
+        upon creation. Returns `409 Conflict` if a server with the same
+        name already exists.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateServerRequest"
+      responses:
+        "201":
+          description: Server created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Server name already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      summary: List servers
+      operationId: listMcpServers
+      description: Retrieve all registered MCP servers.
+      parameters:
+        - name: status
+          in: query
+          description: Filter by server status.
+          required: false
+          schema:
+            type: string
+            enum: ["active", "inactive", "error"]
+      responses:
+        "200":
+          description: List of servers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /mcp/servers/{id}:
+    get:
+      summary: Retrieve server
+      operationId: getMcpServer
+      description: Fetch a single MCP server with its tools and access configuration.
+      parameters:
+        - $ref: "#/components/parameters/ServerId"
+      responses:
+        "200":
+          description: Server details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerDetailResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Server not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      summary: Update server
+      operationId: updateMcpServer
+      description: Partially update server configuration.
+      parameters:
+        - $ref: "#/components/parameters/ServerId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateServerRequest"
+      responses:
+        "200":
+          description: Server updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Server not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Delete server
+      operationId: deleteMcpServer
+      description: Remove an MCP server registration and its access control rules.
+      parameters:
+        - $ref: "#/components/parameters/ServerId"
+      responses:
+        "200":
+          description: Server deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Server not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /mcp/servers/{id}/probe:
+    post:
+      summary: Probe server
+      operationId: probeMcpServer
+      description: >
+        Probe an MCP server to discover available tools and verify
+        connectivity. Updates the server's tool list and status.
+      parameters:
+        - $ref: "#/components/parameters/ServerId"
+      responses:
+        "200":
+          description: Probe completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProbeResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Server not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Server unreachable or probe failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /mcp/servers/{id}/access:
+    get:
+      summary: Get server access rules
+      operationId: getServerAccess
+      description: Retrieve access control rules for a server.
+      parameters:
+        - $ref: "#/components/parameters/ServerId"
+      responses:
+        "200":
+          description: Server access rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessRulesResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Server not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Replace server access rules
+      operationId: replaceServerAccess
+      description: Replace all access control rules for a server.
+      parameters:
+        - $ref: "#/components/parameters/ServerId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplaceAccessRulesRequest"
+      responses:
+        "200":
+          description: Access rules replaced
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessRulesResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Server not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /mcp/servers/{id}/access/{clientId}:
+    put:
+      summary: Set client access
+      operationId: setClientServerAccess
+      description: Set access control for a specific client on a server.
+      parameters:
+        - $ref: "#/components/parameters/ServerId"
+        - name: clientId
+          in: path
+          required: true
+          description: Client identifier.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetClientAccessRequest"
+      responses:
+        "200":
+          description: Client access updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Server or client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  parameters:
+    ServerId:
+      name: id
+      in: path
+      required: true
+      description: MCP server identifier.
+      schema:
+        type: string
+  schemas:
+    CreateServerRequest:
+      type: object
+      required:
+        - name
+        - url
+      properties:
+        name:
+          type: string
+          description: Display name for the server.
+          example: Analytics Tools Server
+        url:
+          type: string
+          format: uri
+          description: MCP server endpoint URL.
+          example: https://mcp.mythic-analytics.com/analytics
+        description:
+          type: string
+          description: Optional description.
+        auth_token:
+          type: string
+          description: Authentication token for the server.
+    UpdateServerRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        description:
+          type: string
+          nullable: true
+        auth_token:
+          type: string
+          nullable: true
+    ReplaceAccessRulesRequest:
+      type: object
+      required:
+        - rules
+      properties:
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccessRule"
+    SetClientAccessRequest:
+      type: object
+      required:
+        - allowed
+      properties:
+        allowed:
+          type: boolean
+          description: Whether the client can access the server.
+        tool_restrictions:
+          type: array
+          description: Optional list of tool IDs the client can access. Empty means all tools.
+          items:
+            type: string
+    McpServer:
+      type: object
+      properties:
+        id:
+          type: string
+          example: srv_5kN2mPqR
+        name:
+          type: string
+          example: Analytics Tools Server
+        url:
+          type: string
+          format: uri
+          example: https://mcp.mythic-analytics.com/analytics
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: ["active", "inactive", "error"]
+          example: active
+        tool_count:
+          type: integer
+          description: Number of discovered tools.
+          example: 8
+        last_probed:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2024-06-15T12:00:00.000Z"
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-04-01T10:00:00.000Z"
+    McpServerDetail:
+      allOf:
+        - $ref: "#/components/schemas/McpServer"
+        - type: object
+          properties:
+            tools:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  description:
+                    type: string
+                  input_schema:
+                    type: object
+            access_rules:
+              type: array
+              items:
+                $ref: "#/components/schemas/AccessRule"
+    AccessRule:
+      type: object
+      properties:
+        client_id:
+          type: string
+          example: acme-retail
+        allowed:
+          type: boolean
+          example: true
+        tool_restrictions:
+          type: array
+          items:
+            type: string
+    ProbeResult:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: ["active", "error"]
+          example: active
+        tools_discovered:
+          type: integer
+          example: 8
+        response_time_ms:
+          type: integer
+          example: 145
+    ServerResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/McpServer"
+    ServerDetailResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/McpServerDetail"
+    ServerListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/McpServer"
+        count:
+          type: integer
+          example: 3
+    AccessRulesResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccessRule"
+    ProbeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/ProbeResult"
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0

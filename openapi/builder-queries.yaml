@@ -1,0 +1,188 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Queries
+  description: Execute analytics queries against Mythic Analytics data sources.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /query:
+    post:
+      summary: Execute query
+      operationId: executeQuery
+      description: >
+        Execute an analytics query against a client's data. Supports
+        aggregations, filters, grouping, and time-series analysis. Requires
+        admin authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueryRequest"
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryResponse"
+        "400":
+          description: Invalid query syntax or missing parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /public/query:
+    post:
+      summary: Execute public query
+      operationId: executePublicQuery
+      description: >
+        Execute an analytics query using a client's publishable key.
+        Scoped to the client associated with the key. Supports the same
+        query syntax as the admin endpoint but with client-level permissions.
+      security:
+        - PublishableKeyHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueryRequest"
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryResponse"
+        "400":
+          description: Invalid query syntax or missing parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Publishable key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+    PublishableKeyHeader:
+      type: apiKey
+      in: header
+      name: X-Publishable-Key
+      description: "Client publishable key. Format: `pk_...`"
+  schemas:
+    QueryRequest:
+      type: object
+      required:
+        - client_id
+        - metric
+      properties:
+        client_id:
+          type: string
+          description: Client identifier to query data for.
+          example: acme-retail
+        metric:
+          type: string
+          description: "Metric to aggregate (e.g., `page_views`, `unique_visitors`, `events`)."
+          example: page_views
+        dimensions:
+          type: array
+          description: Dimensions to group results by.
+          items:
+            type: string
+          example:
+            - day
+            - country
+        filters:
+          type: object
+          description: Key-value filters to narrow query scope.
+          example:
+            url_contains: /products
+            country: US
+        period:
+          type: string
+          description: "Time period. Default: `30d`."
+          enum: ["24h", "7d", "30d", "90d", "custom"]
+          default: "30d"
+        from:
+          type: string
+          format: date-time
+          description: Custom period start (required when period is `custom`).
+        to:
+          type: string
+          format: date-time
+          description: Custom period end (required when period is `custom`).
+        limit:
+          type: integer
+          description: Maximum number of result rows. Default `1000`.
+          default: 1000
+    QueryResult:
+      type: object
+      properties:
+        columns:
+          type: array
+          items:
+            type: string
+          description: Column names in the result set.
+          example:
+            - day
+            - page_views
+        rows:
+          type: array
+          items:
+            type: array
+            items: {}
+          description: Result rows as arrays of values.
+          example:
+            - ["2024-06-15", 1420]
+            - ["2024-06-16", 1385]
+        total:
+          type: integer
+          description: Total rows matching the query (before limit).
+          example: 30
+    QueryResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/QueryResult"
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0

@@ -1,0 +1,202 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Link Webhooks
+  description: Manage webhook subscriptions for short link events in Mythic Analytics.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /links/webhooks:
+    post:
+      summary: Create webhook
+      operationId: createLinkWebhook
+      description: >
+        Create a webhook subscription for link events. The webhook URL
+        receives POST requests when the subscribed events occur (e.g.,
+        link clicked, link created, uptime alert).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWebhookRequest"
+      responses:
+        "201":
+          description: Webhook created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      summary: List webhooks
+      operationId: listLinkWebhooks
+      description: Retrieve all webhook subscriptions.
+      responses:
+        "200":
+          description: List of webhooks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /links/webhooks/{id}:
+    delete:
+      summary: Delete webhook
+      operationId: deleteLinkWebhook
+      description: Permanently delete a webhook subscription.
+      parameters:
+        - $ref: "#/components/parameters/WebhookId"
+      responses:
+        "200":
+          description: Webhook deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Webhook not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  parameters:
+    WebhookId:
+      name: id
+      in: path
+      required: true
+      description: Webhook identifier.
+      schema:
+        type: string
+  schemas:
+    CreateWebhookRequest:
+      type: object
+      required:
+        - url
+        - events
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Endpoint URL that receives webhook POST requests.
+          example: https://api.acme-retail.com/webhooks/links
+        events:
+          type: array
+          description: Events to subscribe to.
+          items:
+            type: string
+            enum: ["link.clicked", "link.created", "link.deleted", "uptime.down", "uptime.recovered"]
+          example:
+            - link.clicked
+            - uptime.down
+        secret:
+          type: string
+          description: Optional secret for HMAC signature verification.
+        metadata:
+          type: object
+          description: Arbitrary metadata attached to the webhook.
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: string
+          example: whk_7kH3nPqR
+        url:
+          type: string
+          format: uri
+          example: https://api.acme-retail.com/webhooks/links
+        events:
+          type: array
+          items:
+            type: string
+          example:
+            - link.clicked
+            - uptime.down
+        active:
+          type: boolean
+          example: true
+        metadata:
+          type: object
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-05-20T10:00:00.000Z"
+    WebhookResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/Webhook"
+    WebhookListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Webhook"
+        count:
+          type: integer
+          example: 3
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0

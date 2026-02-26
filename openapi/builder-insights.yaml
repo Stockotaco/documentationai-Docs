@@ -1,0 +1,302 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Insights
+  description: Create, read, update, and delete analytics insights in the Mythic Analytics Builder.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /insights:
+    post:
+      summary: Create insight
+      operationId: createInsight
+      description: >
+        Create a new analytics insight. An insight defines a saved query with
+        visualization settings that can be embedded in dashboards.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInsightRequest"
+      responses:
+        "201":
+          description: Insight created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      summary: List insights
+      operationId: listInsights
+      description: Retrieve a paginated list of insights with optional filtering.
+      parameters:
+        - name: dashboard_id
+          in: query
+          description: Filter insights by dashboard association.
+          required: false
+          schema:
+            type: string
+        - name: search
+          in: query
+          description: Case-insensitive search on insight name.
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum results per page. Default `50`, max `500`.
+          required: false
+          schema:
+            type: integer
+            default: 50
+            maximum: 500
+        - name: offset
+          in: query
+          description: Number of results to skip. Default `0`.
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Paginated list of insights
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /insights/{id}:
+    get:
+      summary: Retrieve insight
+      operationId: getInsight
+      description: Fetch a single insight by its ID.
+      parameters:
+        - $ref: "#/components/parameters/InsightId"
+      responses:
+        "200":
+          description: Insight details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Insight not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      summary: Update insight
+      operationId: updateInsight
+      description: Partially update insight fields.
+      parameters:
+        - $ref: "#/components/parameters/InsightId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInsightRequest"
+      responses:
+        "200":
+          description: Insight updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Insight not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Delete insight
+      operationId: deleteInsight
+      description: Permanently delete an insight. Removes it from all dashboards.
+      parameters:
+        - $ref: "#/components/parameters/InsightId"
+      responses:
+        "200":
+          description: Insight deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Insight not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  parameters:
+    InsightId:
+      name: id
+      in: path
+      required: true
+      description: Insight identifier.
+      schema:
+        type: string
+  schemas:
+    CreateInsightRequest:
+      type: object
+      required:
+        - name
+        - query
+      properties:
+        name:
+          type: string
+          description: Display name of the insight.
+          example: Daily Active Users
+        description:
+          type: string
+          description: Optional description.
+          example: Tracks unique visitors per day over the last 30 days.
+        query:
+          type: object
+          description: Query definition including metrics, dimensions, filters, and time range.
+          example:
+            metric: unique_visitors
+            dimension: day
+            period: 30d
+        visualization:
+          type: object
+          description: Visualization config (chart type, colors, axes, etc.).
+          example:
+            type: line
+            color: "#F97316"
+    UpdateInsightRequest:
+      type: object
+      description: Partial update — only include fields you want to change.
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        query:
+          type: object
+        visualization:
+          type: object
+    Insight:
+      type: object
+      properties:
+        id:
+          type: string
+          example: ins_8kN2mPqR
+        name:
+          type: string
+          example: Daily Active Users
+        description:
+          type: string
+          nullable: true
+        query:
+          type: object
+        visualization:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-05-10T08:00:00.000Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2024-06-01T12:30:00.000Z"
+    InsightResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/Insight"
+    InsightListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Insight"
+        count:
+          type: integer
+          example: 12
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0

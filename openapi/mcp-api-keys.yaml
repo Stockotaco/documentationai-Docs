@@ -1,0 +1,211 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: MCP API Keys
+  description: Manage API keys for MCP gateway access in the Mythic Analytics platform.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /mcp/api-keys:
+    get:
+      summary: List API keys
+      operationId: listMcpApiKeys
+      description: Retrieve all MCP API keys. Secret values are masked in the response.
+      responses:
+        "200":
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: Create API key
+      operationId: createMcpApiKey
+      description: >
+        Create a new MCP API key. The full key value is only returned once
+        at creation time. Store it securely.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateApiKeyRequest"
+      responses:
+        "201":
+          description: API key created. The full key is returned only once.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyCreatedResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /mcp/api-keys/{id}:
+    delete:
+      summary: Delete API key
+      operationId: deleteMcpApiKey
+      description: Permanently revoke and delete an MCP API key.
+      parameters:
+        - $ref: "#/components/parameters/ApiKeyId"
+      responses:
+        "200":
+          description: API key deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: API key not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  parameters:
+    ApiKeyId:
+      name: id
+      in: path
+      required: true
+      description: MCP API key identifier.
+      schema:
+        type: string
+  schemas:
+    CreateApiKeyRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Human-readable name for the key.
+          example: Production Gateway Key
+        scopes:
+          type: array
+          description: Permission scopes for the key.
+          items:
+            type: string
+            enum: ["tools:execute", "tools:read", "servers:read"]
+          example:
+            - tools:execute
+            - tools:read
+        expires_at:
+          type: string
+          format: date-time
+          description: Optional expiration date. Null means no expiration.
+    McpApiKey:
+      type: object
+      properties:
+        id:
+          type: string
+          example: mak_7kH3nPqR
+        name:
+          type: string
+          example: Production Gateway Key
+        key_prefix:
+          type: string
+          description: First 8 characters of the key for identification.
+          example: mak_7kH3
+        scopes:
+          type: array
+          items:
+            type: string
+          example:
+            - tools:execute
+            - tools:read
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-05-01T10:00:00.000Z"
+    McpApiKeyCreated:
+      allOf:
+        - $ref: "#/components/schemas/McpApiKey"
+        - type: object
+          properties:
+            key:
+              type: string
+              description: Full API key value. Only returned once at creation.
+              example: mak_7kH3nPqRs9xL2mBcD4vN5tW8yZ1aE6f
+    ApiKeyListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/McpApiKey"
+        count:
+          type: integer
+          example: 2
+    ApiKeyCreatedResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/McpApiKeyCreated"
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0

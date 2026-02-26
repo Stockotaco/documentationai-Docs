@@ -1,0 +1,63 @@
+---
+title: Admin API
+description: >-
+  Manage AI proxy requests, key-value storage, and Pub/Sub subscriptions via
+  the Mythic Analytics Admin API.
+---
+
+## Overview
+
+The Admin API provides platform administration capabilities including AI-powered chat and actions, key-value storage management, and Pub/Sub subscription management for event-driven architectures.
+
+## Base URL
+
+All endpoints share the same base URL and version prefix.
+
+```text
+https://api.mythic-analytics.com/api/v1
+```
+
+## Response envelope
+
+All endpoints return a JSON envelope.
+
+<ResponseField name="success" field-type="boolean" required="true" deprecated="false">
+  Whether the request succeeded.
+</ResponseField>
+
+<ResponseField name="data" field-type="object|array|null" required="false" deprecated="false">
+  Resource payload. Shape depends on the endpoint.
+</ResponseField>
+
+<ResponseField name="count" field-type="integer" required="false" deprecated="false">
+  Total number of matching resources. Present on list endpoints.
+</ResponseField>
+
+<ResponseField name="error" field-type="string|null" required="false" deprecated="false">
+  Error message on failed requests.
+</ResponseField>
+
+## Key concepts
+
+| Concept | Description |
+|---------|-------------|
+| **AI Proxy** | Gateway for proxying AI chat and action requests with platform context |
+| **KV Store** | Key-value storage for client configurations and runtime data |
+| **Pub/Sub** | Event-driven messaging system for analytics event processing |
+| **Subscription** | A named consumer that receives messages from a topic |
+
+## Error handling
+
+| Status | Meaning |
+|--------|---------|
+| `400` | Invalid JSON, missing required fields, or validation error |
+| `401` | Admin key missing or invalid |
+| `404` | Resource not found |
+| `409` | Conflict — duplicate subscription name |
+| `429` | Rate limit exceeded (AI proxy) |
+| `500` | Internal server error |
+| `502` | Upstream provider error (AI proxy) |
+
+<Callout kind="info">
+  Check both the HTTP status code and the `error` field in the response body for programmatic error handling.
+</Callout>

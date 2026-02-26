@@ -1,0 +1,618 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Canvas Nodes & Edges
+  description: Read canvas nodes, edges, manage node URLs and events in the Mythic Analytics Builder.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /canvases/{canvasId}/nodes:
+    get:
+      summary: List nodes
+      operationId: listCanvasNodes
+      description: Retrieve all nodes in a canvas.
+      parameters:
+        - $ref: "#/components/parameters/CanvasId"
+      responses:
+        "200":
+          description: List of canvas nodes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Canvas not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /canvases/{canvasId}/edges:
+    get:
+      summary: List edges
+      operationId: listCanvasEdges
+      description: Retrieve all edges (connections between nodes) in a canvas.
+      parameters:
+        - $ref: "#/components/parameters/CanvasId"
+      responses:
+        "200":
+          description: List of canvas edges
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EdgeListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Canvas not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /canvases/{canvasId}/nodes/{nodeId}/urls:
+    post:
+      summary: Add node URL
+      operationId: addNodeUrl
+      description: Add a tracked URL to a canvas node. URLs are monitored for analytics.
+      parameters:
+        - $ref: "#/components/parameters/CanvasId"
+        - $ref: "#/components/parameters/NodeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddNodeUrlRequest"
+      responses:
+        "201":
+          description: URL added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeUrlResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Canvas or node not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      summary: List node URLs
+      operationId: listNodeUrls
+      description: Retrieve all tracked URLs for a canvas node.
+      parameters:
+        - $ref: "#/components/parameters/CanvasId"
+        - $ref: "#/components/parameters/NodeId"
+      responses:
+        "200":
+          description: List of node URLs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeUrlListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Canvas or node not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /canvases/{canvasId}/nodes/{nodeId}/urls/{urlId}:
+    patch:
+      summary: Update node URL
+      operationId: updateNodeUrl
+      description: Update a tracked URL on a canvas node.
+      parameters:
+        - $ref: "#/components/parameters/CanvasId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/UrlId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateNodeUrlRequest"
+      responses:
+        "200":
+          description: URL updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeUrlResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Canvas, node, or URL not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Delete node URL
+      operationId: deleteNodeUrl
+      description: Remove a tracked URL from a canvas node.
+      parameters:
+        - $ref: "#/components/parameters/CanvasId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/UrlId"
+      responses:
+        "200":
+          description: URL deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Canvas, node, or URL not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /canvases/{canvasId}/nodes/{nodeId}/events:
+    post:
+      summary: Add node event
+      operationId: addNodeEvent
+      description: Add a tracked event to a canvas node.
+      parameters:
+        - $ref: "#/components/parameters/CanvasId"
+        - $ref: "#/components/parameters/NodeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddNodeEventRequest"
+      responses:
+        "201":
+          description: Event added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeEventResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Canvas or node not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      summary: List node events
+      operationId: listNodeEvents
+      description: Retrieve all tracked events for a canvas node.
+      parameters:
+        - $ref: "#/components/parameters/CanvasId"
+        - $ref: "#/components/parameters/NodeId"
+      responses:
+        "200":
+          description: List of node events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeEventListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Canvas or node not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /canvases/{canvasId}/nodes/{nodeId}/events/{eventId}:
+    patch:
+      summary: Update node event
+      operationId: updateNodeEvent
+      description: Update a tracked event on a canvas node.
+      parameters:
+        - $ref: "#/components/parameters/CanvasId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/EventId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateNodeEventRequest"
+      responses:
+        "200":
+          description: Event updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeEventResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Canvas, node, or event not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Delete node event
+      operationId: deleteNodeEvent
+      description: Remove a tracked event from a canvas node.
+      parameters:
+        - $ref: "#/components/parameters/CanvasId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/EventId"
+      responses:
+        "200":
+          description: Event deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Canvas, node, or event not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /canvases/{canvasId}/nodes/{nodeId}/events/{eventId}/cross-domain:
+    put:
+      summary: Toggle cross-domain tracking
+      operationId: toggleEventCrossDomain
+      description: Enable or disable cross-domain tracking for a node event.
+      parameters:
+        - $ref: "#/components/parameters/CanvasId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/EventId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrossDomainRequest"
+      responses:
+        "200":
+          description: Cross-domain setting updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeEventResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Canvas, node, or event not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  parameters:
+    CanvasId:
+      name: canvasId
+      in: path
+      required: true
+      description: Canvas identifier.
+      schema:
+        type: string
+    NodeId:
+      name: nodeId
+      in: path
+      required: true
+      description: Canvas node identifier.
+      schema:
+        type: string
+    UrlId:
+      name: urlId
+      in: path
+      required: true
+      description: Node URL identifier.
+      schema:
+        type: string
+    EventId:
+      name: eventId
+      in: path
+      required: true
+      description: Node event identifier.
+      schema:
+        type: string
+  schemas:
+    CanvasNode:
+      type: object
+      properties:
+        id:
+          type: string
+          example: node_3xL7nBcD
+        type:
+          type: string
+          description: Node type (e.g., `page`, `event`, `conversion`, `source`).
+          example: page
+        label:
+          type: string
+          example: Checkout Page
+        position:
+          type: object
+          properties:
+            x:
+              type: number
+              example: 200
+            "y":
+              type: number
+              example: 150
+        data:
+          type: object
+          nullable: true
+          description: Arbitrary node data and configuration.
+    CanvasEdge:
+      type: object
+      properties:
+        id:
+          type: string
+          example: edge_9mK4pLrT
+        source:
+          type: string
+          description: Source node ID.
+          example: node_3xL7nBcD
+        target:
+          type: string
+          description: Target node ID.
+          example: node_7kH2mNqR
+        label:
+          type: string
+          nullable: true
+          example: clicks through
+    AddNodeUrlRequest:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          format: uri
+          description: URL to track on this node.
+          example: https://acme-retail.com/checkout
+        match_type:
+          type: string
+          description: URL matching strategy.
+          enum: ["exact", "contains", "regex"]
+          default: "exact"
+    UpdateNodeUrlRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        match_type:
+          type: string
+          enum: ["exact", "contains", "regex"]
+    NodeUrl:
+      type: object
+      properties:
+        id:
+          type: string
+          example: url_5kN2mPqR
+        url:
+          type: string
+          format: uri
+          example: https://acme-retail.com/checkout
+        match_type:
+          type: string
+          example: exact
+        created_at:
+          type: string
+          format: date-time
+    AddNodeEventRequest:
+      type: object
+      required:
+        - event_name
+      properties:
+        event_name:
+          type: string
+          description: Event name to track on this node.
+          example: purchase_complete
+        cross_domain:
+          type: boolean
+          default: false
+          description: Whether cross-domain tracking is enabled.
+    UpdateNodeEventRequest:
+      type: object
+      properties:
+        event_name:
+          type: string
+        cross_domain:
+          type: boolean
+    CrossDomainRequest:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+          description: Whether to enable cross-domain tracking.
+    NodeEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          example: evt_8kN2mPqR
+        event_name:
+          type: string
+          example: purchase_complete
+        cross_domain:
+          type: boolean
+          example: false
+        created_at:
+          type: string
+          format: date-time
+    NodeUrlResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/NodeUrl"
+    NodeUrlListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/NodeUrl"
+        count:
+          type: integer
+          example: 3
+    NodeEventResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/NodeEvent"
+    NodeEventListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/NodeEvent"
+        count:
+          type: integer
+          example: 4
+    NodeListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/CanvasNode"
+        count:
+          type: integer
+          example: 12
+    EdgeListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/CanvasEdge"
+        count:
+          type: integer
+          example: 8
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0
