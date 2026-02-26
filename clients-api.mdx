@@ -1,0 +1,757 @@
+---
+title: Clients Management API
+description: >-
+  Create, list, update, and delete Mythic Analytics client tenants, manage tags
+  and snippets, and retrieve loader embed code via the Clients Management API.
+---
+
+## Overview
+
+Use the Clients Management API to manage Mythic Analytics client tenants. You can create tenants with auto-generated credentials, configure tags and snippets for remote injection, and retrieve loader snippets for embedding the SDK.
+
+## Base URL
+
+All endpoints share the same base URL and version prefix.
+
+```text
+https://api.mythic-analytics.com/api/v1
+```
+
+## Authentication
+
+Every endpoint requires an admin API key. Pass it as a bearer token or query parameter.
+
+<ParamField header="Authorization" param-type="string" required="true" deprecated="false">
+  Bearer token. Format: `Bearer YOUR_ADMIN_KEY`.
+</ParamField>
+
+<ParamField query="admin_key" param-type="string" required="false" deprecated="false">
+  Alternative to the header for server-to-server or tooling scenarios. Do not expose in client-side code.
+</ParamField>
+
+<Callout kind="alert">
+  Never expose the admin key in client-side JavaScript, public repositories, or logs. Restrict access to trusted backend services and operations staff.
+</Callout>
+
+## Response envelope
+
+All endpoints return a JSON envelope.
+
+<ResponseField name="success" field-type="boolean" required="true" deprecated="false">
+  Whether the request succeeded.
+</ResponseField>
+
+<ResponseField name="data" field-type="object|array|null" required="false" deprecated="false">
+  Resource payload. Shape depends on the endpoint.
+</ResponseField>
+
+<ResponseField name="count" field-type="integer" required="false" deprecated="false">
+  Total number of matching resources. Present on list endpoints.
+</ResponseField>
+
+<ResponseField name="error" field-type="string|null" required="false" deprecated="false">
+  Error message on failed requests.
+</ResponseField>
+
+Example error response:
+
+```json
+{
+  "success": false,
+  "data": null,
+  "error": "Unauthorized",
+  "count": 0
+}
+```
+
+## Validation rules
+
+The API enforces the following formats:
+
+| Field | Pattern | Description |
+|-------|---------|-------------|
+| `id` | `^[a-zA-Z0-9_-]{1,255}$` | Alphanumeric, hyphens, underscores |
+| `name` | 1–255 characters | Required display name |
+| `domain` | Valid domain format | e.g., `acme-retail.com` |
+| `email` | Standard email format | e.g., `ops@acme.com` |
+| `global_name` | Valid JS identifier | e.g., `acmeRetail`, `_myApp` |
+
+---
+
+## Create client: POST /clients
+
+Create a new client tenant. The API auto-generates `publishable_key` and `secret_key` credentials.
+
+### Headers
+
+<ParamField header="Authorization" param-type="string" required="true" deprecated="false">
+  Admin bearer token.
+</ParamField>
+
+### Body fields
+
+<ParamField body="id" param-type="string" required="true" deprecated="false">
+  Unique client identifier. Must match `^[a-zA-Z0-9_-]{1,255}$`.
+</ParamField>
+
+<ParamField body="name" param-type="string" required="true" deprecated="false">
+  Human-readable client name, 1–255 characters.
+</ParamField>
+
+<ParamField body="status" param-type="boolean" required="false" deprecated="false">
+  Whether the client is active. Defaults to `true`.
+</ParamField>
+
+<ParamField body="domain" param-type="string" required="false" deprecated="false">
+  Primary domain for embedded widgets. Must be a valid domain format.
+</ParamField>
+
+<ParamField body="email" param-type="string" required="false" deprecated="false">
+  Contact email. Must be a valid email format.
+</ParamField>
+
+<ParamField body="phone" param-type="string" required="false" deprecated="false">
+  Contact phone number.
+</ParamField>
+
+<ParamField body="website" param-type="string" required="false" deprecated="false">
+  Public website URL.
+</ParamField>
+
+<ParamField body="timezone" param-type="string" required="false" deprecated="false">
+  IANA timezone identifier, such as `America/New_York`.
+</ParamField>
+
+<ParamField body="global_name" param-type="string" required="false" deprecated="false">
+  JavaScript identifier used for the SDK global variable. Must be a valid JS identifier (e.g., `acmeRetail`).
+</ParamField>
+
+<ParamField body="company_id" param-type="string" required="false" deprecated="false">
+  Internal company or reseller identifier for grouping clients.
+</ParamField>
+
+<ParamField body="agency_id" param-type="string" required="false" deprecated="false">
+  Agency identifier for multi-tenant agency setups.
+</ParamField>
+
+<ParamField body="api_metadata" param-type="object" required="false" deprecated="false">
+  Arbitrary JSON metadata attached to the client.
+</ParamField>
+
+<ParamField body="ghl_location_id" param-type="string" required="false" deprecated="false">
+  External GoHighLevel location identifier for integrations.
+</ParamField>
+
+<ParamField body="proxy_api_key" param-type="string" required="false" deprecated="false">
+  Scoped API key for proxying traffic or third-party integrations.
+</ParamField>
+
+### Example
+
+<Request show-lines="true">
+  ```bash
+  curl -X POST "https://api.mythic-analytics.com/api/v1/clients" \
+    -H "Authorization: Bearer YOUR_ADMIN_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "id": "acme-retail",
+      "name": "Acme Retail",
+      "status": true,
+      "domain": "acme-retail.com",
+      "email": "ops@acme-retail.com",
+      "phone": "+1-415-555-0198",
+      "website": "https://acme-retail.com",
+      "timezone": "America/Los_Angeles",
+      "global_name": "acmeRetail",
+      "company_id": "cmp_7kH3nPqR",
+      "api_metadata": {
+        "plan": "enterprise",
+        "region": "us-west"
+      }
+    }'
+  ```
+</Request>
+
+<Response show-lines="true" tabs="201">
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": "acme-retail",
+      "name": "Acme Retail",
+      "status": true,
+      "publishable_key": "pk_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+      "secret_key": "sk_f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3",
+      "domain": "acme-retail.com",
+      "email": "ops@acme-retail.com",
+      "phone": "+1-415-555-0198",
+      "website": "https://acme-retail.com",
+      "timezone": "America/Los_Angeles",
+      "global_name": "acmeRetail",
+      "company_id": "cmp_7kH3nPqR",
+      "api_metadata": {
+        "plan": "enterprise",
+        "region": "us-west"
+      },
+      "ghl_location_id": null,
+      "proxy_api_key": null,
+      "created_at": "2024-03-21T18:42:15.291Z",
+      "updated_at": "2024-03-21T18:42:15.291Z"
+    }
+  }
+  ```
+</Response>
+
+<Callout kind="info">
+  The `publishable_key` (starts with `pk_`) is safe for client-side code. The `secret_key` (starts with `sk_`) must stay on your backend.
+</Callout>
+
+Returns `409 Conflict` if a client with the same `id` already exists.
+
+---
+
+## List clients: GET /clients
+
+Retrieve a paginated list of clients with optional filtering.
+
+### Query parameters
+
+<ParamField query="status" param-type="string" required="false" deprecated="false">
+  Filter by active status. Pass `true` or `false`.
+</ParamField>
+
+<ParamField query="company_id" param-type="string" required="false" deprecated="false">
+  Filter by company identifier.
+</ParamField>
+
+<ParamField query="search" param-type="string" required="false" deprecated="false">
+  Case-insensitive substring match on client name.
+</ParamField>
+
+<ParamField query="limit" param-type="integer" required="false" deprecated="false">
+  Maximum results per page. Defaults to `50`, maximum `500`.
+</ParamField>
+
+<ParamField query="offset" param-type="integer" required="false" deprecated="false">
+  Number of results to skip. Defaults to `0`.
+</ParamField>
+
+### Example
+
+<Request show-lines="true">
+  ```bash
+  curl "https://api.mythic-analytics.com/api/v1/clients?status=true&limit=2&offset=0" \
+    -H "Authorization: Bearer YOUR_ADMIN_KEY"
+  ```
+</Request>
+
+<Response show-lines="true" tabs="200">
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": "acme-retail",
+        "name": "Acme Retail",
+        "status": true,
+        "publishable_key": "pk_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+        "secret_key": "sk_f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3",
+        "domain": "acme-retail.com",
+        "email": "ops@acme-retail.com",
+        "timezone": "America/Los_Angeles",
+        "global_name": "acmeRetail",
+        "company_id": "cmp_7kH3nPqR",
+        "created_at": "2024-03-21T18:42:15.291Z",
+        "updated_at": "2024-03-21T18:42:15.291Z"
+      },
+      {
+        "id": "orion-fitness",
+        "name": "Orion Fitness",
+        "status": true,
+        "publishable_key": "pk_b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5",
+        "secret_key": "sk_e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2",
+        "domain": "orion-fitness.io",
+        "email": "tech@orion-fitness.io",
+        "timezone": "Europe/London",
+        "global_name": "orionFitness",
+        "company_id": "cmp_B3pQ8zK0",
+        "created_at": "2024-03-11T09:14:03.017Z",
+        "updated_at": "2024-03-18T10:06:44.503Z"
+      }
+    ],
+    "count": 2
+  }
+  ```
+</Response>
+
+---
+
+## Retrieve client: GET /clients/:id
+
+Fetch a single client with its related tags, snippets, and transformers.
+
+### Path parameters
+
+<ParamField path="id" param-type="string" required="true" deprecated="false">
+  Client identifier.
+</ParamField>
+
+### Example
+
+<Request show-lines="true">
+  ```bash
+  curl "https://api.mythic-analytics.com/api/v1/clients/acme-retail" \
+    -H "Authorization: Bearer YOUR_ADMIN_KEY"
+  ```
+</Request>
+
+<Response show-lines="true" tabs="200">
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": "acme-retail",
+      "name": "Acme Retail",
+      "status": true,
+      "publishable_key": "pk_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+      "secret_key": "sk_f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3",
+      "domain": "acme-retail.com",
+      "email": "ops@acme-retail.com",
+      "phone": "+1-415-555-0198",
+      "website": "https://acme-retail.com",
+      "timezone": "America/Los_Angeles",
+      "global_name": "acmeRetail",
+      "company_id": "cmp_7kH3nPqR",
+      "api_metadata": { "plan": "enterprise" },
+      "created_at": "2024-03-21T18:42:15.291Z",
+      "updated_at": "2024-03-22T07:18:49.004Z",
+      "tags": [
+        {
+          "tag_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+          "enabled": true,
+          "params": {},
+          "trigger_rules": null,
+          "tags": {
+            "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+            "name": "Google Analytics 4",
+            "type": "inline",
+            "src": null,
+            "code": "...",
+            "description": "GA4 measurement tag"
+          }
+        }
+      ],
+      "snippets": [
+        {
+          "id": "9xP3qLmN-58cc-4372-a567-0e02b2c3d479",
+          "code": "<script src=\"https://widgets.mythic-analytics.com/checkout.js\"></script>",
+          "description": "Checkout widget",
+          "enabled": true,
+          "trigger_rules": null
+        }
+      ],
+      "transformers": [
+        {
+          "id": "5kN1bVdC-58cc-4372-a567-0e02b2c3d479",
+          "name": "event-filter",
+          "type": "map",
+          "config": { "from": "old_event", "as": "new_event" },
+          "priority": 50,
+          "enabled": true
+        }
+      ]
+    }
+  }
+  ```
+</Response>
+
+Returns `404` if the client does not exist.
+
+---
+
+## Update client: PATCH /clients/:id
+
+Partially update client fields. Only include the fields you want to change.
+
+### Path parameters
+
+<ParamField path="id" param-type="string" required="true" deprecated="false">
+  Client identifier.
+</ParamField>
+
+### Body fields
+
+<ParamField body="name" param-type="string" required="false" deprecated="false">
+  New display name (1–255 characters).
+</ParamField>
+
+<ParamField body="status" param-type="boolean" required="false" deprecated="false">
+  Set to `false` to disable the client.
+</ParamField>
+
+<ParamField body="domain" param-type="string" required="false" deprecated="false">
+  Updated embed domain. Pass `null` or `""` to clear.
+</ParamField>
+
+<ParamField body="email" param-type="string" required="false" deprecated="false">
+  Updated contact email. Pass `null` or `""` to clear.
+</ParamField>
+
+<ParamField body="phone" param-type="string" required="false" deprecated="false">
+  Updated phone number.
+</ParamField>
+
+<ParamField body="website" param-type="string" required="false" deprecated="false">
+  Updated website URL.
+</ParamField>
+
+<ParamField body="timezone" param-type="string" required="false" deprecated="false">
+  Updated IANA timezone.
+</ParamField>
+
+<ParamField body="global_name" param-type="string" required="false" deprecated="false">
+  Updated SDK global variable name. Must be a valid JS identifier. Pass `null` or `""` to clear.
+</ParamField>
+
+<ParamField body="company_id" param-type="string" required="false" deprecated="false">
+  Updated company identifier.
+</ParamField>
+
+<ParamField body="agency_id" param-type="string" required="false" deprecated="false">
+  Updated agency identifier.
+</ParamField>
+
+<ParamField body="api_metadata" param-type="object" required="false" deprecated="false">
+  Replace the metadata object.
+</ParamField>
+
+<ParamField body="ghl_location_id" param-type="string" required="false" deprecated="false">
+  Updated GoHighLevel location ID.
+</ParamField>
+
+<ParamField body="proxy_api_key" param-type="string" required="false" deprecated="false">
+  Updated proxy API key.
+</ParamField>
+
+### Example
+
+<Request show-lines="true">
+  ```bash
+  curl -X PATCH "https://api.mythic-analytics.com/api/v1/clients/acme-retail" \
+    -H "Authorization: Bearer YOUR_ADMIN_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "status": false,
+      "api_metadata": {
+        "plan": "enterprise",
+        "billingSuspended": true
+      }
+    }'
+  ```
+</Request>
+
+<Response show-lines="true" tabs="200">
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": "acme-retail",
+      "name": "Acme Retail",
+      "status": false,
+      "publishable_key": "pk_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+      "secret_key": "sk_f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3",
+      "domain": "acme-retail.com",
+      "email": "ops@acme-retail.com",
+      "api_metadata": {
+        "plan": "enterprise",
+        "billingSuspended": true
+      },
+      "created_at": "2024-03-21T18:42:15.291Z",
+      "updated_at": "2024-04-01T10:03:27.842Z"
+    }
+  }
+  ```
+</Response>
+
+Returns `400` if no valid fields are provided or validation fails. Returns `404` if client not found.
+
+---
+
+## Delete client: DELETE /clients/:id
+
+Soft-delete by default (sets `status` to `false`). Pass `?hard=true` to permanently remove the client from the database and KV store.
+
+### Path parameters
+
+<ParamField path="id" param-type="string" required="true" deprecated="false">
+  Client identifier.
+</ParamField>
+
+### Query parameters
+
+<ParamField query="hard" param-type="string" required="false" deprecated="false">
+  Set to `true` for permanent deletion. Default is soft delete.
+</ParamField>
+
+<Callout kind="danger">
+  Hard delete permanently removes the client and all associated data from the database and KV store. This cannot be undone.
+</Callout>
+
+### Example (soft delete)
+
+<Request show-lines="true">
+  ```bash
+  curl -X DELETE "https://api.mythic-analytics.com/api/v1/clients/acme-retail" \
+    -H "Authorization: Bearer YOUR_ADMIN_KEY"
+  ```
+</Request>
+
+<Response show-lines="true" tabs="200">
+  ```json
+  {
+    "success": true,
+    "deleted": true,
+    "hard": false
+  }
+  ```
+</Response>
+
+### Example (hard delete)
+
+<Request show-lines="true">
+  ```bash
+  curl -X DELETE "https://api.mythic-analytics.com/api/v1/clients/acme-retail?hard=true" \
+    -H "Authorization: Bearer YOUR_ADMIN_KEY"
+  ```
+</Request>
+
+<Response show-lines="true" tabs="200">
+  ```json
+  {
+    "success": true,
+    "deleted": true,
+    "hard": true
+  }
+  ```
+</Response>
+
+---
+
+## Replace tags: PUT /clients/:id/tags
+
+Replace the entire tag set for a client. Tags reference predefined tag templates (GA4, Hotjar, custom scripts, etc.) and can include per-client parameters and trigger rules. After updating, the API rebuilds the client's remote configuration in KV.
+
+### Path parameters
+
+<ParamField path="id" param-type="string" required="true" deprecated="false">
+  Client identifier.
+</ParamField>
+
+### Body fields
+
+<ParamField body="tags" param-type="array of objects" required="true" deprecated="false">
+  Array of tag assignment objects. Replaces all existing tags.
+</ParamField>
+
+<ParamField body="tags[].tag_id" param-type="string" required="true" deprecated="false">
+  UUID of the predefined tag template to assign.
+</ParamField>
+
+<ParamField body="tags[].enabled" param-type="boolean" required="false" deprecated="false">
+  Whether the tag is active. Defaults to `true`.
+</ParamField>
+
+<ParamField body="tags[].params" param-type="object" required="false" deprecated="false">
+  Per-client parameters to pass to the tag template (e.g., measurement IDs). Defaults to `{}`.
+</ParamField>
+
+<ParamField body="tags[].trigger_rules" param-type="object" required="false" deprecated="false">
+  Conditional rules controlling when the tag fires. Defaults to `null` (always fires).
+</ParamField>
+
+### Example
+
+<Request show-lines="true">
+  ```bash
+  curl -X PUT "https://api.mythic-analytics.com/api/v1/clients/acme-retail/tags" \
+    -H "Authorization: Bearer YOUR_ADMIN_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "tags": [
+        {
+          "tag_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+          "enabled": true,
+          "params": { "measurement_id": "G-XXXXXXXXXX" }
+        },
+        {
+          "tag_id": "a23bc45d-67ef-8901-2345-6789abcdef01",
+          "enabled": true,
+          "params": {},
+          "trigger_rules": {
+            "url_contains": "/checkout"
+          }
+        }
+      ]
+    }'
+  ```
+</Request>
+
+<Response show-lines="true" tabs="200">
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "tag_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+        "enabled": true,
+        "params": { "measurement_id": "G-XXXXXXXXXX" },
+        "trigger_rules": null
+      },
+      {
+        "tag_id": "a23bc45d-67ef-8901-2345-6789abcdef01",
+        "enabled": true,
+        "params": {},
+        "trigger_rules": { "url_contains": "/checkout" }
+      }
+    ]
+  }
+  ```
+</Response>
+
+---
+
+## Replace snippets: PUT /clients/:id/snippets
+
+Replace all custom code snippets for a client. Snippets are arbitrary HTML or JavaScript injected via remote configuration. After updating, the API rebuilds the client's remote configuration in KV.
+
+### Path parameters
+
+<ParamField path="id" param-type="string" required="true" deprecated="false">
+  Client identifier.
+</ParamField>
+
+### Body fields
+
+<ParamField body="snippets" param-type="array of objects" required="true" deprecated="false">
+  Array of snippet objects. Replaces all existing snippets.
+</ParamField>
+
+<ParamField body="snippets[].code" param-type="string" required="true" deprecated="false">
+  Raw HTML or JavaScript code to inject.
+</ParamField>
+
+<ParamField body="snippets[].description" param-type="string" required="false" deprecated="false">
+  Human-readable description. Defaults to `null`.
+</ParamField>
+
+<ParamField body="snippets[].enabled" param-type="boolean" required="false" deprecated="false">
+  Whether the snippet is active. Defaults to `true`.
+</ParamField>
+
+<ParamField body="snippets[].trigger_rules" param-type="object" required="false" deprecated="false">
+  Conditional rules controlling when the snippet loads. Defaults to `null` (always loads).
+</ParamField>
+
+### Example
+
+<Request show-lines="true">
+  ```bash
+  curl -X PUT "https://api.mythic-analytics.com/api/v1/clients/acme-retail/snippets" \
+    -H "Authorization: Bearer YOUR_ADMIN_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "snippets": [
+        {
+          "code": "<script src=\"https://widgets.mythic-analytics.com/checkout.js\"></script>",
+          "description": "Checkout widget",
+          "enabled": true
+        },
+        {
+          "code": "<div data-mythic-badge=\"acme-retail\"></div>",
+          "description": "Profile badge",
+          "enabled": true,
+          "trigger_rules": { "url_contains": "/profile" }
+        }
+      ]
+    }'
+  ```
+</Request>
+
+<Response show-lines="true" tabs="200">
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": "9xP3qLmN-58cc-4372-a567-0e02b2c3d479",
+        "code": "<script src=\"https://widgets.mythic-analytics.com/checkout.js\"></script>",
+        "description": "Checkout widget",
+        "enabled": true,
+        "trigger_rules": null
+      },
+      {
+        "id": "4vG7hQpL-58cc-4372-a567-0e02b2c3d479",
+        "code": "<div data-mythic-badge=\"acme-retail\"></div>",
+        "description": "Profile badge",
+        "enabled": true,
+        "trigger_rules": { "url_contains": "/profile" }
+      }
+    ]
+  }
+  ```
+</Response>
+
+---
+
+## Loader snippets: GET /clients/:id/loader
+
+Retrieve the loader configuration including the publishable key, embed URL, and ready-to-paste HTML snippets.
+
+### Path parameters
+
+<ParamField path="id" param-type="string" required="true" deprecated="false">
+  Client identifier.
+</ParamField>
+
+### Example
+
+<Request show-lines="true">
+  ```bash
+  curl "https://api.mythic-analytics.com/api/v1/clients/acme-retail/loader" \
+    -H "Authorization: Bearer YOUR_ADMIN_KEY"
+  ```
+</Request>
+
+<Response show-lines="true" tabs="200">
+  ```json
+  {
+    "success": true,
+    "data": {
+      "publishable_key": "pk_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+      "embed_url": "https://api.mythic-analytics.com/embed/loader/pk_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+      "iframe_snippet": "<iframe src=\"https://api.mythic-analytics.com/embed/loader/pk_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4\" style=\"border:0;width:100%;height:600px\" loading=\"lazy\"></iframe>",
+      "script_snippet": "..."
+    }
+  }
+  ```
+</Response>
+
+<Callout kind="info">
+  The `script_snippet` contains a minified loader that creates the SDK global, initializes it with the correct `api_host`, and loads the SDK from the CDN. Use this for the simplest integration path.
+</Callout>
+
+---
+
+## Error handling
+
+| Status | Meaning |
+|--------|---------|
+| `400` | Invalid JSON, missing required fields, or validation error |
+| `401` | Admin key missing or invalid |
+| `404` | Client not found |
+| `409` | Conflict — duplicate `id`, `global_name`, or `domain` |
+| `500` | Internal server error |
+
+<Callout kind="info">
+  Check both the HTTP status code and the `error` field in the response body for programmatic error handling.
+</Callout>

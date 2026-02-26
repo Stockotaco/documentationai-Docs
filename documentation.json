@@ -150,7 +150,7 @@
         ]
       },
       {
-        "tab": "Clients management api v2",
+        "tab": "Clients API",
         "icon": "building-2",
         "groups": [
           {
@@ -158,8 +158,8 @@
             "icon": "file-text",
             "pages": [
               {
-                "title": "Clients management API v2",
-                "path": "clients-api-v2",
+                "title": "Clients Management API",
+                "path": "clients-api",
                 "icon": "file-text"
               }
             ]
