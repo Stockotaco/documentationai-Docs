@@ -1,0 +1,205 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Snippets
+  description: Manage custom code snippets and retrieve loader embed code for Mythic Analytics client tenants.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /clients/{id}/snippets:
+    put:
+      summary: Replace snippets
+      operationId: replaceSnippets
+      description: >
+        Replace all custom code snippets for a client. Snippets are arbitrary
+        HTML or JavaScript injected via remote configuration. After updating,
+        the API rebuilds the client's remote configuration in KV.
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplaceSnippetsRequest"
+      responses:
+        "200":
+          description: Snippets replaced successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SnippetsResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /clients/{id}/loader:
+    get:
+      summary: Get loader snippets
+      operationId: getLoader
+      description: >
+        Retrieve the loader configuration including the publishable key, embed
+        URL, and ready-to-paste HTML snippets for embedding the SDK.
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      responses:
+        "200":
+          description: Loader configuration with embed snippets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoaderResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  parameters:
+    ClientId:
+      name: id
+      in: path
+      required: true
+      description: Client identifier.
+      schema:
+        type: string
+        pattern: "^[a-zA-Z0-9_-]{1,255}$"
+  schemas:
+    SnippetInput:
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          type: string
+          description: Raw HTML or JavaScript code to inject.
+        description:
+          type: string
+          nullable: true
+          description: Human-readable description.
+        enabled:
+          type: boolean
+          default: true
+          description: Whether the snippet is active.
+        trigger_rules:
+          type: object
+          nullable: true
+          description: Conditional rules controlling when the snippet loads.
+    Snippet:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Auto-generated snippet ID.
+          example: 9xP3qLmN-58cc-4372-a567-0e02b2c3d479
+        code:
+          type: string
+          description: Raw HTML or JavaScript code to inject.
+          example: '<script src="https://widgets.mythic-analytics.com/checkout.js"></script>'
+        description:
+          type: string
+          nullable: true
+          example: Checkout widget
+        enabled:
+          type: boolean
+          default: true
+        trigger_rules:
+          type: object
+          nullable: true
+    Loader:
+      type: object
+      properties:
+        publishable_key:
+          type: string
+          description: Client-side safe key.
+          example: pk_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
+        embed_url:
+          type: string
+          format: uri
+          description: Direct URL for the loader.
+          example: https://api.mythic-analytics.com/embed/loader/pk_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
+        iframe_snippet:
+          type: string
+          description: Ready-to-paste iframe HTML.
+        script_snippet:
+          type: string
+          description: >
+            Minified loader script that creates the SDK global, initializes it
+            with the correct api_host, and loads the SDK from the CDN.
+    ReplaceSnippetsRequest:
+      type: object
+      required:
+        - snippets
+      properties:
+        snippets:
+          type: array
+          description: Array of snippet objects. Replaces all existing snippets.
+          items:
+            $ref: "#/components/schemas/SnippetInput"
+    SnippetsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Snippet"
+    LoaderResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/Loader"
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0

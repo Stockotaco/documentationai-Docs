@@ -170,8 +170,19 @@
             ]
           },
           {
-            "group": "Endpoints",
-            "openapi": "clients-api-openapi.yaml"
+            "group": "Clients",
+            "icon": "users",
+            "openapi": "openapi/clients.yaml"
+          },
+          {
+            "group": "Tags",
+            "icon": "tag",
+            "openapi": "openapi/tags.yaml"
+          },
+          {
+            "group": "Snippets",
+            "icon": "code",
+            "openapi": "openapi/snippets.yaml"
           }
         ]
       },

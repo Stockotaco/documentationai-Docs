@@ -1,0 +1,135 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Tags
+  description: Manage tag assignments for Mythic Analytics client tenants.
+servers:
+  - url: https://api.mythic-analytics.com/api/v1
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /clients/{id}/tags:
+    put:
+      summary: Replace tags
+      operationId: replaceTags
+      description: >
+        Replace the entire tag set for a client. Tags reference predefined tag
+        templates (GA4, Hotjar, custom scripts, etc.) and can include per-client
+        parameters and trigger rules. After updating, the API rebuilds the
+        client's remote configuration in KV.
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplaceTagsRequest"
+      responses:
+        "200":
+          description: Tags replaced successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagsResponse"
+        "400":
+          description: Invalid JSON or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  parameters:
+    ClientId:
+      name: id
+      in: path
+      required: true
+      description: Client identifier.
+      schema:
+        type: string
+        pattern: "^[a-zA-Z0-9_-]{1,255}$"
+  schemas:
+    TagAssignment:
+      type: object
+      required:
+        - tag_id
+      properties:
+        tag_id:
+          type: string
+          format: uuid
+          description: UUID of the predefined tag template to assign.
+          example: f47ac10b-58cc-4372-a567-0e02b2c3d479
+        enabled:
+          type: boolean
+          default: true
+          description: Whether the tag is active.
+        params:
+          type: object
+          default: {}
+          description: Per-client parameters to pass to the tag template (e.g., measurement IDs).
+          example:
+            measurement_id: G-XXXXXXXXXX
+        trigger_rules:
+          type: object
+          nullable: true
+          description: Conditional rules controlling when the tag fires. Null means always fires.
+          example:
+            url_contains: /checkout
+    ReplaceTagsRequest:
+      type: object
+      required:
+        - tags
+      properties:
+        tags:
+          type: array
+          description: Array of tag assignment objects. Replaces all existing tags.
+          items:
+            $ref: "#/components/schemas/TagAssignment"
+    TagsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/TagAssignment"
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+          example: null
+        error:
+          type: string
+          example: Unauthorized
+        count:
+          type: integer
+          example: 0

@@ -1,10 +1,8 @@
 openapi: "3.0.0"
 info:
   version: 1.0.0
-  title: Clients Management API
-  description: >
-    Create, list, update, and delete Mythic Analytics client tenants, manage
-    tags and snippets, and retrieve loader embed code.
+  title: Clients
+  description: Create, list, retrieve, update, and delete Mythic Analytics client tenants.
 servers:
   - url: https://api.mythic-analytics.com/api/v1
 security:
@@ -205,117 +203,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /clients/{id}/tags:
-    put:
-      summary: Replace tags
-      operationId: replaceTags
-      description: >
-        Replace the entire tag set for a client. Tags reference predefined tag
-        templates (GA4, Hotjar, custom scripts, etc.) and can include per-client
-        parameters and trigger rules. After updating, the API rebuilds the
-        client's remote configuration in KV.
-      parameters:
-        - $ref: "#/components/parameters/ClientId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ReplaceTagsRequest"
-      responses:
-        "200":
-          description: Tags replaced successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/TagsResponse"
-        "400":
-          description: Invalid JSON or validation error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Client not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /clients/{id}/snippets:
-    put:
-      summary: Replace snippets
-      operationId: replaceSnippets
-      description: >
-        Replace all custom code snippets for a client. Snippets are arbitrary
-        HTML or JavaScript injected via remote configuration. After updating,
-        the API rebuilds the client's remote configuration in KV.
-      parameters:
-        - $ref: "#/components/parameters/ClientId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ReplaceSnippetsRequest"
-      responses:
-        "200":
-          description: Snippets replaced successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SnippetsResponse"
-        "400":
-          description: Invalid JSON or validation error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Client not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /clients/{id}/loader:
-    get:
-      summary: Get loader snippets
-      operationId: getLoader
-      description: >
-        Retrieve the loader configuration including the publishable key, embed
-        URL, and ready-to-paste HTML snippets for embedding the SDK.
-      parameters:
-        - $ref: "#/components/parameters/ClientId"
-      responses:
-        "200":
-          description: Loader configuration with embed snippets
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LoaderResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Client not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 components:
   securitySchemes:
     BearerAuth:
@@ -326,9 +213,7 @@ components:
       type: apiKey
       in: query
       name: admin_key
-      description: >
-        Alternative to the Authorization header for server-to-server or tooling
-        scenarios. Do not expose in client-side code.
+      description: Alternative to the Authorization header for server-to-server scenarios.
   parameters:
     ClientId:
       name: id
@@ -362,7 +247,7 @@ components:
           description: Whether the client is active.
         domain:
           type: string
-          description: Primary domain for embedded widgets. Must be a valid domain format.
+          description: Primary domain for embedded widgets.
           example: acme-retail.com
         email:
           type: string
@@ -384,27 +269,27 @@ components:
           example: America/Los_Angeles
         global_name:
           type: string
-          description: JavaScript identifier used for the SDK global variable. Must be a valid JS identifier.
+          description: JavaScript identifier for the SDK global variable.
           example: acmeRetail
         company_id:
           type: string
-          description: Internal company or reseller identifier for grouping clients.
+          description: Internal company or reseller identifier.
           example: cmp_7kH3nPqR
         agency_id:
           type: string
-          description: Agency identifier for multi-tenant agency setups.
+          description: Agency identifier for multi-tenant setups.
         api_metadata:
           type: object
-          description: Arbitrary JSON metadata attached to the client.
+          description: Arbitrary JSON metadata.
           example:
             plan: enterprise
             region: us-west
         ghl_location_id:
           type: string
-          description: External GoHighLevel location identifier for integrations.
+          description: GoHighLevel location identifier.
         proxy_api_key:
           type: string
-          description: Scoped API key for proxying traffic or third-party integrations.
+          description: Scoped API key for proxying traffic.
     UpdateClientRequest:
       type: object
       description: Partial update — only include fields you want to change.
@@ -413,55 +298,42 @@ components:
           type: string
           minLength: 1
           maxLength: 255
-          description: New display name.
         status:
           type: boolean
-          description: Set to `false` to disable the client.
         domain:
           type: string
           nullable: true
-          description: Updated embed domain. Pass `null` or `""` to clear.
         email:
           type: string
           format: email
           nullable: true
-          description: Updated contact email. Pass `null` or `""` to clear.
         phone:
           type: string
           nullable: true
-          description: Updated phone number.
         website:
           type: string
           format: uri
           nullable: true
-          description: Updated website URL.
         timezone:
           type: string
-          description: Updated IANA timezone.
         global_name:
           type: string
           nullable: true
-          description: Updated SDK global variable name. Must be a valid JS identifier.
         company_id:
           type: string
           nullable: true
-          description: Updated company identifier.
         agency_id:
           type: string
           nullable: true
-          description: Updated agency identifier.
         api_metadata:
           type: object
           nullable: true
-          description: Replace the metadata object.
         ghl_location_id:
           type: string
           nullable: true
-          description: Updated GoHighLevel location ID.
         proxy_api_key:
           type: string
           nullable: true
-          description: Updated proxy API key.
     Client:
       type: object
       properties:
@@ -480,7 +352,7 @@ components:
           example: pk_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
         secret_key:
           type: string
-          description: Backend-only secret key (starts with `sk_`). Never expose client-side.
+          description: Backend-only secret key (starts with `sk_`).
           example: sk_f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3
         domain:
           type: string
@@ -493,11 +365,9 @@ components:
         phone:
           type: string
           nullable: true
-          example: "+1-415-555-0198"
         website:
           type: string
           nullable: true
-          example: https://acme-retail.com
         timezone:
           type: string
           nullable: true
@@ -516,9 +386,6 @@ components:
         api_metadata:
           type: object
           nullable: true
-          example:
-            plan: enterprise
-            region: us-west
         ghl_location_id:
           type: string
           nullable: true
@@ -541,174 +408,70 @@ components:
             tags:
               type: array
               items:
-                $ref: "#/components/schemas/TagAssignment"
+                type: object
+                properties:
+                  tag_id:
+                    type: string
+                    format: uuid
+                  enabled:
+                    type: boolean
+                  params:
+                    type: object
+                  trigger_rules:
+                    type: object
+                    nullable: true
+                  tags:
+                    type: object
+                    description: Resolved tag template details.
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                      type:
+                        type: string
+                      src:
+                        type: string
+                        nullable: true
+                      code:
+                        type: string
+                      description:
+                        type: string
             snippets:
               type: array
               items:
-                $ref: "#/components/schemas/Snippet"
+                type: object
+                properties:
+                  id:
+                    type: string
+                  code:
+                    type: string
+                  description:
+                    type: string
+                    nullable: true
+                  enabled:
+                    type: boolean
+                  trigger_rules:
+                    type: object
+                    nullable: true
             transformers:
               type: array
               items:
-                $ref: "#/components/schemas/Transformer"
-    TagAssignment:
-      type: object
-      required:
-        - tag_id
-      properties:
-        tag_id:
-          type: string
-          format: uuid
-          description: UUID of the predefined tag template to assign.
-          example: f47ac10b-58cc-4372-a567-0e02b2c3d479
-        enabled:
-          type: boolean
-          default: true
-          description: Whether the tag is active.
-        params:
-          type: object
-          default: {}
-          description: Per-client parameters to pass to the tag template (e.g., measurement IDs).
-          example:
-            measurement_id: G-XXXXXXXXXX
-        trigger_rules:
-          type: object
-          nullable: true
-          description: Conditional rules controlling when the tag fires. Null means always fires.
-          example:
-            url_contains: /checkout
-    TagAssignmentResponse:
-      allOf:
-        - $ref: "#/components/schemas/TagAssignment"
-        - type: object
-          properties:
-            tags:
-              type: object
-              description: The resolved tag template details.
-              properties:
-                id:
-                  type: string
-                  format: uuid
-                name:
-                  type: string
-                  example: Google Analytics 4
-                type:
-                  type: string
-                  example: inline
-                src:
-                  type: string
-                  nullable: true
-                code:
-                  type: string
-                description:
-                  type: string
-                  example: GA4 measurement tag
-    Snippet:
-      type: object
-      properties:
-        id:
-          type: string
-          description: Auto-generated snippet ID (present in responses only).
-          example: 9xP3qLmN-58cc-4372-a567-0e02b2c3d479
-        code:
-          type: string
-          description: Raw HTML or JavaScript code to inject.
-          example: '<script src="https://widgets.mythic-analytics.com/checkout.js"></script>'
-        description:
-          type: string
-          nullable: true
-          description: Human-readable description.
-          example: Checkout widget
-        enabled:
-          type: boolean
-          default: true
-          description: Whether the snippet is active.
-        trigger_rules:
-          type: object
-          nullable: true
-          description: Conditional rules controlling when the snippet loads.
-    SnippetInput:
-      type: object
-      required:
-        - code
-      properties:
-        code:
-          type: string
-          description: Raw HTML or JavaScript code to inject.
-        description:
-          type: string
-          nullable: true
-          description: Human-readable description.
-        enabled:
-          type: boolean
-          default: true
-          description: Whether the snippet is active.
-        trigger_rules:
-          type: object
-          nullable: true
-          description: Conditional rules controlling when the snippet loads.
-    Transformer:
-      type: object
-      properties:
-        id:
-          type: string
-          example: 5kN1bVdC-58cc-4372-a567-0e02b2c3d479
-        name:
-          type: string
-          example: event-filter
-        type:
-          type: string
-          example: map
-        config:
-          type: object
-          example:
-            from: old_event
-            as: new_event
-        priority:
-          type: integer
-          example: 50
-        enabled:
-          type: boolean
-          example: true
-    Loader:
-      type: object
-      properties:
-        publishable_key:
-          type: string
-          description: Client-side safe key.
-          example: pk_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
-        embed_url:
-          type: string
-          format: uri
-          description: Direct URL for the loader.
-          example: https://api.mythic-analytics.com/embed/loader/pk_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
-        iframe_snippet:
-          type: string
-          description: Ready-to-paste iframe HTML.
-        script_snippet:
-          type: string
-          description: >
-            Minified loader script that creates the SDK global, initializes it
-            with the correct api_host, and loads the SDK from the CDN.
-    ReplaceTagsRequest:
-      type: object
-      required:
-        - tags
-      properties:
-        tags:
-          type: array
-          description: Array of tag assignment objects. Replaces all existing tags.
-          items:
-            $ref: "#/components/schemas/TagAssignment"
-    ReplaceSnippetsRequest:
-      type: object
-      required:
-        - snippets
-      properties:
-        snippets:
-          type: array
-          description: Array of snippet objects. Replaces all existing snippets.
-          items:
-            $ref: "#/components/schemas/SnippetInput"
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  type:
+                    type: string
+                  config:
+                    type: object
+                  priority:
+                    type: integer
+                  enabled:
+                    type: boolean
     ClientResponse:
       type: object
       properties:
@@ -739,34 +502,6 @@ components:
           type: integer
           description: Total number of matching resources.
           example: 2
-    TagsResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
-        data:
-          type: array
-          items:
-            $ref: "#/components/schemas/TagAssignment"
-    SnippetsResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
-        data:
-          type: array
-          items:
-            $ref: "#/components/schemas/Snippet"
-    LoaderResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
-        data:
-          $ref: "#/components/schemas/Loader"
     DeleteResponse:
       type: object
       properties:
@@ -791,7 +526,6 @@ components:
           example: null
         error:
           type: string
-          description: Error message.
           example: Unauthorized
         count:
           type: integer
