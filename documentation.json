@@ -171,55 +171,7 @@
           },
           {
             "group": "Endpoints",
-            "icon": "route",
-            "pages": [
-              {
-                "title": "Create Client",
-                "path": "clients-api/create-client",
-                "icon": "plus"
-              },
-              {
-                "title": "List Clients",
-                "path": "clients-api/list-clients",
-                "icon": "list"
-              },
-              {
-                "title": "Retrieve Client",
-                "path": "clients-api/retrieve-client",
-                "icon": "search"
-              },
-              {
-                "title": "Update Client",
-                "path": "clients-api/update-client",
-                "icon": "pencil"
-              },
-              {
-                "title": "Delete Client",
-                "path": "clients-api/delete-client",
-                "icon": "trash-2"
-              }
-            ]
-          },
-          {
-            "group": "Configuration",
-            "icon": "settings",
-            "pages": [
-              {
-                "title": "Replace Tags",
-                "path": "clients-api/replace-tags",
-                "icon": "tag"
-              },
-              {
-                "title": "Replace Snippets",
-                "path": "clients-api/replace-snippets",
-                "icon": "code"
-              },
-              {
-                "title": "Loader Snippets",
-                "path": "clients-api/loader",
-                "icon": "download"
-              }
-            ]
+            "openapi": "clients-api-openapi.yaml"
           }
         ]
       },
