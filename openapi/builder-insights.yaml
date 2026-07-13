@@ -353,6 +353,14 @@ components:
         generated_sql:
           type: string
           description: Optional pre-compiled SQL.
+        cache_ttl_seconds:
+          type: integer
+          description: >-
+            How long (seconds) the worker reuses a query result before
+            re-running BigQuery, for embed/dashboard renders. Defaults to `300`.
+            The KV cache floor is 60s, so `0` (or any value below 60) disables
+            caching and forces a fresh query every render.
+          example: 300
     PatchInsightRequest:
       type: object
       description: >-
