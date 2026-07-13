@@ -1,0 +1,129 @@
+---
+title: Onboard a client
+description: >-
+  Add a new client through the API, get its publishable key, and install the
+  Mythic tracking pixel on the client's site — end to end.
+---
+
+## Overview
+
+When you take on a new client, three things happen: you **create the client** (the API mints its keys), you **fetch the loader snippet**, and you **install the pixel** on the client's site. This page walks the whole flow with copy-paste requests.
+
+```text
+https://mythic-analytics.gulp.workers.dev
+```
+
+<Callout kind="info">
+  Client creation and loader retrieval run on the provisioning API (`/api/v1`) with your server-side API key. The `publishable_key` you get back is the only credential that goes on the client's website — it's browser-safe.
+</Callout>
+
+## Steps
+
+<Steps>
+  <Step title="Create the client" icon="user-plus" titleType="h3">
+    `POST /api/v1/clients`. Only `id` and `name` are required — the API auto-generates the client's `publishable_key` (`pk_`) and `secret_key` (`sk_`).
+
+    <CodeGroup tabs="cURL">
+    ```bash
+    curl -X POST "https://mythic-analytics.gulp.workers.dev/api/v1/clients" \
+      -H "Authorization: Bearer YOUR_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "id": "acme-retail",
+        "name": "Acme Retail",
+        "domain": "acme-retail.com"
+      }'
+    ```
+    </CodeGroup>
+
+    ```json
+    {
+      "success": true,
+      "data": {
+        "id": "acme-retail",
+        "name": "Acme Retail",
+        "status": true,
+        "publishable_key": "pk_example000000000000000000000000",
+        "secret_key": "sk_example000000000000000000000000",
+        "domain": "acme-retail.com",
+        "created_at": "2026-07-13T16:13:43.509Z",
+        "updated_at": "2026-07-13T16:13:43.509Z"
+      }
+    }
+    ```
+
+    <Callout kind="tip">
+      Save the `publishable_key` — it's what goes on the client's site. The `secret_key` is a read-only server-side credential you can hand to the client for their own dashboards. Both are also retrievable later from the client record.
+    </Callout>
+  </Step>
+
+  <Step title="Get the loader snippet" icon="code" titleType="h3">
+    `GET /api/v1/clients/{id}/loader` returns a ready-to-paste `<script>` snippet, a hosted builder URL, and an iframe embed for that URL. No need to assemble anything by hand.
+
+    <CodeGroup tabs="cURL">
+    ```bash
+    curl "https://mythic-analytics.gulp.workers.dev/api/v1/clients/acme-retail/loader" \
+      -H "Authorization: Bearer YOUR_API_KEY"
+    ```
+    </CodeGroup>
+
+    ```json
+    {
+      "success": true,
+      "data": {
+        "publishable_key": "pk_example000000000000000000000000",
+        "embed_url": "https://mythic-analytics.gulp.workers.dev/embed/loader/pk_example000000000000000000000000",
+        "iframe_snippet": "<iframe src=\"https://mythic-analytics.gulp.workers.dev/embed/loader/pk_example000000000000000000000000\" width=\"100%\" height=\"800\" frameborder=\"0\"></iframe>",
+        "script_snippet": "<script>!function(){var e=[];window.mythic={init:function(t,n){return e.push([\"init\",t,n]),window.mythic},q:e};[\"capture\",\"pageview\",\"identify\",\"alias\",\"reset\",\"opt_in\",\"opt_out\"].forEach(function(t){window.mythic[t]=function(){return e.push([t].concat(Array.prototype.slice.call(arguments))),window.mythic}});var t=document.createElement(\"script\");t.async=!0;t.src=\"https://mythic-analytics.gulp.workers.dev/cdn/m.js\";(document.head||document.body).appendChild(t)}();\nmythic.init(\"pk_example000000000000000000000000\");</script>"
+      }
+    }
+    ```
+
+    <ResponseField name="script_snippet" field-type="string">
+      A self-contained `<script>` tag. It stubs `window.mythic`, loads the CDN loader asynchronously, and calls `init` with the client's key. Queues any calls made before the SDK finishes loading. **This is the one to give the client.**
+    </ResponseField>
+    <ResponseField name="embed_url" field-type="string">
+      A hosted, no-auth snippet builder for this key. Open it to preview and customize the install, or hand the link to a non-technical client.
+    </ResponseField>
+    <ResponseField name="iframe_snippet" field-type="string">
+      The `embed_url` wrapped in an iframe — drop it into your own agency portal so clients can copy their snippet without leaving your app.
+    </ResponseField>
+  </Step>
+
+  <Step title="Install the pixel on the client's site" icon="clipboard-paste" titleType="h3">
+    Paste the `script_snippet` into the client's site, just before the closing `</head>` tag. That's it — page views auto-capture immediately.
+
+    ```html
+    <script>!function(){/* ...from script_snippet... */}();
+    mythic.init("pk_example000000000000000000000000");</script>
+    ```
+
+    Prefer a minimal manual install? The snippet is equivalent to the standard CDN loader:
+
+    ```html
+    <script src="https://mythic-analytics.gulp.workers.dev/cdn/m.js"></script>
+    <script>
+      window.mythic.init("pk_example000000000000000000000000");
+    </script>
+    ```
+
+    <Callout kind="success">
+      Verify install: load the client's site and confirm events arrive via <a href="/data-api/overview">the Data API</a> event summary, or watch the network tab for a request to `/e?key=pk_...`.
+    </Callout>
+  </Step>
+</Steps>
+
+## Hand it off without touching code
+
+If the client installs their own tag, skip the copy-paste entirely — send them the `embed_url` from step 2. It's a hosted page that renders their snippet with a copy button and a live config preview, or embed it in your portal with the `iframe_snippet`.
+
+## Where to next
+
+<Columns cols="2">
+  <Card title="JavaScript SDK" href="/javascript-sdk/overview" icon="braces">
+    Track custom events, identify users, and configure consent once the pixel is live.
+  </Card>
+  <Card title="Data API" href="/data-api/overview" icon="database">
+    Confirm events are flowing and query the client's analytics.
+  </Card>
+</Columns>

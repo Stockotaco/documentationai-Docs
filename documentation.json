@@ -27,6 +27,11 @@
                     "title": "For Agencies",
                     "path": "for-agencies/overview",
                     "icon": "briefcase"
+                  },
+                  {
+                    "title": "Onboard a client",
+                    "path": "for-agencies/onboard-a-client",
+                    "icon": "user-plus"
                   }
                 ]
               }
