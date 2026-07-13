@@ -27,43 +27,29 @@ Key capabilities:
 ## Install or load the SDK
 
 <Steps>
-  <Step title="Load the script or install from npm" icon="download" titleType="p">
-    For most sites, add the CDN loader (~1.4KB). It sets up `window.mythic` immediately and asynchronously imports the SDK core:
+  <Step title="Add the CDN loader" icon="download" titleType="p">
+    Add the CDN loader (~1.4KB) to your site. It sets up `window.mythic` immediately and asynchronously imports the SDK core:
 
     ```html
     <script src="https://mythic-analytics.gulp.workers.dev/cdn/m.js"></script>
     ```
 
-    Or install from npm for bundled apps:
-
-    ```bash
-    npm install @mythic-analytics/sdk
-    # or
-    yarn add @mythic-analytics/sdk
-    ```
+    <Callout kind="info">
+      An npm package for bundled apps is coming soon. For now, the CDN loader is the supported install path.
+    </Callout>
   </Step>
 
   <Step title="Initialize" icon="code" titleType="p">
-    <CodeGroup tabs="Script tag,ES module">
-      ```html
-      <script src="https://mythic-analytics.gulp.workers.dev/cdn/m.js"></script>
-      <script>
-        window.mythic.init("pk_your_publishable_key");
+    ```html
+    <script src="https://mythic-analytics.gulp.workers.dev/cdn/m.js"></script>
+    <script>
+      window.mythic.init("pk_your_publishable_key");
 
-        // Methods can be called on window.mythic right away — calls made
-        // before the core finishes loading are queued and replayed.
-        window.mythic.capture("Signup started", { plan: "pro" });
-      </script>
-      ```
-
-      ```javascript
-      import { init } from "@mythic-analytics/sdk";
-
-      // init is async — it resolves once the SDK is initialized
-      const mythic = await init("pk_your_publishable_key");
-      mythic.capture("Signup started", { plan: "pro" });
-      ```
-    </CodeGroup>
+      // Methods can be called on window.mythic right away — calls made
+      // before the core finishes loading are queued and replayed.
+      window.mythic.capture("Signup started", { plan: "pro" });
+    </script>
+    ```
   </Step>
 </Steps>
 
@@ -75,7 +61,7 @@ Key capabilities:
 
 ### `init(key, config?)`
 
-Initialize Mythic. The npm export is an async function that resolves to the SDK instance; the CDN global exposes `window.mythic.init(...)` which does the same and wires up the queued method stubs.
+Initialize Mythic. The CDN global exposes `window.mythic.init(...)`, which loads the SDK core, applies your config, and wires up the queued method stubs so calls made before init completes are replayed.
 
 <ParamField body="key" param-type="string" required="true" show-location="false" deprecated="false">
   Publishable project key starting with `pk_`.
@@ -85,17 +71,18 @@ Initialize Mythic. The npm export is an async function that resolves to the SDK 
   Optional configuration overrides. See the [configuration reference](/javascript-sdk/configuration) for all options.
 </ParamField>
 
-```javascript
-import { init } from "@mythic-analytics/sdk";
-
-const mythic = await init("pk_your_publishable_key", {
-  api_host: "https://analytics.yourdomain.com",
-  debug: true,
-  batch_size: 20,
-  autocapture: true,
-  capture_pageview: true,
-  hipaa: false,
-});
+```html
+<script src="https://mythic-analytics.gulp.workers.dev/cdn/m.js"></script>
+<script>
+  window.mythic.init("pk_your_publishable_key", {
+    api_host: "https://analytics.yourdomain.com",
+    debug: true,
+    batch_size: 20,
+    autocapture: true,
+    capture_pageview: true,
+    hipaa: false,
+  });
+</script>
 ```
 
 <Callout kind="tip">
