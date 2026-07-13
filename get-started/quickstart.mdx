@@ -1,0 +1,143 @@
+---
+title: Quickstart
+description: >-
+  Make your first Mythic Analytics API calls — inspect a client, create a
+  tracked short link, and query event analytics — with copy-paste cURL examples.
+---
+
+## Overview
+
+This guide walks through three real requests end to end: look up a client and its keys, create a tracked short link, and read back event analytics. Every example here is a live, working request against the production host.
+
+```text
+https://mythic-analytics.gulp.workers.dev
+```
+
+## Authentication at a glance
+
+Mythic exposes three credential types. Pick the one that matches the surface you're calling.
+
+| Credential | Header | Used for | Scope |
+|-----------|--------|----------|-------|
+| Admin key | `Authorization: Bearer YOUR_ADMIN_KEY` | `/api/v1/*`, `/admin/*` | Full platform access — server-side only |
+| Agency key (`ak_`) | `Authorization: Bearer ak_...` | `/client/v1/*`, `/builder` | Read-write across an agency's linked locations |
+| Location secret (`sk_`) | `Authorization: Bearer sk_...` | `/client/v1/*`, `/builder` | Read-only, single location |
+| Publishable key (`pk_`) | `x-mythic-key: pk_...` | `/ai/*`, event ingestion | Browser-safe |
+
+<Callout kind="alert">
+  The admin key, `ak_`, and `sk_` keys are server-side credentials. Never expose them in browser JavaScript, public repos, or logs. Only the publishable key (`pk_`) is safe client-side.
+</Callout>
+
+## Steps
+
+<Steps>
+  <Step title="Look up a client and its keys" icon="key" titleType="h3">
+    Fetch a client with the admin key. The response includes the client's `publishable_key` (`pk_`) and `secret_key` (`sk_`) — the credentials you'll use for client-facing calls.
+
+    <CodeGroup tabs="cURL">
+    ```bash
+    curl "https://mythic-analytics.gulp.workers.dev/api/v1/clients/acme-retail" \
+      -H "Authorization: Bearer YOUR_ADMIN_KEY"
+    ```
+    </CodeGroup>
+
+    ```json
+    {
+      "success": true,
+      "data": {
+        "id": "acme-retail",
+        "name": "Acme Retail",
+        "status": true,
+        "publishable_key": "pk_example000000000000000000000000",
+        "secret_key": "sk_example000000000000000000000000",
+        "domain": "acme-retail.com",
+        "created_at": "2026-03-06T19:28:24.483Z",
+        "updated_at": "2026-03-06T20:33:04.694Z"
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Create a tracked short link" icon="link" titleType="h3">
+    Create a short link for the client. `slug` and `destination_url` are required; `redirect_type` defaults to `302`.
+
+    <CodeGroup tabs="cURL">
+    ```bash
+    curl -X POST "https://mythic-analytics.gulp.workers.dev/api/v1/clients/acme-retail/links" \
+      -H "Authorization: Bearer YOUR_ADMIN_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "slug": "spring-sale",
+        "destination_url": "https://acme-retail.com/promo/spring",
+        "title": "Spring sale landing page",
+        "redirect_type": 302
+      }'
+    ```
+    </CodeGroup>
+
+    ```json
+    {
+      "success": true,
+      "data": {
+        "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "location_id": "acme-retail",
+        "slug": "spring-sale",
+        "destination_url": "https://acme-retail.com/promo/spring",
+        "title": "Spring sale landing page",
+        "redirect_type": 302,
+        "enabled": true,
+        "utm_passthrough": true,
+        "metadata": {},
+        "click_count": 0,
+        "expires_at": null,
+        "created_at": "2026-07-13T16:13:43.509Z",
+        "updated_at": "2026-07-13T16:13:43.509Z"
+      }
+    }
+    ```
+
+    <Callout kind="tip">
+      The link is served at `https://mythic-analytics.gulp.workers.dev/r/spring-sale`. Clicks are tracked automatically.
+    </Callout>
+  </Step>
+
+  <Step title="Query event analytics" icon="bar-chart-2" titleType="h3">
+    Read aggregated event analytics through the Data API using the client's read-only `secret_key`. A location secret (`sk_`) resolves its own location, so no `location_id` is needed.
+
+    <CodeGroup tabs="cURL">
+    ```bash
+    curl "https://mythic-analytics.gulp.workers.dev/client/v1/data/events/summary" \
+      -H "Authorization: Bearer sk_example000000000000000000000000"
+    ```
+    </CodeGroup>
+
+    ```json
+    {
+      "success": true,
+      "data": [
+        { "event_type": "pageview",  "total_events": 842190, "unique_users": 331204, "unique_sessions": 402887 },
+        { "event_type": "$autocapture", "total_events": 512044, "unique_users": 288120, "unique_sessions": 350991 },
+        { "event_type": "form_submitted", "total_events": 18422, "unique_users": 15903, "unique_sessions": 16110 }
+      ],
+      "rows": 3
+    }
+    ```
+  </Step>
+</Steps>
+
+## Where to next
+
+<Columns cols="2">
+  <Card title="Clients API" href="/clients-api/overview" icon="building-2">
+    Create and manage client tenants, tags, snippets, and hostnames.
+  </Card>
+  <Card title="Data API" href="/data-api/overview" icon="database">
+    Pull event summaries, daily counts, trends, and person profiles.
+  </Card>
+  <Card title="Client Links API" href="/client-links-api/overview" icon="link-2">
+    Client-scoped short links, click analytics, webhooks, and uptime.
+  </Card>
+  <Card title="JavaScript SDK" href="/javascript-sdk/overview" icon="braces">
+    Install the browser SDK and start capturing events.
+  </Card>
+</Columns>

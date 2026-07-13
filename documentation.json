@@ -1,5 +1,6 @@
 {
   "name": "Mythic Analytics",
+  "initialRoute": "get-started/quickstart",
   "colors": {
     "light": {
       "brand": "#F97316"
@@ -10,6 +11,23 @@
   },
   "navigation": {
     "tabs": [
+      {
+        "tab": "Get Started",
+        "icon": "rocket",
+        "groups": [
+          {
+            "group": "Overview",
+            "icon": "rocket",
+            "pages": [
+              {
+                "title": "Quickstart",
+                "path": "get-started/quickstart",
+                "icon": "zap"
+              }
+            ]
+          }
+        ]
+      },
       {
         "tab": "Clients API",
         "icon": "building-2",
