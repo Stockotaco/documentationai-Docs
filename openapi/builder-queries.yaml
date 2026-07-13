@@ -1,11 +1,15 @@
 openapi: "3.0.0"
 info:
-  version: 1.0.0
+  version: 2.0.0
   title: Queries
   description: >-
-    Execute SQL against a client's BigQuery or Tinybird data using the
-    Builder's server-side credentials. Includes an authenticated endpoint for
-    the workspace and a token-based public endpoint for embedded dashboards.
+    Execute queries against a client's BigQuery data using the Builder's
+    server-side credentials. Saved insights are executed **by id** — the
+    server regenerates the SQL from the stored config with the tenant's
+    dataset baked in, caches results, and rate-limits per location. Raw SQL
+    is only accepted on the authenticated `/query` endpoint (builder live
+    preview) and is validated server-side so it can only touch the
+    authorized location's datasets.
 servers:
   - url: https://mythic-analytics.gulp.workers.dev/builder
 security:
@@ -15,23 +19,29 @@ security:
 paths:
   /query:
     post:
-      summary: Execute query
+      summary: Execute raw SQL (builder preview)
       operationId: executeQuery
       description: >
-        Run a SQL query against the resolved location's data source. The engine
-        defaults to BigQuery; pass `engine: "tinybird"` (or `"clickhouse"`) to
-        query Tinybird instead. Credentials are held server-side and never
-        exposed.
+        Run a read-only BigQuery SQL query against the resolved location's
+        datasets. Credentials are held server-side and never exposed.
 
 
-        The `sql` string **must reference the authorized location** — either the
-        location ID, its underscore-normalized form (hyphens replaced with
-        underscores, as BigQuery datasets require), or the location's configured
-        `client_project_id`. Queries that do not are rejected with `403`.
+        **Scoping**: every table referenced in the SQL must live in one of the
+        location's datasets — its underscore-normalized location ID or its
+        configured `client_project_id` (normalized). References to any other
+        dataset or project, write statements, and dynamic SQL are rejected
+        with `403`. Comments and string literals cannot be used to bypass the
+        check.
+
+
+        BigQuery is the only supported engine; `engine: "tinybird"` /
+        `"clickhouse"` are rejected with `400`. Queries are capped by a
+        server-side `maximumBytesBilled` limit and rate-limited per location.
 
 
         Readable with an agency key (`ak_`, requires `?location_id=`) or a
-        viewer key (`sk_`).
+        viewer key (`sk_`). For saved insights, prefer
+        `POST /insights/{id}/query`.
       parameters:
         - $ref: "#/components/parameters/LocationId"
       requestBody:
@@ -48,13 +58,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/QueryResponse"
         "400":
-          description: Missing `?location_id=`, invalid JSON, or missing `sql`
+          description: >-
+            Missing `?location_id=`, invalid JSON, missing `sql`, or an
+            unsupported engine
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "403":
-          description: Query is not scoped to the authorized location
+          description: SQL references datasets outside the authorized location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded for this location
           content:
             application/json:
               schema:
@@ -65,37 +83,90 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/QueryErrorResponse"
-        "502":
-          description: Tinybird returned an error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/QueryErrorResponse"
         "503":
-          description: The requested engine is not configured on the server
+          description: BigQuery is not configured on the server
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /insights/{id}/query:
+    post:
+      summary: Run a saved insight
+      operationId: runInsight
+      description: >
+        Execute a saved insight. The server regenerates the SQL from the
+        stored config (applying optional `dateRange`/`granularity` overrides),
+        runs the main, comparison, and trend queries in parallel, and returns
+        all three datasets. Results are cached server-side for the insight's
+        `cache_ttl_seconds` (default 300) and rate-limited per location.
+
+
+        Readable with an agency key (`ak_`, requires `?location_id=`) or a
+        viewer key (`sk_`).
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: id
+          in: path
+          required: true
+          description: Insight UUID (must belong to the resolved location).
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InsightRunRequest"
+      responses:
+        "200":
+          description: Insight results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightRunResponse"
+        "404":
+          description: Insight not found for this location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded for this location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Query execution error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryErrorResponse"
   /public/query:
     post:
-      summary: Execute public query
+      summary: Run an embedded insight (public)
       operationId: executePublicQuery
       description: >
-        Run a query for an embedded dashboard or insight without a Builder key.
-        Authenticate with a share token in a header instead:
+        Execute a saved insight for an embedded dashboard or insight without a
+        Builder key. Authenticate with a share token in a header:
 
-
-        - `X-Dashboard-Token` — a dashboard's `public_token` (dashboard must be
-          `is_public = true`).
 
         - `X-Embed-Token` — an insight's `embed_token` (insight must be
-          `is_embeddable = true`).
+          `is_embeddable = true`). Runs that insight; `insight_id` is ignored.
+
+        - `X-Dashboard-Token` — a dashboard's `public_token` (dashboard must
+          be `is_public = true`). Requires `insight_id`, which must be an
+          insight on that dashboard.
 
 
-        The token resolves to a location, and the same location-scoping rule as
-        `POST /query` applies to the `sql` field. This route runs before key
-        auth, so no `ak_`/`sk_` is required.
+        Raw SQL is **not accepted** — the server generates the SQL from the
+        saved insight config, so a share token can only ever run its own
+        insight against its own location. Results are cached server-side for
+        the insight's `cache_ttl_seconds`. Public traffic is rate-limited on a
+        separate, higher per-location allowance than the authenticated
+        endpoints, so a busy public dashboard can't exhaust a tenant's own
+        Builder calls.
       security: []
       parameters:
         - $ref: "#/components/parameters/DashboardToken"
@@ -105,16 +176,18 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/QueryRequest"
+              $ref: "#/components/schemas/PublicInsightRunRequest"
       responses:
         "200":
-          description: Query results
+          description: Insight results
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/QueryResponse"
+                $ref: "#/components/schemas/InsightRunResponse"
         "400":
-          description: Invalid JSON or missing `sql`
+          description: >-
+            Invalid JSON, missing `insight_id` (dashboard tokens), or a legacy
+            `sql` field was supplied
           content:
             application/json:
               schema:
@@ -127,8 +200,14 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "403":
           description: >-
-            Dashboard/insight not found, sharing disabled, or query not scoped
-            to the resolved location
+            Dashboard/insight not found, sharing disabled, or the insight is
+            not part of the dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded for this location
           content:
             application/json:
               schema:
@@ -139,18 +218,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/QueryErrorResponse"
-        "502":
-          description: Tinybird returned an error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/QueryErrorResponse"
-        "503":
-          description: The requested engine is not configured on the server
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 components:
   securitySchemes:
     BearerAuth:
@@ -207,33 +274,95 @@ components:
         sql:
           type: string
           description: >-
-            SQL to execute. Must reference the authorized location (raw ID,
-            underscore-normalized ID, or `client_project_id`).
+            Read-only BigQuery SQL. Every table reference must live in one of
+            the authorized location's datasets.
           example: >-
-            SELECT event, COUNT(*) AS c FROM `acme_retail.events`
-            WHERE _TABLE_SUFFIX >= '20240601' GROUP BY event ORDER BY c DESC
-        engine:
-          type: string
-          description: >-
-            Query engine. Omit or use any value other than `tinybird`/
-            `clickhouse` for BigQuery (the default).
-          enum: [bigquery, tinybird, clickhouse]
-          default: bigquery
-        projectId:
-          type: string
-          description: >-
-            BigQuery project override. Defaults to the server's configured
-            project. Ignored for Tinybird.
-          example: hello-conversions
+            SELECT event_name, COUNT(*) AS c FROM
+            `hello-conversions.acme_retail.events` GROUP BY event_name ORDER
+            BY c DESC
         maxResults:
           type: integer
-          description: Maximum rows to return (BigQuery). Default `1000`.
+          description: Maximum rows to return (capped at 1000).
           default: 1000
+    DateRange:
+      type: object
+      description: Date range override.
+      properties:
+        preset:
+          type: string
+          enum: ["1h", "24h", "7d", "14d", "30d", "90d", "365d", "custom"]
+        from:
+          type: string
+          format: date
+          description: ISO date (with `preset: "custom"`).
+        to:
+          type: string
+          format: date
+          description: ISO date (with `preset: "custom"`).
+    InsightRunRequest:
+      type: object
+      properties:
+        dateRange:
+          $ref: "#/components/schemas/DateRange"
+        granularity:
+          type: string
+          enum: [day, week, month]
+          description: Trend granularity override.
+    PublicInsightRunRequest:
+      allOf:
+        - $ref: "#/components/schemas/InsightRunRequest"
+        - type: object
+          properties:
+            insight_id:
+              type: string
+              format: uuid
+              description: >-
+                Insight to run. Required with `X-Dashboard-Token`; ignored
+                with `X-Embed-Token`.
+    InsightRunResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        insight:
+          type: object
+          description: The insight's definition (for rendering).
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            insight_type:
+              type: string
+              enum: [number, table, funnel, scorecard, bar, pie, line]
+            config:
+              type: object
+        data:
+          type: array
+          description: Main query rows as objects keyed by column name.
+          items:
+            type: object
+        comparisonData:
+          type: array
+          description: Previous-period rows (empty when not configured).
+          items:
+            type: object
+        trendData:
+          type: array
+          description: Time-series rows (empty when not configured).
+          items:
+            type: object
+        rows:
+          type: integer
+          description: Number of rows in `data`.
+        cached:
+          type: boolean
+          description: True when served from the server-side cache.
     QueryResponse:
       type: object
-      description: >-
-        Successful result. `schema`, `totalBytesProcessed`, and `jobId` are
-        present for BigQuery; `statistics` is present for Tinybird.
+      description: Successful raw-SQL result.
       properties:
         success:
           type: boolean
@@ -244,24 +373,21 @@ components:
           items:
             type: object
           example:
-            - { event: pageview, c: 1420 }
-            - { event: click, c: 385 }
+            - { event_name: pageview, c: 1420 }
+            - { event_name: click, c: 385 }
         rows:
           type: integer
           description: Number of rows returned.
           example: 2
         schema:
           type: object
-          description: BigQuery result schema (BigQuery only).
+          description: BigQuery result schema.
         totalBytesProcessed:
           type: string
-          description: Bytes scanned by the BigQuery job (BigQuery only).
+          description: Bytes scanned by the BigQuery job.
         jobId:
           type: string
-          description: BigQuery job ID (BigQuery only).
-        statistics:
-          type: object
-          description: Tinybird query statistics (Tinybird only).
+          description: BigQuery job ID.
     QueryErrorResponse:
       type: object
       properties:
@@ -270,10 +396,10 @@ components:
           example: false
         error:
           type: string
-          example: "Tinybird error: 400 ..."
+          example: "BigQuery error: ..."
     ErrorResponse:
       type: object
       properties:
         error:
           type: string
-          example: Query must be scoped to your location
+          example: "Query must be scoped to your location: dataset \"other_tenant\" not allowed"

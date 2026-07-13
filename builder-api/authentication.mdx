@@ -95,7 +95,7 @@ A viewer key returns its single location:
 
 ## Public embeds (share tokens)
 
-`POST /public/query` runs before key auth and takes no `ak_`/`sk_`. Instead it accepts a share token that resolves to a location:
+`POST /public/query` runs before key auth and takes no `ak_`/`sk_`. Instead it accepts a share token that resolves to a saved insight; the server generates and executes the insight's SQL itself (raw SQL is not accepted on this endpoint):
 
 <ParamField header="X-Dashboard-Token" param-type="string" required="false" deprecated="false">
   A dashboard's `public_token`. The dashboard must have `is_public = true`.

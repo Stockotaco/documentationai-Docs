@@ -77,6 +77,7 @@ Saving a canvas (`POST /canvases/{id}/save`) bumps its `version` and records an 
 | `401` | Authorization key (or public share token) missing or invalid |
 | `403` | Write attempted without an agency key, location not linked to the agency, or a query not scoped to the authorized location |
 | `404` | Resource not found for the resolved location |
+| `429` | Rate limit exceeded for this location (query endpoints) |
 | `500` | Internal or query execution error |
 | `502` | Upstream error (Tinybird, or the GoHighLevel proxy) |
 | `503` | Requested query engine not configured on the server |
