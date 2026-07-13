@@ -1,6 +1,6 @@
 {
   "name": "Mythic Analytics",
-  "initialRoute": "get-started/quickstart",
+  "initialRoute": "for-agencies/overview",
   "colors": {
     "light": {
       "brand": "#F97316"
@@ -10,468 +10,768 @@
     }
   },
   "navigation": {
-    "tabs": [
+    "products": [
       {
-        "tab": "Get Started",
-        "icon": "rocket",
-        "groups": [
-          {
-            "group": "Overview",
-            "icon": "rocket",
-            "pages": [
-              {
-                "title": "Quickstart",
-                "path": "get-started/quickstart",
-                "icon": "zap"
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "tab": "Clients API",
-        "icon": "building-2",
-        "groups": [
-          {
-            "group": "Overview",
-            "icon": "file-text",
-            "pages": [
-              {
-                "title": "Introduction",
-                "path": "clients-api/overview",
-                "icon": "file-text"
-              },
-              {
-                "title": "Authentication",
-                "path": "clients-api/authentication",
-                "icon": "lock"
-              }
-            ]
-          },
-          {
-            "group": "Clients",
-            "icon": "users",
-            "openapi": "openapi/clients.yaml"
-          },
-          {
-            "group": "Tags",
-            "icon": "tag",
-            "openapi": "openapi/tags.yaml"
-          },
-          {
-            "group": "Snippets",
-            "icon": "code",
-            "openapi": "openapi/snippets.yaml"
-          },
-          {
-            "group": "Hostnames",
-            "icon": "globe",
-            "openapi": "openapi/hostnames.yaml"
-          },
-          {
-            "group": "Links",
-            "icon": "link",
-            "openapi": "openapi/client-links.yaml"
-          },
-          {
-            "group": "Logs & Trends",
-            "icon": "activity",
-            "openapi": "openapi/logs-trends.yaml"
-          },
-          {
-            "group": "Tag Templates",
-            "icon": "bookmark",
-            "openapi": "openapi/tag-templates.yaml"
-          }
-        ]
-      },
-      {
-        "tab": "Agencies API",
+        "product": "For Agencies",
         "icon": "briefcase",
-        "groups": [
+        "tabs": [
           {
-            "group": "Overview",
-            "icon": "file-text",
-            "pages": [
-              {
-                "title": "Introduction",
-                "path": "agencies-api/overview",
-                "icon": "file-text"
-              },
-              {
-                "title": "Authentication",
-                "path": "agencies-api/authentication",
-                "icon": "lock"
-              }
-            ]
-          },
-          {
-            "group": "Agencies",
-            "icon": "briefcase",
-            "openapi": "openapi/agencies.yaml"
-          }
-        ]
-      },
-      {
-        "tab": "Builder API",
-        "icon": "layout",
-        "groups": [
-          {
-            "group": "Overview",
-            "icon": "file-text",
-            "pages": [
-              {
-                "title": "Introduction",
-                "path": "builder-api/overview",
-                "icon": "file-text"
-              },
-              {
-                "title": "Authentication",
-                "path": "builder-api/authentication",
-                "icon": "lock"
-              }
-            ]
-          },
-          {
-            "group": "Insights",
-            "icon": "bar-chart-2",
-            "openapi": "openapi/builder-insights.yaml"
-          },
-          {
-            "group": "Dashboards",
-            "icon": "layout-dashboard",
-            "openapi": "openapi/builder-dashboards.yaml"
-          },
-          {
-            "group": "Canvases",
-            "icon": "pen-tool",
-            "openapi": "openapi/builder-canvases.yaml"
-          },
-          {
-            "group": "Nodes & Edges",
-            "icon": "git-branch",
-            "openapi": "openapi/builder-canvas-nodes.yaml"
-          },
-          {
-            "group": "Queries",
-            "icon": "database",
-            "openapi": "openapi/builder-queries.yaml"
-          },
-          {
-            "group": "Data Connections",
-            "icon": "plug",
-            "openapi": "openapi/builder-data-connections.yaml"
-          },
-          {
-            "group": "GHL & Generation",
-            "icon": "wand-2",
-            "openapi": "openapi/builder-ghl.yaml"
-          }
-        ]
-      },
-      {
-        "tab": "Client Links API",
-        "icon": "link-2",
-        "groups": [
-          {
-            "group": "Overview",
-            "icon": "file-text",
-            "pages": [
-              {
-                "title": "Introduction",
-                "path": "client-links-api/overview",
-                "icon": "file-text"
-              },
-              {
-                "title": "Authentication",
-                "path": "client-links-api/authentication",
-                "icon": "lock"
-              }
-            ]
-          },
-          {
-            "group": "Links",
-            "icon": "link",
-            "openapi": "openapi/short-links.yaml"
-          },
-          {
-            "group": "Webhooks",
-            "icon": "webhook",
-            "openapi": "openapi/short-links-webhooks.yaml"
-          },
-          {
-            "group": "Uptime Monitoring",
-            "icon": "activity",
-            "openapi": "openapi/short-links-uptime.yaml"
-          }
-        ]
-      },
-      {
-        "tab": "Data API",
-        "icon": "database",
-        "groups": [
-          {
-            "group": "Overview",
-            "icon": "file-text",
-            "pages": [
-              {
-                "title": "Introduction",
-                "path": "data-api/overview",
-                "icon": "file-text"
-              },
-              {
-                "title": "Authentication",
-                "path": "data-api/authentication",
-                "icon": "lock"
-              }
-            ]
-          },
-          {
-            "group": "Events & Export",
-            "icon": "bar-chart-2",
-            "openapi": "openapi/data.yaml"
-          },
-          {
-            "group": "People & Identity",
-            "icon": "users",
-            "openapi": "openapi/person.yaml"
-          }
-        ]
-      },
-      {
-        "tab": "Destinations API",
-        "icon": "send",
-        "groups": [
-          {
-            "group": "Overview",
-            "icon": "file-text",
-            "pages": [
-              {
-                "title": "Introduction",
-                "path": "destinations-api/overview",
-                "icon": "file-text"
-              },
-              {
-                "title": "Authentication",
-                "path": "destinations-api/authentication",
-                "icon": "lock"
-              }
-            ]
-          },
-          {
-            "group": "Destinations",
-            "icon": "send",
-            "openapi": "openapi/destinations.yaml"
-          }
-        ]
-      },
-      {
-        "tab": "Airbyte Sync API",
-        "icon": "refresh-cw",
-        "groups": [
-          {
-            "group": "Overview",
-            "icon": "file-text",
-            "pages": [
-              {
-                "title": "Introduction",
-                "path": "airbyte-api/overview",
-                "icon": "file-text"
-              },
-              {
-                "title": "Authentication",
-                "path": "airbyte-api/authentication",
-                "icon": "lock"
-              }
-            ]
-          },
-          {
-            "group": "Sync",
-            "icon": "refresh-cw",
-            "openapi": "openapi/airbyte.yaml"
-          }
-        ]
-      },
-      {
-        "tab": "MCP Platform",
-        "icon": "cpu",
-        "groups": [
-          {
-            "group": "Overview",
-            "icon": "file-text",
-            "pages": [
-              {
-                "title": "Introduction",
-                "path": "mcp/overview",
-                "icon": "file-text"
-              },
-              {
-                "title": "Authentication",
-                "path": "mcp/authentication",
-                "icon": "lock"
-              },
-              {
-                "title": "Gateway (JSON-RPC)",
-                "path": "mcp/gateway",
-                "icon": "radio"
-              }
-            ]
-          },
-          {
-            "group": "Servers",
-            "icon": "server",
-            "openapi": "openapi/mcp-servers.yaml"
-          },
-          {
-            "group": "Tools",
-            "icon": "wrench",
-            "openapi": "openapi/mcp-tools.yaml"
-          },
-          {
-            "group": "API Keys",
-            "icon": "key",
-            "openapi": "openapi/mcp-api-keys.yaml"
-          }
-        ]
-      },
-      {
-        "tab": "Admin API",
-        "icon": "shield",
-        "groups": [
-          {
-            "group": "Overview",
-            "icon": "file-text",
-            "pages": [
-              {
-                "title": "Introduction",
-                "path": "admin-api/overview",
-                "icon": "file-text"
-              },
-              {
-                "title": "Authentication",
-                "path": "admin-api/authentication",
-                "icon": "lock"
-              },
-              {
-                "title": "BigQuery Export Guide",
-                "path": "bigquery-api/overview",
-                "icon": "database"
-              }
-            ]
-          },
-          {
-            "group": "KV Management",
-            "icon": "database",
-            "openapi": "openapi/admin-kv.yaml"
-          },
-          {
-            "group": "Pub/Sub",
-            "icon": "radio",
-            "openapi": "openapi/admin-pubsub.yaml"
-          },
-          {
-            "group": "Destinations",
-            "icon": "send",
-            "openapi": "openapi/admin-destinations.yaml"
-          },
-          {
-            "group": "Airbyte",
-            "icon": "refresh-cw",
-            "openapi": "openapi/admin-airbyte.yaml"
-          },
-          {
-            "group": "BigQuery Export",
-            "icon": "database",
-            "openapi": "openapi/bigquery.yaml"
-          }
-        ]
-      },
-      {
-        "tab": "AI Proxy",
-        "icon": "bot",
-        "groups": [
-          {
-            "group": "Overview",
-            "icon": "file-text",
-            "pages": [
-              {
-                "title": "Introduction",
-                "path": "ai-api/overview",
-                "icon": "file-text"
-              },
-              {
-                "title": "Authentication",
-                "path": "ai-api/authentication",
-                "icon": "lock"
-              }
-            ]
-          },
-          {
-            "group": "AI",
-            "icon": "bot",
-            "openapi": "openapi/ai-proxy.yaml"
-          }
-        ]
-      },
-      {
-        "tab": "JavaScript SDK",
-        "icon": "braces",
-        "groups": [
-          {
-            "group": "Getting Started",
+            "tab": "Get Started",
             "icon": "rocket",
-            "pages": [
+            "groups": [
               {
-                "title": "Overview",
-                "path": "javascript-sdk/overview",
-                "icon": "braces"
-              },
-              {
-                "title": "Tracking Methods",
-                "path": "javascript-sdk/tracking-methods",
-                "icon": "activity"
+                "group": "Overview",
+                "icon": "briefcase",
+                "pages": [
+                  {
+                    "title": "For Agencies",
+                    "path": "for-agencies/overview",
+                    "icon": "briefcase"
+                  }
+                ]
               }
             ]
           },
           {
-            "group": "Methods",
-            "icon": "code",
-            "pages": [
+            "tab": "Data API",
+            "icon": "database",
+            "groups": [
               {
-                "title": "Super Properties",
-                "path": "javascript-sdk/super-properties",
-                "icon": "layers"
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "data-api/overview",
+                    "icon": "file-text"
+                  },
+                  {
+                    "title": "Authentication",
+                    "path": "data-api/authentication",
+                    "icon": "lock"
+                  }
+                ]
               },
               {
-                "title": "Consent & Privacy",
-                "path": "javascript-sdk/consent-privacy",
-                "icon": "shield"
+                "group": "Events & Export",
+                "icon": "bar-chart-2",
+                "openapi": "openapi/data.yaml"
               },
               {
-                "title": "Utility Methods",
-                "path": "javascript-sdk/utility-methods",
-                "icon": "wrench"
+                "group": "People & Identity",
+                "icon": "users",
+                "openapi": "openapi/person.yaml"
               }
             ]
           },
           {
-            "group": "Reference",
-            "icon": "book-open",
-            "pages": [
+            "tab": "Client Links",
+            "icon": "link-2",
+            "groups": [
               {
-                "title": "Configuration",
-                "path": "javascript-sdk/configuration",
-                "icon": "settings"
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "client-links-api/overview",
+                    "icon": "file-text"
+                  },
+                  {
+                    "title": "Authentication",
+                    "path": "client-links-api/authentication",
+                    "icon": "lock"
+                  }
+                ]
               },
               {
-                "title": "Auto-captured Events",
-                "path": "javascript-sdk/auto-captured-events",
-                "icon": "zap"
+                "group": "Links",
+                "icon": "link",
+                "openapi": "openapi/short-links.yaml"
               },
               {
-                "title": "Troubleshooting",
-                "path": "javascript-sdk/troubleshooting",
-                "icon": "alert-triangle"
+                "group": "Webhooks",
+                "icon": "webhook",
+                "openapi": "openapi/short-links-webhooks.yaml"
+              },
+              {
+                "group": "Uptime Monitoring",
+                "icon": "activity",
+                "openapi": "openapi/short-links-uptime.yaml"
+              }
+            ]
+          },
+          {
+            "tab": "Destinations",
+            "icon": "send",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "destinations-api/overview",
+                    "icon": "file-text"
+                  },
+                  {
+                    "title": "Authentication",
+                    "path": "destinations-api/authentication",
+                    "icon": "lock"
+                  }
+                ]
+              },
+              {
+                "group": "Destinations",
+                "icon": "send",
+                "openapi": "openapi/destinations.yaml"
+              }
+            ]
+          },
+          {
+            "tab": "Builder",
+            "icon": "layout",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "builder-api/overview",
+                    "icon": "file-text"
+                  },
+                  {
+                    "title": "Authentication",
+                    "path": "builder-api/authentication",
+                    "icon": "lock"
+                  }
+                ]
+              },
+              {
+                "group": "Insights",
+                "icon": "bar-chart-2",
+                "openapi": "openapi/builder-insights.yaml"
+              },
+              {
+                "group": "Dashboards",
+                "icon": "layout-dashboard",
+                "openapi": "openapi/builder-dashboards.yaml"
+              },
+              {
+                "group": "Canvases",
+                "icon": "pen-tool",
+                "openapi": "openapi/builder-canvases.yaml"
+              },
+              {
+                "group": "Nodes & Edges",
+                "icon": "git-branch",
+                "openapi": "openapi/builder-canvas-nodes.yaml"
+              },
+              {
+                "group": "Queries",
+                "icon": "database",
+                "openapi": "openapi/builder-queries.yaml"
+              },
+              {
+                "group": "Data Connections",
+                "icon": "plug",
+                "openapi": "openapi/builder-data-connections.yaml"
+              },
+              {
+                "group": "GHL & Generation",
+                "icon": "wand-2",
+                "openapi": "openapi/builder-ghl.yaml"
+              }
+            ]
+          },
+          {
+            "tab": "Airbyte Sync",
+            "icon": "refresh-cw",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "airbyte-api/overview",
+                    "icon": "file-text"
+                  },
+                  {
+                    "title": "Authentication",
+                    "path": "airbyte-api/authentication",
+                    "icon": "lock"
+                  }
+                ]
+              },
+              {
+                "group": "Sync",
+                "icon": "refresh-cw",
+                "openapi": "openapi/airbyte.yaml"
+              }
+            ]
+          },
+          {
+            "tab": "AI Proxy",
+            "icon": "bot",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "ai-api/overview",
+                    "icon": "file-text"
+                  },
+                  {
+                    "title": "Authentication",
+                    "path": "ai-api/authentication",
+                    "icon": "lock"
+                  }
+                ]
+              },
+              {
+                "group": "AI",
+                "icon": "bot",
+                "openapi": "openapi/ai-proxy.yaml"
+              }
+            ]
+          },
+          {
+            "tab": "JavaScript SDK",
+            "icon": "braces",
+            "groups": [
+              {
+                "group": "Getting Started",
+                "icon": "rocket",
+                "pages": [
+                  {
+                    "title": "Overview",
+                    "path": "javascript-sdk/overview",
+                    "icon": "braces"
+                  },
+                  {
+                    "title": "Tracking Methods",
+                    "path": "javascript-sdk/tracking-methods",
+                    "icon": "activity"
+                  }
+                ]
+              },
+              {
+                "group": "Methods",
+                "icon": "code",
+                "pages": [
+                  {
+                    "title": "Super Properties",
+                    "path": "javascript-sdk/super-properties",
+                    "icon": "layers"
+                  },
+                  {
+                    "title": "Consent & Privacy",
+                    "path": "javascript-sdk/consent-privacy",
+                    "icon": "shield"
+                  },
+                  {
+                    "title": "Utility Methods",
+                    "path": "javascript-sdk/utility-methods",
+                    "icon": "wrench"
+                  }
+                ]
+              },
+              {
+                "group": "Reference",
+                "icon": "book-open",
+                "pages": [
+                  {
+                    "title": "Configuration",
+                    "path": "javascript-sdk/configuration",
+                    "icon": "settings"
+                  },
+                  {
+                    "title": "Auto-captured Events",
+                    "path": "javascript-sdk/auto-captured-events",
+                    "icon": "zap"
+                  },
+                  {
+                    "title": "Troubleshooting",
+                    "path": "javascript-sdk/troubleshooting",
+                    "icon": "alert-triangle"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "product": "Full API Reference",
+        "icon": "book",
+        "tabs": [
+          {
+            "tab": "Get Started",
+            "icon": "rocket",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "rocket",
+                "pages": [
+                  {
+                    "title": "Quickstart",
+                    "path": "get-started/quickstart",
+                    "icon": "zap"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "Clients API",
+            "icon": "building-2",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "clients-api/overview",
+                    "icon": "file-text"
+                  },
+                  {
+                    "title": "Authentication",
+                    "path": "clients-api/authentication",
+                    "icon": "lock"
+                  }
+                ]
+              },
+              {
+                "group": "Clients",
+                "icon": "users",
+                "openapi": "openapi/clients.yaml"
+              },
+              {
+                "group": "Tags",
+                "icon": "tag",
+                "openapi": "openapi/tags.yaml"
+              },
+              {
+                "group": "Snippets",
+                "icon": "code",
+                "openapi": "openapi/snippets.yaml"
+              },
+              {
+                "group": "Hostnames",
+                "icon": "globe",
+                "openapi": "openapi/hostnames.yaml"
+              },
+              {
+                "group": "Links",
+                "icon": "link",
+                "openapi": "openapi/client-links.yaml"
+              },
+              {
+                "group": "Logs & Trends",
+                "icon": "activity",
+                "openapi": "openapi/logs-trends.yaml"
+              },
+              {
+                "group": "Tag Templates",
+                "icon": "bookmark",
+                "openapi": "openapi/tag-templates.yaml"
+              }
+            ]
+          },
+          {
+            "tab": "Agencies API",
+            "icon": "briefcase",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "agencies-api/overview",
+                    "icon": "file-text"
+                  },
+                  {
+                    "title": "Authentication",
+                    "path": "agencies-api/authentication",
+                    "icon": "lock"
+                  }
+                ]
+              },
+              {
+                "group": "Agencies",
+                "icon": "briefcase",
+                "openapi": "openapi/agencies.yaml"
+              }
+            ]
+          },
+          {
+            "tab": "Builder API",
+            "icon": "layout",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "builder-api/overview",
+                    "icon": "file-text"
+                  },
+                  {
+                    "title": "Authentication",
+                    "path": "builder-api/authentication",
+                    "icon": "lock"
+                  }
+                ]
+              },
+              {
+                "group": "Insights",
+                "icon": "bar-chart-2",
+                "openapi": "openapi/builder-insights.yaml"
+              },
+              {
+                "group": "Dashboards",
+                "icon": "layout-dashboard",
+                "openapi": "openapi/builder-dashboards.yaml"
+              },
+              {
+                "group": "Canvases",
+                "icon": "pen-tool",
+                "openapi": "openapi/builder-canvases.yaml"
+              },
+              {
+                "group": "Nodes & Edges",
+                "icon": "git-branch",
+                "openapi": "openapi/builder-canvas-nodes.yaml"
+              },
+              {
+                "group": "Queries",
+                "icon": "database",
+                "openapi": "openapi/builder-queries.yaml"
+              },
+              {
+                "group": "Data Connections",
+                "icon": "plug",
+                "openapi": "openapi/builder-data-connections.yaml"
+              },
+              {
+                "group": "GHL & Generation",
+                "icon": "wand-2",
+                "openapi": "openapi/builder-ghl.yaml"
+              }
+            ]
+          },
+          {
+            "tab": "Client Links API",
+            "icon": "link-2",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "client-links-api/overview",
+                    "icon": "file-text"
+                  },
+                  {
+                    "title": "Authentication",
+                    "path": "client-links-api/authentication",
+                    "icon": "lock"
+                  }
+                ]
+              },
+              {
+                "group": "Links",
+                "icon": "link",
+                "openapi": "openapi/short-links.yaml"
+              },
+              {
+                "group": "Webhooks",
+                "icon": "webhook",
+                "openapi": "openapi/short-links-webhooks.yaml"
+              },
+              {
+                "group": "Uptime Monitoring",
+                "icon": "activity",
+                "openapi": "openapi/short-links-uptime.yaml"
+              }
+            ]
+          },
+          {
+            "tab": "Data API",
+            "icon": "database",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "data-api/overview",
+                    "icon": "file-text"
+                  },
+                  {
+                    "title": "Authentication",
+                    "path": "data-api/authentication",
+                    "icon": "lock"
+                  }
+                ]
+              },
+              {
+                "group": "Events & Export",
+                "icon": "bar-chart-2",
+                "openapi": "openapi/data.yaml"
+              },
+              {
+                "group": "People & Identity",
+                "icon": "users",
+                "openapi": "openapi/person.yaml"
+              }
+            ]
+          },
+          {
+            "tab": "Destinations API",
+            "icon": "send",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "destinations-api/overview",
+                    "icon": "file-text"
+                  },
+                  {
+                    "title": "Authentication",
+                    "path": "destinations-api/authentication",
+                    "icon": "lock"
+                  }
+                ]
+              },
+              {
+                "group": "Destinations",
+                "icon": "send",
+                "openapi": "openapi/destinations.yaml"
+              }
+            ]
+          },
+          {
+            "tab": "Airbyte Sync API",
+            "icon": "refresh-cw",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "airbyte-api/overview",
+                    "icon": "file-text"
+                  },
+                  {
+                    "title": "Authentication",
+                    "path": "airbyte-api/authentication",
+                    "icon": "lock"
+                  }
+                ]
+              },
+              {
+                "group": "Sync",
+                "icon": "refresh-cw",
+                "openapi": "openapi/airbyte.yaml"
+              }
+            ]
+          },
+          {
+            "tab": "MCP Platform",
+            "icon": "cpu",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "mcp/overview",
+                    "icon": "file-text"
+                  },
+                  {
+                    "title": "Authentication",
+                    "path": "mcp/authentication",
+                    "icon": "lock"
+                  },
+                  {
+                    "title": "Gateway (JSON-RPC)",
+                    "path": "mcp/gateway",
+                    "icon": "radio"
+                  }
+                ]
+              },
+              {
+                "group": "Servers",
+                "icon": "server",
+                "openapi": "openapi/mcp-servers.yaml"
+              },
+              {
+                "group": "Tools",
+                "icon": "wrench",
+                "openapi": "openapi/mcp-tools.yaml"
+              },
+              {
+                "group": "API Keys",
+                "icon": "key",
+                "openapi": "openapi/mcp-api-keys.yaml"
+              }
+            ]
+          },
+          {
+            "tab": "Admin API",
+            "icon": "shield",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "admin-api/overview",
+                    "icon": "file-text"
+                  },
+                  {
+                    "title": "Authentication",
+                    "path": "admin-api/authentication",
+                    "icon": "lock"
+                  },
+                  {
+                    "title": "BigQuery Export Guide",
+                    "path": "bigquery-api/overview",
+                    "icon": "database"
+                  }
+                ]
+              },
+              {
+                "group": "KV Management",
+                "icon": "database",
+                "openapi": "openapi/admin-kv.yaml"
+              },
+              {
+                "group": "Pub/Sub",
+                "icon": "radio",
+                "openapi": "openapi/admin-pubsub.yaml"
+              },
+              {
+                "group": "Destinations",
+                "icon": "send",
+                "openapi": "openapi/admin-destinations.yaml"
+              },
+              {
+                "group": "Airbyte",
+                "icon": "refresh-cw",
+                "openapi": "openapi/admin-airbyte.yaml"
+              },
+              {
+                "group": "BigQuery Export",
+                "icon": "database",
+                "openapi": "openapi/bigquery.yaml"
+              }
+            ]
+          },
+          {
+            "tab": "AI Proxy",
+            "icon": "bot",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "ai-api/overview",
+                    "icon": "file-text"
+                  },
+                  {
+                    "title": "Authentication",
+                    "path": "ai-api/authentication",
+                    "icon": "lock"
+                  }
+                ]
+              },
+              {
+                "group": "AI",
+                "icon": "bot",
+                "openapi": "openapi/ai-proxy.yaml"
+              }
+            ]
+          },
+          {
+            "tab": "JavaScript SDK",
+            "icon": "braces",
+            "groups": [
+              {
+                "group": "Getting Started",
+                "icon": "rocket",
+                "pages": [
+                  {
+                    "title": "Overview",
+                    "path": "javascript-sdk/overview",
+                    "icon": "braces"
+                  },
+                  {
+                    "title": "Tracking Methods",
+                    "path": "javascript-sdk/tracking-methods",
+                    "icon": "activity"
+                  }
+                ]
+              },
+              {
+                "group": "Methods",
+                "icon": "code",
+                "pages": [
+                  {
+                    "title": "Super Properties",
+                    "path": "javascript-sdk/super-properties",
+                    "icon": "layers"
+                  },
+                  {
+                    "title": "Consent & Privacy",
+                    "path": "javascript-sdk/consent-privacy",
+                    "icon": "shield"
+                  },
+                  {
+                    "title": "Utility Methods",
+                    "path": "javascript-sdk/utility-methods",
+                    "icon": "wrench"
+                  }
+                ]
+              },
+              {
+                "group": "Reference",
+                "icon": "book-open",
+                "pages": [
+                  {
+                    "title": "Configuration",
+                    "path": "javascript-sdk/configuration",
+                    "icon": "settings"
+                  },
+                  {
+                    "title": "Auto-captured Events",
+                    "path": "javascript-sdk/auto-captured-events",
+                    "icon": "zap"
+                  },
+                  {
+                    "title": "Troubleshooting",
+                    "path": "javascript-sdk/troubleshooting",
+                    "icon": "alert-triangle"
+                  }
+                ]
               }
             ]
           }

@@ -1,0 +1,83 @@
+---
+title: For Agencies
+description: >-
+  Everything an agency needs to run headless analytics for its clients —
+  authenticate with an agency key, query per-client data, activate audiences,
+  and build dashboards.
+---
+
+## Overview
+
+This view collects the surfaces you use to manage headless data on behalf of your clients. You operate across every location linked to your agency with a single **agency key** (`ak_`), scope each call to one client with a `location_id`, and hand out read-only or browser-safe keys where you need them.
+
+```text
+https://mythic-analytics.gulp.workers.dev
+```
+
+## Your credentials
+
+| Credential | Header | Scope | Give it to |
+|-----------|--------|-------|-----------|
+| Agency key (`ak_`) | `Authorization: Bearer ak_...` | Read-write across **all** your linked locations | Your server-side integrations only |
+| Location secret (`sk_`) | `Authorization: Bearer sk_...` | Read-only, **one** location | A client, or a read-only dashboard |
+| Publishable key (`pk_`) | `x-mythic-key: pk_...` | Event ingestion + AI proxy | A client's website (browser-safe) |
+
+<Callout kind="alert">
+  The agency key and location secrets are server-side credentials — never expose them in browser JavaScript, public repos, or logs. Only the publishable key (`pk_`) is safe client-side.
+</Callout>
+
+## Scope a call to one client
+
+An agency key spans every location you manage, so each request must name the client you mean. Pass it as a `location_id` query parameter **or** an `X-Location-Id` header.
+
+<CodeGroup tabs="Query param,Header">
+```bash
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/data/events/summary?location_id=acme-retail" \
+  -H "Authorization: Bearer ak_example000000000000000000000000"
+```
+
+```bash
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/data/events/summary" \
+  -H "Authorization: Bearer ak_example000000000000000000000000" \
+  -H "X-Location-Id: acme-retail"
+```
+</CodeGroup>
+
+```json
+{
+  "success": true,
+  "data": [
+    { "event_type": "pageview",       "total_events": 842190, "unique_users": 331204, "unique_sessions": 402887 },
+    { "event_type": "$autocapture",   "total_events": 512044, "unique_users": 288120, "unique_sessions": 350991 },
+    { "event_type": "form_submitted", "total_events": 18422,  "unique_users": 15903,  "unique_sessions": 16110 }
+  ],
+  "rows": 3
+}
+```
+
+<Callout kind="tip">
+  Omit `location_id` on agency-wide routes that don't target a single client. When a route needs a location and none is supplied, the API returns `400 location_required`. A location secret (`sk_`) never needs `location_id` — it resolves its own location.
+</Callout>
+
+## What you can do
+
+<Columns cols="2">
+  <Card title="Data API" href="/data-api/overview" icon="database">
+    Query per-client event summaries, daily counts, and trends; resolve people and identity; export raw events.
+  </Card>
+  <Card title="Client Links" href="/client-links-api/overview" icon="link-2">
+    Create tracked short links, read click analytics, wire up webhooks, and monitor uptime.
+  </Card>
+  <Card title="Destinations" href="/destinations-api/overview" icon="send">
+    Activate audiences — forward resolved events to ad platforms and downstream tools.
+  </Card>
+  <Card title="Builder" href="/builder-api/overview" icon="layout">
+    Assemble dashboards, insights, and canvases for each client.
+  </Card>
+  <Card title="Airbyte Sync" href="/airbyte-api/overview" icon="refresh-cw">
+    Sync client data into your own warehouse on a schedule.
+  </Card>
+  <Card title="JavaScript SDK" href="/javascript-sdk/overview" icon="braces">
+    Install the browser SDK on a client's site to start capturing events.
+  </Card>
+</Columns>
