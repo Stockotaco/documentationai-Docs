@@ -7,7 +7,11 @@ description: >-
 
 ## Super properties
 
-Super properties are automatically merged into every event. Use them for values that should be attached to all subsequent events, like a user's subscription plan or A/B test variant.
+Super properties are automatically merged into every event. Use them for values that should be attached to all subsequent events, like a user's subscription plan or A/B test variant. They are persisted in storage and survive page reloads until cleared.
+
+<Callout kind="info">
+  Super properties are attached to every event you send. To set properties **on the user's profile** instead, pass them as the second argument to [`identify()`](/javascript-sdk/tracking-methods), which sends them as a `$set` event.
+</Callout>
 
 ### `set(properties)`
 

@@ -2,59 +2,33 @@ openapi: "3.0.0"
 info:
   version: 1.0.0
   title: Client Links
-  description: Manage short links and view link analytics for Mythic Analytics client tenants.
+  description: Manage link redirects (short links) and view click analytics for Mythic Analytics client tenants.
 servers:
-  - url: https://api.mythic-analytics.com/api/v1
+  - url: https://mythic-analytics.gulp.workers.dev/api/v1
 security:
   - BearerAuth: []
   - AdminKeyQuery: []
 paths:
   /clients/{id}/links:
-    post:
-      summary: Create link
-      operationId: createClientLink
-      description: >
-        Create a new short link for a client tenant. The link is assigned a
-        unique slug and tracks click analytics automatically.
-      parameters:
-        - $ref: "#/components/parameters/ClientId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateLinkRequest"
-      responses:
-        "201":
-          description: Link created successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LinkResponse"
-        "400":
-          description: Invalid JSON or validation error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Client not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
     get:
       summary: List links
       operationId: listClientLinks
-      description: Retrieve all short links for a client tenant with optional filtering.
+      description: Retrieve link redirects for a client tenant with optional filtering.
       parameters:
         - $ref: "#/components/parameters/ClientId"
+        - name: enabled
+          in: query
+          description: Filter by enabled status. Pass `true` or `false`.
+          required: false
+          schema:
+            type: string
+            enum: ["true", "false"]
+        - name: search
+          in: query
+          description: Case-insensitive substring match on link title.
+          required: false
+          schema:
+            type: string
         - name: limit
           in: query
           description: Maximum results per page. Default `50`, max `500`.
@@ -72,11 +46,46 @@ paths:
             default: 0
       responses:
         "200":
-          description: Paginated list of links
+          description: List of links
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/LinkListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: Create link
+      operationId: createClientLink
+      description: >
+        Create a link redirect for a client tenant. `destination_url` is
+        required; a `slug` may be supplied or omitted. Enabled links are
+        written through to KV for edge redirect serving. Returns `409 Conflict`
+        if the slug is already in use for this client.
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLinkRequest"
+      responses:
+        "201":
+          description: Link created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkResponse"
+        "400":
+          description: Invalid JSON, missing destination_url, or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Admin key missing or invalid
           content:
@@ -89,80 +98,54 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /clients/{id}/links/{linkId}:
+        "409":
+          description: A link with this slug already exists for this client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /clients/{id}/links/analytics:
     get:
-      summary: Retrieve link
-      operationId: getClientLink
-      description: Fetch a single short link by its ID.
-      parameters:
-        - $ref: "#/components/parameters/ClientId"
-        - $ref: "#/components/parameters/LinkId"
-      responses:
-        "200":
-          description: Link details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LinkResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Client or link not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-    delete:
-      summary: Delete link
-      operationId: deleteClientLink
-      description: Permanently delete a short link. This action is irreversible.
-      parameters:
-        - $ref: "#/components/parameters/ClientId"
-        - $ref: "#/components/parameters/LinkId"
-      responses:
-        "200":
-          description: Link deleted
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Client or link not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /clients/{id}/links/{linkId}/analytics:
-    get:
-      summary: Get link analytics
+      summary: Get link click analytics
       operationId: getClientLinkAnalytics
       description: >
-        Retrieve click analytics for a specific short link, including total
-        clicks, unique visitors, referrers, and geographic breakdown.
+        Aggregated click analytics for a client's link redirects, sourced from
+        the Pub/Sub analytics pipeline. Returns one row per slug (or a single
+        slug when the `slug` filter is set) with total and unique clicks plus
+        top referrers, countries, and cities.
       parameters:
         - $ref: "#/components/parameters/ClientId"
-        - $ref: "#/components/parameters/LinkId"
-        - name: period
+        - name: slug
           in: query
-          description: "Time period for analytics. Default: `30d`."
+          description: Restrict analytics to a single link slug.
           required: false
           schema:
             type: string
-            enum: ["24h", "7d", "30d", "90d", "all"]
-            default: "30d"
+        - name: date_from
+          in: query
+          description: Start date (ISO 8601). Defaults to 30 days ago.
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          description: End date (ISO 8601), inclusive. Defaults to now.
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: limit
+          in: query
+          description: Maximum slugs returned. Default `50`, max `500`.
+          required: false
+          schema:
+            type: integer
+            default: 50
+            maximum: 500
       responses:
         "200":
-          description: Link analytics data
+          description: Link analytics rows
           content:
             application/json:
               schema:
@@ -173,8 +156,82 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Analytics service not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /clients/{id}/links/{linkId}:
+    patch:
+      summary: Update link
+      operationId: updateClientLink
+      description: >
+        Partially update a link redirect. Only the supplied fields change. KV is
+        updated to reflect slug changes and enable/disable. Returns `409` if the
+        new slug collides with an existing link for the client.
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - $ref: "#/components/parameters/LinkId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLinkRequest"
+      responses:
+        "200":
+          description: Link updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkResponse"
+        "400":
+          description: Invalid JSON, no valid fields, or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
-          description: Client or link not found
+          description: Link not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: A link with this slug already exists for this client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Delete link
+      operationId: deleteClientLink
+      description: Permanently delete a link redirect and remove its KV entry.
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - $ref: "#/components/parameters/LinkId"
+      responses:
+        "200":
+          description: Link deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Link not found
           content:
             application/json:
               schema:
@@ -203,7 +260,7 @@ components:
       name: linkId
       in: path
       required: true
-      description: Short link identifier.
+      description: Link redirect identifier (row id).
       schema:
         type: string
   schemas:
@@ -214,53 +271,109 @@ components:
       properties:
         destination_url:
           type: string
-          format: uri
-          description: Target URL the short link redirects to.
+          description: Target URL. Must start with `http://` or `https://`.
           example: https://acme-retail.com/summer-sale
         slug:
           type: string
-          description: Custom slug for the short link. Auto-generated if omitted.
+          pattern: "^[a-zA-Z0-9_-]{1,128}$"
+          description: Custom slug (1-128 chars — alphanumeric, hyphens, underscores).
           example: summer-sale
         title:
           type: string
+          nullable: true
           description: Human-readable title for the link.
           example: Summer Sale Campaign
+        redirect_type:
+          type: integer
+          enum: [301, 302]
+          default: 302
+          description: HTTP redirect status code.
+        enabled:
+          type: boolean
+          default: true
+          description: Whether the redirect is active and served from the edge.
+        utm_passthrough:
+          type: boolean
+          default: true
+          description: Whether inbound UTM query params are forwarded to the destination.
         metadata:
           type: object
+          nullable: true
           description: Arbitrary JSON metadata attached to the link.
           example:
             campaign: summer-2024
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Optional expiry timestamp after which the redirect stops serving.
+    UpdateLinkRequest:
+      type: object
+      description: Partial update — only include fields you want to change.
+      properties:
+        destination_url:
+          type: string
+        title:
+          type: string
+          nullable: true
+        slug:
+          type: string
+          pattern: "^[a-zA-Z0-9_-]{1,128}$"
+        redirect_type:
+          type: integer
+          enum: [301, 302]
+        enabled:
+          type: boolean
+        utm_passthrough:
+          type: boolean
+        metadata:
+          type: object
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
     Link:
       type: object
       properties:
         id:
           type: string
-          example: lnk_9xP3qLmN
-        client_id:
+          description: Link redirect row identifier.
+        location_id:
           type: string
+          description: Owning client identifier.
           example: acme-retail
-        destination_url:
-          type: string
-          format: uri
-          example: https://acme-retail.com/summer-sale
-        short_url:
-          type: string
-          format: uri
-          description: The generated short URL.
-          example: https://go.mythic-analytics.com/summer-sale
         slug:
           type: string
+          nullable: true
           example: summer-sale
+        destination_url:
+          type: string
+          example: https://acme-retail.com/summer-sale
         title:
           type: string
           nullable: true
           example: Summer Sale Campaign
-        clicks:
+        redirect_type:
           type: integer
-          description: Total click count.
-          example: 1247
+          enum: [301, 302]
+          example: 302
+        enabled:
+          type: boolean
+          example: true
+        utm_passthrough:
+          type: boolean
+          example: true
         metadata:
           type: object
+          nullable: true
+        click_count:
+          type: integer
+          description: Total recorded clicks.
+          example: 1247
+        expires_at:
+          type: string
+          format: date-time
           nullable: true
         created_at:
           type: string
@@ -270,49 +383,53 @@ components:
           type: string
           format: date-time
           example: "2024-06-15T08:30:00.000Z"
-    LinkAnalytics:
+    LinkAnalyticsRow:
       type: object
       properties:
+        slug:
+          type: string
+          example: summer-sale
+        destination:
+          type: string
+          example: https://acme-retail.com/summer-sale
+        redirect_type:
+          type: integer
+          example: 302
         total_clicks:
           type: integer
           example: 1247
-        unique_visitors:
+        unique_clicks:
           type: integer
+          description: Unique visitors (by internal identity id).
           example: 892
-        referrers:
+        top_referrers:
           type: array
+          description: Up to 10 most frequent referrers.
           items:
-            type: object
-            properties:
-              source:
-                type: string
-                example: google.com
-              clicks:
-                type: integer
-                example: 340
-        countries:
+            type: string
+          example: ["https://google.com", "https://facebook.com"]
+        top_countries:
           type: array
+          description: Up to 10 most frequent countries.
           items:
-            type: object
-            properties:
-              country:
-                type: string
-                example: US
-              clicks:
-                type: integer
-                example: 580
-        daily_clicks:
+            type: string
+          example: ["US", "CA"]
+        top_cities:
           type: array
+          description: Up to 10 most frequent cities.
           items:
-            type: object
-            properties:
-              date:
-                type: string
-                format: date
-                example: "2024-06-15"
-              clicks:
-                type: integer
-                example: 42
+            type: string
+        top_user_agents:
+          type: array
+          description: Up to 5 most frequent user agents.
+          items:
+            type: string
+        first_click:
+          type: string
+          format: date-time
+        last_click:
+          type: string
+          format: date-time
     LinkResponse:
       type: object
       properties:
@@ -333,6 +450,7 @@ components:
             $ref: "#/components/schemas/Link"
         count:
           type: integer
+          description: Number of links returned in this response (page size, not the grand total).
           example: 5
     LinkAnalyticsResponse:
       type: object
@@ -341,11 +459,20 @@ components:
           type: boolean
           example: true
         data:
-          $ref: "#/components/schemas/LinkAnalytics"
-    SuccessResponse:
+          type: array
+          items:
+            $ref: "#/components/schemas/LinkAnalyticsRow"
+        rows:
+          type: integer
+          description: Number of analytics rows returned.
+          example: 3
+    DeleteResponse:
       type: object
       properties:
         success:
+          type: boolean
+          example: true
+        deleted:
           type: boolean
           example: true
     ErrorResponse:

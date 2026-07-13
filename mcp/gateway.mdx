@@ -1,32 +1,35 @@
 ---
 title: MCP Gateway
 description: >-
-  Execute MCP tool calls via the JSON-RPC 2.0 gateway endpoint.
+  Call MCP tools over JSON-RPC 2.0. The gateway exposes built-in analytics
+  tools plus any upstream tools the key's agency and location can reach.
 ---
 
 ## Overview
 
-The MCP Gateway provides a JSON-RPC 2.0 interface for executing tool calls on registered MCP servers. The gateway handles authentication, access control enforcement, request routing, and response normalization.
+The MCP Gateway is a single JSON-RPC 2.0 endpoint. It authenticates the caller's `mcp_` key, enforces scopes and agency/location access, then either runs a **built-in tool** directly against Supabase or proxies the call to a registered **upstream** MCP server (injecting that client's credentials).
 
-## Gateway endpoint
+## Endpoint
 
 ```text
-POST https://mcp-gateway.mythic-analytics.com/rpc
+POST https://mythic-analytics.gulp.workers.dev/mcp
 ```
+
+The endpoint accepts a single JSON-RPC request object per HTTP call. CORS is open (`*`) for `POST` and `OPTIONS`.
 
 ## Authentication
 
-Include your MCP API key in the `Authorization` header.
+Send the `mcp_` key as a bearer token or in `X-Api-Key`.
 
 ```text
-Authorization: Bearer YOUR_MCP_API_KEY
+Authorization: Bearer mcp_...
 ```
+
+See [Authentication](/mcp/authentication) for scope rules.
 
 ## JSON-RPC 2.0 format
 
-All requests and responses follow the [JSON-RPC 2.0 specification](https://www.jsonrpc.org/specification).
-
-### Request format
+### Request
 
 ```json
 {
@@ -34,12 +37,8 @@ All requests and responses follow the [JSON-RPC 2.0 specification](https://www.j
   "id": "req-001",
   "method": "tools/call",
   "params": {
-    "name": "query_analytics",
-    "arguments": {
-      "client_id": "acme-retail",
-      "metric": "page_views",
-      "period": "30d"
-    }
+    "name": "list_insights",
+    "arguments": { "limit": 10 }
   }
 }
 ```
@@ -48,15 +47,15 @@ All requests and responses follow the [JSON-RPC 2.0 specification](https://www.j
   Must be `"2.0"`.
 </ParamField>
 
-<ParamField body="id" param-type="string|number" required="true" deprecated="false">
-  Unique request identifier. Returned in the response for correlation.
+<ParamField body="id" param-type="string|number|null" required="false" deprecated="false">
+  Request identifier, echoed back in the response.
 </ParamField>
 
 <ParamField body="method" param-type="string" required="true" deprecated="false">
-  The MCP method to invoke. Use `tools/call` for tool execution.
+  One of `initialize`, `notifications/initialized`, `tools/list`, `tools/call`.
 </ParamField>
 
-<ParamField body="params" param-type="object" required="true" deprecated="false">
+<ParamField body="params" param-type="object" required="false" deprecated="false">
   Method-specific parameters. For `tools/call`, include `name` and `arguments`.
 </ParamField>
 
@@ -68,10 +67,7 @@ All requests and responses follow the [JSON-RPC 2.0 specification](https://www.j
   "id": "req-001",
   "result": {
     "content": [
-      {
-        "type": "text",
-        "text": "{\"page_views\": 42600, \"period\": \"30d\"}"
-      }
+      { "type": "text", "text": "[ ... insights ... ]" }
     ]
   }
 }
@@ -84,121 +80,114 @@ All requests and responses follow the [JSON-RPC 2.0 specification](https://www.j
   "jsonrpc": "2.0",
   "id": "req-001",
   "error": {
-    "code": -32600,
-    "message": "Invalid request",
-    "data": "Missing required field: method"
+    "code": -32601,
+    "message": "Method not found: tools/execute"
   }
 }
 ```
 
-## Standard JSON-RPC error codes
+## Methods
+
+### initialize
+
+Returns protocol and server info. No authentication side effects beyond the standard key check.
+
+```json
+{ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {} }
+```
+
+Result:
+
+```json
+{
+  "protocolVersion": "2025-03-26",
+  "capabilities": { "tools": {} },
+  "serverInfo": { "name": "mythic-analytics-gateway", "version": "1.0.0" }
+}
+```
+
+### notifications/initialized
+
+Client lifecycle notification. The gateway accepts it and returns an empty result.
+
+### tools/list
+
+Returns every tool the key can use — built-in tools allowed by scope, plus upstream tools allowed by scope, agency access, and location access. Each entry has `name`, `description`, `inputSchema`, and `annotations`.
+
+```json
+{ "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {} }
+```
+
+### tools/call
+
+Execute a tool by name.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "create_dashboard",
+    "arguments": { "name": "Q3 Overview" }
+  }
+}
+```
+
+The result is the tool's MCP content payload (`{ "content": [...] }`, optionally with `"isError": true`). Built-in tools return their content as a JSON string inside a text block. Upstream tool results are proxied through unchanged.
+
+<Callout kind="info">
+  `location_id` is injected from the API key for built-in tools — you do not pass it when creating resources. Upstream calls receive that client's credentials automatically.
+</Callout>
+
+## Built-in tools
+
+These tools are always implemented by the gateway (subject to scope). They operate on the key's location.
+
+| Tool | Scope required |
+|------|----------------|
+| `list_insights` | `insights:read` |
+| `get_insight` | `insights:read` |
+| `create_insight` | `insights:write` |
+| `update_insight` | `insights:write` |
+| `delete_insight` | `insights:write` |
+| `list_dashboards` | `dashboards:read` |
+| `get_dashboard` | `dashboards:read` |
+| `create_dashboard` | `dashboards:write` |
+| `update_dashboard` | `dashboards:write` |
+| `delete_dashboard` | `dashboards:write` |
+| `add_insight_to_dashboard` | `dashboards:write` |
+| `remove_insight_from_dashboard` | `dashboards:write` |
+| `list_canvases` | `canvases:read` |
+| `get_canvas` | `canvases:read` |
+
+Any additional tools come from registered upstream servers and require `<scope_prefix>:call` (or `upstream:call`).
+
+## Error codes
+
+Standard JSON-RPC codes are used throughout:
 
 | Code | Meaning |
 |------|---------|
 | `-32700` | Parse error — invalid JSON |
-| `-32600` | Invalid request — missing required fields |
-| `-32601` | Method not found |
-| `-32602` | Invalid params |
+| `-32600` | Invalid request — bad envelope, auth failure, or access/scope denial |
+| `-32601` | Method not found, or unknown tool |
+| `-32602` | Invalid params — missing tool name |
 | `-32603` | Internal error |
-
-## MCP-specific error codes
-
-| Code | Meaning |
-|------|---------|
-| `-32001` | Authentication failed — invalid or expired API key |
-| `-32002` | Access denied — client not allowed to use this tool |
-| `-32003` | Tool execution failed — upstream server error |
-| `-32004` | Server unavailable — MCP server is not reachable |
-
-## Available methods
-
-### tools/call
-
-Execute a tool on a registered MCP server.
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "req-002",
-  "method": "tools/call",
-  "params": {
-    "name": "generate_report",
-    "arguments": {
-      "client_id": "acme-retail",
-      "report_type": "monthly_summary"
-    }
-  }
-}
-```
-
-### tools/list
-
-List all available tools the API key has access to.
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "req-003",
-  "method": "tools/list",
-  "params": {}
-}
-```
-
-### ping
-
-Health check endpoint.
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "req-004",
-  "method": "ping",
-  "params": {}
-}
-```
-
-## Batch requests
-
-The gateway supports JSON-RPC batch requests. Send an array of request objects to execute multiple tool calls in a single HTTP request.
-
-```json
-[
-  {
-    "jsonrpc": "2.0",
-    "id": "req-005",
-    "method": "tools/call",
-    "params": {
-      "name": "query_analytics",
-      "arguments": { "client_id": "acme-retail", "metric": "page_views" }
-    }
-  },
-  {
-    "jsonrpc": "2.0",
-    "id": "req-006",
-    "method": "tools/call",
-    "params": {
-      "name": "query_analytics",
-      "arguments": { "client_id": "acme-retail", "metric": "unique_visitors" }
-    }
-  }
-]
-```
+| `-32000` | Rate limit exceeded, or an upstream transport/HTTP error |
 
 <Callout kind="info">
-  Batch requests are executed concurrently. The response array maintains the same order as the request array.
+  Authentication failures return HTTP `401` and rate-limit rejections return HTTP `429`, each carrying a JSON-RPC `error` object. Scope and access denials are returned as `-32600`.
 </Callout>
 
 ## Rate limiting
 
-The gateway enforces rate limits per API key. Current limits:
+The gateway enforces a per-key, per-minute request ceiling using a sliding window. The limit comes from the key's `rate_limit_per_minute` (default `60`). Exceeding it returns HTTP `429`:
 
-| Tier | Requests per minute | Concurrent connections |
-|------|--------------------|-----------------------|
-| Standard | 60 | 10 |
-| Enterprise | 600 | 100 |
-
-When rate limited, the gateway returns a `-32603` error with a `Retry-After` header.
+```json
+{ "jsonrpc": "2.0", "id": null, "error": { "code": -32000, "message": "Rate limit exceeded" } }
+```
 
 <Callout kind="alert">
-  Rate limits are applied per API key, not per client. Create separate API keys for different services to isolate rate limits.
+  Limits are per API key, not per location. Provision separate keys for separate services to isolate their limits.
 </Callout>

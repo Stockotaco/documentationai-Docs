@@ -2,72 +2,108 @@ openapi: "3.0.0"
 info:
   version: 1.0.0
   title: Short Links
-  description: Create, read, update, and delete short links with click analytics in Mythic Analytics.
+  description: >
+    Create, read, update, and delete short links and read link click
+    analytics through the Mythic Analytics Client API. Mounted at
+    `/client/v1`. Authenticated with a client agency key (`ak_`, read-write)
+    or location secret key (`sk_`, read-only).
 servers:
-  - url: https://api.mythic-analytics.com/api/v1
+  - url: https://mythic-analytics.gulp.workers.dev/client/v1
 security:
-  - BearerAuth: []
-  - AdminKeyQuery: []
+  - ClientBearerAuth: []
+  - AgencyKeyQuery: []
+  - SecretKeyQuery: []
 paths:
-  /links:
+  /status:
+    get:
+      summary: Get client status
+      operationId: getClientStatus
+      description: Read the active/inactive status of the authenticated client (location).
+      parameters:
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/LocationIdHeader"
+      responses:
+        "200":
+          description: Current client status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
     post:
-      summary: Create link
-      operationId: createLink
+      summary: Update client status
+      operationId: updateClientStatus
       description: >
-        Create a new short link. The link is assigned a unique slug and
-        automatically tracks click analytics including referrers, geography,
-        and device information.
+        Enable or disable the authenticated client. Requires an agency key
+        (`ak_`). Writes the new status through to KV so ingestion picks it up
+        immediately.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/LocationIdHeader"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateLinkRequest"
+              type: object
+              required:
+                - active
+              properties:
+                active:
+                  type: boolean
+                  description: "`true` to activate the client, `false` to disable it."
       responses:
-        "201":
-          description: Link created successfully
+        "200":
+          description: Status updated
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LinkResponse"
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      client_id:
+                        type: string
+                      active:
+                        type: boolean
         "400":
-          description: Invalid JSON or validation error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/BadRequest"
         "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "409":
-          description: Slug already in use
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+  /links:
     get:
       summary: List links
       operationId: listLinks
-      description: Retrieve a paginated list of short links with optional filtering.
+      description: >
+        List short links for the authenticated location, ordered by newest
+        first. Each link is enriched with a `click_count` sourced from
+        Tinybird.
       parameters:
-        - name: client_id
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - name: enabled
           in: query
-          description: Filter by client identifier.
+          description: Filter by enabled state. Pass `true` or `false`.
           required: false
           schema:
             type: string
+            enum: ["true", "false"]
         - name: search
           in: query
-          description: Search on slug or title.
+          description: Case-insensitive substring match on the link title.
           required: false
           schema:
             type: string
         - name: limit
           in: query
-          description: Maximum results per page. Default `50`, max `500`.
+          description: Maximum results. Default `50`, max `500`.
           required: false
           schema:
             type: integer
@@ -82,49 +118,55 @@ paths:
             default: 0
       responses:
         "200":
-          description: Paginated list of links
+          description: List of links
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/LinkListResponse"
         "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /links/{id}:
-    get:
-      summary: Retrieve link
-      operationId: getLink
-      description: Fetch a single short link by its ID.
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      summary: Create link
+      operationId: createLink
+      description: >
+        Create a short link. Requires an agency key (`ak_`). An initial uptime
+        check runs synchronously and its result is returned under `uptime`.
       parameters:
-        - $ref: "#/components/parameters/LinkId"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/LocationIdHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLinkRequest"
       responses:
-        "200":
-          description: Link details
+        "201":
+          description: Link created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LinkResponse"
+                $ref: "#/components/schemas/CreateLinkResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Link not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+        "409":
+          $ref: "#/components/responses/SlugConflict"
+  /links/{linkId}:
     patch:
       summary: Update link
       operationId: updateLink
-      description: Partially update a short link.
+      description: >
+        Partially update a short link owned by the authenticated location.
+        Requires an agency key (`ak_`). Only the fields listed in
+        `UpdateLinkRequest` are accepted; unknown fields are ignored.
       parameters:
         - $ref: "#/components/parameters/LinkId"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/LocationIdHeader"
       requestBody:
         required: true
         content:
@@ -139,104 +181,399 @@ paths:
               schema:
                 $ref: "#/components/schemas/LinkResponse"
         "400":
-          description: Invalid JSON or validation error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/BadRequest"
         "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
         "404":
-          description: Link not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/SlugConflict"
     delete:
       summary: Delete link
       operationId: deleteLink
-      description: Permanently delete a short link. **This action is irreversible.**
+      description: >
+        Permanently delete a short link owned by the authenticated location.
+        Requires an agency key (`ak_`). Also removes the link's KV redirect and
+        uptime state. **This action is irreversible.**
       parameters:
         - $ref: "#/components/parameters/LinkId"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/LocationIdHeader"
       responses:
         "200":
           description: Link deleted
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessResponse"
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  deleted:
+                    type: boolean
+                    example: true
         "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
         "404":
-          description: Link not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /links/{id}/analytics:
+          $ref: "#/components/responses/NotFound"
+  /links/analytics:
     get:
-      summary: Get link analytics
+      summary: Get link click analytics
       operationId: getLinkAnalytics
       description: >
-        Retrieve click analytics for a short link including total clicks,
-        unique visitors, referrer breakdown, geographic data, and device
-        statistics.
+        Proxy to the Tinybird `pubsub_link_click_analytics` pipe for the
+        authenticated location. Returns the raw Tinybird JSON envelope.
       parameters:
-        - $ref: "#/components/parameters/LinkId"
-        - name: period
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/SlugQuery"
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+        - $ref: "#/components/parameters/LimitQuery"
+        - $ref: "#/components/parameters/UtmSource"
+        - $ref: "#/components/parameters/UtmMedium"
+        - $ref: "#/components/parameters/UtmCampaign"
+        - $ref: "#/components/parameters/UtmTerm"
+        - $ref: "#/components/parameters/UtmContent"
+      responses:
+        "200":
+          description: Tinybird analytics result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TinybirdResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/AnalyticsUnavailable"
+  /links/trend:
+    get:
+      summary: Get link click trend
+      operationId: getLinkTrend
+      description: >
+        Proxy to the Tinybird `pubsub_link_click_trend` pipe for the
+        authenticated location. Returns the raw Tinybird JSON envelope.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/SlugQuery"
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+        - $ref: "#/components/parameters/UtmSource"
+        - $ref: "#/components/parameters/UtmMedium"
+        - $ref: "#/components/parameters/UtmCampaign"
+        - $ref: "#/components/parameters/UtmTerm"
+        - $ref: "#/components/parameters/UtmContent"
+      responses:
+        "200":
+          description: Tinybird trend result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TinybirdResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/AnalyticsUnavailable"
+  /links/stream:
+    get:
+      summary: Get link click stream
+      operationId: getLinkStream
+      description: >
+        Proxy to the Tinybird `pubsub_link_click_stream` pipe for the
+        authenticated location. Returns recent individual click events as the
+        raw Tinybird JSON envelope.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/SlugQuery"
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+        - $ref: "#/components/parameters/LimitQuery"
+        - $ref: "#/components/parameters/UtmSource"
+        - $ref: "#/components/parameters/UtmMedium"
+        - $ref: "#/components/parameters/UtmCampaign"
+        - $ref: "#/components/parameters/UtmTerm"
+        - $ref: "#/components/parameters/UtmContent"
+      responses:
+        "200":
+          description: Tinybird click stream result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TinybirdResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/AnalyticsUnavailable"
+  /links/utm-values:
+    get:
+      summary: Get distinct UTM values
+      operationId: getLinkUtmValues
+      description: >
+        Proxy to the Tinybird `pubsub_link_utm_values` pipe. Returns distinct
+        UTM values for populating filter dropdowns.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/SlugQuery"
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+      responses:
+        "200":
+          description: Tinybird UTM values result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TinybirdResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/AnalyticsUnavailable"
+  /performance/cwv:
+    get:
+      summary: Get Core Web Vitals metrics
+      operationId: getCoreWebVitals
+      description: >
+        Proxy to the Tinybird `cwv_metrics` pipe for the authenticated
+        location. Returns Core Web Vitals aggregations with optional breakdown,
+        granularity, and dimensional filters. Returns the raw Tinybird JSON
+        envelope.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+        - name: metric
           in: query
-          description: "Time period for analytics. Default: `30d`."
+          description: "Metric filter. One of `lcp`, `fcp`, `cls`, `ttfb`, `fid`, `inp`."
           required: false
           schema:
             type: string
-            enum: ["24h", "7d", "30d", "90d", "all"]
-            default: "30d"
+            enum: ["lcp", "fcp", "cls", "ttfb", "fid", "inp"]
+        - name: breakdown
+          in: query
+          description: >
+            Breakdown dimension. One of `page`, `page_url`, `device`, `browser`,
+            `country`, `country_name`, `utm_source`, `utm_medium`,
+            `utm_campaign`, `funnel`, `connection`, `hostname`, `os`,
+            `navigation`.
+          required: false
+          schema:
+            type: string
+        - name: granularity
+          in: query
+          description: "Time-series granularity. One of `hour`, `day`, `week`, `month`."
+          required: false
+          schema:
+            type: string
+            enum: ["hour", "day", "week", "month"]
+        - name: page_path
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page_url
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: device_type
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: browser
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: country
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/UtmSource"
+        - $ref: "#/components/parameters/UtmMedium"
+        - $ref: "#/components/parameters/UtmCampaign"
+        - name: funnel_name
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: connection_type
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: hostname
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/LimitQuery"
       responses:
         "200":
-          description: Link analytics data
+          description: Tinybird CWV result
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AnalyticsResponse"
+                $ref: "#/components/schemas/TinybirdResponse"
         "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Link not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/AnalyticsUnavailable"
 components:
   securitySchemes:
-    BearerAuth:
+    ClientBearerAuth:
       type: http
       scheme: bearer
-      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
-    AdminKeyQuery:
+      description: >-
+        Client API key as a bearer token. Use an agency key (`ak_...`,
+        read-write) or a location secret key (`sk_...`, read-only). Format:
+        `Bearer ak_...` or `Bearer sk_...`.
+    AgencyKeyQuery:
       type: apiKey
       in: query
-      name: admin_key
-      description: Alternative to the Authorization header for server-to-server scenarios.
+      name: ak
+      description: Agency key passed as a query parameter instead of the Authorization header.
+    SecretKeyQuery:
+      type: apiKey
+      in: query
+      name: sk
+      description: Location secret key passed as a query parameter instead of the Authorization header.
   parameters:
     LinkId:
-      name: id
+      name: linkId
       in: path
       required: true
-      description: Short link identifier.
+      description: Link identifier (UUID from `link_redirects.id`).
       schema:
         type: string
+        format: uuid
+    LocationIdQuery:
+      name: location_id
+      in: query
+      required: false
+      description: >-
+        Target location (client) id. Required when authenticating with an
+        agency key (`ak_`); alternative to the `X-Location-Id` header. Ignored
+        for secret keys, which resolve their own location.
+      schema:
+        type: string
+    LocationIdHeader:
+      name: X-Location-Id
+      in: header
+      required: false
+      description: >-
+        Target location (client) id. Required when authenticating with an
+        agency key (`ak_`); alternative to the `location_id` query parameter.
+        Ignored for secret keys.
+      schema:
+        type: string
+    SlugQuery:
+      name: slug
+      in: query
+      required: false
+      description: Restrict results to a single link slug.
+      schema:
+        type: string
+    DateFrom:
+      name: date_from
+      in: query
+      required: false
+      description: Start of the date range (forwarded to Tinybird).
+      schema:
+        type: string
+    DateTo:
+      name: date_to
+      in: query
+      required: false
+      description: End of the date range (forwarded to Tinybird).
+      schema:
+        type: string
+    LimitQuery:
+      name: limit
+      in: query
+      required: false
+      description: Maximum rows to return (forwarded to Tinybird).
+      schema:
+        type: integer
+    UtmSource:
+      name: utm_source
+      in: query
+      required: false
+      description: >-
+        Filter by `utm_source`. An empty string matches clicks with no value
+        for that UTM.
+      schema:
+        type: string
+    UtmMedium:
+      name: utm_medium
+      in: query
+      required: false
+      schema:
+        type: string
+    UtmCampaign:
+      name: utm_campaign
+      in: query
+      required: false
+      schema:
+        type: string
+    UtmTerm:
+      name: utm_term
+      in: query
+      required: false
+      schema:
+        type: string
+    UtmContent:
+      name: utm_content
+      in: query
+      required: false
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: Invalid JSON body or validation error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Missing or invalid key, or missing `location_id` for an agency key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    WriteForbidden:
+      description: Write access requires an agency key (`ak_`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Link not found for this location
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    SlugConflict:
+      description: A link with this slug already exists for this client
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    AnalyticsUnavailable:
+      description: Analytics backend not configured
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
   schemas:
     CreateLinkRequest:
       type: object
@@ -246,102 +583,103 @@ components:
         destination_url:
           type: string
           format: uri
-          description: Target URL the short link redirects to.
+          description: Target URL. Must start with `http://` or `https://`.
           example: https://acme-retail.com/summer-sale
         slug:
           type: string
-          description: Custom slug. Auto-generated if omitted.
+          description: >-
+            Custom slug, 1-128 chars of `[a-zA-Z0-9_-]`. Auto-generated by the
+            database if omitted.
           example: summer-sale
         title:
           type: string
           description: Human-readable title.
           example: Summer Sale Campaign
-        client_id:
-          type: string
-          description: Associate the link with a client tenant.
-          example: acme-retail
-        tags:
-          type: array
-          description: Tags for organizing links.
-          items:
-            type: string
-          example:
-            - campaign
-            - summer-2024
-        password:
-          type: string
-          description: Optional password protection for the link.
-        expires_at:
-          type: string
-          format: date-time
-          description: Optional expiration date.
+        redirect_type:
+          type: integer
+          enum: [301, 302]
+          default: 302
+          description: HTTP redirect status. Defaults to `302`.
+        enabled:
+          type: boolean
+          description: Whether the link is active.
+        utm_passthrough:
+          type: boolean
+          description: Whether inbound UTM parameters are forwarded to the destination.
         metadata:
           type: object
           description: Arbitrary JSON metadata.
+        expires_at:
+          type: string
+          format: date-time
+          description: Optional expiration timestamp.
+          nullable: true
     UpdateLinkRequest:
       type: object
+      description: >
+        Partial update. Only these fields are accepted; any other keys are
+        silently ignored. At least one valid field is required.
       properties:
+        slug:
+          type: string
+          description: New slug, 1-128 chars of `[a-zA-Z0-9_-]`.
         destination_url:
           type: string
           format: uri
         title:
           type: string
           nullable: true
-        tags:
-          type: array
-          items:
-            type: string
-        password:
-          type: string
+        redirect_type:
+          type: integer
+          enum: [301, 302]
+        enabled:
+          type: boolean
+        utm_passthrough:
+          type: boolean
+        metadata:
+          type: object
           nullable: true
         expires_at:
           type: string
           format: date-time
-          nullable: true
-        metadata:
-          type: object
           nullable: true
     Link:
       type: object
       properties:
         id:
           type: string
-          example: lnk_9xP3qLmN
+          format: uuid
+          example: 4f9a2c1e-8b3d-4e7a-9c2f-1a2b3c4d5e6f
+        location_id:
+          type: string
+          example: acme-retail
+        slug:
+          type: string
+          example: summer-sale
         destination_url:
           type: string
           format: uri
           example: https://acme-retail.com/summer-sale
-        short_url:
-          type: string
-          format: uri
-          example: https://go.mythic-analytics.com/summer-sale
-        slug:
-          type: string
-          example: summer-sale
         title:
           type: string
           nullable: true
           example: Summer Sale Campaign
-        client_id:
-          type: string
-          nullable: true
-          example: acme-retail
-        clicks:
+        redirect_type:
           type: integer
-          example: 1247
-        tags:
-          type: array
-          items:
-            type: string
-        has_password:
+          enum: [301, 302]
+          example: 302
+        enabled:
           type: boolean
-          example: false
+          example: true
+        utm_passthrough:
+          type: boolean
+          example: true
+        metadata:
+          type: object
+          nullable: true
         expires_at:
           type: string
           format: date-time
-          nullable: true
-        metadata:
-          type: object
           nullable: true
         created_at:
           type: string
@@ -351,60 +689,54 @@ components:
           type: string
           format: date-time
           example: "2024-06-15T08:30:00.000Z"
-    LinkAnalytics:
+        click_count:
+          type: integer
+          description: Total clicks sourced from Tinybird. Present on the list endpoint.
+          example: 1247
+    Uptime:
+      type: object
+      description: Result of the initial uptime check run on link creation.
+      properties:
+        is_up:
+          type: boolean
+          example: true
+        status_code:
+          type: integer
+          example: 200
+        response_time_ms:
+          type: integer
+          example: 142
+        error_type:
+          type: string
+          nullable: true
+          example: null
+        error_message:
+          type: string
+          nullable: true
+          example: null
+        checked_at:
+          type: string
+          format: date-time
+          example: "2024-06-01T12:00:00.500Z"
+    StatusResponse:
       type: object
       properties:
-        total_clicks:
-          type: integer
-          example: 1247
-        unique_visitors:
-          type: integer
-          example: 892
-        referrers:
-          type: array
-          items:
-            type: object
-            properties:
-              source:
-                type: string
-                example: google.com
-              clicks:
-                type: integer
-                example: 340
-        countries:
-          type: array
-          items:
-            type: object
-            properties:
-              country:
-                type: string
-                example: US
-              clicks:
-                type: integer
-                example: 580
-        devices:
-          type: array
-          items:
-            type: object
-            properties:
-              device:
-                type: string
-                example: mobile
-              clicks:
-                type: integer
-                example: 620
-        daily_clicks:
-          type: array
-          items:
-            type: object
-            properties:
-              date:
-                type: string
-                format: date
-                example: "2024-06-15"
-              clicks:
-                type: integer
-                example: 42
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            client_id:
+              type: string
+              example: acme-retail
+            name:
+              type: string
+              nullable: true
+              example: Acme Retail
+            active:
+              type: boolean
+              example: true
     LinkResponse:
       type: object
       properties:
@@ -413,6 +745,19 @@ components:
           example: true
         data:
           $ref: "#/components/schemas/Link"
+    CreateLinkResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          allOf:
+            - $ref: "#/components/schemas/Link"
+            - type: object
+              properties:
+                uptime:
+                  $ref: "#/components/schemas/Uptime"
     LinkListResponse:
       type: object
       properties:
@@ -425,33 +770,33 @@ components:
             $ref: "#/components/schemas/Link"
         count:
           type: integer
+          description: Number of links returned in this page.
           example: 25
-    AnalyticsResponse:
+    TinybirdResponse:
       type: object
+      description: Raw Tinybird pipe JSON response, proxied through unchanged.
       properties:
-        success:
-          type: boolean
-          example: true
+        meta:
+          type: array
+          description: Column metadata (name/type per field).
+          items:
+            type: object
         data:
-          $ref: "#/components/schemas/LinkAnalytics"
-    SuccessResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
+          type: array
+          description: Result rows.
+          items:
+            type: object
+        rows:
+          type: integer
+          example: 42
+        statistics:
+          type: object
     ErrorResponse:
       type: object
+      description: >
+        Client Links API errors return a bare `error` string. (Some
+        Supabase-level failures instead return `success: false` with `error`.)
       properties:
-        success:
-          type: boolean
-          example: false
-        data:
-          nullable: true
-          example: null
         error:
           type: string
-          example: Unauthorized
-        count:
-          type: integer
-          example: 0
+          example: Write access requires an agency key (ak_)

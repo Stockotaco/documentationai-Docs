@@ -1,0 +1,79 @@
+---
+title: Authentication
+description: >-
+  Authenticate Data API requests with an agency key or a location secret key,
+  and bind a location to scope the data you receive.
+---
+
+## Authentication
+
+The Data API accepts two key types. Both are passed as a bearer token in the `Authorization` header, or — for server-to-server tooling — as a query parameter.
+
+| Key type | Prefix | Scope | Query parameter |
+|----------|--------|-------|-----------------|
+| Agency key | `ak_` | All locations linked to the agency | `?ak=` |
+| Location secret key | `sk_` | A single location | `?sk=` |
+
+<ParamField header="Authorization" param-type="string" required="true" deprecated="false">
+  Bearer token. Format: `Bearer ak_...` for an agency key, or `Bearer sk_...` for a location secret key.
+</ParamField>
+
+<ParamField query="ak" param-type="string" required="false" deprecated="false">
+  Agency key as a query parameter. Alternative to the `Authorization` header.
+</ParamField>
+
+<ParamField query="sk" param-type="string" required="false" deprecated="false">
+  Location secret key as a query parameter. Alternative to the `Authorization` header.
+</ParamField>
+
+<Callout kind="alert">
+  These are server-side credentials. The Data API sends no CORS headers by design — never embed a key in browser-side JavaScript, public repositories, or logs.
+</Callout>
+
+## Binding a location
+
+Data is isolated per location, and the location is derived entirely from the auth context — never from a resource id in the path.
+
+- **Location secret keys (`sk_`)** resolve their location automatically. No extra parameter is needed.
+- **Agency keys (`ak_`)** must name a location on every request, using either the `location_id` query parameter or the `X-Location-Id` header. The location must be linked to the agency, or the request returns `403 location_not_linked`.
+
+<ParamField query="location_id" param-type="string" required="false" deprecated="false">
+  Location to scope the request to. Required for agency keys on every route except `/export`.
+</ParamField>
+
+<ParamField header="X-Location-Id" param-type="string" required="false" deprecated="false">
+  Alternative to the `location_id` query parameter for agency keys.
+</ParamField>
+
+If an agency key calls a location-scoped route without binding a location, the request returns `400 location_required`.
+
+## Examples
+
+<CodeGroup tabs="Secret key,Agency key (header),Agency key (query)">
+  ```bash
+  # Location secret key — location is implicit
+  curl https://mythic-analytics.gulp.workers.dev/client/v1/data/people \
+    -H "Authorization: Bearer sk_YOUR_SECRET_KEY"
+  ```
+
+  ```bash
+  # Agency key with the location in a header
+  curl https://mythic-analytics.gulp.workers.dev/client/v1/data/people \
+    -H "Authorization: Bearer ak_YOUR_AGENCY_KEY" \
+    -H "X-Location-Id: acme-retail"
+  ```
+
+  ```bash
+  # Agency key with the location as a query parameter
+  curl "https://mythic-analytics.gulp.workers.dev/client/v1/data/people?location_id=acme-retail" \
+    -H "Authorization: Bearer ak_YOUR_AGENCY_KEY"
+  ```
+</CodeGroup>
+
+## The `/export` exception
+
+The [`/export`](/data-api/overview#endpoints) route reports agency-wide BigQuery export status and does **not** require a bound location. It requires an agency (`ak_`) key — secret keys return `403 agency_required`.
+
+## HIPAA locations
+
+Locations with HIPAA mode enabled are blocked from the Data API. Any request scoped to such a location returns `403 hipaa_restricted`, regardless of key type.

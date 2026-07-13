@@ -4,7 +4,7 @@ info:
   title: Clients
   description: Create, list, retrieve, update, and delete Mythic Analytics client tenants.
 servers:
-  - url: https://api.mythic-analytics.com/api/v1
+  - url: https://mythic-analytics.gulp.workers.dev/api/v1
 security:
   - BearerAuth: []
   - AdminKeyQuery: []
@@ -43,7 +43,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
-          description: Conflict — duplicate id, global_name, or domain
+          description: Conflict — a client with the same `id` already exists
           content:
             application/json:
               schema:
@@ -277,7 +277,9 @@ components:
           example: cmp_7kH3nPqR
         agency_id:
           type: string
-          description: Agency identifier for multi-tenant setups.
+          description: >
+            Agency identifier for multi-tenant setups. Write-only — accepted on
+            create/update but not returned in responses.
         api_metadata:
           type: object
           description: Arbitrary JSON metadata.
@@ -290,6 +292,19 @@ components:
         proxy_api_key:
           type: string
           description: Scoped API key for proxying traffic.
+        gcp_project_id:
+          type: string
+          pattern: "^[a-zA-Z0-9-]{1,128}$"
+          description: Google Cloud project ID (1-128 chars, alphanumeric and hyphens) used for BigQuery export.
+          example: acme-analytics-prod
+        gcp_credentials:
+          type: object
+          nullable: true
+          description: >
+            GCP service-account key as a JSON object (a JSON string is also
+            accepted). Must contain `type`, `project_id`, `client_email`, and
+            `private_key`. Pass `null` to clear. Write-only — responses return a
+            masked summary, never the private key.
     UpdateClientRequest:
       type: object
       description: Partial update — only include fields you want to change.
@@ -334,6 +349,16 @@ components:
         proxy_api_key:
           type: string
           nullable: true
+        gcp_project_id:
+          type: string
+          pattern: "^[a-zA-Z0-9-]{1,128}$"
+          nullable: true
+        gcp_credentials:
+          type: object
+          nullable: true
+          description: >
+            GCP service-account key (JSON object or string) with `type`,
+            `project_id`, `client_email`, and `private_key`. Pass `null` to clear.
     Client:
       type: object
       properties:
@@ -380,9 +405,6 @@ components:
           type: string
           nullable: true
           example: cmp_7kH3nPqR
-        agency_id:
-          type: string
-          nullable: true
         api_metadata:
           type: object
           nullable: true
@@ -392,6 +414,29 @@ components:
         proxy_api_key:
           type: string
           nullable: true
+        gcp_project_id:
+          type: string
+          nullable: true
+          example: acme-analytics-prod
+        gcp_credentials:
+          type: object
+          nullable: true
+          description: >
+            Masked service-account summary. `null` when unset; otherwise an object
+            with `configured`, `client_email`, and `project_id`. The private key is
+            never returned.
+          properties:
+            configured:
+              type: boolean
+              example: true
+            client_email:
+              type: string
+              nullable: true
+              example: exporter@acme-analytics-prod.iam.gserviceaccount.com
+            project_id:
+              type: string
+              nullable: true
+              example: acme-analytics-prod
         created_at:
           type: string
           format: date-time
@@ -500,7 +545,7 @@ components:
             $ref: "#/components/schemas/Client"
         count:
           type: integer
-          description: Total number of matching resources.
+          description: Number of clients returned in this response (page size, not the grand total).
           example: 2
     DeleteResponse:
       type: object

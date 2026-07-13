@@ -1,0 +1,383 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: BigQuery Export
+  description: >
+    Provision and manage per-agency BigQuery exports, and run ad-hoc SQL
+    queries against BigQuery through the Mythic Analytics admin proxy.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /admin/bigquery-exports/{agencyId}/provision:
+    post:
+      summary: Provision agency export
+      operationId: provisionBigqueryExport
+      description: >
+        Create or refresh the agency's BigQuery export. Provisioning creates a
+        dataset `mythic-data.agency_<id>` (dashes in the agency UUID become
+        underscores) containing views filtered to the agency's linked
+        locations, authorizes the dataset over the central events dataset, and
+        grants the supplied principals `READER` on the dataset. The operation
+        is idempotent — repeat calls re-derive the location list and refresh
+        the views. Returns `404` if the agency does not exist.
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProvisionRequest"
+      responses:
+        "200":
+          description: Export provisioned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProvisionResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Agency not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Provisioning failed (BigQuery error, missing configuration)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/bigquery-exports/{agencyId}:
+    get:
+      summary: Get export status
+      operationId: getBigqueryExport
+      description: >
+        Retrieve the stored export record for an agency, including the dataset
+        name, resolved location IDs, principals, and provisioning status.
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+      responses:
+        "200":
+          description: Export record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportRecordResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No export provisioned for this agency
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/bigquery-exports/{agencyId}/reconcile:
+    post:
+      summary: Reconcile agency export
+      operationId: reconcileBigqueryExport
+      description: >
+        Re-derive the agency's location list and refresh its views without
+        changing principals. Use after linking or unlinking locations. No-op
+        with a `400` response if the agency has no export provisioned or the
+        reconcile fails.
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+      responses:
+        "200":
+          description: Export reconciled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconcileResponse"
+        "400":
+          description: No export provisioned or reconcile failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/bigquery/query:
+    post:
+      summary: Run BigQuery SQL
+      operationId: runBigqueryQuery
+      description: >
+        Execute a read SQL query against BigQuery and return the rows, schema,
+        and job metadata. The query runs through a service-account credential
+        server-side. Long-running queries are polled to completion before the
+        response returns.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueryRequest"
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryResponse"
+        "400":
+          description: Invalid JSON body, missing `sql` field, or a BigQuery query error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryErrorResponse"
+        "500":
+          description: Internal error executing the query
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryErrorResponse"
+        "503":
+          description: BigQuery not configured on the server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  parameters:
+    AgencyId:
+      name: agencyId
+      in: path
+      required: true
+      description: Agency UUID.
+      schema:
+        type: string
+        example: "550e8400-e29b-41d4-a716-446655440000"
+  schemas:
+    ProvisionRequest:
+      type: object
+      description: Optional provisioning options. An empty body is accepted.
+      properties:
+        principals:
+          type: array
+          description: >
+            Google principals to grant `READER` on the agency dataset. Each
+            entry is prefixed with its kind: `user:`, `group:`, or
+            `serviceAccount:` followed by the email address.
+          items:
+            type: string
+          example:
+            - "user:analyst@agency.com"
+            - "group:data-team@agency.com"
+            - "serviceAccount:etl@agency-project.iam.gserviceaccount.com"
+        include_hipaa:
+          type: boolean
+          description: >
+            When `true`, include HIPAA-enabled locations in the export. Defaults
+            to `false` — HIPAA locations are excluded.
+          default: false
+    ProvisionResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        dataset:
+          type: string
+          description: Fully-qualified dataset in `project.dataset` form.
+          example: "mythic-data.agency_550e8400_e29b_41d4_a716_446655440000"
+        tables:
+          type: array
+          description: >
+            Views provisioned in the dataset. `events` is always present;
+            snapshot and pre-joined views (`person_profiles`, `identities`,
+            `person_merges`, `sessions`, `attribution_default`, `person_events`)
+            appear once their source tables exist.
+          items:
+            type: string
+          example:
+            - "events"
+            - "person_profiles"
+            - "identities"
+            - "person_merges"
+            - "sessions"
+            - "attribution_default"
+            - "person_events"
+        location_count:
+          type: integer
+          description: Number of locations resolved into the export views.
+          example: 12
+        principals:
+          type: array
+          items:
+            type: string
+          example:
+            - "user:analyst@agency.com"
+    ExportRecord:
+      type: object
+      properties:
+        agency_id:
+          type: string
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        dataset_name:
+          type: string
+          example: "agency_550e8400_e29b_41d4_a716_446655440000"
+        principals:
+          type: array
+          items:
+            type: string
+          example:
+            - "user:analyst@agency.com"
+        location_ids:
+          type: array
+          description: Location IDs currently included in the export views.
+          items:
+            type: string
+        include_hipaa:
+          type: boolean
+          example: false
+        status:
+          type: string
+          description: Provisioning status.
+          enum: ["provisioned", "error"]
+          example: "provisioned"
+        error_message:
+          type: string
+          nullable: true
+          description: Error message from the last failed provision/reconcile. Null when healthy.
+          example: null
+        provisioned_at:
+          type: string
+          format: date-time
+          example: "2024-03-21T18:42:15.291Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2024-06-15T10:00:00.000Z"
+    ExportRecordResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/ExportRecord"
+    ReconcileResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        location_count:
+          type: integer
+          description: Number of locations resolved after reconciliation.
+          example: 12
+    QueryRequest:
+      type: object
+      required:
+        - sql
+      properties:
+        sql:
+          type: string
+          description: The SQL query to execute (GoogleSQL / standard SQL).
+          example: >-
+            SELECT event_name, COUNT(*) AS events
+            FROM `mythic-data.agency_550e8400_e29b_41d4_a716_446655440000.events`
+            WHERE event_timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)
+            GROUP BY event_name
+        projectId:
+          type: string
+          description: >
+            GCP project to bill the query to. Defaults to the server-configured
+            billing project when omitted.
+          example: "hello-conversions"
+        maxResults:
+          type: integer
+          description: Maximum rows to return. Defaults to `1000`.
+          default: 1000
+          example: 1000
+    QueryResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        rows:
+          type: array
+          description: Result rows as plain objects keyed by column name.
+          items:
+            type: object
+          example:
+            - event_name: "page_view"
+              events: 4821
+            - event_name: "form_submit"
+              events: 137
+        schema:
+          type: array
+          description: Column definitions in result order.
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                example: "event_name"
+              type:
+                type: string
+                example: "STRING"
+        totalRows:
+          type: integer
+          description: Total rows matched by the query.
+          example: 2
+        totalBytesProcessed:
+          type: integer
+          description: Bytes scanned by the query (billing basis).
+          example: 1048576
+        jobId:
+          type: string
+          description: BigQuery job identifier.
+          example: "job_aBcDeFgHiJkLmNoPqRsTuVwXyZ"
+    QueryErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "Missing or invalid \"sql\" field"
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "No export provisioned"

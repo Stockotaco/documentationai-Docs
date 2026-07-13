@@ -1,0 +1,55 @@
+---
+title: Authentication
+description: >-
+  Authenticate to the Destinations API with an agency key for read-write
+  access or a location secret key for read-only access, scoped to a single
+  client location.
+---
+
+## Authentication
+
+The Destinations API is client-scoped. Every request carries a client key as a bearer token, and the location it operates on comes entirely from that key's context — it is never taken from the request body.
+
+<ParamField header="Authorization" param-type="string" required="true" deprecated="false">
+  Bearer token. Use an agency key (`Bearer ak_...`) or a location secret key (`Bearer sk_...`).
+</ParamField>
+
+You may alternatively pass the key as a query parameter: `?ak=...` for an agency key or `?sk=...` for a secret key. Prefer the header — these are server-side credentials and should never appear in client-side code.
+
+## Key types
+
+| Key | Prefix | Access | Location |
+|-----|--------|--------|----------|
+| **Agency key** | `ak_` | Read-write | Must be named per request |
+| **Secret key** | `sk_` | Read-only (viewer) | Resolved from the key itself |
+
+### Agency keys (`ak_`)
+
+An agency key can read and write. It must name the location it acts on via the `location_id` query parameter or the `X-Location-Id` header. The location must be linked to the agency, otherwise the request is rejected.
+
+```bash
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/destinations?location_id=loc_acme" \
+  -H "Authorization: Bearer ak_YOUR_AGENCY_KEY"
+```
+
+### Secret keys (`sk_`)
+
+A secret key is a read-only viewer. It resolves its own location directly, so no `location_id` is needed. Write operations (create, update, delete, credential management, test) return `403 agency_required`. When a viewer reads a webhook destination, its inline secrets (`headers` values and `body_template`) are redacted to `***`.
+
+```bash
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/destinations" \
+  -H "Authorization: Bearer sk_YOUR_SECRET_KEY"
+```
+
+## Errors
+
+| Status | `code` | Meaning |
+|--------|--------|---------|
+| `400` | `location_required` | Agency key did not name a `location_id` |
+| `401` | `unauthorized` | Key missing, malformed, or not recognized |
+| `403` | `location_not_linked` | Location is not linked to the agency |
+| `403` | `agency_required` | Write attempted with a read-only secret key |
+
+<Callout kind="alert">
+  Never expose agency or secret keys in client-side JavaScript, public repositories, or logs. There are no CORS headers on these endpoints by design — call them only from trusted backend services.
+</Callout>

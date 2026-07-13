@@ -2,18 +2,31 @@ openapi: "3.0.0"
 info:
   version: 1.0.0
   title: MCP API Keys
-  description: Manage API keys for MCP gateway access in the Mythic Analytics platform.
+  description: >-
+    Platform-level provisioning of `mcp_` API keys used to authenticate
+    against the MCP gateway. Mounted under /admin/mcp and authenticated with
+    the platform ADMIN_KEY. Each key is scoped to one agency and one location.
 servers:
-  - url: https://api.mythic-analytics.com/api/v1
+  - url: https://mythic-analytics.gulp.workers.dev
 security:
   - BearerAuth: []
   - AdminKeyQuery: []
 paths:
-  /mcp/api-keys:
+  /admin/mcp/api-keys:
     get:
       summary: List API keys
       operationId: listMcpApiKeys
-      description: Retrieve all MCP API keys. Secret values are masked in the response.
+      description: >
+        List MCP API keys. Only the `key_prefix` is returned — the raw key and
+        its hash are never exposed.
+      parameters:
+        - name: agency_id
+          in: query
+          description: Filter keys to a single agency.
+          required: false
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: List of API keys
@@ -27,12 +40,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     post:
       summary: Create API key
       operationId: createMcpApiKey
       description: >
-        Create a new MCP API key. The full key value is only returned once
-        at creation time. Store it securely.
+        Create a new `mcp_` API key. The raw key is returned only once, in the
+        `data.key` field of this response. Only its SHA-256 hash and 12-char
+        prefix are stored afterwards.
       requestBody:
         required: true
         content:
@@ -47,7 +67,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiKeyCreatedResponse"
         "400":
-          description: Invalid JSON or validation error
+          description: Missing required field (name, agency_id, or location_id)
           content:
             application/json:
               schema:
@@ -58,11 +78,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /mcp/api-keys/{id}:
+        "500":
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/mcp/api-keys/{id}:
     delete:
       summary: Delete API key
       operationId: deleteMcpApiKey
-      description: Permanently revoke and delete an MCP API key.
+      description: Permanently delete (revoke) an MCP API key.
       parameters:
         - $ref: "#/components/parameters/ApiKeyId"
       responses:
@@ -78,8 +104,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: API key not found
+        "500":
+          description: Internal error
           content:
             application/json:
               schema:
@@ -89,7 +115,7 @@ components:
     BearerAuth:
       type: http
       scheme: bearer
-      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+      description: "Platform admin key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
     AdminKeyQuery:
       type: apiKey
       in: query
@@ -100,56 +126,77 @@ components:
       name: id
       in: path
       required: true
-      description: MCP API key identifier.
+      description: MCP API key UUID.
       schema:
         type: string
+        format: uuid
   schemas:
     CreateApiKeyRequest:
       type: object
       required:
         - name
+        - agency_id
+        - location_id
       properties:
         name:
           type: string
           description: Human-readable name for the key.
           example: Production Gateway Key
+        agency_id:
+          type: string
+          format: uuid
+          description: Agency this key belongs to.
+        location_id:
+          type: string
+          description: Location (client/tenant) the key operates on behalf of.
+          example: acme-retail
         scopes:
           type: array
-          description: Permission scopes for the key.
+          description: >
+            Permission scopes in `resource:action`, `resource:*`, or `*` form
+            (e.g. `insights:read`, `dashboards:*`, `analytics:call`). An empty
+            array grants unrestricted access. See the Authentication page.
           items:
             type: string
-            enum: ["tools:execute", "tools:read", "servers:read"]
           example:
-            - tools:execute
-            - tools:read
-        expires_at:
-          type: string
-          format: date-time
-          description: Optional expiration date. Null means no expiration.
+            - insights:read
+            - dashboards:*
+        rate_limit_per_minute:
+          type: integer
+          description: Per-key request ceiling. Defaults to 60.
+          example: 60
     McpApiKey:
       type: object
       properties:
         id:
           type: string
-          example: mak_7kH3nPqR
+          format: uuid
+        agency_id:
+          type: string
+          format: uuid
+        location_id:
+          type: string
+          example: acme-retail
         name:
           type: string
           example: Production Gateway Key
         key_prefix:
           type: string
-          description: First 8 characters of the key for identification.
-          example: mak_7kH3
+          description: First 12 characters of the key (`mcp_` + 8 hex) for identification.
+          example: mcp_a1b2c3d4
         scopes:
           type: array
           items:
             type: string
           example:
-            - tools:execute
-            - tools:read
-        expires_at:
-          type: string
-          format: date-time
-          nullable: true
+            - insights:read
+            - dashboards:*
+        is_active:
+          type: boolean
+          example: true
+        rate_limit_per_minute:
+          type: integer
+          example: 60
         last_used_at:
           type: string
           format: date-time
@@ -157,7 +204,6 @@ components:
         created_at:
           type: string
           format: date-time
-          example: "2024-05-01T10:00:00.000Z"
     McpApiKeyCreated:
       allOf:
         - $ref: "#/components/schemas/McpApiKey"
@@ -165,29 +211,23 @@ components:
           properties:
             key:
               type: string
-              description: Full API key value. Only returned once at creation.
-              example: mak_7kH3nPqRs9xL2mBcD4vN5tW8yZ1aE6f
+              description: Full `mcp_` key. Returned only once at creation.
+              example: mcp_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4
     ApiKeyListResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: true
         data:
           type: array
           items:
             $ref: "#/components/schemas/McpApiKey"
-        count:
-          type: integer
-          example: 2
     ApiKeyCreatedResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: true
         data:
           $ref: "#/components/schemas/McpApiKeyCreated"
+        warning:
+          type: string
+          example: Save this key now. It cannot be retrieved after this response.
     SuccessResponse:
       type: object
       properties:
@@ -197,15 +237,6 @@ components:
     ErrorResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: false
-        data:
-          nullable: true
-          example: null
         error:
           type: string
           example: Unauthorized
-        count:
-          type: integer
-          example: 0

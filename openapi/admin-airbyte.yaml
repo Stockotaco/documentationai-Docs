@@ -1,0 +1,1273 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Airbyte Admin
+  description: >
+    Operator-facing Airbyte management across all agencies and clients. Provision
+    workspaces, manage connections and sources, trigger and schedule syncs,
+    backfill sync history, and review cross-agency status, statistics, and health.
+    All endpoints require the platform admin key.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+tags:
+  - name: Global
+    description: Cross-agency management under `/admin/airbyte`.
+  - name: Per-client
+    description: Client-scoped management under `/api/v1/clients/{id}/airbyte`.
+paths:
+  /admin/airbyte/platforms:
+    get:
+      tags: [Global]
+      summary: List supported platforms
+      operationId: adminListAirbytePlatforms
+      description: Return the catalog of supported source platforms and their default streams.
+      responses:
+        "200":
+          description: Supported platforms
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Platform"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /admin/airbyte/config/status:
+    get:
+      tags: [Global]
+      summary: Cross-agency provisioning overview
+      operationId: adminAirbyteConfigStatus
+      description: >
+        Return provisioning status for every agency's Airbyte config, newest
+        first. Encrypted credentials are redacted; `has_credentials` indicates
+        presence.
+      responses:
+        "200":
+          description: Config status list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Config"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /admin/airbyte/config/{agencyId}:
+    get:
+      tags: [Global]
+      summary: Get agency config
+      operationId: adminGetAirbyteConfig
+      description: Return a single agency's Airbyte configuration.
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+      responses:
+        "200":
+          description: Agency config
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Config"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /admin/airbyte/config/{agencyId}/provision:
+    post:
+      tags: [Global]
+      summary: Provision agency workspace
+      operationId: adminProvisionAirbyteWorkspace
+      description: >
+        Create or refresh the agency's Airbyte workspace and BigQuery destination.
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProvisionRequest"
+      responses:
+        "200":
+          description: Workspace provisioned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/ProvisionResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description: Encryption key not configured on the server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/airbyte/connections:
+    get:
+      tags: [Global]
+      summary: List connections
+      operationId: adminListAirbyteConnections
+      description: List connections across all agencies, with optional filters.
+      parameters:
+        - name: agency_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: client_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: platform
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["active", "error", "paused"]
+      responses:
+        "200":
+          description: Connections
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Connection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Global]
+      summary: Create connection
+      operationId: adminCreateAirbyteConnection
+      description: >
+        Create a source and connection. The request body must include
+        `client_id`, `agency_id`, and `platform`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminCreateConnectionRequest"
+      responses:
+        "201":
+          description: Connection created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Connection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /admin/airbyte/connections/{id}:
+    get:
+      tags: [Global]
+      summary: Retrieve connection
+      operationId: adminGetAirbyteConnection
+      parameters:
+        - $ref: "#/components/parameters/ConnectionId"
+      responses:
+        "200":
+          description: Connection details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Connection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Global]
+      summary: Update connection
+      operationId: adminUpdateAirbyteConnection
+      parameters:
+        - $ref: "#/components/parameters/ConnectionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateConnectionRequest"
+      responses:
+        "200":
+          description: Updated connection
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Connection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Global]
+      summary: Delete connection
+      operationId: adminDeleteAirbyteConnection
+      parameters:
+        - $ref: "#/components/parameters/ConnectionId"
+      responses:
+        "200":
+          description: Connection deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /admin/airbyte/connections/{id}/sync:
+    post:
+      tags: [Global]
+      summary: Trigger sync
+      operationId: adminTriggerAirbyteSync
+      parameters:
+        - $ref: "#/components/parameters/ConnectionId"
+      responses:
+        "200":
+          description: Sync job queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/Job"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /admin/airbyte/connections/{id}/jobs:
+    get:
+      tags: [Global]
+      summary: List recent jobs
+      operationId: adminListAirbyteJobs
+      parameters:
+        - $ref: "#/components/parameters/ConnectionId"
+        - name: limit
+          in: query
+          description: Maximum jobs to return. Default `10`, clamped to `1`–`100`.
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Recent jobs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /admin/airbyte/connections/{id}/schedule:
+    patch:
+      tags: [Global]
+      summary: Update schedule
+      operationId: adminUpdateAirbyteSchedule
+      parameters:
+        - $ref: "#/components/parameters/ConnectionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleRequest"
+      responses:
+        "200":
+          description: Schedule updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /admin/airbyte/connections/{id}/backfill:
+    post:
+      tags: [Global]
+      summary: Backfill sync events
+      operationId: adminBackfillAirbyteSyncEvents
+      description: >
+        Pull recent jobs (up to 50) from Airbyte for the connection and insert
+        any missing sync events into the local log.
+      parameters:
+        - $ref: "#/components/parameters/ConnectionId"
+      responses:
+        "200":
+          description: Backfill result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  inserted:
+                    type: integer
+                    example: 7
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /admin/airbyte/sync-events:
+    get:
+      tags: [Global]
+      summary: List sync events
+      operationId: adminListAirbyteSyncEvents
+      parameters:
+        - name: client_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: agency_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: connection_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: platform
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: success
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Paginated sync events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncEventsPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /admin/airbyte/stats:
+    get:
+      tags: [Global]
+      summary: Get sync statistics
+      operationId: adminGetAirbyteStats
+      parameters:
+        - name: agency_id
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Stats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /admin/airbyte/health:
+    get:
+      tags: [Global]
+      summary: Get connection health
+      operationId: adminGetAirbyteHealth
+      parameters:
+        - name: agency_id
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Health overview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Health"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/clients/{id}/airbyte/platforms:
+    get:
+      tags: [Per-client]
+      summary: List supported platforms
+      operationId: clientAdminListAirbytePlatforms
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      responses:
+        "200":
+          description: Supported platforms
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Platform"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/clients/{id}/airbyte/config:
+    get:
+      tags: [Per-client]
+      summary: Get client's agency config
+      operationId: clientAdminGetAirbyteConfig
+      description: Resolve the client's agency and return its Airbyte config.
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      responses:
+        "200":
+          description: Agency config
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Config"
+        "400":
+          description: Client not linked to an agency
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/clients/{id}/airbyte/config/provision:
+    post:
+      tags: [Per-client]
+      summary: Provision workspace for client's agency
+      operationId: clientAdminProvisionAirbyteWorkspace
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProvisionRequest"
+      responses:
+        "200":
+          description: Workspace provisioned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/ProvisionResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/clients/{id}/airbyte/connections:
+    get:
+      tags: [Per-client]
+      summary: List client connections
+      operationId: clientAdminListAirbyteConnections
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - name: platform
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Connections
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Connection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Per-client]
+      summary: Create client connection
+      operationId: clientAdminCreateAirbyteConnection
+      description: >
+        Create a source and connection for the client. `client_id` and
+        `agency_id` are derived from the path — the body only needs `platform`
+        and platform configuration.
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConnectionRequest"
+      responses:
+        "201":
+          description: Connection created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Connection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/clients/{id}/airbyte/connections/{connId}:
+    get:
+      tags: [Per-client]
+      summary: Retrieve client connection
+      operationId: clientAdminGetAirbyteConnection
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - $ref: "#/components/parameters/ConnId"
+      responses:
+        "200":
+          description: Connection details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Connection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Per-client]
+      summary: Update client connection
+      operationId: clientAdminUpdateAirbyteConnection
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - $ref: "#/components/parameters/ConnId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateConnectionRequest"
+      responses:
+        "200":
+          description: Updated connection
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Connection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Per-client]
+      summary: Delete client connection
+      operationId: clientAdminDeleteAirbyteConnection
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - $ref: "#/components/parameters/ConnId"
+      responses:
+        "200":
+          description: Connection deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/clients/{id}/airbyte/connections/{connId}/sync:
+    post:
+      tags: [Per-client]
+      summary: Trigger sync
+      operationId: clientAdminTriggerAirbyteSync
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - $ref: "#/components/parameters/ConnId"
+      responses:
+        "200":
+          description: Sync job queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/Job"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/clients/{id}/airbyte/connections/{connId}/jobs:
+    get:
+      tags: [Per-client]
+      summary: List recent jobs
+      operationId: clientAdminListAirbyteJobs
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - $ref: "#/components/parameters/ConnId"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Recent jobs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/clients/{id}/airbyte/connections/{connId}/schedule:
+    patch:
+      tags: [Per-client]
+      summary: Update schedule
+      operationId: clientAdminUpdateAirbyteSchedule
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - $ref: "#/components/parameters/ConnId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleRequest"
+      responses:
+        "200":
+          description: Schedule updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/clients/{id}/airbyte/connections/{connId}/backfill:
+    post:
+      tags: [Per-client]
+      summary: Backfill sync events
+      operationId: clientAdminBackfillAirbyteSyncEvents
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - $ref: "#/components/parameters/ConnId"
+      responses:
+        "200":
+          description: Backfill result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  inserted:
+                    type: integer
+                    example: 7
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/clients/{id}/airbyte/sync-events:
+    get:
+      tags: [Per-client]
+      summary: List sync events
+      operationId: clientAdminListAirbyteSyncEvents
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - name: connection_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: platform
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: success
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Paginated sync events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncEventsPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/clients/{id}/airbyte/stats:
+    get:
+      tags: [Per-client]
+      summary: Get sync statistics
+      operationId: clientAdminGetAirbyteStats
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      responses:
+        "200":
+          description: Statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Stats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/clients/{id}/airbyte/health:
+    get:
+      tags: [Per-client]
+      summary: Get connection health
+      operationId: clientAdminGetAirbyteHealth
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      responses:
+        "200":
+          description: Health overview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Health"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  parameters:
+    AgencyId:
+      name: agencyId
+      in: path
+      required: true
+      description: Agency identifier.
+      schema:
+        type: string
+    ClientId:
+      name: id
+      in: path
+      required: true
+      description: Client (location) identifier.
+      schema:
+        type: string
+        pattern: "^[a-zA-Z0-9_-]{1,255}$"
+    ConnectionId:
+      name: id
+      in: path
+      required: true
+      description: Mythic connection record identifier.
+      schema:
+        type: string
+    ConnId:
+      name: connId
+      in: path
+      required: true
+      description: Mythic connection record identifier.
+      schema:
+        type: string
+  responses:
+    Unauthorized:
+      description: Admin key missing or invalid
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    BadRequest:
+      description: Missing required fields or validation error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    Platform:
+      type: object
+      properties:
+        key:
+          type: string
+          example: google_ads
+        label:
+          type: string
+          example: Google Ads
+        requiredFields:
+          type: array
+          items:
+            type: object
+        defaultStreams:
+          type: array
+          items:
+            $ref: "#/components/schemas/Stream"
+    Stream:
+      type: object
+      properties:
+        name:
+          type: string
+          example: campaigns
+        syncMode:
+          type: string
+          enum: ["incremental", "full_refresh"]
+        cursorField:
+          type: string
+          nullable: true
+        sourceDefinedCursor:
+          type: boolean
+          nullable: true
+        primaryKey:
+          type: array
+          nullable: true
+          items:
+            type: array
+            items:
+              type: string
+    Config:
+      type: object
+      properties:
+        id:
+          type: string
+        agency_id:
+          type: string
+        workspace_id:
+          type: string
+          nullable: true
+        destination_id:
+          type: string
+          nullable: true
+        bigquery_project_id:
+          type: string
+          nullable: true
+        bigquery_dataset:
+          type: string
+          nullable: true
+        staging_bucket_name:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: ["provisioning", "active", "error"]
+        error_message:
+          type: string
+          nullable: true
+        has_credentials:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ProvisionRequest:
+      type: object
+      required:
+        - bigquery_project_id
+        - bigquery_dataset
+        - gcp_credentials_json
+      properties:
+        bigquery_project_id:
+          type: string
+          example: acme-analytics
+        bigquery_dataset:
+          type: string
+          example: mythic_ads
+        gcp_credentials_json:
+          type: string
+          description: GCP service-account credentials JSON, as a string. Encrypted at rest.
+        dataset_location:
+          type: string
+          default: US
+        staging_bucket_name:
+          type: string
+        staging_bucket_path:
+          type: string
+        hmac_key_access_id:
+          type: string
+        hmac_key_secret:
+          type: string
+        keep_files_in_gcs_bucket:
+          type: string
+    ProvisionResult:
+      type: object
+      properties:
+        workspace_id:
+          type: string
+        destination_id:
+          type: string
+        status:
+          type: string
+          example: active
+    CreateConnectionRequest:
+      type: object
+      required:
+        - platform
+      properties:
+        platform:
+          type: string
+          example: google_ads
+        display_name:
+          type: string
+        account_id:
+          type: string
+        source_config:
+          type: object
+        sync_frequency:
+          $ref: "#/components/schemas/SyncFrequency"
+        streams:
+          type: array
+          items:
+            $ref: "#/components/schemas/Stream"
+    AdminCreateConnectionRequest:
+      allOf:
+        - type: object
+          required:
+            - client_id
+            - agency_id
+          properties:
+            client_id:
+              type: string
+              example: acme-retail
+            agency_id:
+              type: string
+        - $ref: "#/components/schemas/CreateConnectionRequest"
+    UpdateConnectionRequest:
+      type: object
+      properties:
+        display_name:
+          type: string
+        sync_frequency:
+          $ref: "#/components/schemas/SyncFrequency"
+        streams:
+          type: array
+          items:
+            $ref: "#/components/schemas/Stream"
+        status:
+          type: string
+          enum: ["active", "error", "paused"]
+    Connection:
+      type: object
+      properties:
+        id:
+          type: string
+        client_id:
+          type: string
+        agency_id:
+          type: string
+        platform:
+          type: string
+        connection_id:
+          type: string
+          description: Airbyte connection ID.
+        source_id:
+          type: string
+          description: Airbyte source ID.
+        display_name:
+          type: string
+        account_id:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: ["active", "error", "paused"]
+        sync_frequency:
+          $ref: "#/components/schemas/SyncFrequency"
+        tables_json:
+          type: array
+          items:
+            type: object
+        last_sync_at:
+          type: string
+          format: date-time
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    SyncFrequency:
+      type: string
+      description: "`24h`, `12h`, and `6h` map to cron schedules; `manual` disables automatic syncing."
+      enum: ["24h", "12h", "6h", "manual"]
+      example: 24h
+    ScheduleRequest:
+      type: object
+      required:
+        - sync_frequency
+      properties:
+        sync_frequency:
+          $ref: "#/components/schemas/SyncFrequency"
+    ScheduleResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        sync_frequency:
+          $ref: "#/components/schemas/SyncFrequency"
+    Job:
+      type: object
+      properties:
+        jobId:
+          type: integer
+          example: 1234567
+        status:
+          type: string
+          example: running
+        jobType:
+          type: string
+          example: sync
+    SyncEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        client_id:
+          type: string
+          nullable: true
+        agency_id:
+          type: string
+          nullable: true
+        connection_id:
+          type: string
+        platform:
+          type: string
+          nullable: true
+        job_id:
+          type: integer
+          nullable: true
+        success:
+          type: boolean
+        error_message:
+          type: string
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        duration_seconds:
+          type: integer
+          nullable: true
+        records_emitted:
+          type: integer
+        records_committed:
+          type: integer
+        bytes_emitted:
+          type: integer
+        bytes_committed:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+    SyncEventsPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SyncEvent"
+        total:
+          type: integer
+          example: 128
+        limit:
+          type: integer
+          example: 50
+        offset:
+          type: integer
+          example: 0
+    StatsBucket:
+      type: object
+      properties:
+        syncs:
+          type: integer
+        success_rate:
+          type: integer
+        records_synced:
+          type: integer
+        bytes_synced:
+          type: integer
+        estimated_cost_usd:
+          type: number
+    Stats:
+      type: object
+      properties:
+        last_24h:
+          $ref: "#/components/schemas/StatsBucket"
+        last_30d:
+          $ref: "#/components/schemas/StatsBucket"
+        all_time:
+          $ref: "#/components/schemas/StatsBucket"
+        per_platform:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/StatsBucket"
+        per_client:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/StatsBucket"
+    Health:
+      type: object
+      properties:
+        total_connections:
+          type: integer
+        active:
+          type: integer
+        error_connections:
+          type: array
+          items:
+            type: object
+        stale_connections:
+          type: array
+          items:
+            type: object
+        failure_rates:
+          type: object
+          additionalProperties:
+            type: integer
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Unauthorized

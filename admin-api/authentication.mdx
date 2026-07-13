@@ -5,9 +5,9 @@ description: >-
   as a bearer token or query parameter.
 ---
 
-## Authentication
+## Admin key
 
-Every endpoint requires an admin API key. Pass it as a bearer token or query parameter.
+Every Admin API endpoint requires an admin API key. Pass it as a bearer token or query parameter — either satisfies the check.
 
 <ParamField header="Authorization" param-type="string" required="true" deprecated="false">
   Bearer token. Format: `Bearer YOUR_ADMIN_KEY`.
@@ -18,5 +18,5 @@ Every endpoint requires an admin API key. Pass it as a bearer token or query par
 </ParamField>
 
 <Callout kind="alert">
-  Never expose the admin key in client-side JavaScript, public repositories, or logs. Admin API access should be restricted to trusted backend services and operations staff only.
+  Never expose the admin key in client-side JavaScript, public repositories, or logs. Admin key access should be restricted to trusted backend services and operations staff only.
 </Callout>

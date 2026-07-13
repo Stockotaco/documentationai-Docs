@@ -2,21 +2,27 @@ openapi: "3.0.0"
 info:
   version: 1.0.0
   title: AI Proxy
-  description: Proxy AI chat and action requests through the Mythic Analytics platform.
+  description: >
+    Server-side proxy to Anthropic Claude or Google Gemini. Provider API keys
+    stay on the worker; browser clients authenticate with their publishable
+    key. Unlike the KV and Pub/Sub admin routes, the AI proxy is mounted at the
+    root (`/ai`) and does NOT use the admin key.
 servers:
-  - url: https://api.mythic-analytics.com/api/v1
+  - url: https://mythic-analytics.gulp.workers.dev
 security:
-  - BearerAuth: []
-  - AdminKeyQuery: []
+  - PublishableKeyAuth: []
 paths:
   /ai/chat:
     post:
-      summary: Chat completion
+      summary: Streaming chat completion
       operationId: aiChat
       description: >
-        Proxy a chat completion request through the Mythic Analytics AI
-        gateway. Supports streaming responses and context-aware conversations
-        about analytics data.
+        Proxy a chat request to the selected provider and stream the raw
+        provider response back to the caller as server-sent events
+        (`text/event-stream`). The worker injects the provider API key and, for
+        Gemini, converts the Anthropic-style message/tool format on the fly.
+        The response body is the provider's native SSE stream, not a JSON
+        envelope. Blocked (`403`) for HIPAA-enabled locations.
       requestBody:
         required: true
         content:
@@ -25,43 +31,56 @@ paths:
               $ref: "#/components/schemas/ChatRequest"
       responses:
         "200":
-          description: Chat completion response
+          description: >
+            Provider server-sent event stream. The event schema matches the
+            selected provider (Anthropic Messages streaming events, or Gemini
+            `streamGenerateContent` SSE).
           content:
-            application/json:
+            text/event-stream:
               schema:
-                $ref: "#/components/schemas/ChatResponse"
+                type: string
+                description: Raw provider SSE stream.
         "400":
-          description: Invalid JSON or missing required fields
+          description: Unknown provider
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Missing or invalid publishable key
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "429":
-          description: Rate limit exceeded
+        "403":
+          description: Client inactive, or AI proxy disabled for a HIPAA location
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "502":
-          description: Upstream AI provider error
+        "500":
+          description: Provider API key not configured on the worker
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: >
+            Upstream provider error. The worker forwards the provider's HTTP
+            status and returns the provider error text.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
   /ai/action:
     post:
-      summary: Execute AI action
+      summary: Execute a server-side action
       operationId: aiAction
       description: >
-        Execute a predefined AI action (e.g., summarize data, generate
-        report, suggest insights). Actions are higher-level operations
-        that combine AI capabilities with platform data.
+        Run one of the supported server-side tools. `firecrawl_extract`
+        extracts page content (placeholder until `FIRECRAWL_API_KEY` is set);
+        `write_config` merges the supplied config into the caller's tenant
+        configuration in KV (`CFG::<location_id>`).
       requestBody:
         required: true
         content:
@@ -70,111 +89,90 @@ paths:
               $ref: "#/components/schemas/ActionRequest"
       responses:
         "200":
-          description: Action result
+          description: >
+            Action result. Shape depends on the `action` value — see the
+            `FirecrawlExtractResult` and `WriteConfigResult` schemas.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ActionResponse"
+                oneOf:
+                  - $ref: "#/components/schemas/FirecrawlExtractResult"
+                  - $ref: "#/components/schemas/WriteConfigResult"
         "400":
-          description: Invalid JSON, missing required fields, or unknown action
+          description: Unknown action, or `write_config` called without a config
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Missing or invalid publishable key
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "429":
-          description: Rate limit exceeded
+        "403":
+          description: Client inactive, or AI proxy disabled for a HIPAA location
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "502":
-          description: Upstream AI provider error
+        "500":
+          description: Failed to write config
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 components:
   securitySchemes:
-    BearerAuth:
-      type: http
-      scheme: bearer
-      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
-    AdminKeyQuery:
+    PublishableKeyAuth:
       type: apiKey
-      in: query
-      name: admin_key
-      description: Alternative to the Authorization header for server-to-server scenarios.
+      in: header
+      name: x-mythic-key
+      description: >
+        Client publishable key (`pk_...`). The worker resolves it to a
+        location, verifies the location is active, and rejects HIPAA-enabled
+        locations.
   schemas:
     ChatRequest:
       type: object
       required:
+        - provider
         - messages
       properties:
+        provider:
+          type: string
+          enum: ["anthropic", "gemini"]
+          description: AI provider to proxy to.
+          example: anthropic
         messages:
           type: array
-          description: Conversation message history.
+          description: >
+            Conversation history in Anthropic message format. Each message has
+            a `role` and `content` (string, or an array of content blocks such
+            as `text`, `tool_use`, and `tool_result`). Gemini requests are
+            converted from this format server-side.
           items:
             type: object
-            required:
-              - role
-              - content
-            properties:
-              role:
-                type: string
-                enum: ["system", "user", "assistant"]
-              content:
-                type: string
           example:
             - role: user
-              content: Summarize the traffic trends for acme-retail over the last 30 days.
-        client_id:
-          type: string
-          description: Optional client ID to scope the conversation context.
-          example: acme-retail
-        stream:
-          type: boolean
-          default: false
-          description: Whether to stream the response via server-sent events.
+              content: What were my top traffic sources last week?
         model:
           type: string
-          description: AI model to use. Defaults to platform default.
-          example: gpt-4o
-    ChatResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
-        data:
-          type: object
-          properties:
-            message:
-              type: object
-              properties:
-                role:
-                  type: string
-                  example: assistant
-                content:
-                  type: string
-                  example: "Over the last 30 days, acme-retail saw 42,600 page views with a 12% increase compared to the previous period..."
-            usage:
-              type: object
-              properties:
-                prompt_tokens:
-                  type: integer
-                  example: 150
-                completion_tokens:
-                  type: integer
-                  example: 280
-                total_tokens:
-                  type: integer
-                  example: 430
+          description: >
+            Provider model id. Defaults to `claude-sonnet-4-20250514`
+            (Anthropic) or `gemini-2.0-flash` (Gemini).
+          example: claude-sonnet-4-20250514
+        system:
+          type: string
+          description: Optional system prompt.
+        tools:
+          type: array
+          description: >
+            Optional tool definitions in Anthropic format (`name`,
+            `description`, `input_schema`). Converted to Gemini
+            `functionDeclarations` when `provider` is `gemini`.
+          items:
+            type: object
     ActionRequest:
       type: object
       required:
@@ -182,56 +180,52 @@ components:
       properties:
         action:
           type: string
-          description: "Action identifier (e.g., `summarize_data`, `generate_report`, `suggest_insights`)."
-          example: summarize_data
-        client_id:
-          type: string
-          description: Client ID to scope the action.
-          example: acme-retail
+          enum: ["firecrawl_extract", "write_config"]
+          description: Server-side action to run.
+          example: write_config
         params:
           type: object
-          description: Action-specific parameters.
+          description: >
+            Action parameters. `firecrawl_extract` expects `{ url }`;
+            `write_config` expects `{ config }` (merged into the tenant config).
           example:
-            period: 30d
-            metrics:
-              - page_views
-              - unique_visitors
-    ActionResponse:
+            config:
+              theme: dark
+    FirecrawlExtractResult:
+      type: object
+      properties:
+        url:
+          type: string
+          nullable: true
+          example: https://example.com/pricing
+        content:
+          type: string
+          example: "Firecrawl extraction not yet configured. Please set FIRECRAWL_API_KEY."
+        error:
+          type: string
+          nullable: true
+          description: Present when `FIRECRAWL_API_KEY` is not set.
+          example: FIRECRAWL_API_KEY not set
+    WriteConfigResult:
       type: object
       properties:
         success:
           type: boolean
           example: true
-        data:
-          type: object
-          properties:
-            action:
-              type: string
-              example: summarize_data
-            result:
-              type: object
-              description: Action-specific result payload.
-            usage:
-              type: object
-              properties:
-                prompt_tokens:
-                  type: integer
-                completion_tokens:
-                  type: integer
-                total_tokens:
-                  type: integer
+        locationId:
+          type: string
+          example: loc_abc123
+        updatedKeys:
+          type: array
+          description: Config keys that were merged.
+          items:
+            type: string
+          example:
+            - theme
     ErrorResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: false
-        data:
-          nullable: true
-          example: null
         error:
           type: string
-          example: Unauthorized
-        count:
-          type: integer
-          example: 0
+          description: Error message.
+          example: Invalid publishable key

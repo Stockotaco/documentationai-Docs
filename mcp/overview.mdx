@@ -1,69 +1,77 @@
 ---
 title: MCP Platform
 description: >-
-  Manage MCP servers, tools, API keys, and access control for the Mythic
-  Analytics Model Context Protocol platform.
+  Register upstream MCP servers, manage discovered tools, control per-agency
+  access, and provision gateway API keys for the Mythic Analytics Model
+  Context Protocol platform.
 ---
 
 ## Overview
 
-The MCP Platform API enables you to register and manage Model Context Protocol servers, discover and configure tools, control client-level access, and manage API keys for gateway authentication. The MCP gateway provides a JSON-RPC 2.0 interface for tool execution.
+The MCP Platform has two surfaces:
+
+- A **management API** under `/admin/mcp` for registering upstream MCP servers, probing them for tools, controlling which agencies may use each server and tool, and provisioning gateway API keys. It is authenticated with the platform `ADMIN_KEY`.
+- A **gateway** at `/mcp` that speaks JSON-RPC 2.0. External MCP clients call it with an `mcp_` API key to list and execute tools. See [MCP Gateway](/mcp/gateway).
 
 ## Base URL
 
-All REST endpoints share the same base URL and version prefix.
+The management API and gateway share the same worker host.
 
 ```text
-https://api.mythic-analytics.com/api/v1
+https://mythic-analytics.gulp.workers.dev
 ```
 
-The MCP gateway uses a separate endpoint for JSON-RPC requests:
-
-```text
-https://mcp-gateway.mythic-analytics.com/rpc
-```
+Management endpoints are mounted under `/admin/mcp` (for example `/admin/mcp/servers`). The gateway is a single endpoint at `POST /mcp`.
 
 ## Response envelope
 
-All REST endpoints return a JSON envelope.
+Management endpoints return a small JSON envelope — there is no `success` or `count` wrapper on reads.
 
-<ResponseField name="success" field-type="boolean" required="true" deprecated="false">
-  Whether the request succeeded.
+<ResponseField name="data" field-type="object|array" required="false" deprecated="false">
+  Resource payload. An array for list endpoints, an object for single-resource endpoints. Present on successful reads, creates, and updates.
 </ResponseField>
 
-<ResponseField name="data" field-type="object|array|null" required="false" deprecated="false">
-  Resource payload. Shape depends on the endpoint.
+<ResponseField name="success" field-type="boolean" required="false" deprecated="false">
+  Returned as `true` by delete endpoints and by the server probe endpoint.
 </ResponseField>
 
-<ResponseField name="count" field-type="integer" required="false" deprecated="false">
-  Total number of matching resources. Present on list endpoints.
+<ResponseField name="warning" field-type="string" required="false" deprecated="false">
+  Returned alongside `data` when creating an API key, reminding you the raw key is shown only once.
 </ResponseField>
 
-<ResponseField name="error" field-type="string|null" required="false" deprecated="false">
-  Error message on failed requests.
+<ResponseField name="errors" field-type="array" required="false" deprecated="false">
+  Returned by bulk agency-access updates when some entries were rejected. Each item is `{ agency_id, error }`.
+</ResponseField>
+
+<ResponseField name="error" field-type="string" required="false" deprecated="false">
+  Error message. This is the only field on a failed request.
 </ResponseField>
 
 ## Key concepts
 
 | Concept | Description |
 |---------|-------------|
-| **MCP Server** | A registered server that exposes tools via the Model Context Protocol |
-| **Tool** | A capability discovered on an MCP server, callable via the gateway |
-| **Access Control** | Per-client, per-server, and per-tool permission rules |
-| **API Key** | Authentication credential for the MCP gateway |
-| **Gateway** | JSON-RPC 2.0 endpoint for executing tool calls |
+| **MCP Server** | A registered upstream server that exposes tools over MCP. A server is either platform-wide (`agency_id` is null) or owned by one agency. |
+| **Tool** | A capability discovered on a server by probing. Tools are never created directly — they come from `initialize` + `tools/list`. |
+| **Built-in tool** | A tool the gateway implements itself (insights, dashboards, canvases) backed by Supabase. Always available; not tied to any server. |
+| **Agency access** | Per-agency enable/disable rules on a server or tool. When no record exists, access defaults to enabled. |
+| **API key** | An `mcp_` credential scoped to one agency and one location, used to authenticate against the gateway. |
+| **Scope prefix** | Optional namespace on a server, mapping its tools to a `<prefix>:call` scope for gateway keys. |
+
+## Access model
+
+Management endpoints control access at the **agency** level (`mcp_server_agency_access`, `mcp_tool_agency_access`). Per-location (client) tool access is a separate concern configured through the agency Builder API, not through `/admin/mcp`.
 
 ## Error handling
 
 | Status | Meaning |
 |--------|---------|
-| `400` | Invalid JSON, missing required fields, or validation error |
-| `401` | Admin key or API key missing or invalid |
-| `404` | Resource not found |
-| `409` | Conflict — duplicate server name |
-| `502` | Upstream MCP server unreachable |
-| `500` | Internal server error |
+| `400` | Missing required field, invalid URL, blocked header, invalid `scope_prefix`, or nothing to update |
+| `401` | Admin key missing or invalid |
+| `404` | Server or tool not found |
+| `502` | Upstream MCP server unreachable or probe failed |
+| `500` | Internal error |
 
 <Callout kind="info">
-  Check both the HTTP status code and the `error` field in the response body for programmatic error handling.
+  On failure, read the `error` string in the response body together with the HTTP status. There is no `success: false` envelope on errors.
 </Callout>

@@ -1,0 +1,1102 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Destinations
+  description: >
+    Partner self-serve data activation. Create and manage destinations
+    (webhooks, Meta Conversions API, Google Ads), store per-location
+    credentials, and inspect delivery logs and health. Client-scoped: an
+    agency key (`ak_`) has read-write access to a single named location, and a
+    location secret key (`sk_`) is a read-only viewer of its own location.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+  - AgencyKeyQuery: []
+  - SecretKeyQuery: []
+paths:
+  /client/v1/destinations:
+    get:
+      summary: List destinations
+      operationId: listDestinations
+      description: >
+        List the calling location's destinations, newest first. Both agency
+        (`ak_`) and viewer (`sk_`) keys may read. For viewer keys, webhook
+        `action_config` secrets (`headers` values and `body_template`) are
+        redacted to `***`.
+      parameters:
+        - name: type
+          in: query
+          description: Filter by destination type.
+          required: false
+          schema:
+            type: string
+            enum: [webhook, meta_capi, google_ads]
+        - name: enabled
+          in: query
+          description: Filter by enabled state. Pass `true` or `false`.
+          required: false
+          schema:
+            type: string
+            enum: ["true", "false"]
+      responses:
+        "200":
+          description: List of destinations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DestinationListResponse"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    post:
+      summary: Create destination
+      operationId: createDestination
+      description: >
+        Create a destination for the calling location. Requires an agency
+        (`ak_`) key. The `action_config` shape is validated against
+        `action_type`. HIPAA-enabled locations reject `http://` webhook URLs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDestinationRequest"
+      responses:
+        "201":
+          description: Destination created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DestinationResponse"
+        "400":
+          description: Invalid body, unsupported type, or configuration error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponse"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Operation requires an agency (`ak_`) key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+  /client/v1/destinations/credentials:
+    get:
+      summary: List credentials
+      operationId: listCredentials
+      description: >
+        List stored credential metadata for the calling location. Requires an
+        agency (`ak_`) key. Credential values are never returned.
+      responses:
+        "200":
+          description: Credential metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CredentialListResponse"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Operation requires an agency (`ak_`) key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+  /client/v1/destinations/credentials/{type}:
+    put:
+      summary: Store or rotate a credential
+      operationId: upsertCredential
+      description: >
+        Store (or rotate, by re-sending) a credential for a credential-backed
+        destination type. Requires an agency (`ak_`) key. A given
+        `(destination_type, credential_name)` pair is upserted in place.
+        `google_ads` credential values must be a JSON object containing
+        `developer_token`, `client_id`, `client_secret`, and `refresh_token`.
+        The response echoes metadata only — never the credential value.
+      parameters:
+        - $ref: "#/components/parameters/CredentialType"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertCredentialRequest"
+      responses:
+        "200":
+          description: Credential stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CredentialResponse"
+        "400":
+          description: Unsupported credential type or invalid value
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponse"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Operation requires an agency (`ak_`) key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+    delete:
+      summary: Delete a credential
+      operationId: deleteCredential
+      description: >
+        Delete a credential for the calling location. Requires an agency
+        (`ak_`) key. Omitting `credential_name` deletes all credentials of the
+        given type.
+      parameters:
+        - $ref: "#/components/parameters/CredentialType"
+        - name: credential_name
+          in: query
+          description: Restrict the delete to a single named credential.
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Credential deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Unsupported credential type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Operation requires an agency (`ak_`) key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+  /client/v1/destinations/deliveries:
+    get:
+      summary: List delivery attempts
+      operationId: listDeliveries
+      description: >
+        List destination delivery attempts for the calling location, newest
+        first. Backed by analytics; defaults to the last 7 days when no `since`
+        is given. Both agency and viewer keys may read.
+      parameters:
+        - $ref: "#/components/parameters/ActionIdQuery"
+        - $ref: "#/components/parameters/DeliveryStatus"
+        - $ref: "#/components/parameters/EventUuid"
+        - $ref: "#/components/parameters/Since"
+        - $ref: "#/components/parameters/Until"
+        - $ref: "#/components/parameters/DeliveryLimit"
+        - $ref: "#/components/parameters/DeliveryOffset"
+      responses:
+        "200":
+          description: Delivery attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliveryListResponse"
+        "400":
+          description: Unparseable `since`/`until` timestamp
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponse"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/AnalyticsNotConfigured"
+  /client/v1/destinations/health:
+    get:
+      summary: Destination health
+      operationId: destinationHealth
+      description: >
+        Per-destination health for the calling location, joining live action
+        metadata with delivery aggregates over a rolling window. Both agency
+        and viewer keys may read.
+      parameters:
+        - name: hours
+          in: query
+          description: Rolling window in hours. Default `24`, min `1`, max `720`.
+          required: false
+          schema:
+            type: integer
+            default: 24
+            minimum: 1
+            maximum: 720
+        - $ref: "#/components/parameters/ActionIdQuery"
+      responses:
+        "200":
+          description: Destination health rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/AnalyticsNotConfigured"
+  /client/v1/destinations/{id}:
+    get:
+      summary: Retrieve destination
+      operationId: getDestination
+      description: >
+        Fetch a single destination by id. Viewer keys receive redacted webhook
+        secrets. Returns `404` if the destination does not belong to the
+        calling location.
+      parameters:
+        - $ref: "#/components/parameters/DestinationId"
+      responses:
+        "200":
+          description: Destination
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DestinationResponse"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Destination not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    patch:
+      summary: Update destination
+      operationId: updateDestination
+      description: >
+        Partially update a destination. Requires an agency (`ak_`) key. Only
+        include fields you want to change; `action_type` is immutable. When
+        `action_config` is supplied it fully replaces the stored config and is
+        re-validated against the existing `action_type`.
+      parameters:
+        - $ref: "#/components/parameters/DestinationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDestinationRequest"
+      responses:
+        "200":
+          description: Destination updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DestinationResponse"
+        "400":
+          description: Invalid body or configuration error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponse"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Operation requires an agency (`ak_`) key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Destination not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+    delete:
+      summary: Delete destination
+      operationId: deleteDestination
+      description: >
+        Delete a destination. Requires an agency (`ak_`) key. Idempotent — an
+        already-deleted destination still returns success.
+      parameters:
+        - $ref: "#/components/parameters/DestinationId"
+      responses:
+        "200":
+          description: Destination deleted (or already absent)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Operation requires an agency (`ak_`) key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+  /client/v1/destinations/{id}/deliveries:
+    get:
+      summary: List delivery attempts for a destination
+      operationId: listDestinationDeliveries
+      description: >
+        Same as the delivery log, pre-filtered to a single destination id.
+      parameters:
+        - $ref: "#/components/parameters/DestinationId"
+        - $ref: "#/components/parameters/DeliveryStatus"
+        - $ref: "#/components/parameters/EventUuid"
+        - $ref: "#/components/parameters/Since"
+        - $ref: "#/components/parameters/Until"
+        - $ref: "#/components/parameters/DeliveryLimit"
+        - $ref: "#/components/parameters/DeliveryOffset"
+      responses:
+        "200":
+          description: Delivery attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliveryListResponse"
+        "400":
+          description: Unparseable `since`/`until` timestamp
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponse"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/AnalyticsNotConfigured"
+  /client/v1/destinations/{id}/test:
+    post:
+      summary: Test a destination
+      operationId: testDestination
+      description: >
+        Send a test delivery through the real ad-platform adapter using the
+        stored credential. Requires an agency (`ak_`) key. Supported only for
+        ad destinations (`meta_capi`, `google_ads`) — webhooks fire on real
+        events and return `400`.
+      parameters:
+        - $ref: "#/components/parameters/DestinationId"
+      responses:
+        "200":
+          description: Test result from the destination adapter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestResponse"
+        "400":
+          description: Destination type does not support testing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Operation requires an agency (`ak_`) key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Destination not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Test delivery failed or the test service was unreachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Destination testing is not available in this environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >
+        Client key as bearer token. Use an agency key (`Bearer ak_...`) for
+        read-write access or a location secret key (`Bearer sk_...`) for
+        read-only access.
+    AgencyKeyQuery:
+      type: apiKey
+      in: query
+      name: ak
+      description: Agency key as a query parameter. Prefer the `Authorization` header.
+    SecretKeyQuery:
+      type: apiKey
+      in: query
+      name: sk
+      description: Secret key as a query parameter. Prefer the `Authorization` header.
+  parameters:
+    DestinationId:
+      name: id
+      in: path
+      required: true
+      description: Destination (action) identifier.
+      schema:
+        type: string
+        format: uuid
+    CredentialType:
+      name: type
+      in: path
+      required: true
+      description: Credential-backed destination type.
+      schema:
+        type: string
+        enum: [meta_capi, google_ads]
+    ActionIdQuery:
+      name: action_id
+      in: query
+      description: Filter to a single destination id.
+      required: false
+      schema:
+        type: string
+        format: uuid
+    DeliveryStatus:
+      name: status
+      in: query
+      description: Filter by delivery status.
+      required: false
+      schema:
+        type: string
+        enum: [success, failed, retrying, skipped, test]
+    EventUuid:
+      name: event_uuid
+      in: query
+      description: Filter to deliveries triggered by a single source event.
+      required: false
+      schema:
+        type: string
+    Since:
+      name: since
+      in: query
+      description: >
+        Lower time bound. ISO 8601 or `YYYY-MM-DD HH:MM:SS`. Defaults to 7 days
+        ago when omitted.
+      required: false
+      schema:
+        type: string
+        format: date-time
+    Until:
+      name: until
+      in: query
+      description: Upper time bound. ISO 8601 or `YYYY-MM-DD HH:MM:SS`.
+      required: false
+      schema:
+        type: string
+        format: date-time
+    DeliveryLimit:
+      name: limit
+      in: query
+      description: Maximum rows. Default `50`, min `1`, max `200`.
+      required: false
+      schema:
+        type: integer
+        default: 50
+        minimum: 1
+        maximum: 200
+    DeliveryOffset:
+      name: offset
+      in: query
+      description: Rows to skip. Default `0`.
+      required: false
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
+  responses:
+    RateLimited:
+      description: >
+        Rate limit exceeded (120 requests per 10s per location). A
+        `Retry-After` header indicates when to retry.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    UpstreamError:
+      description: Upstream data store returned an error.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    AnalyticsNotConfigured:
+      description: Analytics service is not configured in this environment.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    TriggerRules:
+      type: object
+      description: >
+        Conditions that gate whether a destination fires for a given event.
+      required:
+        - rules
+      properties:
+        operator:
+          type: string
+          enum: [AND, OR]
+          description: How to combine `rules`. Defaults to matching-all behavior when omitted.
+        rules:
+          type: array
+          minItems: 1
+          description: Non-empty array of rules. Each rule requires a string `type`.
+          items:
+            type: object
+            required:
+              - type
+            properties:
+              type:
+                type: string
+                description: Rule type discriminator (for example an event-name match).
+          example:
+            - type: event_name
+              value: purchase
+    WebhookConfig:
+      type: object
+      description: "`action_config` for `action_type: webhook`."
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          format: uri
+          description: >
+            Fetchable http(s) endpoint. HIPAA-enabled locations require
+            `https://`.
+          example: https://hooks.example.com/mythic
+        method:
+          type: string
+          example: POST
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: Request headers. May carry a bearer token; redacted for viewer keys.
+        body_template:
+          type: string
+          description: Request body template. Redacted for viewer keys.
+        timeout_ms:
+          type: number
+          description: Request timeout in milliseconds. Must be positive.
+        retry_count:
+          type: number
+          description: Retry attempts on failure. Must be non-negative.
+    MetaCapiConfig:
+      type: object
+      description: "`action_config` for `action_type: meta_capi`."
+      required:
+        - pixel_id
+        - event_mapping
+      properties:
+        pixel_id:
+          type: string
+          example: "1234567890"
+        event_mapping:
+          type: object
+          description: >
+            Maps a source event name to a Meta event name (non-empty string).
+            At least one mapping is required.
+          additionalProperties:
+            type: string
+          example:
+            purchase: Purchase
+            signup: CompleteRegistration
+        test_event_code:
+          type: string
+          description: Meta test event code for the Events Manager test tab.
+        action_source:
+          type: string
+          example: website
+        credential_name:
+          type: string
+          description: Named credential to use. Defaults to `default`.
+        enrichment:
+          type: object
+          description: Optional enrichment configuration.
+    GoogleAdsConfig:
+      type: object
+      description: "`action_config` for `action_type: google_ads`."
+      required:
+        - customer_id
+        - event_mapping
+      properties:
+        customer_id:
+          type: string
+          pattern: "^\\d{10}$"
+          description: Google Ads customer id — 10 digits, no dashes.
+          example: "1234567890"
+        event_mapping:
+          type: object
+          description: >
+            Maps a source event name to a conversion spec. At least one mapping
+            is required.
+          additionalProperties:
+            type: object
+            required:
+              - conversion_action
+            properties:
+              conversion_action:
+                type: string
+                description: Conversion action resource name.
+              value_property:
+                type: string
+                description: Event property to read the conversion value from.
+              default_value:
+                type: number
+                description: Fallback conversion value.
+              currency:
+                type: string
+                description: 3-letter currency code.
+                example: USD
+          example:
+            purchase:
+              conversion_action: customers/1234567890/conversionActions/987
+              value_property: revenue
+              currency: USD
+        enhanced_conversions_for_leads:
+          type: boolean
+        consent:
+          type: object
+          description: Consent signals passed to Google Ads.
+    Destination:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_key:
+          type: string
+          description: The location id this destination belongs to.
+        name:
+          type: string
+          example: Purchase → Meta
+        action_type:
+          type: string
+          enum: [webhook, meta_capi, google_ads]
+        trigger_rules:
+          $ref: "#/components/schemas/TriggerRules"
+        action_config:
+          type: object
+          description: >
+            Type-specific configuration. See `WebhookConfig`, `MetaCapiConfig`,
+            and `GoogleAdsConfig`. Webhook secrets are redacted for viewer keys.
+        enabled:
+          type: boolean
+        rate_limit_max:
+          type: integer
+          nullable: true
+        rate_limit_window_seconds:
+          type: integer
+          nullable: true
+        trigger_count:
+          type: integer
+        last_triggered_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_error:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CreateDestinationRequest:
+      type: object
+      required:
+        - name
+        - action_type
+        - trigger_rules
+        - action_config
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Human-readable destination name.
+          example: Purchase → Meta
+        action_type:
+          type: string
+          enum: [webhook, meta_capi, google_ads]
+        trigger_rules:
+          $ref: "#/components/schemas/TriggerRules"
+        action_config:
+          oneOf:
+            - $ref: "#/components/schemas/WebhookConfig"
+            - $ref: "#/components/schemas/MetaCapiConfig"
+            - $ref: "#/components/schemas/GoogleAdsConfig"
+        enabled:
+          type: boolean
+          default: true
+        rate_limit_max:
+          type: number
+          description: Optional per-destination rate cap. Must be positive.
+        rate_limit_window_seconds:
+          type: number
+          description: Optional rate-limit window in seconds. Must be positive.
+    UpdateDestinationRequest:
+      type: object
+      description: Partial update — only include fields you want to change. `action_type` cannot be changed.
+      properties:
+        name:
+          type: string
+          minLength: 1
+        enabled:
+          type: boolean
+        trigger_rules:
+          $ref: "#/components/schemas/TriggerRules"
+        action_config:
+          type: object
+          description: Fully replaces the stored config; re-validated against the existing type.
+        rate_limit_max:
+          type: number
+        rate_limit_window_seconds:
+          type: number
+    UpsertCredentialRequest:
+      type: object
+      required:
+        - credential_value
+      properties:
+        credential_value:
+          type: string
+          description: >
+            Secret value, max 8KB. For `google_ads` this must be a JSON object
+            string containing `developer_token`, `client_id`, `client_secret`,
+            and `refresh_token`.
+        credential_name:
+          type: string
+          default: default
+          description: Name for this credential. Defaults to `default`.
+    Credential:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        destination_type:
+          type: string
+          enum: [meta_capi, google_ads]
+        credential_name:
+          type: string
+          example: default
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Delivery:
+      type: object
+      properties:
+        ts:
+          type: string
+          format: date-time
+          description: When the delivery attempt occurred.
+        action_id:
+          type: string
+          format: uuid
+        action_name:
+          type: string
+        destination_type:
+          type: string
+          enum: [webhook, meta_capi, google_ads]
+        event_name:
+          type: string
+          description: Source event name that triggered the delivery.
+        event_uuid:
+          type: string
+        destination_event_name:
+          type: string
+          description: Mapped event name sent to the destination.
+        status:
+          type: string
+          enum: [success, failed, retrying, skipped, test]
+        attempt:
+          type: integer
+        max_attempts:
+          type: integer
+        response_status:
+          type: integer
+          nullable: true
+          description: HTTP status returned by the destination.
+        error:
+          type: string
+          nullable: true
+        duration_ms:
+          type: number
+          nullable: true
+        queued_at:
+          type: string
+          format: date-time
+          nullable: true
+        enrichment_applied:
+          type: boolean
+    Health:
+      type: object
+      properties:
+        action_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        destination_type:
+          type: string
+          enum: [webhook, meta_capi, google_ads]
+        enabled:
+          type: boolean
+        trigger_count:
+          type: integer
+        last_triggered_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_error:
+          type: string
+          nullable: true
+        credential_ok:
+          type: boolean
+          nullable: true
+          description: >
+            `false` when the most recent failure was a 401/403 (credential
+            problem), `true` otherwise, `null` when there are no deliveries in
+            the window.
+        total:
+          type: integer
+        successes:
+          type: integer
+        failures:
+          type: integer
+        skipped:
+          type: integer
+        success_rate:
+          type: number
+          nullable: true
+        avg_duration_ms:
+          type: number
+          nullable: true
+        p95_duration_ms:
+          type: number
+          nullable: true
+        avg_queue_lag_ms:
+          type: number
+          nullable: true
+        last_delivery_at:
+          type: string
+          format: date-time
+          nullable: true
+    DestinationResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/Destination"
+    DestinationListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Destination"
+    CredentialResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/Credential"
+    CredentialListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Credential"
+    DeliveryListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Delivery"
+        limit:
+          type: integer
+          example: 50
+        offset:
+          type: integer
+          example: 0
+    HealthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Health"
+    TestResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          description: Adapter-specific test result returned by the identity processor.
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+    ValidationErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: invalid_config
+            message:
+              type: string
+              example: Destination configuration is invalid
+            details:
+              type: array
+              description: Per-field validation failures.
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                    example: action_config.url
+                  message:
+                    type: string
+                    example: required for webhook (non-empty string)
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: unauthorized
+            message:
+              type: string
+              example: Missing authorization

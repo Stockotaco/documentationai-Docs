@@ -2,24 +2,28 @@ openapi: "3.0.0"
 info:
   version: 1.0.0
   title: KV Management
-  description: Manage key-value storage entries in the Mythic Analytics platform.
+  description: >
+    Inspect and delete Cloudflare KV entries in the Mythic Analytics platform.
+    Every request must target a namespace via the required `namespace` query
+    parameter (`MYTHIC_KEYS` or `MYTHIC_CFG`). Mounted at `/admin/kv`.
 servers:
-  - url: https://api.mythic-analytics.com/api/v1
+  - url: https://mythic-analytics.gulp.workers.dev
 security:
   - BearerAuth: []
   - AdminKeyQuery: []
 paths:
-  /admin/kv:
+  /admin/kv/list:
     get:
       summary: List KV entries
       operationId: listKvEntries
       description: >
-        Retrieve a paginated list of key-value entries. Supports prefix
-        filtering for scoped lookups.
+        List keys in a namespace, optionally filtered by prefix, with
+        cursor-based pagination.
       parameters:
+        - $ref: "#/components/parameters/Namespace"
         - name: prefix
           in: query
-          description: Filter keys by prefix (e.g., `client:acme-retail:`).
+          description: Filter keys by prefix (e.g., `PK::` or `CFG::`).
           required: false
           schema:
             type: string
@@ -39,23 +43,38 @@ paths:
             type: string
       responses:
         "200":
-          description: Paginated list of KV entries
+          description: Page of KV keys
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/KvListResponse"
+        "400":
+          description: Invalid or missing namespace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Admin key missing or invalid
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /admin/kv/{key}:
+        "500":
+          description: Failed to list keys
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/kv/get:
     get:
       summary: Get KV entry
       operationId: getKvEntry
-      description: Retrieve a single key-value entry by its key.
+      description: >
+        Retrieve a single value by key. If the stored value is valid JSON it is
+        parsed and `isJson` is `true`; otherwise the raw string is returned.
       parameters:
+        - $ref: "#/components/parameters/Namespace"
         - $ref: "#/components/parameters/KvKey"
       responses:
         "200":
@@ -64,6 +83,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/KvEntryResponse"
+        "400":
+          description: Invalid namespace or missing key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Admin key missing or invalid
           content:
@@ -76,27 +101,41 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Failed to get key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/kv/delete:
     delete:
       summary: Delete KV entry
       operationId: deleteKvEntry
-      description: Delete a single key-value entry.
+      description: Delete a single key.
       parameters:
+        - $ref: "#/components/parameters/Namespace"
         - $ref: "#/components/parameters/KvKey"
       responses:
         "200":
-          description: KV entry deleted
+          description: Key deleted
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessResponse"
+                $ref: "#/components/schemas/DeleteResponse"
+        "400":
+          description: Invalid namespace or missing key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Admin key missing or invalid
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Key not found
+        "500":
+          description: Failed to delete key
           content:
             application/json:
               schema:
@@ -106,8 +145,10 @@ paths:
       summary: Bulk delete KV entries
       operationId: bulkDeleteKvEntries
       description: >
-        Delete multiple key-value entries in a single request. Pass an
-        array of keys or a prefix pattern.
+        Delete multiple keys in one request. Provide either an explicit `keys`
+        array (max 1000) or a `prefix`. A prefix that matches more than 1000
+        keys is rejected — narrow the prefix. The namespace is passed in the
+        request body.
       requestBody:
         required: true
         content:
@@ -116,19 +157,27 @@ paths:
               $ref: "#/components/schemas/BulkDeleteRequest"
       responses:
         "200":
-          description: Entries deleted
+          description: Delete summary
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/BulkDeleteResponse"
         "400":
-          description: Invalid JSON or validation error
+          description: >
+            Invalid namespace, more than 1000 keys, prefix matching more than
+            1000 keys, or neither `keys` nor `prefix` supplied.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Failed to bulk delete keys
           content:
             application/json:
               schema:
@@ -145,108 +194,129 @@ components:
       name: admin_key
       description: Alternative to the Authorization header for server-to-server scenarios.
   parameters:
+    Namespace:
+      name: namespace
+      in: query
+      required: true
+      description: KV namespace to operate on.
+      schema:
+        type: string
+        enum: ["MYTHIC_KEYS", "MYTHIC_CFG"]
     KvKey:
       name: key
-      in: path
+      in: query
       required: true
-      description: Key-value entry key. URL-encode keys containing special characters.
+      description: KV entry key. URL-encode keys containing special characters.
       schema:
         type: string
   schemas:
     BulkDeleteRequest:
       type: object
+      required:
+        - namespace
       properties:
+        namespace:
+          type: string
+          enum: ["MYTHIC_KEYS", "MYTHIC_CFG"]
+          description: KV namespace to delete from.
+          example: MYTHIC_KEYS
         keys:
           type: array
-          description: Specific keys to delete.
+          description: Explicit keys to delete. Maximum 1000.
           items:
             type: string
           example:
-            - "client:acme-retail:config"
-            - "client:acme-retail:loader"
+            - "PK::pk_xxxxxxxxxxxx"
+            - "HOST::example.com"
         prefix:
           type: string
-          description: Delete all keys matching this prefix. Use with caution.
-          example: "client:acme-retail:"
-    KvEntry:
+          description: >
+            Delete all keys matching this prefix. Rejected if it matches more
+            than 1000 keys. Use with caution.
+          example: "PUBSUB_PAUSED::"
+    KvKeyEntry:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "PK::pk_xxxxxxxxxxxx"
+        expiration:
+          type: integer
+          nullable: true
+          description: Unix expiration timestamp (seconds), or null if none.
+          example: null
+        metadata:
+          type: object
+          nullable: true
+          description: Optional KV metadata, or null.
+          example: null
+    KvListResponse:
+      type: object
+      properties:
+        keys:
+          type: array
+          items:
+            $ref: "#/components/schemas/KvKeyEntry"
+        list_complete:
+          type: boolean
+          description: Whether all matching keys have been returned.
+          example: true
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page. Null when the list is complete.
+          example: null
+    KvEntryResponse:
       type: object
       properties:
         key:
           type: string
-          example: "client:acme-retail:config"
+          example: "CFG::loc_abc123"
         value:
-          type: object
-          description: Stored value (JSON object).
-        metadata:
-          type: object
-          nullable: true
-          description: Optional entry metadata.
-        expiration:
-          type: string
-          format: date-time
-          nullable: true
-          description: Entry expiration timestamp. Null means no expiration.
-        created_at:
-          type: string
-          format: date-time
-          example: "2024-03-21T18:42:15.291Z"
-        updated_at:
-          type: string
-          format: date-time
-          example: "2024-06-15T10:00:00.000Z"
-    KvEntryResponse:
-      type: object
-      properties:
-        success:
+          description: >
+            Parsed JSON value when `isJson` is true, otherwise the raw string.
+          example:
+            active: true
+        isJson:
           type: boolean
+          description: Whether the stored value parsed as JSON.
           example: true
-        data:
-          $ref: "#/components/schemas/KvEntry"
-    KvListResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
-        data:
-          type: array
-          items:
-            $ref: "#/components/schemas/KvEntry"
-        count:
+        size:
           type: integer
-          example: 50
-        cursor:
+          description: Byte length of the stored value.
+          example: 128
+    DeleteResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        deleted:
           type: string
-          nullable: true
-          description: Pagination cursor for the next page. Null if no more results.
+          description: The key that was deleted.
+          example: "PK::pk_xxxxxxxxxxxx"
     BulkDeleteResponse:
       type: object
       properties:
         success:
           type: boolean
           example: true
-        deleted_count:
+        deleted:
           type: integer
-          description: Number of entries deleted.
+          description: Number of keys successfully deleted.
           example: 5
-    SuccessResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
+        failed:
+          type: integer
+          description: Number of deletions that failed.
+          example: 0
+        total:
+          type: integer
+          description: Total number of keys matched for deletion.
+          example: 5
     ErrorResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: false
-        data:
-          nullable: true
-          example: null
         error:
           type: string
-          example: Unauthorized
-        count:
-          type: integer
-          example: 0
+          description: Error message.
+          example: Invalid namespace. Use MYTHIC_KEYS or MYTHIC_CFG

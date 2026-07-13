@@ -2,87 +2,109 @@ openapi: "3.0.0"
 info:
   version: 1.0.0
   title: Canvases
-  description: Create, read, update, and manage visual canvases in the Mythic Analytics Builder.
+  description: >-
+    Create, list, retrieve, and delete canvases, and drive their lifecycle:
+    save state, publish, version history, rollback, activation toggle, funnel
+    import, dashboard generation, and platform configs. A canvas is a visual
+    node-and-edge map of a client's funnel, scoped to a single location.
 servers:
-  - url: https://api.mythic-analytics.com/api/v1
+  - url: https://mythic-analytics.gulp.workers.dev/builder
 security:
   - BearerAuth: []
-  - AdminKeyQuery: []
+  - AgencyKeyQuery: []
+  - SecretKeyQuery: []
 paths:
   /canvases:
-    post:
-      summary: Create canvas
-      operationId: createCanvas
+    get:
+      summary: List canvases
+      operationId: listCanvases
       description: >
-        Create a new visual canvas. Canvases are drag-and-drop workspaces
-        with nodes and edges for building analytics flows.
+        List canvases for the resolved location, ordered by `updated_at`
+        descending. Each row includes a computed `node_count`. Agency keys
+        (`ak_`) must pass `?location_id=`; viewer keys (`sk_`) are scoped.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Canvases for the location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CanvasListResponse"
+        "400":
+          description: Missing `?location_id=` when using an agency key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authorization key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: Create or update canvas
+      operationId: saveCanvasMeta
+      description: >
+        Create a new canvas, or update an existing one's `name`/`description`
+        when an `id` is included in the body. Requires an agency key (`ak_`)
+        and `?location_id=`. Returns the saved row.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateCanvasRequest"
+              $ref: "#/components/schemas/SaveCanvasMetaRequest"
       responses:
-        "201":
-          description: Canvas created successfully
+        "200":
+          description: Canvas created or updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CanvasResponse"
+        "403":
+          description: Write access requires an agency key (`ak_`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /canvases/import-funnel:
+    post:
+      summary: Import canvas from a GHL funnel
+      operationId: importFunnelCanvas
+      description: >
+        Create a canvas from a GoHighLevel funnel object. Each funnel step
+        becomes a `page` node (positioned left to right by `sequence`), a URL
+        pattern is added for the step's `url` (match type `contains`) and its
+        `id` (match type `step_id`), and sequential steps are connected with
+        edges. Pass the funnel object returned by `GET /ghl/funnels`. Requires
+        an agency key (`ak_`) and `?location_id=`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportFunnelRequest"
+      responses:
+        "200":
+          description: Canvas created
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/CanvasResponse"
         "400":
-          description: Invalid JSON or validation error
+          description: Missing `name` or `funnel.steps`
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-    get:
-      summary: List canvases
-      operationId: listCanvases
-      description: Retrieve a paginated list of canvases.
-      parameters:
-        - name: status
-          in: query
-          description: Filter by canvas status (`draft`, `published`).
-          required: false
-          schema:
-            type: string
-            enum: ["draft", "published"]
-        - name: search
-          in: query
-          description: Case-insensitive search on canvas name.
-          required: false
-          schema:
-            type: string
-        - name: limit
-          in: query
-          description: Maximum results per page. Default `50`, max `500`.
-          required: false
-          schema:
-            type: integer
-            default: 50
-            maximum: 500
-        - name: offset
-          in: query
-          description: Number of results to skip. Default `0`.
-          required: false
-          schema:
-            type: integer
-            default: 0
-      responses:
-        "200":
-          description: Paginated list of canvases
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CanvasListResponse"
-        "401":
-          description: Admin key missing or invalid
+        "403":
+          description: Write access requires an agency key (`ak_`)
           content:
             application/json:
               schema:
@@ -91,61 +113,21 @@ paths:
     get:
       summary: Retrieve canvas
       operationId: getCanvas
-      description: Fetch a single canvas with metadata.
+      description: >
+        Fetch a single canvas by ID, including its `viewport`. Must belong to
+        the resolved location.
       parameters:
         - $ref: "#/components/parameters/CanvasId"
+        - $ref: "#/components/parameters/LocationId"
       responses:
         "200":
-          description: Canvas details
+          description: The canvas
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CanvasResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "#/components/schemas/CanvasDetailResponse"
         "404":
-          description: Canvas not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-    patch:
-      summary: Update canvas
-      operationId: updateCanvas
-      description: Partially update canvas metadata.
-      parameters:
-        - $ref: "#/components/parameters/CanvasId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateCanvasRequest"
-      responses:
-        "200":
-          description: Canvas updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CanvasResponse"
-        "400":
-          description: Invalid JSON or validation error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Canvas not found
+          description: Canvas not found for this location
           content:
             application/json:
               schema:
@@ -153,9 +135,12 @@ paths:
     delete:
       summary: Delete canvas
       operationId: deleteCanvas
-      description: Permanently delete a canvas and all its nodes and edges.
+      description: >
+        Permanently delete a canvas and its nodes, edges, URLs, and events
+        (via cascade). Requires an agency key (`ak_`).
       parameters:
         - $ref: "#/components/parameters/CanvasId"
+        - $ref: "#/components/parameters/LocationId"
       responses:
         "200":
           description: Canvas deleted
@@ -163,74 +148,79 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Canvas not found
+        "403":
+          description: Write access requires an agency key (`ak_`)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
   /canvases/{id}/toggle:
-    post:
-      summary: Toggle canvas status
+    patch:
+      summary: Toggle canvas active state
       operationId: toggleCanvas
-      description: Toggle a canvas between `draft` and `published` status.
+      description: >
+        Set the canvas `is_active` flag. Requires an agency key (`ak_`).
       parameters:
         - $ref: "#/components/parameters/CanvasId"
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ToggleCanvasRequest"
       responses:
         "200":
-          description: Canvas status toggled
+          description: State updated
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CanvasResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Canvas not found
+                $ref: "#/components/schemas/SuccessResponse"
+        "403":
+          description: Write access requires an agency key (`ak_`)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
   /canvases/{id}/save:
     post:
-      summary: Save canvas
-      operationId: saveCanvas
+      summary: Save canvas state
+      operationId: saveCanvasState
       description: >
-        Save the current canvas state as a working draft. This creates a
-        snapshot that can be reverted to later.
+        Persist the full working state of a canvas: viewport, the complete set
+        of nodes, and the complete set of edges. Nodes and edges not present in
+        the payload are deleted. Increments the canvas `version` and writes a
+        version snapshot. Requires an agency key (`ak_`).
       parameters:
         - $ref: "#/components/parameters/CanvasId"
+        - $ref: "#/components/parameters/LocationId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SaveCanvasRequest"
+              $ref: "#/components/schemas/SaveCanvasStateRequest"
       responses:
         "200":
           description: Canvas saved
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CanvasResponse"
-        "401":
-          description: Admin key missing or invalid
+                $ref: "#/components/schemas/VersionBumpResponse"
+        "403":
+          description: Write access requires an agency key (`ak_`)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Canvas not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Save error
           content:
             application/json:
               schema:
@@ -240,19 +230,21 @@ paths:
       summary: Publish canvas
       operationId: publishCanvas
       description: >
-        Publish the current canvas state. Creates a new version and makes
-        the canvas live. The published version is served to end users.
+        Mark the canvas's current `version` as published: sets
+        `published_version` and stamps `published_at` on the matching version
+        snapshot. Requires an agency key (`ak_`).
       parameters:
         - $ref: "#/components/parameters/CanvasId"
+        - $ref: "#/components/parameters/LocationId"
       responses:
         "200":
           description: Canvas published
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CanvasVersionResponse"
-        "401":
-          description: Admin key missing or invalid
+                $ref: "#/components/schemas/PublishResponse"
+        "403":
+          description: Write access requires an agency key (`ak_`)
           content:
             application/json:
               schema:
@@ -265,18 +257,14 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
   /canvases/{id}/versions:
     get:
-      summary: List versions
+      summary: List canvas versions
       operationId: listCanvasVersions
-      description: Retrieve the version history for a canvas.
+      description: >
+        List version snapshots for a canvas, ordered by `version` descending.
+        The canvas must belong to the resolved location.
       parameters:
         - $ref: "#/components/parameters/CanvasId"
-        - name: limit
-          in: query
-          description: Maximum results per page. Default `20`.
-          required: false
-          schema:
-            type: integer
-            default: 20
+        - $ref: "#/components/parameters/LocationId"
       responses:
         "200":
           description: Version history
@@ -284,12 +272,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/VersionListResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Canvas not found
           content:
@@ -301,10 +283,13 @@ paths:
       summary: Rollback canvas
       operationId: rollbackCanvas
       description: >
-        Rollback a canvas to a specific version. The current state is
-        replaced with the specified version's snapshot.
+        Replace the canvas's nodes, edges, URLs, and events with those from a
+        supplied `snapshot` (the `snapshot` field of a version row from
+        `GET /canvases/{id}/versions`), then bump the version and record a new
+        snapshot. Requires an agency key (`ak_`).
       parameters:
         - $ref: "#/components/parameters/CanvasId"
+        - $ref: "#/components/parameters/LocationId"
       requestBody:
         required: true
         content:
@@ -317,21 +302,78 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CanvasResponse"
+                $ref: "#/components/schemas/VersionBumpResponse"
         "400":
-          description: Invalid version ID
+          description: Missing `snapshot`
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Admin key missing or invalid
+        "403":
+          description: Write access requires an agency key (`ak_`)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
-          description: Canvas or version not found
+          description: Canvas not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /canvases/{id}/generate-dashboard:
+    post:
+      summary: Generate dashboard from canvas
+      operationId: generateCanvasDashboard
+      description: >
+        Build (or regenerate) a dashboard of funnel insights from the canvas's
+        page nodes. Page nodes are topologically sorted by edges, and a fixed
+        set of insights (unique users, sessions, pageviews, conversion funnel,
+        traffic by step, session UTMs, purchases) is created and linked. If a
+        dashboard already exists for this canvas it is regenerated in place.
+        No request body. Requires an agency key (`ak_`).
+      parameters:
+        - $ref: "#/components/parameters/CanvasId"
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Dashboard created or regenerated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateDashboardResponse"
+        "403":
+          description: Write access requires an agency key (`ak_`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Canvas not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /canvases/{id}/platform-configs:
+    get:
+      summary: List platform configs
+      operationId: listPlatformConfigs
+      description: >
+        List the destination platform configs (pixel IDs, measurement IDs, etc.)
+        for the resolved location, ordered with defaults first. These are
+        location-scoped and shared across the location's canvases.
+      parameters:
+        - $ref: "#/components/parameters/CanvasId"
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Platform configs for the location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformConfigListResponse"
+        "401":
+          description: Authorization key missing or invalid
           content:
             application/json:
               schema:
@@ -341,161 +383,334 @@ components:
     BearerAuth:
       type: http
       scheme: bearer
-      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
-    AdminKeyQuery:
+      description: >-
+        Builder key as a bearer token. Use an agency key for full CRUD
+        (`Bearer ak_...`) or a viewer key for read-only access
+        (`Bearer sk_...`).
+    AgencyKeyQuery:
       type: apiKey
       in: query
-      name: admin_key
-      description: Alternative to the Authorization header for server-to-server scenarios.
+      name: ak
+      description: "Agency key passed as a query parameter. Format: `ak_...`."
+    SecretKeyQuery:
+      type: apiKey
+      in: query
+      name: sk
+      description: "Viewer (secret) key passed as a query parameter. Format: `sk_...`."
   parameters:
     CanvasId:
       name: id
       in: path
       required: true
-      description: Canvas identifier.
+      description: Canvas UUID.
       schema:
         type: string
+        format: uuid
+    LocationId:
+      name: location_id
+      in: query
+      required: false
+      description: >-
+        Client location to scope the request to. Required when authenticating
+        with an agency key (`ak_`). Ignored for viewer keys (`sk_`).
+      schema:
+        type: string
+        example: acme-retail
   schemas:
-    CreateCanvasRequest:
-      type: object
-      required:
-        - name
-      properties:
-        name:
-          type: string
-          description: Canvas display name.
-          example: User Journey Flow
-        description:
-          type: string
-          description: Optional description.
-        settings:
-          type: object
-          description: Canvas-level settings.
-    UpdateCanvasRequest:
-      type: object
-      properties:
-        name:
-          type: string
-        description:
-          type: string
-          nullable: true
-        settings:
-          type: object
-    SaveCanvasRequest:
-      type: object
-      required:
-        - nodes
-        - edges
-      properties:
-        nodes:
-          type: array
-          description: Array of canvas node objects.
-          items:
-            type: object
-        edges:
-          type: array
-          description: Array of canvas edge objects.
-          items:
-            type: object
-    RollbackRequest:
-      type: object
-      required:
-        - version_id
-      properties:
-        version_id:
-          type: string
-          description: Version identifier to rollback to.
-          example: ver_2nK8mPqR
     Canvas:
       type: object
       properties:
         id:
           type: string
-          example: cvs_5kN2mPqR
+          format: uuid
+        tenant_key:
+          type: string
+          description: The client location ID that owns the canvas.
+          example: acme-retail
         name:
           type: string
-          example: User Journey Flow
+          example: Product Launch Funnel
         description:
           type: string
           nullable: true
-        status:
-          type: string
-          enum: ["draft", "published"]
-          example: draft
-        settings:
+        viewport:
           type: object
-          nullable: true
-        current_version:
-          type: string
-          nullable: true
-          description: ID of the currently published version.
-          example: ver_2nK8mPqR
+          description: Saved pan/zoom state.
+          example: { x: 0, y: 0, zoom: 1 }
+        is_active:
+          type: boolean
+          example: false
+        version:
+          type: integer
+          description: Current working version.
+          example: 3
+        published_version:
+          type: integer
+          description: Version currently marked as published (`0` if never published).
+          example: 2
         created_at:
           type: string
           format: date-time
-          example: "2024-04-20T08:00:00.000Z"
         updated_at:
           type: string
           format: date-time
-          example: "2024-06-12T14:20:00.000Z"
+    CanvasSummary:
+      allOf:
+        - $ref: "#/components/schemas/Canvas"
+        - type: object
+          properties:
+            node_count:
+              type: integer
+              description: Number of nodes on the canvas (computed).
+              example: 5
     CanvasVersion:
       type: object
       properties:
         id:
           type: string
-          example: ver_2nK8mPqR
+          format: uuid
         canvas_id:
           type: string
-          example: cvs_5kN2mPqR
-        version_number:
+          format: uuid
+        version:
           type: integer
           example: 3
+        snapshot:
+          type: object
+          description: Full canvas state at this version (nodes, edges, urls, events).
         published_at:
           type: string
           format: date-time
-          example: "2024-06-12T14:20:00.000Z"
+          nullable: true
+        created_by:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    PlatformConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_key:
+          type: string
+          example: acme-retail
+        platform:
+          type: string
+          enum: [meta_pixel, ga4, google_ads, tiktok, linkedin, pinterest, custom_html]
+          example: meta_pixel
+        credentials:
+          type: object
+          description: Platform credentials (e.g. pixel/measurement IDs).
+        label:
+          type: string
+          example: Meta Pixel — Acme
+        is_default:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SaveCanvasMetaRequest:
+      type: object
+      required:
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Include to update an existing canvas; omit to create.
+        name:
+          type: string
+          example: Product Launch Funnel
+        description:
+          type: string
+          nullable: true
+    ImportFunnelRequest:
+      type: object
+      required:
+        - name
+        - funnel
+      properties:
+        name:
+          type: string
+          example: Product Launch Funnel
+        description:
+          type: string
+        funnel:
+          type: object
+          required:
+            - steps
+          properties:
+            name:
+              type: string
+            steps:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    description: GHL step ID (stored as a `step_id` URL match).
+                  name:
+                    type: string
+                  url:
+                    type: string
+                    description: Step URL (stored as a `contains` URL match).
+                  sequence:
+                    type: integer
+                    description: Ordering; steps are sorted ascending.
+    ToggleCanvasRequest:
+      type: object
+      required:
+        - is_active
+      properties:
+        is_active:
+          type: boolean
+          example: true
+    SaveCanvasStateRequest:
+      type: object
+      properties:
+        viewport:
+          type: object
+          example: { x: 0, y: 0, zoom: 1 }
+        nodes:
+          type: array
+          description: Complete node set. Missing nodes are deleted.
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              type:
+                type: string
+                enum: [page, action, decision, offsite]
+              label:
+                type: string
+              position_x:
+                type: number
+              position_y:
+                type: number
+        edges:
+          type: array
+          description: Complete edge set. Missing edges are deleted.
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              source_node_id:
+                type: string
+                format: uuid
+              target_node_id:
+                type: string
+                format: uuid
+              source_handle:
+                type: string
+                nullable: true
+              target_handle:
+                type: string
+                nullable: true
+              label:
+                type: string
+                nullable: true
+    RollbackRequest:
+      type: object
+      required:
+        - snapshot
+      properties:
+        snapshot:
+          type: object
+          description: >-
+            A version snapshot with `nodes`, `edges`, `urls`, and `events`
+            arrays (as returned in a `canvas_versions` row).
+          properties:
+            nodes:
+              type: array
+              items:
+                type: object
+            edges:
+              type: array
+              items:
+                type: object
+            urls:
+              type: array
+              items:
+                type: object
+            events:
+              type: array
+              items:
+                type: object
     CanvasResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: true
         data:
           $ref: "#/components/schemas/Canvas"
-    CanvasVersionResponse:
+    CanvasDetailResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: true
         data:
-          $ref: "#/components/schemas/CanvasVersion"
+          $ref: "#/components/schemas/Canvas"
     CanvasListResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: true
         data:
           type: array
           items:
-            $ref: "#/components/schemas/Canvas"
-        count:
-          type: integer
-          example: 8
+            $ref: "#/components/schemas/CanvasSummary"
     VersionListResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: true
         data:
           type: array
           items:
             $ref: "#/components/schemas/CanvasVersion"
-        count:
+    PlatformConfigListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlatformConfig"
+    VersionBumpResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        version:
           type: integer
-          example: 5
+          example: 4
+    PublishResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        published_version:
+          type: integer
+          example: 3
+    GenerateDashboardResponse:
+      type: object
+      properties:
+        dashboardId:
+          type: string
+          format: uuid
+        created:
+          type: boolean
+          description: "`true` on first-time creation."
+          example: true
+        regenerated:
+          type: boolean
+          description: "`true` when an existing dashboard was rebuilt."
+          example: false
     SuccessResponse:
       type: object
       properties:
@@ -505,15 +720,6 @@ components:
     ErrorResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: false
-        data:
-          nullable: true
-          example: null
         error:
           type: string
-          example: Unauthorized
-        count:
-          type: integer
-          example: 0
+          example: Canvas not found

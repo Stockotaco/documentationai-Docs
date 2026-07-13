@@ -4,7 +4,7 @@ info:
   title: Tag Templates
   description: Retrieve available tag templates for Mythic Analytics.
 servers:
-  - url: https://api.mythic-analytics.com/api/v1
+  - url: https://mythic-analytics.gulp.workers.dev/api/v1
 security:
   - BearerAuth: []
   - AdminKeyQuery: []
@@ -14,23 +14,11 @@ paths:
       summary: List tag templates
       operationId: listTagTemplates
       description: >
-        Retrieve all available tag templates. Tag templates define pre-built
-        integrations (GA4, Hotjar, Meta Pixel, custom scripts, etc.) that can
-        be assigned to clients. Each template includes a name, type, code
-        template, and required parameter definitions.
-      parameters:
-        - name: type
-          in: query
-          description: Filter by tag type (e.g., `analytics`, `marketing`, `custom`).
-          required: false
-          schema:
-            type: string
-        - name: search
-          in: query
-          description: Case-insensitive search on tag template name.
-          required: false
-          schema:
-            type: string
+        Retrieve all available tag templates, ordered by name. Tag templates
+        define pre-built integrations (GA4, Hotjar, Meta Pixel, custom scripts,
+        etc.) that can be assigned to clients. Each template includes a name,
+        type, code template, and optional default trigger rules. This endpoint
+        takes no query parameters.
       responses:
         "200":
           description: List of tag templates
@@ -84,25 +72,10 @@ components:
           type: string
           description: Human-readable description of the tag.
           example: Google Analytics 4 measurement tag with configurable measurement ID.
-        required_params:
-          type: array
-          description: Parameters the tag template expects.
-          items:
-            type: object
-            properties:
-              key:
-                type: string
-                example: measurement_id
-              label:
-                type: string
-                example: Measurement ID
-              placeholder:
-                type: string
-                example: G-XXXXXXXXXX
-        created_at:
-          type: string
-          format: date-time
-          example: "2024-01-10T09:00:00.000Z"
+        trigger_rules:
+          type: object
+          nullable: true
+          description: Default conditional rules controlling when the tag fires. Null means always fires.
     TagTemplateListResponse:
       type: object
       properties:
@@ -113,9 +86,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TagTemplate"
-        count:
-          type: integer
-          example: 12
     ErrorResponse:
       type: object
       properties:

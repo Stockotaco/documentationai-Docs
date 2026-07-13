@@ -100,7 +100,7 @@ The full set of options you can pass to `init(key, config)`.
 ### Identity
 
 <ParamField body="allowReidentification" param-type="boolean" required="false" show-location="false" deprecated="false">
-  Allow calling `identify` with a different user ID on the same device. Default: `true`. Set to `false` to preserve the first identity and prevent accidental merges.
+  Allow calling `identify` with a different user ID after one has already been set. Default: `false` — re-identification is blocked to prevent accidental merges. Call `reset()` before identifying as a different user, or set this to `true` to permit switching identities directly. (An identity previously set only by auto-capture can always be overridden by a later `identify()`.)
 </ParamField>
 
 ### Session
@@ -126,11 +126,19 @@ The full set of options you can pass to `init(key, config)`.
 ### HIPAA compliance
 
 <ParamField body="hipaa" param-type="boolean" required="false" show-location="false" deprecated="false">
-  Enable HIPAA mode. Applies a `hipaaFilter` to all outgoing events and force-disables autocapture, form identification, geolocation, cross-domain tracking, cookies, AI chat, and other features that could expose PHI. Default: `false`.
+  Enable HIPAA mode. Applies a `hipaaFilter` to all outgoing events and force-disables autocapture, form identification, input capture, framework extraction, GTM sync, booking/survey listeners, network interception, geolocation, cross-domain tracking, web vitals, and cookies. It also forces `respect_dnt`, `mask_all_text`, `mask_all_element_attributes`, `disable_remote_config`, and `persistence: 'localStorage'`. These overrides are immutable — `updateConfig()` cannot re-enable them. Default: `false`.
+</ParamField>
+
+<ParamField body="disable_remote_config" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Prevent loading server-defined tags, snippets, and transformers from the `/decide` endpoint. Force-enabled in HIPAA mode. Default: `false`.
+</ParamField>
+
+<ParamField body="disable_cookie" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Disable cookie-based storage entirely. Force-enabled in HIPAA mode. Default: `false`.
 </ParamField>
 
 <ParamField body="max_storage_duration" param-type="number" required="false" show-location="false" deprecated="false">
-  Maximum hours to retain data in local storage. Only relevant in HIPAA mode. Default: `24` (in HIPAA mode).
+  Maximum hours to retain data in local storage; stale data is purged on init. Default: `24` in HIPAA mode, `0` (disabled) otherwise.
 </ParamField>
 
 <Callout kind="alert">
@@ -176,19 +184,23 @@ The full set of options you can pass to `init(key, config)`.
 </ParamField>
 
 <ParamField body="auto_booking_listener" param-type="boolean" required="false" show-location="false" deprecated="false">
-  Automatically detect and track booking widget interactions (Calendly, etc.). Default: `false`.
+  Automatically detect and track booking API calls (LeadConnector, Calendly, Acuity). Default: `true`. Fires `appointment_booked`, `calendly_booked`, or `acuity_booked`.
 </ParamField>
 
 <ParamField body="auto_survey_tracking" param-type="boolean" required="false" show-location="false" deprecated="false">
-  Automatically track survey widget responses. Default: `false`.
+  Automatically track survey submission API calls (LeadConnector, Typeform, SurveyMonkey). Default: `true`. Fires `survey_completed`, `typeform_submitted`, or `surveymonkey_completed`.
 </ParamField>
 
 <ParamField body="auto_network_intercept" param-type="boolean|object" required="false" show-location="false" deprecated="false">
-  Intercept fetch/XHR requests to specified endpoints and capture them as events. Default: `false`.
+  Intercept fetch/XHR requests to the endpoints listed in `network_endpoints` and capture them as events. Default: `false`.
+</ParamField>
+
+<ParamField body="network_endpoints" param-type="array" required="false" show-location="false" deprecated="false">
+  Custom endpoints to monitor when `auto_network_intercept` is enabled. Each entry: `{ url, method?, event_name, event_prefix?, extract_fields? }`. `url` supports wildcards (e.g. `*/api/checkout`).
 </ParamField>
 
 <ParamField body="auto_framework_extract" param-type="boolean|object" required="false" show-location="false" deprecated="false">
-  Extract page metadata from frameworks (Nuxt, Next.js, React, Vue, Angular). Default: `false`. Pass `{ framework: 'auto' }` for auto-detection.
+  Extract page context from frameworks (Nuxt, Next.js, React, Vue, Angular). Default: `true`. Pass an object for control: `{ enabled: true, framework: 'auto', extract_properties: ['funnelId', 'pageId'] }`.
 </ParamField>
 
 <ParamField body="auto_gtm_sync" param-type="boolean" required="false" show-location="false" deprecated="false">
@@ -196,7 +208,7 @@ The full set of options you can pass to `init(key, config)`.
 </ParamField>
 
 <ParamField body="wait_for_page_data" param-type="boolean" required="false" show-location="false" deprecated="false">
-  Buffer events until framework extraction completes. Default: `false`.
+  Buffer events until framework extraction completes so the first `$pageview` includes framework-detected properties. Default: `true` when `auto_framework_extract` is enabled. A 2-second safety timeout prevents indefinite blocking; set to `false` to opt out of buffering.
 </ParamField>
 
 ### Web Vitals
@@ -208,7 +220,7 @@ The full set of options you can pass to `init(key, config)`.
 ### Geolocation
 
 <ParamField body="geolocation" param-type="boolean|object" required="false" show-location="false" deprecated="false">
-  Enrich events with geolocation data. Default: enabled at city level. Pass an object for control: `{ enabled: true, level: 'country' | 'region' | 'city', cache_duration: 3600 }`. Set to `false` to disable.
+  Enrich events with IP-based geolocation data. Default: enabled at city level. Pass an object for control: `{ enabled: true, level: 'country' | 'region' | 'city', cache_duration: 86400000, api_endpoint: '...' }`. `cache_duration` is in milliseconds (default `86400000`, 24 hours). Set `api_endpoint: false` to skip the external lookup API, or set the whole option to `false` to disable geolocation.
 </ParamField>
 
 ### Cross-domain tracking
@@ -221,4 +233,34 @@ The full set of options you can pass to `init(key, config)`.
 
 <ParamField body="rate_limiting" param-type="object" required="false" show-location="false" deprecated="false">
   Client-side rate limiting. Example: `{ events_per_second: 10, events_burst_limit: 50 }`.
+</ParamField>
+
+### Properties and forms
+
+<ParamField body="super_properties" param-type="object" required="false" show-location="false" deprecated="false">
+  Properties merged into every event from initialization. Equivalent to calling `set()` at startup. Default: `{}`.
+</ParamField>
+
+<ParamField body="form_selector" param-type="string" required="false" show-location="false" deprecated="false">
+  CSS selector for forms tracked by `auto_form_identify`. Default: `'form, .c-form, [data-form]'`.
+</ParamField>
+
+<ParamField body="sensitive_fields" param-type="array" required="false" show-location="false" deprecated="false">
+  Field names to strip from captured form/network data (passwords, tokens, card numbers, etc.). Your list is used in place of the built-in defaults.
+</ParamField>
+
+<ParamField body="max_payload_size" param-type="number" required="false" show-location="false" deprecated="false">
+  Maximum size, in characters, of captured network/form payloads. Default: `6000`.
+</ParamField>
+
+<ParamField body="properties_string_max_length" param-type="number" required="false" show-location="false" deprecated="false">
+  Maximum length for individual string property values. Default: `65535`.
+</ParamField>
+
+<ParamField body="disabled" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Completely disable tracking. Default: `false`.
+</ParamField>
+
+<ParamField body="disable_external_storage" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Disable localStorage and cookies, keeping data in memory only. Default: `false`.
 </ParamField>

@@ -11,13 +11,31 @@ The SDK automatically captures these events when the corresponding config option
 
 | Event | Description | Config |
 |-------|-------------|--------|
-| `$pageview` | Page load with URL, title, referrer, and performance metrics | `capture_pageview` |
-| `$pageleave` | Page exit with `$time_on_page`, `$exit_intent`, scroll depth | `capture_pageleave` |
-| `$engagement` | Fires 10 seconds after page load | Always on |
+| `$pageview` | Page load and SPA navigation with URL, title, referrer, and performance metrics | `capture_pageview` |
+| `$pageleave` | Page exit with `$time_on_page`, `$exit_intent`, and `$trigger` | `capture_pageleave` |
+| `$engagement` | Fires 10 seconds after page load (`$time_to_engage: 10`) | Always on |
 | `$identify` | User identification (via `identify()`) | Always on |
 | `$create_alias` | Alias creation (via `alias()`) | Always on |
-| Click events | Auto-captured link clicks, button clicks | `autocapture` |
-| Form submissions | Auto-captured form submit events | `autocapture` |
+| `$set` | Person-property update (via `identify()` or `setPersonProperties()`) | Always on |
+| `$autocapture` | Clicks, form submissions, and input changes. The `$event_type` property is `click`, `submit`, or `change` | `autocapture` |
+
+## Feature-module events
+
+These fire only when their feature is enabled (most are on by default — see the [configuration reference](/javascript-sdk/configuration)):
+
+| Event | Description | Config |
+|-------|-------------|--------|
+| `form_submitted` | Form submission with extracted, mapped fields | `auto_form_identify` |
+| `input_captured` | Email detected in an input field | `auto_input_capture` |
+| `appointment_booked` / `calendly_booked` / `acuity_booked` | Booking API call detected | `auto_booking_listener` |
+| `survey_completed` / `typeform_submitted` / `surveymonkey_completed` | Survey submission detected | `auto_survey_tracking` |
+| Custom `event_name` | Fired per matched endpoint in `network_endpoints` | `auto_network_intercept` |
+| `$web_vital_lcp`, `$web_vital_cls`, `$web_vital_inp`, … | One event per Core Web Vital metric | `web_vitals` |
+| `$cross_domain_linked` | Session adopted from a cross-domain link | `cross_domain_tracking` |
+
+<Callout kind="info">
+  When remote-config tags or snippets fail, the SDK also reports `$tag_error`, `$snippet_error`, and `$snippet_compilation_error`; a failing event transformer reports `$transformer_error`.
+</Callout>
 
 ## Attribution tracking
 
@@ -35,8 +53,9 @@ When `capture_utm` is enabled (default), the SDK captures UTM parameters and adv
 Every event automatically includes:
 
 - `$lib`, `$lib_version` — SDK identifier and version
-- `$current_url`, `$referrer`, `$host`, `$pathname` — Page context
-- `$browser`, `$browser_version`, `$os`, `$os_version` — User agent
-- `$device_type` — `mobile`, `tablet`, or `desktop`
-- `$screen_width`, `$screen_height`, `$viewport_width`, `$viewport_height`
-- `$session_id`, `$device_id`, `distinct_id` — Identity context
+- `$current_url`, `$host`, `$pathname`, `$page_title` — Page context (`$referrer`/`$referring_domain` when available)
+- `$browser`, `$browser_version`, `$os`, `$device_type`, `$user_agent` — User agent (`$device_type` is `mobile`, `tablet`, or `desktop`)
+- `$screen_width`, `$screen_height`, `$viewport_width`, `$viewport_height`, `$screen_density`
+- `$timezone`, `$timezone_offset`, `$browser_language`
+- `$is_bot`, `$is_identified`, `$pageview_id`
+- `$session_id`, `$device_id`, `distinct_id` (and `$user_id` once identified) — Identity context

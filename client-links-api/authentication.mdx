@@ -1,22 +1,77 @@
 ---
 title: Authentication
 description: >-
-  Authenticate requests to the Client Links API using an admin API key
-  passed as a bearer token or query parameter.
+  Authenticate Client Links API requests with an agency key or a location
+  secret key, passed as a bearer token or query parameter.
 ---
 
 ## Authentication
 
-Every endpoint requires an admin API key. Pass it as a bearer token or query parameter.
+The Client Links API is client-scoped and uses **client keys** — not the admin key. Two key types are accepted:
 
-<ParamField header="Authorization" param-type="string" required="true" deprecated="false">
-  Bearer token. Format: `Bearer YOUR_ADMIN_KEY`.
+| Key | Prefix | Access | Scope |
+|-----|--------|--------|-------|
+| **Agency key** | `ak_` | Read-write | An agency; must name a specific client (location) per request |
+| **Location secret key** | `sk_` | Read-only | A single client (location), resolved from the key itself |
+
+Pass the key either as a bearer token or as a query parameter.
+
+<ParamField header="Authorization" param-type="string" required="false" deprecated="false">
+  Bearer token. Format: `Bearer ak_...` or `Bearer sk_...`.
 </ParamField>
 
-<ParamField query="admin_key" param-type="string" required="false" deprecated="false">
-  Alternative to the header for server-to-server or tooling scenarios. Do not expose in client-side code.
+<ParamField query="ak" param-type="string" required="false" deprecated="false">
+  Agency key as a query parameter, when the `Authorization` header cannot be used.
 </ParamField>
+
+<ParamField query="sk" param-type="string" required="false" deprecated="false">
+  Location secret key as a query parameter, when the `Authorization` header cannot be used.
+</ParamField>
+
+A key must be supplied through one of the above. Anything that is not prefixed with `ak_` or `sk_` is rejected with `401`.
+
+## Selecting a client with an agency key
+
+An agency key spans multiple clients, so every request made with an `ak_` key must name the target client (location). Supply it as a query parameter or header — omitting it returns `401`.
+
+<ParamField query="location_id" param-type="string" required="false" deprecated="false">
+  Target client (location) id. Required for agency keys. Verified against the
+  agency; a location not linked to the agency returns `403`.
+</ParamField>
+
+<ParamField header="X-Location-Id" param-type="string" required="false" deprecated="false">
+  Alternative to the `location_id` query parameter for agency keys.
+</ParamField>
+
+Location secret keys (`sk_`) already resolve to exactly one client, so `location_id` is ignored for them.
+
+## Examples
+
+<CodeGroup>
+```bash Agency key (header)
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/links?location_id=acme-retail" \
+  -H "Authorization: Bearer ak_your_agency_key"
+```
+
+```bash Agency key (X-Location-Id)
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/links" \
+  -H "Authorization: Bearer ak_your_agency_key" \
+  -H "X-Location-Id: acme-retail"
+```
+
+```bash Secret key (read-only)
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/links" \
+  -H "Authorization: Bearer sk_your_location_secret_key"
+```
+
+```bash Query parameter
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/links?sk=sk_your_location_secret_key"
+```
+</CodeGroup>
 
 <Callout kind="alert">
-  Never expose the admin key in client-side JavaScript, public repositories, or logs. Restrict access to trusted backend services and operations staff.
+  Treat both key types as secrets. The agency key is read-write across every
+  client in the agency — never expose it in client-side code, public
+  repositories, or logs. Prefer the read-only `sk_` key for browser or
+  untrusted contexts.
 </Callout>

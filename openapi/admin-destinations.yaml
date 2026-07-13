@@ -1,0 +1,270 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Destinations (Admin)
+  description: >
+    Platform-admin management of destination credentials and destination
+    testing. Operates on any location by explicit `location_id`. Authenticated
+    with the platform admin key, not a client key.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /admin/destinations/credentials:
+    post:
+      summary: Store or rotate a credential
+      operationId: adminUpsertCredential
+      description: >
+        Store (or rotate) a credential for a location. A given
+        `(location_id, destination_type, credential_name)` triple is upserted
+        in place. The response returns the credential id only — never the
+        stored value.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUpsertCredentialRequest"
+      responses:
+        "200":
+          description: Credential stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCredentialUpsertResponse"
+        "400":
+          description: "Missing required fields: location_id, destination_type, credential_value"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "500":
+          description: Data store error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+  /admin/destinations/credentials/{locationId}:
+    get:
+      summary: List credentials for a location
+      operationId: adminListCredentials
+      description: >
+        List credential metadata for a location. Returns types and names only,
+        never the stored values.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Credential metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCredentialListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "500":
+          description: Data store error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+  /admin/destinations/credentials/{locationId}/{type}:
+    delete:
+      summary: Delete a credential
+      operationId: adminDeleteCredential
+      description: >
+        Delete a single named credential for a location and destination type.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: type
+          in: path
+          required: true
+          description: Destination type.
+          schema:
+            type: string
+        - name: credential_name
+          in: query
+          description: Named credential to delete. Defaults to `default`.
+          required: false
+          schema:
+            type: string
+            default: default
+      responses:
+        "200":
+          description: Credential deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSuccessResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "500":
+          description: Data store error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+  /admin/destinations/test:
+    post:
+      summary: Test a destination
+      operationId: adminTestDestination
+      description: >
+        Send a test delivery through the real ad-platform adapter (Meta CAPI /
+        Google Ads) using the stored credential. Proxies to the identity
+        processor; only ad destinations are testable — webhooks fire on real
+        events.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminTestRequest"
+      responses:
+        "200":
+          description: Test result from the destination adapter
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Adapter-specific test result returned by the identity processor.
+        "400":
+          description: "Missing required fields: location_id, action_id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "502":
+          description: Test delivery failed or the test service was unreachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "503":
+          description: Destination testing is not available in this environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  parameters:
+    LocationId:
+      name: locationId
+      in: path
+      required: true
+      description: Location (tenant) identifier.
+      schema:
+        type: string
+  schemas:
+    AdminUpsertCredentialRequest:
+      type: object
+      required:
+        - location_id
+        - destination_type
+        - credential_value
+      properties:
+        location_id:
+          type: string
+          example: loc_acme
+        destination_type:
+          type: string
+          description: Destination type the credential belongs to.
+          example: meta_capi
+        credential_name:
+          type: string
+          default: default
+          description: Name for this credential. Defaults to `default`.
+        credential_value:
+          type: string
+          description: Secret value. Never returned by any endpoint.
+    AdminTestRequest:
+      type: object
+      required:
+        - location_id
+        - action_id
+      properties:
+        location_id:
+          type: string
+          example: loc_acme
+        action_id:
+          type: string
+          format: uuid
+          description: Destination id to test.
+    AdminCredential:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        location_id:
+          type: string
+        destination_type:
+          type: string
+        credential_name:
+          type: string
+          example: default
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AdminCredentialUpsertResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        id:
+          type: string
+          format: uuid
+    AdminCredentialListResponse:
+      type: object
+      properties:
+        credentials:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminCredential"
+    AdminSuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+    AdminErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Unauthorized

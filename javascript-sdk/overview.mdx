@@ -28,65 +28,67 @@ Key capabilities:
 
 <Steps>
   <Step title="Load the script or install from npm" icon="download" titleType="p">
-    Use a script tag for quick embeds:
+    For most sites, add the CDN loader (~1.4KB). It sets up `window.mythic` immediately and asynchronously imports the SDK core:
 
     ```html
-    <script
-      src="https://cdn.mythic-analytics.com/sdk/latest/mythic.min.js"
-      crossorigin="anonymous"
-    ></script>
+    <script src="https://mythic-analytics.gulp.workers.dev/cdn/m.js"></script>
     ```
 
-    Or install from npm for bundlers:
+    Or install from npm for bundled apps:
 
     ```bash
-    npm install @mythic/analytics
+    npm install @mythic-analytics/sdk
     # or
-    yarn add @mythic/analytics
+    yarn add @mythic-analytics/sdk
     ```
   </Step>
 
-  <Step title="Import or reference the global" icon="code" titleType="p">
-    <CodeGroup tabs="Script tag,ES module,CommonJS">
+  <Step title="Initialize" icon="code" titleType="p">
+    <CodeGroup tabs="Script tag,ES module">
       ```html
+      <script src="https://mythic-analytics.gulp.workers.dev/cdn/m.js"></script>
       <script>
-        window.mythic = window.Mythic.init("pk_your_publishable_key");
+        window.mythic.init("pk_your_publishable_key");
+
+        // Methods can be called on window.mythic right away — calls made
+        // before the core finishes loading are queued and replayed.
+        window.mythic.capture("Signup started", { plan: "pro" });
       </script>
       ```
 
       ```javascript
-      import { init } from "@mythic/analytics";
-      const mythic = init("pk_your_publishable_key");
-      ```
+      import { init } from "@mythic-analytics/sdk";
 
-      ```javascript
-      const { init } = require("@mythic/analytics");
-      const mythic = init("pk_your_publishable_key");
+      // init is async — it resolves once the SDK is initialized
+      const mythic = await init("pk_your_publishable_key");
+      mythic.capture("Signup started", { plan: "pro" });
       ```
     </CodeGroup>
-
-    After this step, you have a `mythic` instance you can call methods on.
   </Step>
 </Steps>
+
+<Callout kind="info">
+  With the CDN loader, the global is `window.mythic` (lowercase). It exposes pre-init stubs for every public method, so you can call `window.mythic.capture(...)`, `window.mythic.identify(...)`, etc. before initialization completes — those calls are queued and replayed once the core loads.
+</Callout>
 
 ## Initialize the SDK
 
 ### `init(key, config?)`
 
-Create a configured Mythic client instance.
+Initialize Mythic. The npm export is an async function that resolves to the SDK instance; the CDN global exposes `window.mythic.init(...)` which does the same and wires up the queued method stubs.
 
 <ParamField body="key" param-type="string" required="true" show-location="false" deprecated="false">
   Publishable project key starting with `pk_`.
 </ParamField>
 
 <ParamField body="config" param-type="object" required="false" show-location="false" deprecated="false">
-  Optional configuration overrides. See the full config reference below.
+  Optional configuration overrides. See the [configuration reference](/javascript-sdk/configuration) for all options.
 </ParamField>
 
 ```javascript
-import { init } from "@mythic/analytics";
+import { init } from "@mythic-analytics/sdk";
 
-const mythic = init("pk_your_publishable_key", {
+const mythic = await init("pk_your_publishable_key", {
   api_host: "https://analytics.yourdomain.com",
   debug: true,
   batch_size: 20,
@@ -95,3 +97,7 @@ const mythic = init("pk_your_publishable_key", {
   hipaa: false,
 });
 ```
+
+<Callout kind="tip">
+  When the SDK is loaded from a custom first-party domain (Cloudflare for SaaS), it auto-detects that hostname and uses it as `api_host` — you do not need to set `api_host` manually in that case.
+</Callout>

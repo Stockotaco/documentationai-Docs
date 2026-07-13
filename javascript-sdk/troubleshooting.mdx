@@ -11,16 +11,18 @@ description: >-
 
 <Steps>
   <Step title="Verify initialization" icon="check-circle" titleType="p">
-    Confirm `init` is called with a valid publishable key:
+    Confirm `init` is called with a valid publishable key. With the CDN loader:
 
     ```javascript
-    const mythic = init("pk_your_publishable_key");
+    window.mythic.init("pk_your_publishable_key");
     ```
+
+    Check `window.mythic.loaded === true` once the core has finished loading.
   </Step>
 
   <Step title="Enable debug logging" icon="terminal" titleType="p">
     ```javascript
-    const mythic = init("pk_your_publishable_key", { debug: true });
+    window.mythic.init("pk_your_publishable_key", { debug: true });
     ```
 
     You should see logs when `capture` or `pageview` fires and when events are sent.
@@ -30,6 +32,15 @@ description: >-
     Open the browser network panel and filter by `/e?key=` or `/decide?key=`. Verify requests reach the expected `api_host`.
   </Step>
 </Steps>
+
+### Events are captured but not sent
+
+- **Consent gating**: with `requireConsent: true` (or `autoConsentMode`), events are silently dropped until `grantConsent()` is called.
+- **Do Not Track**: if `respect_dnt: true` and the browser has DNT / Global Privacy Control on, tracking is disabled at init.
+- **Test mode**: `test_mode: true` logs events to the console instead of sending them.
+- **Batching**: events are held until `batch_size` (default 10) or `flush_interval` (default 2000ms) is reached. Call `flush()` to send immediately.
+- **Buffering for framework data**: with `auto_framework_extract` enabled, the first events are briefly buffered until page context is extracted (up to a 2s safety timeout). Set `wait_for_page_data: false` to disable this.
+- **Bot detection**: requests from user agents detected as bots are still captured, but you can check `isBot()` to gate your own calls.
 
 ### Network requests blocked
 

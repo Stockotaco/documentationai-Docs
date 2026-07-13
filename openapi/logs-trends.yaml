@@ -2,9 +2,12 @@ openapi: "3.0.0"
 info:
   version: 1.0.0
   title: Logs & Trends
-  description: Retrieve event logs and trend analytics for Mythic Analytics client tenants.
+  description: >-
+    Retrieve event logs and event analytics (trend, summary, daily) for Mythic
+    Analytics client tenants. All endpoints proxy the Tinybird analytics
+    pipeline and return a `data` array with a `rows` count.
 servers:
-  - url: https://api.mythic-analytics.com/api/v1
+  - url: https://mythic-analytics.gulp.workers.dev/api/v1
 security:
   - BearerAuth: []
   - AdminKeyQuery: []
@@ -14,49 +17,50 @@ paths:
       summary: Get event logs
       operationId: getClientLogs
       description: >
-        Retrieve a paginated list of event logs for a client tenant. Logs include
-        page views, custom events, and system events. Results are ordered by
-        timestamp descending (newest first).
+        Retrieve a chronological activity stream of events for a client tenant,
+        newest first. Backed by the Tinybird `pubsub_activity_stream` pipe. The
+        window is controlled by `hours_back` (there is no offset-based paging).
       parameters:
         - $ref: "#/components/parameters/ClientId"
-        - name: event
+        - name: hours_back
           in: query
-          description: Filter by event name (e.g., `pageview`, `click`, `form_submit`).
+          description: How many hours back to include. Default `24`, min `1`, max `720`.
           required: false
           schema:
-            type: string
-        - name: from
-          in: query
-          description: Start date in ISO 8601 format. Default is 24 hours ago.
-          required: false
-          schema:
-            type: string
-            format: date-time
-        - name: to
-          in: query
-          description: End date in ISO 8601 format. Default is now.
-          required: false
-          schema:
-            type: string
-            format: date-time
+            type: integer
+            default: 24
+            minimum: 1
+            maximum: 720
         - name: limit
           in: query
-          description: Maximum results per page. Default `100`, max `1000`.
+          description: Maximum events returned. Default `500`, min `1`, max `1000`.
           required: false
           schema:
             type: integer
-            default: 100
+            default: 500
+            minimum: 1
             maximum: 1000
-        - name: offset
+        - name: distinct_id
           in: query
-          description: Number of results to skip. Default `0`.
+          description: Filter to a single distinct (anonymous/device) id.
           required: false
           schema:
-            type: integer
-            default: 0
+            type: string
+        - name: session_id
+          in: query
+          description: Filter to a single session id.
+          required: false
+          schema:
+            type: string
+        - name: event_type
+          in: query
+          description: Filter by event name. Accepts a comma-separated list.
+          required: false
+          schema:
+            type: string
       responses:
         "200":
-          description: Paginated list of event logs
+          description: Event activity stream
           content:
             application/json:
               schema:
@@ -67,53 +71,153 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Client not found
+        "503":
+          description: Analytics service not configured
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /clients/{id}/trends:
+  /clients/{id}/trend:
     get:
-      summary: Get trends
-      operationId: getClientTrends
+      summary: Get event trend
+      operationId: getClientTrend
       description: >
-        Retrieve aggregated trend data for a client tenant over a specified
-        time period. Returns metrics such as total page views, unique visitors,
-        average session duration, and bounce rate.
+        Daily event counts for a client tenant, suitable for sparklines. Backed
+        by the Tinybird `pubsub_event_trend` pipe. Provide either an explicit
+        `start_date` or the `days` shorthand.
       parameters:
         - $ref: "#/components/parameters/ClientId"
-        - name: period
+        - name: days
           in: query
-          description: "Time period for trend aggregation. Default: `30d`."
+          description: >
+            Number of days back from today. Default `14`, min `1`, max `365`.
+            Ignored when `start_date` is supplied.
+          required: false
+          schema:
+            type: integer
+            default: 14
+            minimum: 1
+            maximum: 365
+        - name: start_date
+          in: query
+          description: Explicit start date (ISO 8601 `YYYY-MM-DD`). Overrides `days`.
           required: false
           schema:
             type: string
-            enum: ["24h", "7d", "30d", "90d"]
-            default: "30d"
-        - name: granularity
+            format: date
+        - name: end_date
           in: query
-          description: "Data point granularity. Default: `day`."
+          description: End date (ISO 8601 `YYYY-MM-DD`). Defaults to today.
           required: false
           schema:
             type: string
-            enum: ["hour", "day", "week"]
-            default: "day"
+            format: date
       responses:
         "200":
-          description: Trend analytics data
+          description: Daily event counts
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TrendsResponse"
+                $ref: "#/components/schemas/TrendResponse"
         "401":
           description: Admin key missing or invalid
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Client not found
+        "503":
+          description: Analytics service not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /clients/{id}/events/summary:
+    get:
+      summary: Get event type summary
+      operationId: getClientEventSummary
+      description: >
+        Per-event-type totals for a client tenant — total events, unique users,
+        and unique sessions. Backed by the Tinybird `client_event_summary` pipe.
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - name: date_from
+          in: query
+          description: Start date (ISO 8601). Defaults to 30 days ago.
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          description: End date (ISO 8601), inclusive.
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Event type summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventSummaryResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Analytics service not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /clients/{id}/events/daily:
+    get:
+      summary: Get daily event breakdown
+      operationId: getClientEventDaily
+      description: >
+        Daily time-series of events for a client tenant — total events, unique
+        users, unique sessions, and pageviews per day. Backed by the Tinybird
+        `client_event_daily` pipe.
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - name: date_from
+          in: query
+          description: Start date (ISO 8601). Defaults to 30 days ago.
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          description: End date (ISO 8601), inclusive.
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: event_type
+          in: query
+          description: Restrict the breakdown to a single event type.
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Daily event breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventDailyResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Analytics service not configured
           content:
             application/json:
               schema:
@@ -141,85 +245,147 @@ components:
   schemas:
     LogEntry:
       type: object
+      description: >
+        A single event from the activity stream. Fields are passed through from
+        the Tinybird pipe; the most useful are documented here.
       properties:
-        id:
+        location_id:
           type: string
-          example: log_8kN2mPqR
+          example: acme-retail
         event:
           type: string
-          description: Event name.
-          example: pageview
-        url:
+          example: $pageview
+        distinct_id:
           type: string
-          format: uri
-          description: Page URL where the event occurred.
-          example: https://acme-retail.com/products
-        referrer:
+        user_id:
           type: string
           nullable: true
-          example: https://google.com
-        user_agent:
+        session_id:
+          type: string
+        device_id:
           type: string
           nullable: true
-        ip_country:
-          type: string
-          nullable: true
-          example: US
-        properties:
-          type: object
-          nullable: true
-          description: Custom event properties.
         timestamp:
           type: string
           format: date-time
-          example: "2024-06-15T14:32:10.000Z"
+        formatted_timestamp:
+          type: string
+          example: "2024-06-15 14:32:10"
+        properties:
+          type: string
+          description: Raw event properties as a JSON string.
+        uuid:
+          type: string
+        url:
+          type: string
+          nullable: true
+          example: https://acme-retail.com/products
+        page_title:
+          type: string
+          nullable: true
+        referrer:
+          type: string
+          nullable: true
+        browser:
+          type: string
+          nullable: true
+        browser_version:
+          type: string
+          nullable: true
+        os:
+          type: string
+          nullable: true
+        platform:
+          type: string
+          nullable: true
+        device_type:
+          type: string
+          nullable: true
+        user_agent:
+          type: string
+          nullable: true
+        utm_source:
+          type: string
+          nullable: true
+        utm_medium:
+          type: string
+          nullable: true
+        utm_campaign:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+          example: US
+        timezone:
+          type: string
+          nullable: true
+        is_identify_event:
+          type: integer
+          example: 0
+        is_identified:
+          type: integer
+          example: 1
+        event_position_in_session:
+          type: integer
+        session_event_count:
+          type: integer
+        session_start:
+          type: string
+          format: date-time
+        session_end:
+          type: string
+          format: date-time
+        session_total_events:
+          type: integer
+        session_duration_seconds:
+          type: integer
+        user_journey_step:
+          type: integer
     TrendDataPoint:
       type: object
       properties:
         date:
           type: string
-          description: Data point timestamp.
+          format: date
           example: "2024-06-15"
-        page_views:
+        events:
           type: integer
           example: 1420
-        unique_visitors:
-          type: integer
-          example: 890
-        sessions:
-          type: integer
-          example: 1050
-        avg_session_duration:
-          type: number
-          format: float
-          description: Average session duration in seconds.
-          example: 182.5
-        bounce_rate:
-          type: number
-          format: float
-          description: Bounce rate as a decimal (0.0 to 1.0).
-          example: 0.42
-    TrendsSummary:
+    EventSummaryRow:
       type: object
       properties:
-        total_page_views:
+        event_type:
+          type: string
+          example: $pageview
+        total_events:
           type: integer
           example: 42600
-        total_unique_visitors:
+        unique_users:
           type: integer
           example: 26700
-        avg_session_duration:
-          type: number
-          format: float
-          example: 175.3
-        bounce_rate:
-          type: number
-          format: float
-          example: 0.38
-        data_points:
-          type: array
-          items:
-            $ref: "#/components/schemas/TrendDataPoint"
+        unique_sessions:
+          type: integer
+          example: 31200
+    EventDailyRow:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2024-06-15"
+        total_events:
+          type: integer
+          example: 1420
+        unique_users:
+          type: integer
+          example: 890
+        unique_sessions:
+          type: integer
+          example: 1050
+        pageviews:
+          type: integer
+          example: 980
     LogListResponse:
       type: object
       properties:
@@ -230,17 +396,49 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LogEntry"
-        count:
+        rows:
           type: integer
+          description: Number of events returned.
           example: 250
-    TrendsResponse:
+    TrendResponse:
       type: object
       properties:
         success:
           type: boolean
           example: true
         data:
-          $ref: "#/components/schemas/TrendsSummary"
+          type: array
+          items:
+            $ref: "#/components/schemas/TrendDataPoint"
+        rows:
+          type: integer
+          example: 14
+    EventSummaryResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventSummaryRow"
+        rows:
+          type: integer
+          example: 8
+    EventDailyResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventDailyRow"
+        rows:
+          type: integer
+          example: 30
     ErrorResponse:
       type: object
       properties:

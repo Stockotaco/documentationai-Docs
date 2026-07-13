@@ -1,0 +1,94 @@
+---
+title: Destinations API
+description: >-
+  Activate your resolved event data by forwarding conversions to webhooks,
+  the Meta Conversions API, and Google Ads, with per-destination credentials,
+  delivery logs, and health monitoring.
+---
+
+## Overview
+
+The Destinations API is the partner self-serve surface for data activation. A destination forwards qualifying events to an external system when its trigger rules match. You manage destinations, store the credentials they need, and inspect what was delivered — all scoped to a single client location.
+
+## Base URL
+
+All endpoints are mounted under the `/client/v1/destinations` prefix.
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/destinations
+```
+
+## Destination types
+
+Three destination types are supported. The `action_config` you send is validated against the `action_type`.
+
+| Type | `action_type` | What it does | Credential |
+|------|---------------|--------------|------------|
+| **Webhook** | `webhook` | POSTs the event to an http(s) URL you control | Inline in `action_config` (headers / body template) |
+| **Meta Conversions API** | `meta_capi` | Sends server-side conversions to a Meta pixel | Stored separately (`meta_capi`) |
+| **Google Ads** | `google_ads` | Uploads conversions to a Google Ads customer | Stored separately (`google_ads`) |
+
+<Callout kind="info">
+  `tiktok_events` is recognized by the schema but has no executor yet, so creating it returns `unsupported_destination_type`. Only `webhook`, `meta_capi`, and `google_ads` are live.
+</Callout>
+
+### Webhook
+
+Requires a fetchable `url`. Optional `method`, `headers`, `body_template`, `timeout_ms`, and `retry_count`. Because webhook credentials live inline in `action_config`, header values and `body_template` are redacted to `***` when read with a secret (viewer) key. HIPAA-enabled locations reject `http://` URLs at write time.
+
+### Meta Conversions API
+
+Requires a `pixel_id` and an `event_mapping` object that maps each source event name to a Meta event name (for example `{"purchase": "Purchase"}`). Optional `test_event_code`, `action_source`, `credential_name`, and `enrichment`. The Meta access token is stored separately as a `meta_capi` credential.
+
+### Google Ads
+
+Requires a 10-digit `customer_id` (no dashes) and an `event_mapping` object mapping each source event name to a conversion spec with a `conversion_action` (and optional `value_property`, `default_value`, `currency`). Optional `enhanced_conversions_for_leads` and `consent`. Credentials are stored separately as a `google_ads` credential — a JSON object containing `developer_token`, `client_id`, `client_secret`, and `refresh_token`.
+
+## Trigger rules
+
+Every destination carries `trigger_rules`: an object with a non-empty `rules` array and an optional `operator` (`AND` or `OR`). Each rule requires a string `type`. Rules decide whether a given event fires the destination.
+
+## Credentials
+
+Ad destinations (`meta_capi`, `google_ads`) read their secrets from a separate, never-readable credential store keyed by `(location_id, destination_type, credential_name)`. Store or rotate a credential with `PUT /credentials/{type}`; list metadata with `GET /credentials`. Credential values are write-only — no endpoint ever returns them. Webhooks carry their auth inline in `action_config` instead.
+
+## Delivery logs & health
+
+- `GET /deliveries` returns individual delivery attempts (newest first), filterable by destination, status, source event, and time range. It defaults to the last 7 days.
+- `GET /health` returns per-destination aggregates over a rolling window (default 24 hours): success rate, failure counts, latency percentiles, and a `credential_ok` flag that flips to `false` when the most recent failure was a 401/403.
+
+## Testing
+
+`POST /{id}/test` sends a real test delivery through the ad-platform adapter using the stored credential. It is supported only for `meta_capi` and `google_ads`; webhooks fire on real events and return `400`.
+
+## Response envelope
+
+All endpoints return a JSON envelope.
+
+<ResponseField name="success" field-type="boolean" required="true" deprecated="false">
+  Whether the request succeeded.
+</ResponseField>
+
+<ResponseField name="data" field-type="object|array" required="false" deprecated="false">
+  Resource payload. Shape depends on the endpoint. Omitted on bare success responses (for example delete).
+</ResponseField>
+
+<ResponseField name="error" field-type="object" required="false" deprecated="false">
+  Present on failed requests. Contains `code`, `message`, and — for validation failures — a `details` array of per-field errors.
+</ResponseField>
+
+## Error handling
+
+| Status | Meaning |
+|--------|---------|
+| `400` | Invalid body, unsupported destination type, or configuration/validation error |
+| `401` | Key missing or invalid |
+| `403` | Write attempted with a read-only secret (`sk_`) key |
+| `404` | Destination not found for this location |
+| `429` | Rate limit exceeded (120 requests per 10s per location) |
+| `502` | Upstream data store or test service error |
+| `503` | Analytics or testing service not configured in this environment |
+
+<Callout kind="info">
+  Validation errors return `code: invalid_config` with a `details` array naming each offending field, so you can surface actionable messages instead of a bare `400`.
+</Callout>

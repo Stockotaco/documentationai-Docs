@@ -1,0 +1,337 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Data
+  description: >
+    Read-only event analytics and BigQuery export status for agencies.
+    Event endpoints are location-scoped; export is agency-wide. Served from
+    Mythic Analytics. Person profiles and the identity graph live in the
+    People API.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev/client/v1/data
+security:
+  - BearerAuth: []
+  - AgencyKeyQuery: []
+  - SecretKeyQuery: []
+paths:
+  /events/summary:
+    get:
+      summary: Event summary
+      operationId: getEventsSummary
+      description: Aggregated event counts by type for the location over an optional date range.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+      responses:
+        "200":
+          description: Event summary rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RowsResponse"
+        "400":
+          $ref: "#/components/responses/LocationRequired"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/NotConfigured"
+  /events/daily:
+    get:
+      summary: Daily events
+      operationId: getEventsDaily
+      description: Per-day event counts for the location over an optional date range, optionally filtered to one event type.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+        - name: event_type
+          in: query
+          description: Filter to a single event type.
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Daily event rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RowsResponse"
+        "400":
+          $ref: "#/components/responses/LocationRequired"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/NotConfigured"
+  /events/trend:
+    get:
+      summary: Event trend
+      operationId: getEventsTrend
+      description: >
+        Event volume trend for the location. Provide an explicit
+        `start_date`/`end_date`, or use `days` to derive a rolling window
+        ending today.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - name: start_date
+          in: query
+          description: Window start date (`YYYY-MM-DD`). Defaults to `days` before today.
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          description: Window end date (`YYYY-MM-DD`).
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: days
+          in: query
+          description: Rolling window size in days, used when `start_date` is omitted. Default `14`, min `1`, max `365`.
+          required: false
+          schema:
+            type: integer
+            default: 14
+            minimum: 1
+            maximum: 365
+      responses:
+        "200":
+          description: Event trend rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RowsResponse"
+        "400":
+          $ref: "#/components/responses/LocationRequired"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/NotConfigured"
+  /export:
+    get:
+      summary: BigQuery export status
+      operationId: getExport
+      description: >
+        Return the agency's BigQuery export dataset status. Agency-wide — this
+        is the only route that does not require a bound location. Requires an
+        agency (`ak_`) key; secret keys receive `403`.
+      responses:
+        "200":
+          description: BigQuery export dataset status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Route requires an agency (`ak_`) key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No BigQuery export provisioned for the agency
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >
+        Agency key (`ak_`) or location secret key (`sk_`) as a bearer token.
+        Format: `Bearer ak_...` or `Bearer sk_...`.
+    AgencyKeyQuery:
+      type: apiKey
+      in: query
+      name: ak
+      description: Agency key passed as a query parameter. Prefer the `Authorization` header.
+    SecretKeyQuery:
+      type: apiKey
+      in: query
+      name: sk
+      description: Location secret key passed as a query parameter. Prefer the `Authorization` header.
+  parameters:
+    LocationIdHeader:
+      name: X-Location-Id
+      in: header
+      required: false
+      description: >
+        Location to scope the request to. Required for agency (`ak_`) keys on
+        the event routes. Ignored for secret (`sk_`) keys, which resolve their
+        own location, and not used by `/export`.
+      schema:
+        type: string
+    LocationIdQuery:
+      name: location_id
+      in: query
+      required: false
+      description: >
+        Alternative to the `X-Location-Id` header for agency (`ak_`) keys.
+        Ignored for secret (`sk_`) keys.
+      schema:
+        type: string
+    DateFrom:
+      name: date_from
+      in: query
+      required: false
+      description: Start date (`YYYY-MM-DD`).
+      schema:
+        type: string
+        format: date
+    DateTo:
+      name: date_to
+      in: query
+      required: false
+      description: End date (`YYYY-MM-DD`).
+      schema:
+        type: string
+        format: date
+  responses:
+    Unauthorized:
+      description: Missing, malformed, or invalid key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: >
+        Access denied — location not linked to the agency
+        (`location_not_linked`) or the location has HIPAA mode enabled
+        (`hipaa_restricted`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    LocationRequired:
+      description: An agency key called an event route without binding a location
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    RateLimited:
+      description: >
+        Rate limit exceeded (120 requests per 10 seconds, per location).
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying.
+          schema:
+            type: integer
+        X-RateLimit-Limit:
+          description: Request ceiling for the window.
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          description: Requests remaining in the current window.
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    UpstreamError:
+      description: An upstream data service failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotConfigured:
+      description: The analytics service is not configured for this deployment
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    RowsResponse:
+      type: object
+      description: Generic Tinybird result envelope for analytics rows.
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        rows:
+          type: integer
+          description: Number of rows returned.
+    ExportResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            dataset:
+              type: string
+              description: Fully-qualified BigQuery dataset (`mythic-data.<dataset_name>`).
+              example: mythic-data.agency_acme
+            tables:
+              type: array
+              items:
+                type: string
+              example: ["events"]
+            location_count:
+              type: integer
+              description: Number of locations included in the export dataset.
+            status:
+              type: string
+              description: Provisioning status of the export dataset.
+            provisioned_at:
+              type: string
+              format: date-time
+              nullable: true
+            updated_at:
+              type: string
+              format: date-time
+              nullable: true
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code.
+              example: unauthorized
+            message:
+              type: string
+              description: Human-readable error message.
+              example: Missing authorization

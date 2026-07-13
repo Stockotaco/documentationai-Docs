@@ -1,66 +1,85 @@
 ---
 title: Builder API
 description: >-
-  Build insights, dashboards, and visual canvases with the Mythic Analytics
-  Builder API.
+  Build insights, dashboards, and visual funnel canvases for a client with the
+  Mythic Analytics Builder API.
 ---
 
 ## Overview
 
-The Builder API powers the Mythic Analytics visual workspace. Use it to create insights with saved queries, assemble dashboards with configurable layouts, and build canvas-based analytics flows with tracked nodes and edges.
+The Builder API powers the Mythic Analytics visual workspace. Use it to create insights (saved analytics queries with visualization settings), assemble dashboards from those insights, build canvas funnel maps with tracked nodes and edges, and run SQL against a client's data through server-held credentials.
+
+Every resource is scoped to a single client **location**. You authenticate with a Builder key — an agency key (`ak_`) for full read/write across all linked locations, or a viewer key (`sk_`) for read-only access to one.
 
 ## Base URL
 
-All endpoints share the same base URL and version prefix.
+The Builder API is mounted under `/builder`.
 
 ```text
-https://api.mythic-analytics.com/api/v1
+https://mythic-analytics.gulp.workers.dev/builder
 ```
+
+## Authentication
+
+Pass a Builder key as a bearer token, or as an `ak`/`sk` query parameter (useful for iframe embeds). See [Authentication](/builder-api/authentication) for the full model, roles, and the `location_id` scoping rule.
+
+<ParamField header="Authorization" param-type="string" required="false" deprecated="false">
+  Bearer token. Format: `Bearer ak_...` (agency) or `Bearer sk_...` (viewer).
+</ParamField>
+
+<ParamField query="ak" param-type="string" required="false" deprecated="false">
+  Agency key as a query parameter. Alternative to the `Authorization` header.
+</ParamField>
+
+<ParamField query="sk" param-type="string" required="false" deprecated="false">
+  Viewer key as a query parameter. Alternative to the `Authorization` header.
+</ParamField>
+
+<Callout kind="info">
+  Agency keys (`ak_`) must add `?location_id=<client>` to scope a request to one of their linked locations. Viewer keys (`sk_`) are already bound to a single location, so `location_id` is ignored.
+</Callout>
 
 ## Response envelope
 
-All endpoints return a JSON envelope.
+The Builder does not use a single fixed envelope. The shape depends on the operation:
 
-<ResponseField name="success" field-type="boolean" required="true" deprecated="false">
-  Whether the request succeeded.
-</ResponseField>
-
-<ResponseField name="data" field-type="object|array|null" required="false" deprecated="false">
-  Resource payload. Shape depends on the endpoint.
-</ResponseField>
-
-<ResponseField name="count" field-type="integer" required="false" deprecated="false">
-  Total number of matching resources. Present on list endpoints.
-</ResponseField>
-
-<ResponseField name="error" field-type="string|null" required="false" deprecated="false">
-  Error message on failed requests.
-</ResponseField>
+- **Reads** return `{ "data": ... }` — an array for list endpoints, an object for single-resource endpoints. There is no top-level `success` or `count`.
+- **Writes that return a row** (create/update) return `{ "data": { ... } }`.
+- **Writes that return no row** (delete, patch metadata, toggle) return `{ "success": true }`. Some lifecycle writes add a field, e.g. `{ "success": true, "version": 4 }`.
+- **Query endpoints** return `{ "success": true, "data": [...], "rows": <n>, ... }`.
+- **Errors** return `{ "error": "<message>" }` with the matching HTTP status. Query failures may also include `"success": false`.
 
 ## Key concepts
 
 | Concept | Description |
 |---------|-------------|
-| **Insight** | A saved analytics query with visualization settings |
-| **Dashboard** | A configurable grid of insights with layout control |
-| **Canvas** | A visual node-and-edge workspace for mapping analytics flows |
-| **Node** | A canvas element representing a page, event, or conversion point |
-| **Edge** | A connection between two canvas nodes showing user flow |
-| **Data Connection** | An external data source available for queries |
+| **Location** | A client tenant. Every Builder resource belongs to exactly one location. |
+| **Insight** | A saved analytics query with a visualization type and `config`. |
+| **Dashboard** | A responsive grid of insights. Can be made public via a share token. |
+| **Canvas** | A visual node-and-edge map of a funnel, with versioning. |
+| **Node** | A canvas element (`page`, `action`, `decision`, or `offsite`) with URL patterns and events. |
+| **Edge** | A directed connection between two nodes describing funnel flow. |
+| **Data connection** | The engine (Tinybird or BigQuery) and dataset a location's queries run against. |
 
-## Versioning
+## Embedding
 
-Canvases support full version history. Each publish creates an immutable version snapshot. You can list versions and rollback to any previous version.
+`GET /builder?ak=ak_...` (or `?sk=sk_...`) returns an HTML page that loads the admin workspace inside a sandboxed iframe, rather than JSON. It accepts theming parameters (`theme`, `transparent`, `hideHeader`, `branding`, `theme_primary`, `theme_secondary`, `theme_heading_font`, `theme_body_font`, `accent`, `font`, `style`) and an optional `page` (default `insights`). This endpoint is for embedding the UI, not for programmatic API access.
+
+## Canvas versioning
+
+Saving a canvas (`POST /canvases/{id}/save`) bumps its `version` and records an immutable snapshot. Publishing marks the current version as live (`published_version`). You can list versions and roll back by replaying a version's snapshot.
 
 ## Error handling
 
 | Status | Meaning |
 |--------|---------|
-| `400` | Invalid JSON, missing required fields, or validation error |
-| `401` | Admin key missing or invalid |
-| `404` | Resource not found |
-| `500` | Internal server error |
-| `502` | Upstream integration error (e.g., GHL API) |
+| `400` | Invalid JSON, missing required fields, or missing `?location_id=` for an agency key |
+| `401` | Authorization key (or public share token) missing or invalid |
+| `403` | Write attempted without an agency key, location not linked to the agency, or a query not scoped to the authorized location |
+| `404` | Resource not found for the resolved location |
+| `500` | Internal or query execution error |
+| `502` | Upstream error (Tinybird, or the GoHighLevel proxy) |
+| `503` | Requested query engine not configured on the server |
 
 <Callout kind="info">
   Check both the HTTP status code and the `error` field in the response body for programmatic error handling.

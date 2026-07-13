@@ -2,44 +2,47 @@ openapi: "3.0.0"
 info:
   version: 1.0.0
   title: Data Connections
-  description: Retrieve available data connections for the Mythic Analytics Builder.
+  description: >-
+    List the data connections registered for a client location. A data
+    connection defines the engine (Tinybird or BigQuery) and dataset that
+    insights and queries run against.
 servers:
-  - url: https://api.mythic-analytics.com/api/v1
+  - url: https://mythic-analytics.gulp.workers.dev/builder
 security:
   - BearerAuth: []
-  - AdminKeyQuery: []
+  - AgencyKeyQuery: []
+  - SecretKeyQuery: []
 paths:
   /data-connections:
     get:
       summary: List data connections
       operationId: listDataConnections
       description: >
-        Retrieve all available data connections. Data connections define
-        external data sources (databases, APIs, warehouses) that can be
-        used in queries and insights.
+        List all data connections for the resolved location. Readable with an
+        agency key (`ak_`, requires `?location_id=`) or a viewer key (`sk_`).
       parameters:
-        - name: type
-          in: query
-          description: Filter by connection type (e.g., `postgres`, `bigquery`, `api`).
-          required: false
-          schema:
-            type: string
-        - name: status
-          in: query
-          description: Filter by connection status.
-          required: false
-          schema:
-            type: string
-            enum: ["active", "inactive", "error"]
+        - $ref: "#/components/parameters/LocationId"
       responses:
         "200":
-          description: List of data connections
+          description: Data connections for the location
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/DataConnectionListResponse"
+        "400":
+          description: Missing `?location_id=` when using an agency key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Authorization key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Database error
           content:
             application/json:
               schema:
@@ -49,64 +52,74 @@ components:
     BearerAuth:
       type: http
       scheme: bearer
-      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
-    AdminKeyQuery:
+      description: >-
+        Builder key as a bearer token. Use an agency key (`Bearer ak_...`) or a
+        viewer key (`Bearer sk_...`).
+    AgencyKeyQuery:
       type: apiKey
       in: query
-      name: admin_key
-      description: Alternative to the Authorization header for server-to-server scenarios.
+      name: ak
+      description: "Agency key passed as a query parameter. Format: `ak_...`."
+    SecretKeyQuery:
+      type: apiKey
+      in: query
+      name: sk
+      description: "Viewer (secret) key passed as a query parameter. Format: `sk_...`."
+  parameters:
+    LocationId:
+      name: location_id
+      in: query
+      required: false
+      description: >-
+        Client location to scope the request to. Required when authenticating
+        with an agency key (`ak_`). Ignored for viewer keys (`sk_`).
+      schema:
+        type: string
+        example: acme-retail
   schemas:
     DataConnection:
       type: object
       properties:
         id:
           type: string
-          example: dc_7kH3nPqR
+          format: uuid
+        location_id:
+          type: string
+          example: acme-retail
         name:
           type: string
-          example: Production PostgreSQL
-        type:
+          example: Mythic Analytics (Tinybird)
+        engine:
           type: string
-          description: Connection type.
-          example: postgres
-        status:
-          type: string
-          enum: ["active", "inactive", "error"]
-          example: active
-        last_checked:
-          type: string
-          format: date-time
-          description: Last health check timestamp.
-          example: "2024-06-15T12:00:00.000Z"
+          enum: [tinybird, bigquery]
+          example: tinybird
+        config:
+          type: object
+          description: >-
+            Engine-specific settings. For Tinybird, e.g.
+            `{ "datasource": "pubsub_events_analytics_mv" }`; for BigQuery, e.g.
+            `{ "project": "...", "dataset": "...", "table": "..." }`.
+          example:
+            datasource: pubsub_events_analytics_mv
+        is_default:
+          type: boolean
+          example: true
         created_at:
           type: string
           format: date-time
-          example: "2024-03-01T10:00:00.000Z"
+        updated_at:
+          type: string
+          format: date-time
     DataConnectionListResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: true
         data:
           type: array
           items:
             $ref: "#/components/schemas/DataConnection"
-        count:
-          type: integer
-          example: 3
     ErrorResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: false
-        data:
-          nullable: true
-          example: null
         error:
           type: string
           example: Unauthorized
-        count:
-          type: integer
-          example: 0

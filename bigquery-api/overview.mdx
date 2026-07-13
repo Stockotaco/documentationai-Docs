@@ -1,0 +1,97 @@
+---
+title: BigQuery Export
+description: >-
+  Provision per-agency BigQuery datasets of raw events and identity state, and
+  run SQL queries against BigQuery through the Mythic Analytics admin API.
+---
+
+## Overview
+
+BigQuery Export gives each agency its own BigQuery dataset of raw analytics events plus resolved identity, session, and attribution state — the substrate for building custom attribution pipelines and warehouse-native reporting. This API provisions and reconciles those exports and runs ad-hoc SQL queries server-side.
+
+There are two surfaces:
+
+| Surface | Purpose |
+|---------|---------|
+| **Export management** | Provision, inspect, and reconcile an agency's BigQuery dataset and its views. |
+| **Query proxy** | Execute a read SQL query against BigQuery and return rows, schema, and job metadata. |
+
+## Base URL
+
+All endpoints share the same base URL. BigQuery routes are mounted at the worker root under `/admin`.
+
+```text
+https://mythic-analytics.gulp.workers.dev
+```
+
+## How provisioning works
+
+Provisioning creates a per-agency dataset and populates it with views filtered to the agency's linked locations. Agency principals get `READER` on the dataset only — never on the central tables.
+
+<Steps>
+  <Step title="Dataset created">
+    A dataset named `mythic-data.agency_<id>` is created if it does not exist. BigQuery dataset names cannot contain dashes, so every dash in the agency UUID is replaced with an underscore — agency `550e8400-e29b-41d4-a716-446655440000` becomes `agency_550e8400_e29b_41d4_a716_446655440000`.
+  </Step>
+  <Step title="Views built">
+    An `events` view is always created, filtered to the agency's locations. Snapshot and pre-joined views are added when their source tables exist.
+  </Step>
+  <Step title="Access authorized">
+    The agency dataset is authorized over the central events dataset with a single authorized-dataset grant, and the supplied principals are granted `READER`.
+  </Step>
+</Steps>
+
+Provisioning is idempotent — repeat calls re-derive the location list and refresh the views. Reconciliation runs the same logic without changing principals; call it after linking or unlinking locations.
+
+## Views
+
+The dataset contains up to seven views. `events` is always present; the rest appear once the identity-processor snapshot and derived tables exist.
+
+| View | Contents | Freshness |
+|------|----------|-----------|
+| `events` | One row per SDK event, filtered to the agency's locations | Real-time (minutes) |
+| `person_events` | `events` with a resolved `person_id` and merge tombstones collapsed | Real-time (minutes) |
+| `sessions` | One row per session with `person_id` and entry attribution | Daily |
+| `attribution_default` | Lifetime first-touch and last-touch channel per person | Daily |
+| `person_profiles` | Latest daily person snapshot (canonical + tombstoned) | Daily |
+| `identities` | Latest daily identity-mapping snapshot | Daily |
+| `person_merges` | Full merge audit log | Daily |
+
+<Callout kind="alert">
+  The central `events` table enforces a partition filter. Every query against `events` and `person_events` must filter on `event_timestamp`, and `sessions` must filter on `started_at`, or the query is rejected.
+</Callout>
+
+## Billing
+
+BigQuery bills queries to the project that runs the job. Agency principals can read the dataset but cannot create jobs in `mythic-data`, so they must set their own GCP project as the billing project. The query proxy accepts an optional `projectId` to control which project a proxied query bills to; it falls back to the server-configured billing project when omitted.
+
+## Response envelope
+
+Export-management endpoints return a JSON envelope.
+
+<ResponseField name="success" field-type="boolean" required="true" deprecated="false">
+  Whether the request succeeded.
+</ResponseField>
+
+<ResponseField name="data" field-type="object" required="false" deprecated="false">
+  Resource payload. Returned by the export-status endpoint.
+</ResponseField>
+
+<ResponseField name="error" field-type="string" required="false" deprecated="false">
+  Error message on failed requests.
+</ResponseField>
+
+The query proxy returns query results directly alongside `success` (see the Query endpoint reference).
+
+## Error handling
+
+| Status | Meaning |
+|--------|---------|
+| `400` | Invalid JSON, missing `sql` field, a BigQuery query error, or reconcile failed |
+| `401` | Admin key missing or invalid |
+| `404` | Agency not found, or no export provisioned |
+| `500` | Provisioning or query execution failed |
+| `503` | BigQuery not configured on the server |
+
+<Callout kind="info">
+  Check both the HTTP status code and the `error` field in the response body for programmatic error handling.
+</Callout>

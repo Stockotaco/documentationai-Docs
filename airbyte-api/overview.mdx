@@ -1,0 +1,117 @@
+---
+title: Airbyte Sync API
+description: >-
+  Provision a BigQuery destination and manage per-client ad-platform data
+  connections, syncs, schedules, and sync health through the Airbyte Sync API.
+---
+
+## Overview
+
+The Airbyte Sync API lets an agency stand up managed data pipelines for its clients without touching the Airbyte UI. You provision a single BigQuery destination for the agency, then create one connection per client and ad platform. Mythic manages the underlying Airbyte workspace, sources, and connections on your behalf and records every sync outcome.
+
+Behind the scenes each connection wires an Airbyte source (Google Ads, Meta Ads, and others) to your agency's BigQuery destination using GCS staging. Sync results stream back into an immutable event log that powers the statistics and health endpoints.
+
+## Base URL
+
+All endpoints share the same base URL.
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/airbyte
+```
+
+## Key concepts
+
+| Concept | Description |
+|---------|-------------|
+| **Config** | Your agency's Airbyte setup — workspace, BigQuery destination, and staging bucket. One per agency. |
+| **Platform** | A supported source (e.g. `google_ads`, `meta_ads`) with its required fields and default streams. |
+| **Connection** | A client-scoped pipeline from a platform source into your BigQuery destination. |
+| **Stream** | A table/entity within a platform (e.g. `campaigns`), synced incrementally or by full refresh. |
+| **Sync event** | An immutable record of one completed sync — outcome, record and byte counts, timing. |
+
+## Typical workflow
+
+<Steps>
+  <Step title="Provision the destination" titleType="h3">
+    Call `POST /config/provision` once with your BigQuery project, dataset, and GCP service-account credentials. This creates the agency workspace and destination.
+  </Step>
+  <Step title="Discover platforms" titleType="h3">
+    Call `GET /platforms` to see supported sources and the fields each one requires.
+  </Step>
+  <Step title="Create a connection" titleType="h3">
+    Call `POST /connections` with a `client_id`, `platform`, and the platform's `source_config`. The client must belong to your agency.
+  </Step>
+  <Step title="Sync and monitor" titleType="h3">
+    Trigger a sync with `POST /connections/{id}/sync`, adjust cadence with `PATCH /connections/{id}/schedule`, and review outcomes via `/sync-events`, `/stats`, and `/health`.
+  </Step>
+</Steps>
+
+## Response envelope
+
+Responses are JSON. Most endpoints wrap their payload in a `data` field; write and action endpoints add a `success` flag; list endpoints for sync events add pagination fields.
+
+<ResponseField name="data" field-type="object|array" required="false" deprecated="false">
+  Resource payload. Shape depends on the endpoint.
+</ResponseField>
+
+<ResponseField name="success" field-type="boolean" required="false" deprecated="false">
+  Present on provision, sync, schedule, and delete responses.
+</ResponseField>
+
+<ResponseField name="total" field-type="integer" required="false" deprecated="false">
+  Total matching sync events. Present on `GET /sync-events` alongside `limit` and `offset`.
+</ResponseField>
+
+<ResponseField name="error" field-type="string" required="false" deprecated="false">
+  Error message. Present only on failed requests.
+</ResponseField>
+
+Example error response:
+
+```json
+{
+  "error": "Missing authorization"
+}
+```
+
+## Supported platforms
+
+The platform catalog is returned live by `GET /platforms`. At the time of writing it includes:
+
+| Key | Label |
+|-----|-------|
+| `google_ads` | Google Ads |
+| `meta_ads` | Meta Ads (Facebook) |
+| `bing_ads` | Bing Ads (Microsoft) |
+| `tiktok_ads` | TikTok Ads |
+| `salesforce` | Salesforce |
+
+<Callout kind="tip">
+  Always read `requiredFields` and `defaultStreams` from `GET /platforms` rather than hard-coding them — the catalog is the source of truth for what each connection needs.
+</Callout>
+
+## Sync frequency
+
+Connections sync on one of a fixed set of cadences. Cron-based cadences run on a shared schedule; `manual` disables automatic syncing so you control it with `POST /connections/{id}/sync`.
+
+| Value | Cadence |
+|-------|---------|
+| `24h` | Once daily |
+| `12h` | Every 12 hours |
+| `6h` | Every 6 hours |
+| `manual` | No automatic syncs |
+
+## Error handling
+
+| Status | Meaning |
+|--------|---------|
+| `400` | Missing required fields, unsupported platform, or workspace not provisioned |
+| `401` | Authorization missing or invalid |
+| `403` | Write attempted with a read-only `sk_` key, or client not linked to the agency |
+| `404` | Config or connection not found (or not owned by the calling agency) |
+| `503` | Server-side encryption key not configured |
+| `500` | Internal server error |
+
+<Callout kind="info">
+  Check both the HTTP status code and the `error` field in the response body for programmatic error handling.
+</Callout>

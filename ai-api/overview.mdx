@@ -1,0 +1,50 @@
+---
+title: AI Proxy
+description: >-
+  Server-side proxy to Anthropic Claude and Google Gemini. Provider keys stay on
+  the worker; browser clients authenticate with a publishable key.
+---
+
+## Overview
+
+The AI Proxy is a browser-facing gateway that forwards chat and action requests to a large language model provider (Anthropic Claude or Google Gemini) without exposing provider API keys to the client. The worker holds the provider credentials, resolves the caller's publishable key to a location, and blocks HIPAA-enabled locations.
+
+Unlike the resource and admin APIs, the AI Proxy authenticates with a **publishable key** (`pk_...`) sent in a header — the same key the browser SDK uses — so it is safe to call from client-side code.
+
+## Base URL
+
+The AI Proxy is mounted at the worker root under `/ai`.
+
+```text
+https://mythic-analytics.gulp.workers.dev
+```
+
+## Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /ai/chat` | Streaming chat completion. Returns the provider's native server-sent event stream (`text/event-stream`), not a JSON envelope. |
+| `POST /ai/action` | Named server-side actions (`firecrawl_extract`, `write_config`). |
+
+## Providers
+
+<ParamField body="provider" param-type="string" required="true" deprecated="false">
+  `anthropic` or `gemini`. The worker injects the matching provider key and, for
+  Gemini, converts the Anthropic-style message and tool format on the fly.
+</ParamField>
+
+Default models are `claude-sonnet-4-20250514` (Anthropic) and `gemini-2.0-flash` (Gemini); override with the optional `model` field.
+
+## Error handling
+
+| Status | Meaning |
+|--------|---------|
+| `400` | Invalid JSON, missing `provider`/`messages`, or unknown action |
+| `401` | Missing or invalid publishable key |
+| `403` | Location inactive, or AI proxy blocked for a HIPAA location |
+| `500` | Provider key not configured, or upstream provider error |
+
+<Callout kind="info">
+  `/ai/chat` streams the provider response as server-sent events. Consume it as a
+  stream — do not wait for a single JSON body.
+</Callout>

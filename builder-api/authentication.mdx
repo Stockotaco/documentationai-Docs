@@ -1,30 +1,110 @@
 ---
 title: Authentication
 description: >-
-  Authenticate requests to the Builder API using an admin API key or
-  publishable key for public query endpoints.
+  Authenticate to the Builder API with an agency key (ak_) or viewer key (sk_),
+  and use share tokens for public embeds.
 ---
 
-## Authentication
+## Keys and roles
 
-Most Builder API endpoints require an admin API key. Pass it as a bearer token or query parameter.
+The Builder API uses two key types, both resolved server-side against Supabase. Keys match the pattern `^(ak_|sk_)[a-f0-9]{32,64}$`.
 
-<ParamField header="Authorization" param-type="string" required="true" deprecated="false">
-  Bearer token. Format: `Bearer YOUR_ADMIN_KEY`.
+| Key | Role | Access |
+|-----|------|--------|
+| `ak_...` | **agency** | Full read/write (CRUD) across every location linked to the agency. Required for all write operations. |
+| `sk_...` | **viewer** | Read-only, scoped to the single location the key belongs to. |
+
+Write endpoints (`POST`, `PATCH`, `DELETE`) require an agency key and reject viewer keys with `403`. Read endpoints accept either.
+
+## Passing the key
+
+Send the key as a bearer token, or as a query parameter (convenient for iframe embeds).
+
+<ParamField header="Authorization" param-type="string" required="false" deprecated="false">
+  Bearer token. Format: `Bearer ak_...` or `Bearer sk_...`.
 </ParamField>
 
-<ParamField query="admin_key" param-type="string" required="false" deprecated="false">
-  Alternative to the header for server-to-server or tooling scenarios. Do not expose in client-side code.
+<ParamField query="ak" param-type="string" required="false" deprecated="false">
+  Agency key as a query parameter.
 </ParamField>
 
-## Public query endpoint
+<ParamField query="sk" param-type="string" required="false" deprecated="false">
+  Viewer key as a query parameter.
+</ParamField>
 
-The `POST /public/query` endpoint accepts a client publishable key instead of an admin key. This allows client-side dashboards to query their own data.
+## Location scoping
 
-<ParamField header="X-Publishable-Key" param-type="string" required="true" deprecated="false">
-  Client publishable key. Format: `pk_...`. Scopes the query to the associated client.
+A viewer key is bound to one location, so requests are automatically scoped. An agency key spans many locations, so location-scoped endpoints require a `location_id` query parameter identifying which linked location to act on.
+
+<ParamField query="location_id" param-type="string" required="false" deprecated="false">
+  The client location to scope the request to. **Required with an agency key** on location-scoped endpoints; the location must be linked to that agency. Ignored with a viewer key.
+</ParamField>
+
+<Callout kind="info">
+  With an agency key, an agency-linked location can also be passed to the embed page as a second key: `GET /builder?ak=ak_...&sk=sk_...` scopes the embedded workspace to that location.
+</Callout>
+
+## Validate a key
+
+`GET /validate` returns the role and what the key can reach. Use it to bootstrap a session.
+
+<CodeGroup>
+```bash Request
+curl "https://mythic-analytics.gulp.workers.dev/builder/validate" \
+  -H "Authorization: Bearer ak_00000000000000000000000000000000"
+```
+</CodeGroup>
+
+An agency key returns its linked locations:
+
+```json Agency response
+{
+  "role": "agency",
+  "agencyId": "8f3c…",
+  "agencyName": "Vision Labs",
+  "locations": [
+    { "id": "acme-retail", "name": "Acme Retail", "domain": "acme-retail.com", "business_name": "Acme Retail Co.", "status": true, "api_metadata": {} }
+  ],
+  "locationId": null,
+  "locationName": null
+}
+```
+
+A viewer key returns its single location:
+
+```json Viewer response
+{
+  "role": "viewer",
+  "locationId": "acme-retail",
+  "locationName": "Acme Retail",
+  "apiMetadata": {}
+}
+```
+
+## List agency locations
+
+`GET /locations` lists the locations linked to an agency key. It requires an agency key (`403` otherwise). Secret keys in the response are **masked** (`sk_xxxx…xxxx`) — the Builder runs in the browser, and a `sk_` key grants person-level reads on the data API, so full keys are only issued over server-side channels (the admin API or a rotate-secret endpoint).
+
+```json Response
+{
+  "data": [
+    { "id": "acme-retail", "name": "Acme Retail", "domain": "acme-retail.com", "business_name": "Acme Retail Co.", "status": true, "secret_key": "sk_a1b2…9f0e" }
+  ]
+}
+```
+
+## Public embeds (share tokens)
+
+`POST /public/query` runs before key auth and takes no `ak_`/`sk_`. Instead it accepts a share token that resolves to a location:
+
+<ParamField header="X-Dashboard-Token" param-type="string" required="false" deprecated="false">
+  A dashboard's `public_token`. The dashboard must have `is_public = true`.
+</ParamField>
+
+<ParamField header="X-Embed-Token" param-type="string" required="false" deprecated="false">
+  An insight's `embed_token`. The insight must have `is_embeddable = true`.
 </ParamField>
 
 <Callout kind="alert">
-  Never expose the admin key in client-side JavaScript, public repositories, or logs. Use the publishable key for client-facing dashboards.
+  Never expose an agency key (`ak_`) in client-side code, public repositories, or logs. For client-facing dashboards, publish the dashboard or insight and use its share token with `POST /public/query`.
 </Callout>

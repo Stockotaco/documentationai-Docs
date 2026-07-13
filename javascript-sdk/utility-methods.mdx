@@ -39,6 +39,15 @@ Returns `true` if the current user agent is detected as a bot.
 if (mythic.isBot()) return; // Skip tracking for bots
 ```
 
+### `getPageContext()`
+
+Returns the page context extracted by the framework extractor (route name, funnel/page IDs, etc.), or `undefined` if `auto_framework_extract` is disabled or no framework was detected.
+
+```javascript
+const ctx = mythic.getPageContext();
+// e.g. { $framework: 'nuxt', $route_path: '/products/123', funnel_id: '...' }
+```
+
 ### `debug(enabled?)`
 
 Toggle debug logging. When enabled, the SDK logs queued events, network requests, and configuration decisions to the console.

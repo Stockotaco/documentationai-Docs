@@ -1,169 +1,120 @@
 openapi: "3.0.0"
 info:
   version: 1.0.0
-  title: GHL Integration & Dashboard Generation
-  description: GoHighLevel integration and AI-powered dashboard generation for the Mythic Analytics Builder.
+  title: GoHighLevel Funnels
+  description: >-
+    List funnels from the GoHighLevel account linked to a client location. The
+    Builder proxies this request server-side using the client's stored GHL
+    location ID and proxy API key.
 servers:
-  - url: https://api.mythic-analytics.com/api/v1
+  - url: https://mythic-analytics.gulp.workers.dev/builder
 security:
   - BearerAuth: []
-  - AdminKeyQuery: []
+  - AgencyKeyQuery: []
+  - SecretKeyQuery: []
 paths:
   /ghl/funnels:
     get:
-      summary: List GHL funnels
+      summary: List GoHighLevel funnels
       operationId: listGhlFunnels
       description: >
-        Retrieve funnels from a connected GoHighLevel location. Requires
-        a valid GHL integration configured for the account.
+        List funnels for the resolved location's linked GoHighLevel account.
+        The client's `ghl_location_id` and `proxy_api_key` (stored on the
+        location record) are used to authenticate against the GHL Funnels API.
+        The GHL response is returned verbatim. Agency keys (`ak_`) must pass
+        `?location_id=`.
       parameters:
-        - name: location_id
+        - $ref: "#/components/parameters/LocationId"
+        - name: limit
           in: query
-          description: GoHighLevel location identifier.
-          required: true
+          description: Maximum funnels to return. Default `50`.
+          required: false
           schema:
             type: string
+            default: "50"
+        - name: offset
+          in: query
+          description: Number of funnels to skip. Default `0`.
+          required: false
+          schema:
+            type: string
+            default: "0"
       responses:
         "200":
-          description: List of GHL funnels
+          description: >-
+            Funnel list, proxied verbatim from the GoHighLevel Funnels API. The
+            exact shape follows GHL's `GET /funnels/funnel/list` response.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/GhlFunnelListResponse"
         "400":
-          description: Missing location_id or invalid parameters
+          description: >-
+            Missing `?location_id=` (agency key), no GHL Location ID configured
+            for the client, or no proxy API key configured for the client.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Authorization key missing or invalid
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "502":
-          description: GHL API unavailable or integration error
+        "500":
+          description: Failed to reach the GHL proxy
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /ghl/funnels/import:
-    post:
-      summary: Import GHL funnel
-      operationId: importGhlFunnel
-      description: >
-        Import a GoHighLevel funnel as a canvas with nodes automatically
-        mapped to funnel steps. Creates a new canvas and populates it with
-        the funnel's page structure.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ImportFunnelRequest"
-      responses:
-        "201":
-          description: Funnel imported as canvas
+        default:
+          description: >-
+            On a non-2xx from GoHighLevel, the upstream status code is passed
+            through with an error envelope.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ImportFunnelResponse"
-        "400":
-          description: Invalid JSON or validation error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Funnel not found in GHL
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "502":
-          description: GHL API unavailable or integration error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /generate-dashboard:
-    post:
-      summary: Generate dashboard
-      operationId: generateDashboard
-      description: >
-        Use AI to automatically generate a dashboard with insights based on
-        a natural language prompt. The generated dashboard includes relevant
-        metrics, visualizations, and layout.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/GenerateDashboardRequest"
-      responses:
-        "201":
-          description: Dashboard generated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/GenerateDashboardResponse"
-        "400":
-          description: Invalid JSON or missing prompt
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /platform-config:
-    get:
-      summary: Get platform config
-      operationId: getPlatformConfig
-      description: >
-        Retrieve the current platform configuration including enabled
-        features, limits, and integration settings.
-      responses:
-        "200":
-          description: Platform configuration
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PlatformConfigResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "#/components/schemas/GhlUpstreamError"
 components:
   securitySchemes:
     BearerAuth:
       type: http
       scheme: bearer
-      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
-    AdminKeyQuery:
+      description: >-
+        Builder key as a bearer token. Use an agency key (`Bearer ak_...`) or a
+        viewer key (`Bearer sk_...`).
+    AgencyKeyQuery:
       type: apiKey
       in: query
-      name: admin_key
-      description: Alternative to the Authorization header for server-to-server scenarios.
+      name: ak
+      description: "Agency key passed as a query parameter. Format: `ak_...`."
+    SecretKeyQuery:
+      type: apiKey
+      in: query
+      name: sk
+      description: "Viewer (secret) key passed as a query parameter. Format: `sk_...`."
+  parameters:
+    LocationId:
+      name: location_id
+      in: query
+      required: false
+      description: >-
+        Client location to scope the request to. Required when authenticating
+        with an agency key (`ak_`). Ignored for viewer keys (`sk_`). This is the
+        Mythic location ID, not the GoHighLevel location ID.
+      schema:
+        type: string
+        example: acme-retail
   schemas:
     GhlFunnel:
       type: object
+      description: >-
+        A GoHighLevel funnel. Fields are defined by the GHL Funnels API and
+        passed through unchanged; the properties below are representative.
       properties:
-        id:
+        _id:
           type: string
-          example: fnl_8kN2mPqR
         name:
           type: string
           example: Product Launch Funnel
@@ -178,130 +129,31 @@ components:
                 type: string
               url:
                 type: string
-                format: uri
-        location_id:
-          type: string
-          example: loc_5kN2mPqR
-    ImportFunnelRequest:
-      type: object
-      required:
-        - funnel_id
-        - location_id
-      properties:
-        funnel_id:
-          type: string
-          description: GHL funnel identifier to import.
-          example: fnl_8kN2mPqR
-        location_id:
-          type: string
-          description: GHL location identifier.
-          example: loc_5kN2mPqR
-        canvas_name:
-          type: string
-          description: Optional name for the generated canvas. Defaults to the funnel name.
-    GenerateDashboardRequest:
-      type: object
-      required:
-        - prompt
-        - client_id
-      properties:
-        prompt:
-          type: string
-          description: Natural language description of the desired dashboard.
-          example: Create a marketing overview dashboard showing traffic sources, conversion rates, and top landing pages.
-        client_id:
-          type: string
-          description: Client identifier to generate the dashboard for.
-          example: acme-retail
-    PlatformConfig:
-      type: object
-      properties:
-        features:
-          type: object
-          description: Feature flags and enabled capabilities.
-          example:
-            canvases: true
-            ai_generation: true
-            ghl_integration: true
-        limits:
-          type: object
-          description: Platform-level limits.
-          example:
-            max_canvases: 50
-            max_insights: 200
-            max_dashboards: 25
-        integrations:
-          type: object
-          description: Configured integration settings.
-          example:
-            ghl_connected: true
+              sequence:
+                type: integer
     GhlFunnelListResponse:
       type: object
+      description: Proxied GoHighLevel funnel list response.
       properties:
-        success:
-          type: boolean
-          example: true
-        data:
+        funnels:
           type: array
           items:
             $ref: "#/components/schemas/GhlFunnel"
         count:
           type: integer
           example: 5
-    ImportFunnelResponse:
+    GhlUpstreamError:
       type: object
       properties:
-        success:
-          type: boolean
-          example: true
-        data:
-          type: object
-          properties:
-            canvas_id:
-              type: string
-              description: ID of the newly created canvas.
-              example: cvs_9xP3qLmN
-            nodes_created:
-              type: integer
-              example: 5
-            edges_created:
-              type: integer
-              example: 4
-    GenerateDashboardResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
-        data:
-          type: object
-          properties:
-            dashboard_id:
-              type: string
-              example: dsh_4mK9pLrT
-            insights_created:
-              type: integer
-              example: 6
-    PlatformConfigResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
-        data:
-          $ref: "#/components/schemas/PlatformConfig"
+        error:
+          type: string
+          example: "GHL API error: 401"
+        details:
+          type: string
+          description: Raw error body returned by GoHighLevel.
     ErrorResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: false
-        data:
-          nullable: true
-          example: null
         error:
           type: string
-          example: Unauthorized
-        count:
-          type: integer
-          example: 0
+          example: No GHL Location ID configured for this client

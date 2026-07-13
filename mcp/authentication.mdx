@@ -1,15 +1,15 @@
 ---
 title: Authentication
 description: >-
-  Authenticate requests to the MCP Platform API using an admin API key for
-  management endpoints, or an MCP API key for gateway tool execution.
+  Authenticate management requests with the platform admin key, and gateway
+  tool calls with a scoped mcp_ API key.
 ---
 
 ## Management API authentication
 
-Management endpoints (servers, tools, access control, API keys) require an admin API key.
+Every endpoint under `/admin/mcp` (servers, tools, agency access, API keys) requires the platform `ADMIN_KEY`. Provide it either as a bearer token or as a query parameter.
 
-<ParamField header="Authorization" param-type="string" required="true" deprecated="false">
+<ParamField header="Authorization" param-type="string" required="false" deprecated="false">
   Bearer token. Format: `Bearer YOUR_ADMIN_KEY`.
 </ParamField>
 
@@ -17,18 +17,45 @@ Management endpoints (servers, tools, access control, API keys) require an admin
   Alternative to the header for server-to-server or tooling scenarios. Do not expose in client-side code.
 </ParamField>
 
+One of the two must be present and match `ADMIN_KEY`; otherwise the request returns `401` with `{ "error": "Unauthorized" }`.
+
 ## Gateway authentication
 
-The MCP gateway JSON-RPC endpoint accepts MCP API keys created via the management API.
+The gateway at `POST /mcp` accepts an `mcp_` API key created through the management API. Provide it as a bearer token or in the `X-Api-Key` header.
 
-<ParamField header="Authorization" param-type="string" required="true" deprecated="false">
-  MCP API key as bearer token. Format: `Bearer YOUR_MCP_API_KEY`.
+<ParamField header="Authorization" param-type="string" required="false" deprecated="false">
+  MCP API key as bearer token. Format: `Bearer mcp_...`.
 </ParamField>
 
-<Callout kind="alert">
-  Never expose admin keys or MCP API keys in client-side JavaScript, public repositories, or logs. MCP API keys should only be used server-side.
-</Callout>
+<ParamField header="X-Api-Key" param-type="string" required="false" deprecated="false">
+  MCP API key. Alternative to the Authorization header.
+</ParamField>
+
+The key must begin with `mcp_`. A missing, malformed, or deactivated key returns HTTP `401` with a JSON-RPC error (`code -32600`).
+
+## Scopes
+
+An `mcp_` key carries a `scopes` array that gates which tools it can list and call. Scopes use `resource:action` form, with `*` wildcards:
+
+| Form | Example | Meaning |
+|------|---------|---------|
+| `resource:action` | `insights:read` | One action on one resource |
+| `resource:*` | `dashboards:*` | Any action on one resource |
+| `*` | `*` | Any tool |
 
 <Callout kind="info">
-  MCP API keys support scoped permissions (`tools:execute`, `tools:read`, `servers:read`). Create keys with the minimum required scopes for your use case.
+  An **empty** `scopes` array grants unrestricted access to every tool the key's agency and location can reach. Grant explicit scopes to narrow a key down.
+</Callout>
+
+### How tool names map to scopes
+
+Built-in tools are mapped by name prefix, and the resource is normalized to `insights`, `dashboards`, or `canvases`:
+
+- `list_*`, `get_*` require `<resource>:read`
+- `create_*`, `update_*`, `delete_*`, `add_*`, `remove_*` require `<resource>:write`
+
+Upstream tools require `<scope_prefix>:call`, where `<scope_prefix>` is the owning server's configured prefix. If the server has no scope prefix, the required scope is `upstream:call`.
+
+<Callout kind="alert">
+  Never expose the admin key or `mcp_` API keys in client-side JavaScript, public repositories, or logs. Both are server-side credentials. The raw `mcp_` key is shown only once, at creation.
 </Callout>

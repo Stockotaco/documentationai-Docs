@@ -4,7 +4,7 @@ info:
   title: Tags
   description: Manage tag assignments for Mythic Analytics client tenants.
 servers:
-  - url: https://api.mythic-analytics.com/api/v1
+  - url: https://mythic-analytics.gulp.workers.dev/api/v1
 security:
   - BearerAuth: []
   - AdminKeyQuery: []

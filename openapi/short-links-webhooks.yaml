@@ -1,22 +1,47 @@
 openapi: "3.0.0"
 info:
   version: 1.0.0
-  title: Link Webhooks
-  description: Manage webhook subscriptions for short link events in Mythic Analytics.
+  title: Link Uptime Webhooks
+  description: >
+    Manage webhook subscriptions for link uptime events (`link_down`,
+    `link_up`) through the Mythic Analytics Client API. Mounted at
+    `/client/v1`. Backed by `tenant_actions` rows of type `webhook` whose
+    trigger rules match uptime events. Writes require an agency key (`ak_`).
 servers:
-  - url: https://api.mythic-analytics.com/api/v1
+  - url: https://mythic-analytics.gulp.workers.dev/client/v1
 security:
-  - BearerAuth: []
-  - AdminKeyQuery: []
+  - ClientBearerAuth: []
+  - AgencyKeyQuery: []
+  - SecretKeyQuery: []
 paths:
   /links/webhooks:
+    get:
+      summary: List uptime webhooks
+      operationId: listLinkWebhooks
+      description: >
+        List uptime webhooks for the authenticated location, newest first.
+        Only actions subscribed to `link_down` and/or `link_up` are returned.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/LocationIdHeader"
+      responses:
+        "200":
+          description: List of uptime webhooks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
     post:
-      summary: Create webhook
+      summary: Create uptime webhook
       operationId: createLinkWebhook
       description: >
-        Create a webhook subscription for link events. The webhook URL
-        receives POST requests when the subscribed events occur (e.g.,
-        link clicked, link created, uptime alert).
+        Create an uptime webhook. Requires an agency key (`ak_`). The webhook
+        URL receives a POST request when a subscribed event fires.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/LocationIdHeader"
       requestBody:
         required: true
         content:
@@ -31,130 +56,247 @@ paths:
               schema:
                 $ref: "#/components/schemas/WebhookResponse"
         "400":
-          description: Invalid JSON or validation error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/BadRequest"
         "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-    get:
-      summary: List webhooks
-      operationId: listLinkWebhooks
-      description: Retrieve all webhook subscriptions.
-      responses:
-        "200":
-          description: List of webhooks
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WebhookListResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /links/webhooks/{id}:
-    delete:
-      summary: Delete webhook
-      operationId: deleteLinkWebhook
-      description: Permanently delete a webhook subscription.
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+  /links/webhooks/{webhookId}:
+    patch:
+      summary: Update uptime webhook
+      operationId: updateLinkWebhook
+      description: >
+        Partially update an uptime webhook owned by the authenticated location.
+        Requires an agency key (`ak_`). At least one valid field is required.
       parameters:
         - $ref: "#/components/parameters/WebhookId"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/LocationIdHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWebhookRequest"
+      responses:
+        "200":
+          description: Webhook updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete uptime webhook
+      operationId: deleteLinkWebhook
+      description: >
+        Permanently delete an uptime webhook owned by the authenticated
+        location. Requires an agency key (`ak_`).
+      parameters:
+        - $ref: "#/components/parameters/WebhookId"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/LocationIdHeader"
       responses:
         "200":
           description: Webhook deleted
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessResponse"
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  deleted:
+                    type: boolean
+                    example: true
         "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
         "404":
-          description: Webhook not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/NotFound"
 components:
   securitySchemes:
-    BearerAuth:
+    ClientBearerAuth:
       type: http
       scheme: bearer
-      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
-    AdminKeyQuery:
+      description: >-
+        Client API key as a bearer token. Use an agency key (`ak_...`,
+        read-write) or a location secret key (`sk_...`, read-only). Format:
+        `Bearer ak_...` or `Bearer sk_...`.
+    AgencyKeyQuery:
       type: apiKey
       in: query
-      name: admin_key
-      description: Alternative to the Authorization header for server-to-server scenarios.
+      name: ak
+      description: Agency key passed as a query parameter instead of the Authorization header.
+    SecretKeyQuery:
+      type: apiKey
+      in: query
+      name: sk
+      description: Location secret key passed as a query parameter instead of the Authorization header.
   parameters:
     WebhookId:
-      name: id
+      name: webhookId
       in: path
       required: true
-      description: Webhook identifier.
+      description: Webhook identifier (`tenant_actions.id`).
       schema:
         type: string
+        format: uuid
+    LocationIdQuery:
+      name: location_id
+      in: query
+      required: false
+      description: >-
+        Target location (client) id. Required when authenticating with an
+        agency key (`ak_`); alternative to the `X-Location-Id` header. Ignored
+        for secret keys.
+      schema:
+        type: string
+    LocationIdHeader:
+      name: X-Location-Id
+      in: header
+      required: false
+      description: >-
+        Target location (client) id. Required when authenticating with an
+        agency key (`ak_`); alternative to the `location_id` query parameter.
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: Invalid JSON body or validation error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Missing or invalid key, or missing `location_id` for an agency key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    WriteForbidden:
+      description: Write access requires an agency key (`ak_`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Webhook not found for this location
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
   schemas:
     CreateWebhookRequest:
       type: object
       required:
         - url
-        - events
       properties:
         url:
           type: string
           format: uri
-          description: Endpoint URL that receives webhook POST requests.
-          example: https://api.acme-retail.com/webhooks/links
+          description: Endpoint that receives the webhook POST. Must be `http` or `https`.
+          example: https://api.acme-retail.com/webhooks/uptime
         events:
           type: array
-          description: Events to subscribe to.
+          description: >
+            Events to subscribe to. Defaults to both if omitted. Only
+            `link_down` and `link_up` are accepted.
           items:
             type: string
-            enum: ["link.clicked", "link.created", "link.deleted", "uptime.down", "uptime.recovered"]
+            enum: ["link_down", "link_up"]
+          default: ["link_down", "link_up"]
           example:
-            - link.clicked
-            - uptime.down
-        secret:
+            - link_down
+            - link_up
+        name:
           type: string
-          description: Optional secret for HMAC signature verification.
-        metadata:
+          description: >
+            Display name. Defaults to `Uptime webhook: <events>` if omitted.
+          example: Ops on-call uptime alerts
+        method:
+          type: string
+          description: HTTP method used when calling the webhook. Defaults to `POST`.
+          default: POST
+          example: POST
+        headers:
           type: object
-          description: Arbitrary metadata attached to the webhook.
+          description: Custom headers sent with the webhook request.
+          additionalProperties:
+            type: string
+        enabled:
+          type: boolean
+          description: Whether the webhook is active. Defaults to `true`.
+          default: true
+    UpdateWebhookRequest:
+      type: object
+      description: Partial update. At least one field is required.
+      properties:
+        name:
+          type: string
+        enabled:
+          type: boolean
+        url:
+          type: string
+          format: uri
+        method:
+          type: string
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        events:
+          type: array
+          items:
+            type: string
+            enum: ["link_down", "link_up"]
     Webhook:
       type: object
       properties:
         id:
           type: string
-          example: whk_7kH3nPqR
+          format: uuid
+          example: 7c1e4a2b-9d3f-4a8e-b1c2-3d4e5f6a7b8c
+        name:
+          type: string
+          example: "Uptime webhook: link_down, link_up"
+        enabled:
+          type: boolean
+          example: true
         url:
           type: string
           format: uri
-          example: https://api.acme-retail.com/webhooks/links
+          nullable: true
+          example: https://api.acme-retail.com/webhooks/uptime
+        method:
+          type: string
+          example: POST
+        headers:
+          type: object
+          additionalProperties:
+            type: string
         events:
           type: array
           items:
             type: string
+            enum: ["link_down", "link_up"]
           example:
-            - link.clicked
-            - uptime.down
-        active:
-          type: boolean
-          example: true
-        metadata:
-          type: object
-          nullable: true
+            - link_down
+            - link_up
         created_at:
+          type: string
+          format: date-time
+          example: "2024-05-20T10:00:00.000Z"
+        updated_at:
           type: string
           format: date-time
           example: "2024-05-20T10:00:00.000Z"
@@ -178,25 +320,10 @@ components:
             $ref: "#/components/schemas/Webhook"
         count:
           type: integer
-          example: 3
-    SuccessResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
+          example: 2
     ErrorResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: false
-        data:
-          nullable: true
-          example: null
         error:
           type: string
-          example: Unauthorized
-        count:
-          type: integer
-          example: 0
+          example: Webhook not found

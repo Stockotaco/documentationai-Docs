@@ -1,274 +1,170 @@
 openapi: "3.0.0"
 info:
   version: 1.0.0
-  title: Uptime Monitoring
-  description: Monitor short link destination uptime and availability in Mythic Analytics.
+  title: Link Uptime Monitoring
+  description: >
+    Read uptime status and history for short link destinations through the
+    Mythic Analytics Client API. Mounted at `/client/v1`.
+
+
+    Monitoring is fully automatic — there is nothing to enable. A scheduled
+    job checks every enabled, non-expired link with a `HEAD` request roughly
+    every 5 minutes, ingests results to Tinybird, and (after two consecutive
+    failures) publishes a `link_down` event; recovery publishes `link_up`.
+    Subscribe to those events with the Link Uptime Webhooks API. These
+    endpoints are read-only Tinybird proxies and accept either an agency key
+    (`ak_`) or a location secret key (`sk_`).
 servers:
-  - url: https://api.mythic-analytics.com/api/v1
+  - url: https://mythic-analytics.gulp.workers.dev/client/v1
 security:
-  - BearerAuth: []
-  - AdminKeyQuery: []
+  - ClientBearerAuth: []
+  - AgencyKeyQuery: []
+  - SecretKeyQuery: []
 paths:
-  /links/{id}/uptime/status:
+  /links/uptime:
     get:
-      summary: Get uptime status
+      summary: Get current uptime status
       operationId: getUptimeStatus
       description: >
-        Retrieve the current uptime monitoring status for a link's
-        destination URL, including current state and response time.
+        Proxy to the Tinybird `uptime_status` pipe for the authenticated
+        location. Returns the latest status per link (optionally filtered to a
+        single slug) as the raw Tinybird JSON envelope.
       parameters:
-        - $ref: "#/components/parameters/LinkId"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/SlugQuery"
       responses:
         "200":
-          description: Current uptime status
+          description: Tinybird uptime status result
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UptimeStatusResponse"
+                $ref: "#/components/schemas/TinybirdResponse"
         "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Link not found or monitoring not enabled
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /links/{id}/uptime/history:
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/AnalyticsUnavailable"
+  /links/uptime/history:
     get:
       summary: Get uptime history
       operationId: getUptimeHistory
       description: >
-        Retrieve uptime history with response times, status changes,
-        and availability percentage over a given period.
+        Proxy to the Tinybird `uptime_history` pipe for the authenticated
+        location. Returns the uptime time series (optionally filtered by slug
+        and date range) as the raw Tinybird JSON envelope.
       parameters:
-        - $ref: "#/components/parameters/LinkId"
-        - name: period
-          in: query
-          description: "Time period for history. Default: `7d`."
-          required: false
-          schema:
-            type: string
-            enum: ["24h", "7d", "30d", "90d"]
-            default: "7d"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/SlugQuery"
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
       responses:
         "200":
-          description: Uptime history data
+          description: Tinybird uptime history result
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UptimeHistoryResponse"
+                $ref: "#/components/schemas/TinybirdResponse"
         "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Link not found or monitoring not enabled
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /links/{id}/uptime/start:
-    post:
-      summary: Start monitoring
-      operationId: startUptimeMonitoring
-      description: >
-        Enable uptime monitoring for a link's destination URL. The system
-        checks availability at regular intervals and triggers webhook alerts
-        on status changes.
-      parameters:
-        - $ref: "#/components/parameters/LinkId"
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/StartMonitoringRequest"
-      responses:
-        "200":
-          description: Monitoring started
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UptimeStatusResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Link not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /links/{id}/uptime/stop:
-    post:
-      summary: Stop monitoring
-      operationId: stopUptimeMonitoring
-      description: Disable uptime monitoring for a link. Historical data is preserved.
-      parameters:
-        - $ref: "#/components/parameters/LinkId"
-      responses:
-        "200":
-          description: Monitoring stopped
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SuccessResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Link not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/AnalyticsUnavailable"
 components:
   securitySchemes:
-    BearerAuth:
+    ClientBearerAuth:
       type: http
       scheme: bearer
-      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
-    AdminKeyQuery:
+      description: >-
+        Client API key as a bearer token. Use an agency key (`ak_...`,
+        read-write) or a location secret key (`sk_...`, read-only). Format:
+        `Bearer ak_...` or `Bearer sk_...`.
+    AgencyKeyQuery:
       type: apiKey
       in: query
-      name: admin_key
-      description: Alternative to the Authorization header for server-to-server scenarios.
+      name: ak
+      description: Agency key passed as a query parameter instead of the Authorization header.
+    SecretKeyQuery:
+      type: apiKey
+      in: query
+      name: sk
+      description: Location secret key passed as a query parameter instead of the Authorization header.
   parameters:
-    LinkId:
-      name: id
-      in: path
-      required: true
-      description: Short link identifier.
+    LocationIdQuery:
+      name: location_id
+      in: query
+      required: false
+      description: >-
+        Target location (client) id. Required when authenticating with an
+        agency key (`ak_`); alternative to the `X-Location-Id` header. Ignored
+        for secret keys.
       schema:
         type: string
+    LocationIdHeader:
+      name: X-Location-Id
+      in: header
+      required: false
+      description: >-
+        Target location (client) id. Required when authenticating with an
+        agency key (`ak_`); alternative to the `location_id` query parameter.
+      schema:
+        type: string
+    SlugQuery:
+      name: slug
+      in: query
+      required: false
+      description: Restrict results to a single link slug.
+      schema:
+        type: string
+    DateFrom:
+      name: date_from
+      in: query
+      required: false
+      description: Start of the date range (forwarded to Tinybird).
+      schema:
+        type: string
+    DateTo:
+      name: date_to
+      in: query
+      required: false
+      description: End of the date range (forwarded to Tinybird).
+      schema:
+        type: string
+  responses:
+    Unauthorized:
+      description: Missing or invalid key, or missing `location_id` for an agency key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    AnalyticsUnavailable:
+      description: Analytics backend not configured
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
   schemas:
-    StartMonitoringRequest:
+    TinybirdResponse:
       type: object
+      description: Raw Tinybird pipe JSON response, proxied through unchanged.
       properties:
-        interval:
-          type: integer
-          description: Check interval in seconds. Default `300` (5 minutes). Minimum `60`.
-          default: 300
-          minimum: 60
-          example: 300
-        timeout:
-          type: integer
-          description: Request timeout in seconds. Default `30`.
-          default: 30
-          example: 30
-    UptimeStatus:
-      type: object
-      properties:
-        link_id:
-          type: string
-          example: lnk_9xP3qLmN
-        status:
-          type: string
-          enum: ["up", "down", "unknown"]
-          example: up
-        response_time_ms:
-          type: integer
-          description: Last recorded response time in milliseconds.
-          example: 245
-        last_checked:
-          type: string
-          format: date-time
-          example: "2024-06-15T14:30:00.000Z"
-        monitoring_active:
-          type: boolean
-          example: true
-        interval:
-          type: integer
-          description: Check interval in seconds.
-          example: 300
-    UptimeHistory:
-      type: object
-      properties:
-        link_id:
-          type: string
-          example: lnk_9xP3qLmN
-        availability_percent:
-          type: number
-          format: float
-          description: Uptime percentage over the period.
-          example: 99.85
-        avg_response_time_ms:
-          type: integer
-          example: 230
-        checks:
+        meta:
           type: array
+          description: Column metadata (name/type per field).
           items:
             type: object
-            properties:
-              timestamp:
-                type: string
-                format: date-time
-              status:
-                type: string
-                enum: ["up", "down"]
-              response_time_ms:
-                type: integer
-        incidents:
+        data:
           type: array
-          description: Downtime incidents over the period.
+          description: Result rows.
           items:
             type: object
-            properties:
-              started_at:
-                type: string
-                format: date-time
-              recovered_at:
-                type: string
-                format: date-time
-                nullable: true
-              duration_seconds:
-                type: integer
-    UptimeStatusResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
-        data:
-          $ref: "#/components/schemas/UptimeStatus"
-    UptimeHistoryResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
-        data:
-          $ref: "#/components/schemas/UptimeHistory"
-    SuccessResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
+        rows:
+          type: integer
+          example: 12
+        statistics:
+          type: object
     ErrorResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: false
-        data:
-          nullable: true
-          example: null
         error:
           type: string
-          example: Unauthorized
-        count:
-          type: integer
-          example: 0
+          example: Analytics not configured

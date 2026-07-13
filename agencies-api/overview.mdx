@@ -1,59 +1,78 @@
 ---
 title: Agencies Management API
 description: >-
-  Create, list, update, and delete agencies, and manage GoHighLevel location
-  associations via the Agencies Management API.
+  Create, list, update, and delete agencies, rotate agency keys, and link
+  Mythic Analytics client tenants (locations) to an agency.
 ---
 
 ## Overview
 
-Use the Agencies Management API to manage agency entities in Mythic Analytics. Agencies group multiple client tenants under a single management entity, enabling multi-tenant operations for resellers and white-label partners.
+Use the Agencies Management API to manage agency entities in Mythic Analytics. Agencies group multiple client tenants under a single management entity, enabling multi-tenant operations for resellers and white-label partners. Each agency is issued an `agency_key` (`ak_` credential) that client-facing APIs use to identify it.
 
 ## Base URL
 
 All endpoints share the same base URL and version prefix.
 
 ```text
-https://api.mythic-analytics.com/api/v1
+https://mythic-analytics.gulp.workers.dev/api/v1
 ```
 
-## Response envelope
+## Response shape
 
-All endpoints return a JSON envelope.
+Responses are JSON, but the envelope varies by endpoint rather than following a single uniform wrapper.
 
-<ResponseField name="success" field-type="boolean" required="true" deprecated="false">
-  Whether the request succeeded.
+<ResponseField name="data" field-type="object|array" required="false" deprecated="false">
+  Resource payload on read and write endpoints. List returns an array; retrieve, create, and update return a single object.
 </ResponseField>
 
-<ResponseField name="data" field-type="object|array|null" required="false" deprecated="false">
-  Resource payload. Shape depends on the endpoint.
+<ResponseField name="success" field-type="boolean" required="false" deprecated="false">
+  Present on delete, key-rotation, and link/unlink endpoints. `true` when the operation succeeded.
 </ResponseField>
 
-<ResponseField name="count" field-type="integer" required="false" deprecated="false">
-  Total number of matching resources. Present on list endpoints.
+<ResponseField name="agency_key" field-type="string" required="false" deprecated="false">
+  The newly generated key, returned only by the rotate-key endpoint.
 </ResponseField>
 
-<ResponseField name="error" field-type="string|null" required="false" deprecated="false">
-  Error message on failed requests.
+<ResponseField name="error" field-type="string" required="false" deprecated="false">
+  Error message. Returned as the sole field on failed requests.
 </ResponseField>
+
+| Endpoint | Success body |
+|----------|--------------|
+| `GET /agencies` | `{ "data": [ ... ] }` |
+| `GET /agencies/{id}` | `{ "data": { ...agency, "locations": [ ... ] } }` |
+| `POST /agencies` | `{ "data": { ...agency } }` |
+| `PATCH /agencies/{id}` | `{ "data": { ...agency } }` |
+| `DELETE /agencies/{id}` | `{ "success": true }` |
+| `POST /agencies/{id}/rotate-key` | `{ "success": true, "agency_key": "ak_..." }` |
+| `POST /agencies/{id}/locations` | `{ "success": true, "data": { ... } }` |
+| `DELETE /agencies/{id}/locations/{locationId}` | `{ "success": true }` |
+
+Example error response:
+
+```json
+{
+  "error": "Unauthorized"
+}
+```
 
 ## Key concepts
 
 | Concept | Description |
 |---------|-------------|
 | **Agency** | A management entity that groups related client tenants |
-| **Location** | A GoHighLevel location linked to an agency for CRM integration |
-| **Client count** | Automatically tracked number of clients associated with each agency |
+| **Agency key** | Auto-generated `ak_` credential (format `ak_` + 32 hex characters) used by client-facing APIs to identify the agency |
+| **Location** | A Mythic client tenant (a `location_keys` record) linked to the agency via its `agency_id` |
 
 ## Error handling
 
 | Status | Meaning |
 |--------|---------|
-| `400` | Invalid JSON, missing required fields, or validation error |
+| `400` | Missing required field or no updatable fields provided |
 | `401` | Admin key missing or invalid |
-| `404` | Agency not found |
-| `409` | Conflict — duplicate agency name |
+| `404` | Agency or location not found |
 | `500` | Internal server error |
+| `503` | Admin API not configured (no admin key set on the server) |
 
 <Callout kind="info">
   Check both the HTTP status code and the `error` field in the response body for programmatic error handling.

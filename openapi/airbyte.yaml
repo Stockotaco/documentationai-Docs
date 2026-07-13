@@ -1,0 +1,935 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Airbyte Sync
+  description: >
+    Agency self-service management of Airbyte data connections — provision a
+    BigQuery destination, create per-client ad-platform sources, trigger and
+    schedule syncs, and review sync history and health.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev/client/v1/airbyte
+security:
+  - AgencyKey: []
+  - SecretKey: []
+paths:
+  /platforms:
+    get:
+      summary: List supported platforms
+      operationId: listAirbytePlatforms
+      description: >
+        Return the catalog of supported source platforms, including their
+        required configuration fields and default stream selections. Read-only —
+        available to both agency (`ak_`) and secret (`sk_`) keys.
+      responses:
+        "200":
+          description: Supported platforms
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Platform"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /config:
+    get:
+      summary: Get Airbyte config
+      operationId: getAirbyteConfig
+      description: >
+        Return the calling agency's Airbyte configuration (workspace,
+        destination, and BigQuery target). Encrypted GCP credentials are never
+        returned; a `has_credentials` boolean indicates whether they are stored.
+      responses:
+        "200":
+          description: Agency config
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Config"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: No Airbyte config exists for this agency
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /config/provision:
+    post:
+      summary: Provision workspace
+      operationId: provisionAirbyteWorkspace
+      description: >
+        Create (or refresh) the agency's Airbyte workspace and a BigQuery
+        destination using GCS staging. Idempotent for the workspace — an
+        existing workspace is reused. Requires an agency key (`ak_`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProvisionRequest"
+      responses:
+        "200":
+          description: Workspace provisioned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/ProvisionResult"
+        "400":
+          description: Missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+        "404":
+          description: Agency not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Encryption key not configured on the server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /connections:
+    get:
+      summary: List connections
+      operationId: listAirbyteConnections
+      description: List all connections owned by the calling agency, most recent first.
+      parameters:
+        - name: platform
+          in: query
+          description: Filter by platform key (e.g. `google_ads`).
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter by connection status.
+          required: false
+          schema:
+            type: string
+            enum: ["active", "error", "paused"]
+        - name: client_id
+          in: query
+          description: Filter by client (location) identifier.
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Connections
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Connection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      summary: Create connection
+      operationId: createAirbyteConnection
+      description: >
+        Create an Airbyte source for a client and wire it to the agency's
+        BigQuery destination. The `client_id` must belong to the calling agency
+        and the agency workspace must already be provisioned and active.
+        Requires an agency key (`ak_`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConnectionRequest"
+      responses:
+        "201":
+          description: Connection created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Connection"
+        "400":
+          description: Missing `client_id`, unsupported platform, or workspace not active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Write access requires an agency key, or the location is not linked to the agency
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /connections/{id}:
+    get:
+      summary: Retrieve connection
+      operationId: getAirbyteConnection
+      description: Fetch a single connection owned by the calling agency.
+      parameters:
+        - $ref: "#/components/parameters/ConnectionId"
+      responses:
+        "200":
+          description: Connection details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Connection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/ConnectionNotFound"
+    put:
+      summary: Update connection
+      operationId: updateAirbyteConnection
+      description: >
+        Update a connection's display name, sync frequency, stream selection, or
+        status. Changes to name, schedule, and streams are propagated to Airbyte.
+        Requires an agency key (`ak_`).
+      parameters:
+        - $ref: "#/components/parameters/ConnectionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateConnectionRequest"
+      responses:
+        "200":
+          description: Updated connection
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Connection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+        "404":
+          $ref: "#/components/responses/ConnectionNotFound"
+    delete:
+      summary: Delete connection
+      operationId: deleteAirbyteConnection
+      description: >
+        Delete the connection and its underlying Airbyte source. The remote
+        Airbyte connection and source are removed on a best-effort basis before
+        the local record is deleted. Requires an agency key (`ak_`).
+      parameters:
+        - $ref: "#/components/parameters/ConnectionId"
+      responses:
+        "200":
+          description: Connection deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+        "404":
+          $ref: "#/components/responses/ConnectionNotFound"
+  /connections/{id}/sync:
+    post:
+      summary: Trigger sync
+      operationId: triggerAirbyteSync
+      description: >
+        Queue an immediate sync job for the connection in Airbyte. Requires an
+        agency key (`ak_`).
+      parameters:
+        - $ref: "#/components/parameters/ConnectionId"
+      responses:
+        "200":
+          description: Sync job queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/Job"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+        "404":
+          $ref: "#/components/responses/ConnectionNotFound"
+  /connections/{id}/jobs:
+    get:
+      summary: List recent jobs
+      operationId: listAirbyteJobs
+      description: >
+        Return recent Airbyte sync jobs for the connection, newest first. Data is
+        read live from Airbyte.
+      parameters:
+        - $ref: "#/components/parameters/ConnectionId"
+        - name: limit
+          in: query
+          description: Maximum jobs to return. Default `10`, clamped to `1`–`100`.
+          required: false
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Recent jobs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    description: Airbyte jobs payload (contains a `data` array of jobs).
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/ConnectionNotFound"
+  /connections/{id}/schedule:
+    patch:
+      summary: Update schedule
+      operationId: updateAirbyteSchedule
+      description: >
+        Change the sync frequency for a connection. Cron-based frequencies are
+        pushed to Airbyte; `manual` switches the connection to manual triggering.
+        Requires an agency key (`ak_`).
+      parameters:
+        - $ref: "#/components/parameters/ConnectionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - sync_frequency
+              properties:
+                sync_frequency:
+                  $ref: "#/components/schemas/SyncFrequency"
+      responses:
+        "200":
+          description: Schedule updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  sync_frequency:
+                    $ref: "#/components/schemas/SyncFrequency"
+        "400":
+          description: Missing `sync_frequency`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+        "404":
+          $ref: "#/components/responses/ConnectionNotFound"
+  /sync-events:
+    get:
+      summary: List sync events
+      operationId: listAirbyteSyncEvents
+      description: >
+        Return the paginated, immutable sync-event log for the calling agency.
+        Each event captures the outcome and record/byte counts of a completed
+        sync.
+      parameters:
+        - name: connection_id
+          in: query
+          description: Filter by Airbyte connection ID.
+          required: false
+          schema:
+            type: string
+        - name: platform
+          in: query
+          description: Filter by platform key.
+          required: false
+          schema:
+            type: string
+        - name: client_id
+          in: query
+          description: Filter by client (location) identifier.
+          required: false
+          schema:
+            type: string
+        - name: success
+          in: query
+          description: Filter by outcome. Pass `true` or `false`.
+          required: false
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          description: Maximum results per page. Default `50`, clamped to `1`–`500`.
+          required: false
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          description: Number of results to skip. Default `0`.
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Paginated sync events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SyncEvent"
+                  total:
+                    type: integer
+                    example: 128
+                  limit:
+                    type: integer
+                    example: 50
+                  offset:
+                    type: integer
+                    example: 0
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /stats:
+    get:
+      summary: Get sync statistics
+      operationId: getAirbyteStats
+      description: >
+        Return aggregated sync statistics for the calling agency across the last
+        24 hours, last 30 days, and all time, plus per-platform and per-client
+        breakdowns. Cost is estimated from committed record counts.
+      responses:
+        "200":
+          description: Statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Stats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /health:
+    get:
+      summary: Get connection health
+      operationId: getAirbyteHealth
+      description: >
+        Return a health overview for the calling agency's connections, including
+        counts, connections in an error state, stale connections (no successful
+        sync in 48 hours), and per-connection failure rates.
+      responses:
+        "200":
+          description: Health overview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Health"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+components:
+  securitySchemes:
+    AgencyKey:
+      type: http
+      scheme: bearer
+      description: >
+        Agency key as bearer token, format `Bearer ak_...`. Grants full
+        read-write access scoped to the agency. May also be passed as an `ak`
+        query parameter.
+    SecretKey:
+      type: http
+      scheme: bearer
+      description: >
+        Location secret key as bearer token, format `Bearer sk_...`. Grants
+        read-only access; the agency is resolved from the location. Write
+        endpoints return `403`. May also be passed as an `sk` query parameter.
+  parameters:
+    ConnectionId:
+      name: id
+      in: path
+      required: true
+      description: Mythic connection record identifier (the local UUID, not the Airbyte connection ID).
+      schema:
+        type: string
+  responses:
+    Unauthorized:
+      description: Missing or invalid authorization
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    WriteForbidden:
+      description: Write access requires an agency key (`ak_`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ConnectionNotFound:
+      description: Connection not found or not owned by the calling agency
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    Platform:
+      type: object
+      properties:
+        key:
+          type: string
+          example: google_ads
+        label:
+          type: string
+          example: Google Ads
+        requiredFields:
+          type: array
+          description: Configuration fields the source requires.
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+                example: customer_id
+              label:
+                type: string
+                example: Customer ID
+              placeholder:
+                type: string
+                example: 123-456-7890
+              type:
+                type: string
+                description: Rendering hint, e.g. `json` or `secret`. Absent for plain text.
+                example: secret
+        defaultStreams:
+          type: array
+          description: Streams selected by default when a connection is created.
+          items:
+            $ref: "#/components/schemas/Stream"
+    Stream:
+      type: object
+      properties:
+        name:
+          type: string
+          example: campaigns
+        syncMode:
+          type: string
+          enum: ["incremental", "full_refresh"]
+          example: incremental
+        cursorField:
+          type: string
+          nullable: true
+          example: segments.date
+        sourceDefinedCursor:
+          type: boolean
+          nullable: true
+          example: true
+        primaryKey:
+          type: array
+          nullable: true
+          description: Composite primary key, as an array of column-path arrays.
+          items:
+            type: array
+            items:
+              type: string
+    Config:
+      type: object
+      properties:
+        id:
+          type: string
+        agency_id:
+          type: string
+        workspace_id:
+          type: string
+          nullable: true
+        destination_id:
+          type: string
+          nullable: true
+        bigquery_project_id:
+          type: string
+          nullable: true
+          example: acme-analytics
+        bigquery_dataset:
+          type: string
+          nullable: true
+          example: mythic_ads
+        staging_bucket_name:
+          type: string
+          nullable: true
+          example: acme-airbyte-staging
+        status:
+          type: string
+          enum: ["provisioning", "active", "error"]
+          example: active
+        error_message:
+          type: string
+          nullable: true
+        has_credentials:
+          type: boolean
+          description: Whether encrypted GCP credentials are stored. The credentials themselves are never returned.
+          example: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ProvisionRequest:
+      type: object
+      required:
+        - bigquery_project_id
+        - bigquery_dataset
+        - gcp_credentials_json
+      properties:
+        bigquery_project_id:
+          type: string
+          description: Destination BigQuery project ID.
+          example: acme-analytics
+        bigquery_dataset:
+          type: string
+          description: Destination BigQuery dataset.
+          example: mythic_ads
+        gcp_credentials_json:
+          type: string
+          description: >
+            GCP service-account credentials JSON, as a string. Encrypted at rest;
+            never returned by the API.
+        dataset_location:
+          type: string
+          description: BigQuery dataset location. Defaults to `US`.
+          default: US
+          example: US
+        staging_bucket_name:
+          type: string
+          description: GCS bucket used for staging loads.
+          example: acme-airbyte-staging
+        staging_bucket_path:
+          type: string
+          description: Optional path prefix within the staging bucket.
+        hmac_key_access_id:
+          type: string
+          description: HMAC key access ID for GCS staging. Provide together with the secret.
+        hmac_key_secret:
+          type: string
+          description: HMAC key secret for GCS staging. Provide together with the access ID.
+        keep_files_in_gcs_bucket:
+          type: string
+          description: Airbyte staging-file retention option.
+    ProvisionResult:
+      type: object
+      properties:
+        workspace_id:
+          type: string
+        destination_id:
+          type: string
+        status:
+          type: string
+          example: active
+    CreateConnectionRequest:
+      type: object
+      required:
+        - client_id
+        - platform
+      properties:
+        client_id:
+          type: string
+          description: Client (location) identifier. Must belong to the calling agency.
+          example: acme-retail
+        platform:
+          type: string
+          description: Platform key from the platforms catalog.
+          example: google_ads
+        display_name:
+          type: string
+          description: Human-readable connection name. Defaults to `<platform> - <client_id>`.
+          example: Acme — Google Ads
+        account_id:
+          type: string
+          description: >
+            Platform account identifier. Falls back to the platform's account-ID
+            field within `source_config` if omitted.
+          example: 123-456-7890
+        source_config:
+          type: object
+          description: >
+            Platform-specific source configuration, matching the platform's
+            `requiredFields`.
+        sync_frequency:
+          $ref: "#/components/schemas/SyncFrequency"
+        streams:
+          type: array
+          description: >
+            Stream selection. Defaults to the platform's `defaultStreams` when
+            omitted.
+          items:
+            $ref: "#/components/schemas/Stream"
+    UpdateConnectionRequest:
+      type: object
+      properties:
+        display_name:
+          type: string
+          example: Acme — Google Ads (Prod)
+        sync_frequency:
+          $ref: "#/components/schemas/SyncFrequency"
+        streams:
+          type: array
+          items:
+            $ref: "#/components/schemas/Stream"
+        status:
+          type: string
+          enum: ["active", "error", "paused"]
+    Connection:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Mythic connection record ID.
+        client_id:
+          type: string
+          example: acme-retail
+        agency_id:
+          type: string
+        platform:
+          type: string
+          example: google_ads
+        connection_id:
+          type: string
+          description: Airbyte connection ID.
+        source_id:
+          type: string
+          description: Airbyte source ID.
+        display_name:
+          type: string
+          example: Google Ads - acme-retail
+        account_id:
+          type: string
+          nullable: true
+          example: 123-456-7890
+        status:
+          type: string
+          enum: ["active", "error", "paused"]
+          example: active
+        sync_frequency:
+          $ref: "#/components/schemas/SyncFrequency"
+        tables_json:
+          type: array
+          description: Resolved stream selection stored for the connection.
+          items:
+            type: object
+        last_sync_at:
+          type: string
+          format: date-time
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    SyncFrequency:
+      type: string
+      description: >
+        Sync cadence. `24h`, `12h`, and `6h` map to cron schedules; `manual`
+        disables automatic syncing.
+      enum: ["24h", "12h", "6h", "manual"]
+      example: 24h
+    Job:
+      type: object
+      description: Airbyte job record as returned by Airbyte.
+      properties:
+        jobId:
+          type: integer
+          example: 1234567
+        status:
+          type: string
+          example: running
+        jobType:
+          type: string
+          example: sync
+    SyncEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        client_id:
+          type: string
+          nullable: true
+        agency_id:
+          type: string
+          nullable: true
+        connection_id:
+          type: string
+        platform:
+          type: string
+          nullable: true
+        job_id:
+          type: integer
+          nullable: true
+        success:
+          type: boolean
+        error_message:
+          type: string
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        duration_seconds:
+          type: integer
+          nullable: true
+        records_emitted:
+          type: integer
+          example: 15230
+        records_committed:
+          type: integer
+          example: 15230
+        bytes_emitted:
+          type: integer
+        bytes_committed:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+    StatsBucket:
+      type: object
+      properties:
+        syncs:
+          type: integer
+          example: 12
+        success_rate:
+          type: integer
+          description: Percentage of successful syncs (0–100).
+          example: 100
+        records_synced:
+          type: integer
+          example: 182760
+        bytes_synced:
+          type: integer
+        estimated_cost_usd:
+          type: number
+          description: Estimated cost derived from committed record counts.
+          example: 2.74
+    Stats:
+      type: object
+      properties:
+        last_24h:
+          $ref: "#/components/schemas/StatsBucket"
+        last_30d:
+          $ref: "#/components/schemas/StatsBucket"
+        all_time:
+          $ref: "#/components/schemas/StatsBucket"
+        per_platform:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/StatsBucket"
+        per_client:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/StatsBucket"
+    Health:
+      type: object
+      properties:
+        total_connections:
+          type: integer
+          example: 8
+        active:
+          type: integer
+          example: 7
+        error_connections:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              client_id:
+                type: string
+              platform:
+                type: string
+              error_message:
+                type: string
+                nullable: true
+        stale_connections:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              client_id:
+                type: string
+              platform:
+                type: string
+              last_sync_at:
+                type: string
+                format: date-time
+                nullable: true
+        failure_rates:
+          type: object
+          description: Map of Airbyte connection ID to failure-rate percentage.
+          additionalProperties:
+            type: integer
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Missing authorization

@@ -1,0 +1,111 @@
+---
+title: Data API
+description: >-
+  Read event analytics (summary, daily, and trend) and check BigQuery export
+  status for a location or agency through the headless Data API.
+---
+
+## Overview
+
+The Data API is a read-only surface for agencies that want to pull Mythic Analytics event data into their own systems. It serves aggregated event analytics — summaries, daily counts, and volume trends — plus the provisioning status of a BigQuery export.
+
+Every endpoint is a `GET`. The API deliberately sends no CORS headers: keys are server-side credentials and must never be embedded in a browser.
+
+<Callout kind="info">
+  Resolved person profiles and the identity graph are documented in the **People & Identity** section of this tab, which shares this base URL and authentication.
+</Callout>
+
+## Base URL
+
+All endpoints share the same base URL.
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/data
+```
+
+## Location scoping
+
+Event data is isolated per location. How the location is determined depends on the key type:
+
+| Key type | Prefix | How the location is set |
+|----------|--------|-------------------------|
+| Agency key | `ak_` | You bind a location per request via `location_id` query or `X-Location-Id` header |
+| Location secret key | `sk_` | Resolved automatically from the key itself |
+
+The event routes are location-scoped. The `/export` route is agency-wide and requires an agency key. See [Authentication](/data-api/authentication) for details.
+
+## Endpoints
+
+<Columns cols="2">
+  <Card title="Event summary" icon="bar-chart-2">
+    Aggregated event counts by type over an optional date range.
+  </Card>
+  <Card title="Daily events" icon="calendar-days">
+    Per-day event counts, optionally filtered to a single event type.
+  </Card>
+  <Card title="Event trend" icon="trending-up">
+    Event volume over an explicit range or a rolling window of days.
+  </Card>
+  <Card title="Export" icon="database">
+    BigQuery export dataset status for the agency.
+  </Card>
+</Columns>
+
+## Response envelope
+
+Every response is a JSON envelope with a `success` flag.
+
+<ResponseField name="success" field-type="boolean" required="true" deprecated="false">
+  Whether the request succeeded.
+</ResponseField>
+
+<ResponseField name="data" field-type="object|array" required="false" deprecated="false">
+  Resource payload. Event endpoints return an array of rows; `/export` returns an object.
+</ResponseField>
+
+<ResponseField name="rows" field-type="integer" required="false" deprecated="false">
+  Number of rows returned. Present on the event endpoints.
+</ResponseField>
+
+<ResponseField name="error" field-type="object" required="false" deprecated="false">
+  Present only on failed requests. Contains a machine-readable `code` and a human-readable `message`.
+</ResponseField>
+
+Example error response:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "unauthorized",
+    "message": "Missing authorization"
+  }
+}
+```
+
+## Rate limiting
+
+Requests are limited to **120 per 10 seconds per location**. When you exceed the limit you receive a `429` with a `Retry-After` header. Successful responses also carry `X-RateLimit-Limit` and `X-RateLimit-Remaining` headers.
+
+## Error handling
+
+| Status | Code | Meaning |
+|--------|------|---------|
+| `400` | `location_required` | An agency key called an event route without binding a location |
+| `401` | `unauthorized` | Missing, malformed, or invalid key |
+| `403` | `location_not_linked` | The requested location is not linked to the agency |
+| `403` | `hipaa_restricted` | The location has HIPAA mode enabled; the Data API is unavailable |
+| `403` | `agency_required` | `/export` was called without an agency (`ak_`) key |
+| `404` | `not_provisioned` | No BigQuery export provisioned for the agency |
+| `405` | `method_not_allowed` | Only `GET` is supported |
+| `429` | `rate_limited` | Too many requests |
+| `502` | `upstream_error` | An upstream data service failed |
+| `503` | `not_configured` | The analytics service is not configured |
+
+<Callout kind="info">
+  Check both the HTTP status code and the `error.code` field for programmatic error handling.
+</Callout>
+
+<Callout kind="alert">
+  Locations with HIPAA mode enabled are blocked from the Data API entirely and return `403 hipaa_restricted`.
+</Callout>

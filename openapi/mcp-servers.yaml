@@ -2,21 +2,53 @@ openapi: "3.0.0"
 info:
   version: 1.0.0
   title: MCP Servers
-  description: Manage MCP servers and server-level access control in the Mythic Analytics platform.
+  description: >-
+    Platform-level management of upstream MCP servers and per-agency server
+    access in the Mythic Analytics platform. Mounted under /admin/mcp and
+    authenticated with the platform ADMIN_KEY.
 servers:
-  - url: https://api.mythic-analytics.com/api/v1
+  - url: https://mythic-analytics.gulp.workers.dev
 security:
   - BearerAuth: []
   - AdminKeyQuery: []
 paths:
-  /mcp/servers:
+  /admin/mcp/servers:
+    get:
+      summary: List servers
+      operationId: listMcpServers
+      description: >
+        List every registered MCP server (both platform-wide servers with a
+        null `agency_id` and agency-owned servers). Each server is enriched
+        with `ownership`, `agency_name`, `tool_count`, and a full
+        `agency_access` list.
+      responses:
+        "200":
+          description: List of servers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerListResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     post:
       summary: Create server
       operationId: createMcpServer
       description: >
-        Register a new MCP server. The server is probed for available tools
-        upon creation. Returns `409 Conflict` if a server with the same
-        name already exists.
+        Register a new upstream MCP server. Omit `agency_id` to create a
+        platform-wide server available to all agencies. The URL must use
+        `https://` and must not resolve to localhost or a private/internal IP
+        range (SSRF protection). `default_headers` may not include hop-by-hop
+        or forwarding headers.
       requestBody:
         required: true
         content:
@@ -31,7 +63,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ServerResponse"
         "400":
-          description: Invalid JSON or validation error
+          description: Missing required field, invalid URL, blocked header, or invalid scope_prefix
           content:
             application/json:
               schema:
@@ -42,67 +74,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "409":
-          description: Server name already exists
+        "500":
+          description: Internal error
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-    get:
-      summary: List servers
-      operationId: listMcpServers
-      description: Retrieve all registered MCP servers.
-      parameters:
-        - name: status
-          in: query
-          description: Filter by server status.
-          required: false
-          schema:
-            type: string
-            enum: ["active", "inactive", "error"]
-      responses:
-        "200":
-          description: List of servers
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ServerListResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /mcp/servers/{id}:
-    get:
-      summary: Retrieve server
-      operationId: getMcpServer
-      description: Fetch a single MCP server with its tools and access configuration.
-      parameters:
-        - $ref: "#/components/parameters/ServerId"
-      responses:
-        "200":
-          description: Server details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ServerDetailResponse"
-        "401":
-          description: Admin key missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Server not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+  /admin/mcp/servers/{id}:
     patch:
       summary: Update server
       operationId: updateMcpServer
-      description: Partially update server configuration.
+      description: >
+        Partially update a server. Only `name`, `url`, `default_headers`,
+        `is_enabled`, and `scope_prefix` may be changed. Pass `scope_prefix:
+        null` to clear it.
       parameters:
         - $ref: "#/components/parameters/ServerId"
       requestBody:
@@ -119,7 +104,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ServerResponse"
         "400":
-          description: Invalid JSON or validation error
+          description: No fields to update, invalid URL, blocked header, or invalid scope_prefix
           content:
             application/json:
               schema:
@@ -139,7 +124,9 @@ paths:
     delete:
       summary: Delete server
       operationId: deleteMcpServer
-      description: Remove an MCP server registration and its access control rules.
+      description: >
+        Delete an MCP server. Discovered tools are removed via cascading
+        foreign keys.
       parameters:
         - $ref: "#/components/parameters/ServerId"
       responses:
@@ -155,19 +142,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Server not found
+        "500":
+          description: Internal error
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /mcp/servers/{id}/probe:
+  /admin/mcp/servers/{id}/probe:
     post:
       summary: Probe server
       operationId: probeMcpServer
       description: >
-        Probe an MCP server to discover available tools and verify
-        connectivity. Updates the server's tool list and status.
+        Connect to the upstream server, run `initialize` + `tools/list`, and
+        upsert discovered tools into the platform. Tools are matched by name to
+        preserve existing IDs and access records; tools that no longer exist
+        upstream are removed. Updates `last_probed_at`.
       parameters:
         - $ref: "#/components/parameters/ServerId"
       responses:
@@ -190,25 +179,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "502":
-          description: Server unreachable or probe failed
+          description: Upstream probe failed (server unreachable or protocol error)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /mcp/servers/{id}/access:
+  /admin/mcp/servers/{id}/agency-access:
     get:
-      summary: Get server access rules
-      operationId: getServerAccess
-      description: Retrieve access control rules for a server.
+      summary: List server agency access
+      operationId: getServerAgencyAccess
+      description: >
+        List every agency together with its access status for this server.
+        Agencies without an explicit record default to `is_enabled: true`.
       parameters:
         - $ref: "#/components/parameters/ServerId"
       responses:
         "200":
-          description: Server access rules
+          description: Agency access list
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AccessRulesResponse"
+                $ref: "#/components/schemas/AgencyAccessListResponse"
         "401":
           description: Admin key missing or invalid
           content:
@@ -222,9 +213,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
     put:
-      summary: Replace server access rules
-      operationId: replaceServerAccess
-      description: Replace all access control rules for a server.
+      summary: Bulk update server agency access
+      operationId: bulkSetServerAgencyAccess
+      description: >
+        Upsert access for multiple agencies at once. Entries missing
+        `agency_id` or `is_enabled` are skipped and reported in `errors`.
       parameters:
         - $ref: "#/components/parameters/ServerId"
       requestBody:
@@ -232,16 +225,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ReplaceAccessRulesRequest"
+              $ref: "#/components/schemas/BulkAgencyAccessRequest"
       responses:
         "200":
-          description: Access rules replaced
+          description: Access records upserted
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AccessRulesResponse"
+                $ref: "#/components/schemas/AgencyAccessBulkResponse"
         "400":
-          description: Invalid JSON or validation error
+          description: Missing or empty agencies array
           content:
             application/json:
               schema:
@@ -258,17 +251,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /mcp/servers/{id}/access/{clientId}:
+  /admin/mcp/servers/{id}/agency-access/{agencyId}:
     put:
-      summary: Set client access
-      operationId: setClientServerAccess
-      description: Set access control for a specific client on a server.
+      summary: Set one agency's server access
+      operationId: setServerAgencyAccess
+      description: Enable or disable a single agency's access to this server.
       parameters:
         - $ref: "#/components/parameters/ServerId"
-        - name: clientId
+        - name: agencyId
           in: path
           required: true
-          description: Client identifier.
+          description: Agency identifier.
           schema:
             type: string
       requestBody:
@@ -276,14 +269,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SetClientAccessRequest"
+              $ref: "#/components/schemas/SingleAgencyAccessRequest"
       responses:
         "200":
-          description: Client access updated
+          description: Access record upserted
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessResponse"
+                $ref: "#/components/schemas/AgencyAccessRecordResponse"
+        "400":
+          description: Missing is_enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Admin key missing or invalid
           content:
@@ -291,7 +290,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
-          description: Server or client not found
+          description: Server not found
           content:
             application/json:
               schema:
@@ -301,7 +300,7 @@ components:
     BearerAuth:
       type: http
       scheme: bearer
-      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+      description: "Platform admin key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
     AdminKeyQuery:
       type: apiKey
       in: query
@@ -312,9 +311,10 @@ components:
       name: id
       in: path
       required: true
-      description: MCP server identifier.
+      description: MCP server UUID.
       schema:
         type: string
+        format: uuid
   schemas:
     CreateServerRequest:
       type: object
@@ -329,170 +329,201 @@ components:
         url:
           type: string
           format: uri
-          description: MCP server endpoint URL.
-          example: https://mcp.mythic-analytics.com/analytics
-        description:
+          description: Upstream MCP server endpoint (must be https and public).
+          example: https://mcp.example.com/analytics
+        default_headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: >
+            Static headers sent on every upstream request (e.g. an auth token).
+            Hop-by-hop and forwarding headers are rejected.
+          example:
+            Authorization: Bearer sk-upstream-xxxx
+        is_enabled:
+          type: boolean
+          description: Whether the server is active. Defaults to true.
+        scope_prefix:
           type: string
-          description: Optional description.
-        auth_token:
+          nullable: true
+          description: >
+            Optional scope namespace for this server's tools. Must match
+            `^[a-z][a-z0-9_-]{0,29}$`. Gateway keys then require
+            `<scope_prefix>:call`; when unset, `upstream:call` is required.
+          example: analytics
+        agency_id:
           type: string
-          description: Authentication token for the server.
+          format: uuid
+          nullable: true
+          description: >
+            Owning agency. Omit or send null to create a platform-wide server
+            shared with all agencies.
     UpdateServerRequest:
       type: object
+      description: At least one updatable field must be provided.
       properties:
         name:
           type: string
         url:
           type: string
           format: uri
-        description:
-          type: string
-          nullable: true
-        auth_token:
-          type: string
-          nullable: true
-    ReplaceAccessRulesRequest:
-      type: object
-      required:
-        - rules
-      properties:
-        rules:
-          type: array
-          items:
-            $ref: "#/components/schemas/AccessRule"
-    SetClientAccessRequest:
-      type: object
-      required:
-        - allowed
-      properties:
-        allowed:
-          type: boolean
-          description: Whether the client can access the server.
-        tool_restrictions:
-          type: array
-          description: Optional list of tool IDs the client can access. Empty means all tools.
-          items:
+        default_headers:
+          type: object
+          additionalProperties:
             type: string
+        is_enabled:
+          type: boolean
+        scope_prefix:
+          type: string
+          nullable: true
+          description: Send null to clear the scope prefix.
+    BulkAgencyAccessRequest:
+      type: object
+      required:
+        - agencies
+      properties:
+        agencies:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/AgencyAccessInput"
+    SingleAgencyAccessRequest:
+      type: object
+      required:
+        - is_enabled
+      properties:
+        is_enabled:
+          type: boolean
+    AgencyAccessInput:
+      type: object
+      required:
+        - agency_id
+        - is_enabled
+      properties:
+        agency_id:
+          type: string
+          format: uuid
+        is_enabled:
+          type: boolean
     McpServer:
       type: object
       properties:
         id:
           type: string
-          example: srv_5kN2mPqR
+          format: uuid
+        agency_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Null for platform-wide servers.
         name:
           type: string
           example: Analytics Tools Server
         url:
           type: string
           format: uri
-          example: https://mcp.mythic-analytics.com/analytics
-        description:
+          example: https://mcp.example.com/analytics
+        is_enabled:
+          type: boolean
+          example: true
+        scope_prefix:
           type: string
           nullable: true
-        status:
+          example: analytics
+        ownership:
           type: string
-          enum: ["active", "inactive", "error"]
-          example: active
+          enum: ["platform", "agency"]
+          description: Derived from agency_id.
+        agency_name:
+          type: string
+          nullable: true
         tool_count:
           type: integer
-          description: Number of discovered tools.
           example: 8
-        last_probed:
+        agency_access:
+          type: array
+          description: One entry per agency with its effective access.
+          items:
+            $ref: "#/components/schemas/AgencyAccessRecord"
+        last_probed_at:
           type: string
           format: date-time
           nullable: true
-          example: "2024-06-15T12:00:00.000Z"
         created_at:
           type: string
           format: date-time
-          example: "2024-04-01T10:00:00.000Z"
-    McpServerDetail:
-      allOf:
-        - $ref: "#/components/schemas/McpServer"
-        - type: object
-          properties:
-            tools:
-              type: array
-              items:
-                type: object
-                properties:
-                  id:
-                    type: string
-                  name:
-                    type: string
-                  description:
-                    type: string
-                  input_schema:
-                    type: object
-            access_rules:
-              type: array
-              items:
-                $ref: "#/components/schemas/AccessRule"
-    AccessRule:
+        updated_at:
+          type: string
+          format: date-time
+    AgencyAccessRecord:
       type: object
       properties:
-        client_id:
+        agency_id:
           type: string
-          example: acme-retail
-        allowed:
+          format: uuid
+        agency_name:
+          type: string
+          nullable: true
+        is_enabled:
           type: boolean
-          example: true
-        tool_restrictions:
-          type: array
-          items:
-            type: string
+          description: Defaults to true when no explicit record exists.
     ProbeResult:
       type: object
       properties:
-        status:
+        server_id:
           type: string
-          enum: ["active", "error"]
-          example: active
+          format: uuid
         tools_discovered:
           type: integer
           example: 8
-        response_time_ms:
-          type: integer
-          example: 145
+        tools:
+          type: array
+          items:
+            type: object
     ServerResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: true
         data:
           $ref: "#/components/schemas/McpServer"
-    ServerDetailResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
-        data:
-          $ref: "#/components/schemas/McpServerDetail"
     ServerListResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: true
         data:
           type: array
           items:
             $ref: "#/components/schemas/McpServer"
-        count:
-          type: integer
-          example: 3
-    AccessRulesResponse:
+    AgencyAccessListResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: true
         data:
           type: array
           items:
-            $ref: "#/components/schemas/AccessRule"
+            $ref: "#/components/schemas/AgencyAccessRecord"
+    AgencyAccessRecordResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          description: The upserted mcp_server_agency_access row.
+    AgencyAccessBulkResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+          description: Upserted access rows.
+        errors:
+          type: array
+          nullable: true
+          description: Present only when some entries were rejected.
+          items:
+            type: object
+            properties:
+              agency_id:
+                type: string
+              error:
+                type: string
     ProbeResponse:
       type: object
       properties:
@@ -510,15 +541,6 @@ components:
     ErrorResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: false
-        data:
-          nullable: true
-          example: null
         error:
           type: string
           example: Unauthorized
-        count:
-          type: integer
-          example: 0

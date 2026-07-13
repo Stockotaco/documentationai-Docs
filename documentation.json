@@ -82,7 +82,7 @@
               },
               {
                 "title": "Authentication",
-                "path": "clients-api/authentication",
+                "path": "agencies-api/authentication",
                 "icon": "lock"
               }
             ]
@@ -189,6 +189,92 @@
         ]
       },
       {
+        "tab": "Data API",
+        "icon": "database",
+        "groups": [
+          {
+            "group": "Overview",
+            "icon": "file-text",
+            "pages": [
+              {
+                "title": "Introduction",
+                "path": "data-api/overview",
+                "icon": "file-text"
+              },
+              {
+                "title": "Authentication",
+                "path": "data-api/authentication",
+                "icon": "lock"
+              }
+            ]
+          },
+          {
+            "group": "Events & Export",
+            "icon": "bar-chart-2",
+            "openapi": "openapi/data.yaml"
+          },
+          {
+            "group": "People & Identity",
+            "icon": "users",
+            "openapi": "openapi/person.yaml"
+          }
+        ]
+      },
+      {
+        "tab": "Destinations API",
+        "icon": "send",
+        "groups": [
+          {
+            "group": "Overview",
+            "icon": "file-text",
+            "pages": [
+              {
+                "title": "Introduction",
+                "path": "destinations-api/overview",
+                "icon": "file-text"
+              },
+              {
+                "title": "Authentication",
+                "path": "destinations-api/authentication",
+                "icon": "lock"
+              }
+            ]
+          },
+          {
+            "group": "Destinations",
+            "icon": "send",
+            "openapi": "openapi/destinations.yaml"
+          }
+        ]
+      },
+      {
+        "tab": "Airbyte Sync API",
+        "icon": "refresh-cw",
+        "groups": [
+          {
+            "group": "Overview",
+            "icon": "file-text",
+            "pages": [
+              {
+                "title": "Introduction",
+                "path": "airbyte-api/overview",
+                "icon": "file-text"
+              },
+              {
+                "title": "Authentication",
+                "path": "airbyte-api/authentication",
+                "icon": "lock"
+              }
+            ]
+          },
+          {
+            "group": "Sync",
+            "icon": "refresh-cw",
+            "openapi": "openapi/airbyte.yaml"
+          }
+        ]
+      },
+      {
         "tab": "MCP Platform",
         "icon": "cpu",
         "groups": [
@@ -247,13 +333,13 @@
                 "title": "Authentication",
                 "path": "admin-api/authentication",
                 "icon": "lock"
+              },
+              {
+                "title": "BigQuery Export Guide",
+                "path": "bigquery-api/overview",
+                "icon": "database"
               }
             ]
-          },
-          {
-            "group": "AI Proxy",
-            "icon": "bot",
-            "openapi": "openapi/ai-proxy.yaml"
           },
           {
             "group": "KV Management",
@@ -264,6 +350,48 @@
             "group": "Pub/Sub",
             "icon": "radio",
             "openapi": "openapi/admin-pubsub.yaml"
+          },
+          {
+            "group": "Destinations",
+            "icon": "send",
+            "openapi": "openapi/admin-destinations.yaml"
+          },
+          {
+            "group": "Airbyte",
+            "icon": "refresh-cw",
+            "openapi": "openapi/admin-airbyte.yaml"
+          },
+          {
+            "group": "BigQuery Export",
+            "icon": "database",
+            "openapi": "openapi/bigquery.yaml"
+          }
+        ]
+      },
+      {
+        "tab": "AI Proxy",
+        "icon": "bot",
+        "groups": [
+          {
+            "group": "Overview",
+            "icon": "file-text",
+            "pages": [
+              {
+                "title": "Introduction",
+                "path": "ai-api/overview",
+                "icon": "file-text"
+              },
+              {
+                "title": "Authentication",
+                "path": "ai-api/authentication",
+                "icon": "lock"
+              }
+            ]
+          },
+          {
+            "group": "AI",
+            "icon": "bot",
+            "openapi": "openapi/ai-proxy.yaml"
           }
         ]
       },

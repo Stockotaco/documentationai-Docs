@@ -1,0 +1,62 @@
+---
+title: Authentication
+description: >-
+  Authenticate to the Airbyte Sync API with an agency key for read-write access
+  or a location secret key for read-only access.
+---
+
+## Authentication
+
+The Airbyte Sync API uses the same key model as other client-facing Mythic APIs. Every request must carry either an agency key or a location secret key. The key both authenticates the caller and scopes every response to the owning agency.
+
+<ParamField header="Authorization" param-type="string" required="true" deprecated="false">
+  Bearer token. Format: `Bearer ak_...` for an agency key or `Bearer sk_...` for a location secret key.
+</ParamField>
+
+You may alternatively pass the key as a query parameter — `ak` for an agency key or `sk` for a secret key — for tooling and server-to-server scenarios.
+
+## Key types
+
+<ResponseField name="Agency key (ak_)" field-type="read-write" required="false" deprecated="false">
+  Grants full read-write access to everything owned by the agency, including provisioning, connection creation, sync triggering, and schedule changes. The agency is resolved directly from the key.
+</ResponseField>
+
+<ResponseField name="Secret key (sk_)" field-type="read-only" required="false" deprecated="false">
+  Grants read-only access. The agency is resolved from the location the key belongs to; the location must be linked to an agency. Any write endpoint returns `403`.
+</ResponseField>
+
+## Access matrix
+
+| Endpoint group | `ak_` (agency) | `sk_` (secret) |
+|----------------|:--------------:|:--------------:|
+| `GET /platforms`, `/config`, `/connections`, `/sync-events`, `/stats`, `/health` | Yes | Yes (read-only) |
+| `POST /config/provision` | Yes | No (`403`) |
+| `POST`, `PUT`, `DELETE` on `/connections` | Yes | No (`403`) |
+| `POST /connections/{id}/sync`, `PATCH /connections/{id}/schedule` | Yes | No (`403`) |
+
+<Callout kind="alert">
+  Treat both key types as secrets. An `ak_` key can create pipelines and trigger syncs that incur cost, so never expose it in client-side code, public repositories, or logs.
+</Callout>
+
+## Example request
+
+```bash
+curl https://mythic-analytics.gulp.workers.dev/client/v1/airbyte/connections \
+  -H "Authorization: Bearer ak_your_agency_key"
+```
+
+A missing or malformed key returns `401`:
+
+```json
+{
+  "error": "Missing authorization"
+}
+```
+
+Using a read-only `sk_` key on a write endpoint returns `403`:
+
+```json
+{
+  "error": "Write access requires an agency key (ak_)"
+}
+```

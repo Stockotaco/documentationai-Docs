@@ -2,33 +2,32 @@ openapi: "3.0.0"
 info:
   version: 1.0.0
   title: MCP Tools
-  description: Manage MCP tools and tool-level access control in the Mythic Analytics platform.
+  description: >-
+    Platform-level management of discovered MCP tools and per-agency tool
+    access. Mounted under /admin/mcp and authenticated with the platform
+    ADMIN_KEY. Tools are created by probing a server (see MCP Servers), not by
+    direct creation.
 servers:
-  - url: https://api.mythic-analytics.com/api/v1
+  - url: https://mythic-analytics.gulp.workers.dev
 security:
   - BearerAuth: []
   - AdminKeyQuery: []
 paths:
-  /mcp/tools:
+  /admin/mcp/tools:
     get:
       summary: List tools
       operationId: listMcpTools
       description: >
-        Retrieve all discovered MCP tools across all registered servers.
-        Tools are discovered during server probes.
+        List all tools discovered across every server. Each tool is enriched
+        with `server_name`, `server_url`, and a full `agency_access` list.
       parameters:
         - name: server_id
           in: query
-          description: Filter by server identifier.
+          description: Filter to tools belonging to a single server.
           required: false
           schema:
             type: string
-        - name: search
-          in: query
-          description: Case-insensitive search on tool name.
-          required: false
-          schema:
-            type: string
+            format: uuid
       responses:
         "200":
           description: List of tools
@@ -42,11 +41,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /mcp/tools/{id}:
+        "500":
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/mcp/tools/{id}:
     patch:
       summary: Update tool
       operationId: updateMcpTool
-      description: Update tool metadata such as display name, description, or enabled state.
+      description: >
+        Update a tool. Only `is_enabled` and `display_name` may be changed;
+        all other fields are managed by probing.
       parameters:
         - $ref: "#/components/parameters/ToolId"
       requestBody:
@@ -63,7 +70,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ToolResponse"
         "400":
-          description: Invalid JSON or validation error
+          description: No fields to update
           content:
             application/json:
               schema:
@@ -80,20 +87,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /mcp/tools/{id}/access:
+  /admin/mcp/tools/{id}/agency-access:
     get:
-      summary: Get tool access rules
-      operationId: getToolAccess
-      description: Retrieve access control rules for a specific tool.
+      summary: List tool agency access
+      operationId: getToolAgencyAccess
+      description: >
+        List every agency together with its access status for this tool.
+        Agencies without an explicit record default to `is_enabled: true`.
       parameters:
         - $ref: "#/components/parameters/ToolId"
       responses:
         "200":
-          description: Tool access rules
+          description: Agency access list
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ToolAccessResponse"
+                $ref: "#/components/schemas/AgencyAccessListResponse"
         "401":
           description: Admin key missing or invalid
           content:
@@ -107,9 +116,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
     put:
-      summary: Replace tool access rules
-      operationId: replaceToolAccess
-      description: Replace all access control rules for a tool.
+      summary: Bulk update tool agency access
+      operationId: bulkSetToolAgencyAccess
+      description: >
+        Upsert access for multiple agencies at once. Entries missing
+        `agency_id` or `is_enabled` are skipped and reported in `errors`.
       parameters:
         - $ref: "#/components/parameters/ToolId"
       requestBody:
@@ -117,16 +128,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ReplaceToolAccessRequest"
+              $ref: "#/components/schemas/BulkAgencyAccessRequest"
       responses:
         "200":
-          description: Tool access rules replaced
+          description: Access records upserted
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ToolAccessResponse"
+                $ref: "#/components/schemas/AgencyAccessBulkResponse"
         "400":
-          description: Invalid JSON or validation error
+          description: Missing or empty agencies array
           content:
             application/json:
               schema:
@@ -143,17 +154,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /mcp/tools/{id}/access/{clientId}:
+  /admin/mcp/tools/{id}/agency-access/{agencyId}:
     put:
-      summary: Set client tool access
-      operationId: setClientToolAccess
-      description: Set access control for a specific client on a tool.
+      summary: Set one agency's tool access
+      operationId: setToolAgencyAccess
+      description: Enable or disable a single agency's access to this tool.
       parameters:
         - $ref: "#/components/parameters/ToolId"
-        - name: clientId
+        - name: agencyId
           in: path
           required: true
-          description: Client identifier.
+          description: Agency identifier.
           schema:
             type: string
       requestBody:
@@ -161,14 +172,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SetClientToolAccessRequest"
+              $ref: "#/components/schemas/SingleAgencyAccessRequest"
       responses:
         "200":
-          description: Client tool access updated
+          description: Access record upserted
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessResponse"
+                $ref: "#/components/schemas/AgencyAccessRecordResponse"
+        "400":
+          description: Missing is_enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Admin key missing or invalid
           content:
@@ -176,7 +193,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
-          description: Tool or client not found
+          description: Tool not found
           content:
             application/json:
               schema:
@@ -186,7 +203,7 @@ components:
     BearerAuth:
       type: http
       scheme: bearer
-      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+      description: "Platform admin key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
     AdminKeyQuery:
       type: apiKey
       in: query
@@ -197,48 +214,58 @@ components:
       name: id
       in: path
       required: true
-      description: MCP tool identifier.
+      description: MCP tool UUID.
       schema:
         type: string
+        format: uuid
   schemas:
     UpdateToolRequest:
       type: object
+      description: At least one field must be provided.
       properties:
+        is_enabled:
+          type: boolean
+          description: Whether the tool is available through the gateway.
         display_name:
           type: string
-          description: Custom display name override.
-        description:
-          type: string
-          description: Custom description override.
-        enabled:
-          type: boolean
-          description: Whether the tool is available for use.
-    ReplaceToolAccessRequest:
+          description: Human-friendly name override.
+    BulkAgencyAccessRequest:
       type: object
       required:
-        - rules
+        - agencies
       properties:
-        rules:
+        agencies:
           type: array
+          minItems: 1
           items:
-            $ref: "#/components/schemas/ToolAccessRule"
-    SetClientToolAccessRequest:
+            $ref: "#/components/schemas/AgencyAccessInput"
+    SingleAgencyAccessRequest:
       type: object
       required:
-        - allowed
+        - is_enabled
       properties:
-        allowed:
+        is_enabled:
           type: boolean
-          description: Whether the client can use the tool.
+    AgencyAccessInput:
+      type: object
+      required:
+        - agency_id
+        - is_enabled
+      properties:
+        agency_id:
+          type: string
+          format: uuid
+        is_enabled:
+          type: boolean
     McpTool:
       type: object
       properties:
         id:
           type: string
-          example: tool_3xL7nBcD
+          format: uuid
         server_id:
           type: string
-          example: srv_5kN2mPqR
+          format: uuid
         name:
           type: string
           example: query_analytics
@@ -249,75 +276,89 @@ components:
         description:
           type: string
           nullable: true
-          example: Execute analytics queries against client data.
-        enabled:
-          type: boolean
-          example: true
         input_schema:
           type: object
-          description: JSON Schema defining the tool's input parameters.
+          nullable: true
+          description: JSON Schema for the tool's arguments (from the upstream probe).
+        annotations:
+          type: object
+          nullable: true
+          description: MCP tool annotations (readOnlyHint, destructiveHint, etc.).
+        is_enabled:
+          type: boolean
+          example: true
+        server_name:
+          type: string
+          nullable: true
+        server_url:
+          type: string
+          format: uri
+          nullable: true
+        agency_access:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgencyAccessRecord"
         created_at:
           type: string
           format: date-time
-          example: "2024-04-01T10:00:00.000Z"
-    ToolAccessRule:
+    AgencyAccessRecord:
       type: object
       properties:
-        client_id:
+        agency_id:
           type: string
-          example: acme-retail
-        allowed:
+          format: uuid
+        agency_name:
+          type: string
+          nullable: true
+        is_enabled:
           type: boolean
-          example: true
+          description: Defaults to true when no explicit record exists.
     ToolResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: true
         data:
           $ref: "#/components/schemas/McpTool"
     ToolListResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: true
         data:
           type: array
           items:
             $ref: "#/components/schemas/McpTool"
-        count:
-          type: integer
-          example: 12
-    ToolAccessResponse:
+    AgencyAccessListResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: true
         data:
           type: array
           items:
-            $ref: "#/components/schemas/ToolAccessRule"
-    SuccessResponse:
+            $ref: "#/components/schemas/AgencyAccessRecord"
+    AgencyAccessRecordResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: true
+        data:
+          type: object
+          description: The upserted mcp_tool_agency_access row.
+    AgencyAccessBulkResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+        errors:
+          type: array
+          nullable: true
+          description: Present only when some entries were rejected.
+          items:
+            type: object
+            properties:
+              agency_id:
+                type: string
+              error:
+                type: string
     ErrorResponse:
       type: object
       properties:
-        success:
-          type: boolean
-          example: false
-        data:
-          nullable: true
-          example: null
         error:
           type: string
           example: Unauthorized
-        count:
-          type: integer
-          example: 0

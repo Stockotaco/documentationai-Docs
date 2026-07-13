@@ -4,7 +4,7 @@ info:
   title: Snippets
   description: Manage custom code snippets and retrieve loader embed code for Mythic Analytics client tenants.
 servers:
-  - url: https://api.mythic-analytics.com/api/v1
+  - url: https://mythic-analytics.gulp.workers.dev/api/v1
 security:
   - BearerAuth: []
   - AdminKeyQuery: []
@@ -151,7 +151,7 @@ components:
           type: string
           format: uri
           description: Direct URL for the loader.
-          example: https://api.mythic-analytics.com/embed/loader/pk_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
+          example: https://mythic-analytics.gulp.workers.dev/embed/loader/pk_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
         iframe_snippet:
           type: string
           description: Ready-to-paste iframe HTML.

@@ -13,8 +13,12 @@ Control whether the SDK sends events.
 
 ```javascript
 mythic.opt_in();   // Enable tracking
-mythic.opt_out();  // Disable tracking (no events sent)
+mythic.opt_out();  // Disable tracking, clear stored data, discard queued events
 ```
+
+<Callout kind="warning">
+  `opt_out()` clears all persisted identity/session data and discards any queued events, in addition to stopping future capture.
+</Callout>
 
 ### `has_opted_out()`
 
@@ -45,3 +49,17 @@ function onConsentDeclined() {
 <Callout kind="info">
   When `requireConsent` is `true`, the SDK initializes but does not track any events until `grantConsent()` is called. `revokeConsent()` stops tracking and clears all local storage.
 </Callout>
+
+### Google Consent Mode
+
+Set `autoConsentMode: true` to have the SDK automatically grant or revoke consent based on Google Consent Mode v2 signals pushed to the `dataLayer`. Enabling it forces `requireConsent: true`, so tracking stays paused until consent is granted.
+
+```javascript
+window.mythic.init("pk_your_publishable_key", {
+  autoConsentMode: true,
+  // Or customize which signal to watch:
+  // autoConsentMode: { enabled: true, consentParam: "analytics_storage", dataLayerName: "dataLayer" },
+});
+```
+
+When the watched consent parameter (default `analytics_storage`) is granted, the SDK calls `grantConsent()`; when it is denied, it calls `revokeConsent()`.
