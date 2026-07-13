@@ -14,6 +14,7 @@
       {
         "product": "For Agencies",
         "icon": "briefcase",
+        "public": true,
         "tabs": [
           {
             "tab": "Get Started",
@@ -313,6 +314,7 @@
       {
         "product": "Full API Reference",
         "icon": "book",
+        "public": false,
         "tabs": [
           {
             "tab": "Get Started",
