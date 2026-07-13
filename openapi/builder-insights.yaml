@@ -243,6 +243,16 @@ components:
           description: >-
             Visualization + query definition (metrics, dimensions, filters,
             date range, layout). Shape depends on `insight_type`.
+
+
+            **`config.resolveIdentities`** (boolean, optional, default `false`):
+            when `true`, funnels and distinct-user counts are computed on the
+            canonical **resolved person** instead of the raw per-event
+            `distinct_id`, so a visitor merged across devices or from anonymous
+            to identified counts once and a funnel doesn't break across the
+            merge. BigQuery-backed insights on the events table only; other
+            insight types and aggregates ignore it. Resolution uses a daily
+            identity snapshot, so merges are reflected up to ~24h later.
         generated_sql:
           type: string
           nullable: true
@@ -335,7 +345,11 @@ components:
           example: line
         config:
           type: object
-          description: Query + visualization definition.
+          description: >-
+            Query + visualization definition. Set `config.resolveIdentities:
+            true` to count funnels and distinct users on the canonical resolved
+            person rather than the raw `distinct_id` (BigQuery events insights
+            only; ~24h snapshot lag). See the `Insight.config` description.
         generated_sql:
           type: string
           description: Optional pre-compiled SQL.
