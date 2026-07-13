@@ -31,13 +31,13 @@ Key capabilities:
     Add the CDN loader (~1.4KB) to your site. It sets up `window.mythic` immediately and asynchronously imports the SDK core:
 
     ```html
-    <script src="https://mythic-analytics.gulp.workers.dev/cdn/m.js"></script>
+    <script src="https://api.adberserk.com/cdn/m.js"></script>
     ```
   </Step>
 
   <Step title="Initialize" icon="code" titleType="p">
     ```html
-    <script src="https://mythic-analytics.gulp.workers.dev/cdn/m.js"></script>
+    <script src="https://api.adberserk.com/cdn/m.js"></script>
     <script>
       window.mythic.init("pk_your_publishable_key");
 
@@ -68,7 +68,7 @@ Initialize Mythic. The CDN global exposes `window.mythic.init(...)`, which loads
 </ParamField>
 
 ```html
-<script src="https://mythic-analytics.gulp.workers.dev/cdn/m.js"></script>
+<script src="https://api.adberserk.com/cdn/m.js"></script>
 <script>
   window.mythic.init("pk_your_publishable_key", {
     api_host: "https://analytics.yourdomain.com",
@@ -83,4 +83,40 @@ Initialize Mythic. The CDN global exposes `window.mythic.init(...)`, which loads
 
 <Callout kind="tip">
   When the SDK is loaded from a custom first-party domain (Cloudflare for SaaS), it auto-detects that hostname and uses it as `api_host` — you do not need to set `api_host` manually in that case.
+</Callout>
+
+## White-label the global object
+
+By default the SDK attaches to `window.mythic`. You can rename that global — for example to your agency's or client's brand — so tracking calls read as `window.acme.capture(...)`. The chosen name must be a valid JavaScript identifier.
+
+There are two ways to set it:
+
+<Tabs>
+  <Tab title="Per-client (recommended)" icon="settings">
+    Set the client's `global_name` when you create or update it (see [Onboard a client](/for-agencies/onboard-a-client)). The loader snippet returned by `GET /api/v1/clients/{id}/loader` then bakes the override in automatically — you install the snippet as-is and the global is renamed for you.
+
+    ```bash
+    curl -X PATCH "https://mythic-analytics.gulp.workers.dev/api/v1/clients/acme-retail" \
+      -H "Authorization: Bearer YOUR_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{ "global_name": "acme" }'
+    ```
+  </Tab>
+
+  <Tab title="Inline on the page" icon="code">
+    Set `window.__mythic_global_name` **before** the loader script runs. The loader reads it and attaches to that name (falling back to `mythic` if it isn't a valid identifier).
+
+    ```html
+    <script>window.__mythic_global_name = "acme";</script>
+    <script src="https://api.adberserk.com/cdn/m.js"></script>
+    <script>
+      window.acme.init("pk_your_publishable_key");
+      window.acme.capture("Signup started", { plan: "pro" });
+    </script>
+    ```
+  </Tab>
+</Tabs>
+
+<Callout kind="info">
+  `window.mythic` stays available as an alias even when a custom name is set, so shared snippets keep working. Storage keys also pick up the custom name by default (`{globalName}_{key}_`) — see [`persistence_name`](/javascript-sdk/configuration).
 </Callout>
