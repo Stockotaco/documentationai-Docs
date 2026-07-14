@@ -618,6 +618,11 @@
                     "title": "Gateway (JSON-RPC)",
                     "path": "mcp/gateway",
                     "icon": "radio"
+                  },
+                  {
+                    "title": "Settings Server (agency)",
+                    "path": "mcp/settings-server",
+                    "icon": "sliders"
                   }
                 ]
               },

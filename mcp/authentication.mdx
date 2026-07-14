@@ -47,6 +47,14 @@ An `mcp_` key carries a `scopes` array that gates which tools it can list and ca
   An **empty** `scopes` array grants unrestricted access to every tool the key's agency and location can reach. Grant explicit scopes to narrow a key down.
 </Callout>
 
+<Callout kind="info">
+  The same `mcp_` keys authenticate the [Settings Server](/mcp/settings-server),
+  which adds the `destinations`, `tags`, `snippets`, and `transformers` resources
+  and supports **agency-wide keys** (no fixed location — they select a client per
+  session). A key with a `null` location is agency-wide; one bound to a location
+  is client-scoped.
+</Callout>
+
 ### How tool names map to scopes
 
 Built-in tools are mapped by name prefix, and the resource is normalized to `insights`, `dashboards`, or `canvases`:

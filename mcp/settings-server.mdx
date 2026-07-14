@@ -1,0 +1,115 @@
+---
+title: Settings Server (agency)
+description: >-
+  A hosted MCP server that lets an agency's AI client manage a client's
+  analytics settings — insights, dashboards, canvases, destinations, and tenant
+  config — with a select-a-client session flow.
+---
+
+## Overview
+
+The Settings Server is a hosted MCP server for **managing a client's analytics
+settings** from any MCP-compatible AI client. It is separate from the
+[Gateway](/mcp/gateway) (which proxies upstream tools) but authenticates with
+the **same `mcp_` API keys** and scopes.
+
+Its defining feature: an agency connects once with an agency-wide key, calls
+`list_clients` to see its clients, `select_client` to pick one, and every
+subsequent tool operates on that client for the session.
+
+## Base URL
+
+```text
+https://mythic-mcp-server-production.up.railway.app/mcp
+```
+
+`POST /mcp` speaks JSON-RPC 2.0 (Streamable HTTP). Each connection is issued an
+`Mcp-Session-Id`; the selected client is pinned to that session.
+
+## Connect
+
+```bash
+claude mcp add --transport http mythic \
+  https://mythic-mcp-server-production.up.railway.app/mcp \
+  --header "Authorization: Bearer mcp_your_api_key"
+```
+
+<ParamField header="Authorization" param-type="string" required="false" deprecated="false">
+  MCP API key as bearer token. Format: `Bearer mcp_...`.
+</ParamField>
+
+<ParamField header="X-Api-Key" param-type="string" required="false" deprecated="false">
+  MCP API key. Alternative to the Authorization header.
+</ParamField>
+
+A missing, malformed, or deactivated key returns HTTP `401` with a JSON-RPC
+error (`code -32600`).
+
+## Key types
+
+| Key type | `location_id` | Behavior |
+|----------|:---:|----------|
+| **Client-scoped** | set | Fixed to one client. Tools operate on it; navigation tools are hidden. |
+| **Agency-wide** | `null` | Not bound to a client. Gets `list_clients` / `select_client`; a client must be selected before client-scoped tools work. |
+
+Mint keys of either type in the agency Builder or the platform admin UI.
+
+## The select-a-client flow
+
+```jsonc
+// 1. Discover clients this key can operate on (agency-wide keys only)
+{ "method": "tools/call", "params": { "name": "list_clients", "arguments": {} } }
+// → { "clients": [ { "id": "loc_abc", "name": "Acme", "enabled": true } ] }
+
+// 2. Pin one for the session
+{ "method": "tools/call", "params": { "name": "select_client", "arguments": { "client": "loc_abc" } } }
+
+// 3. Subsequent tools operate on loc_abc — no location_id needed
+{ "method": "tools/call", "params": { "name": "create_insight", "arguments": { "name": "Top Pages", "insight_type": "table" } } }
+```
+
+<Callout kind="info">
+  Client-scoped keys skip steps 1–2 — they always operate on their bound client.
+  Calling a client-scoped tool on an agency-wide key before `select_client`
+  returns an error telling you to select a client first.
+</Callout>
+
+## Tool families & scopes
+
+Every tool is gated by a scope on the key (`resource:read` / `resource:write`,
+`resource:*`, or `*`; an empty `scopes` array is unrestricted). `list_clients`
+and `select_client` need no scope — agency-wide keys get them automatically.
+
+| Resource | Tools |
+|----------|-------|
+| `insights` | `list_insights`, `get_insight`, `create_insight`, `update_insight`, `delete_insight` |
+| `dashboards` | `list_dashboards`, `get_dashboard`, `create_dashboard`, `update_dashboard`, `delete_dashboard`, `add_insight_to_dashboard`, `remove_insight_from_dashboard` |
+| `canvases` | `list_canvases`, `get_canvas`, `create_canvas`, `update_canvas`, `delete_canvas`, and node/edge/event tools |
+| `destinations` | `list_destinations`, `get_destination`, `create_destination`, `update_destination`, `delete_destination` |
+| `tags` | `list_tags`, `create_tag`, `update_tag`, `delete_tag` |
+| `snippets` | `list_snippets`, `get_snippet`, `create_snippet`, `update_snippet`, `delete_snippet` |
+| `transformers` | `list_transformers`, `get_transformer`, `create_transformer`, `update_transformer`, `delete_transformer` |
+
+Destination writes are validated per type (`webhook`, `meta_capi`, `google_ads`);
+runtime secrets are never exposed. Tag/snippet/transformer writes sync to the
+edge automatically.
+
+## Rate limiting
+
+Each key's `rate_limit_per_minute` (default 60) is enforced with a shared
+fixed-window counter. Over the limit returns a JSON-RPC `429`.
+
+## Errors
+
+| Status | Meaning |
+|--------|---------|
+| `401` | Missing or invalid `mcp_` key |
+| `403` | Session doesn't belong to this key |
+| `429` | Rate limit exceeded |
+
+Tool-level failures return `{ "isError": true, "content": [...] }` in the result.
+
+<Callout kind="alert">
+  Never expose `mcp_` API keys in client-side JavaScript, public repositories, or
+  logs — they are server-side credentials. The raw key is shown only once, at creation.
+</Callout>

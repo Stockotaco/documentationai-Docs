@@ -8,10 +8,11 @@ description: >-
 
 ## Overview
 
-The MCP Platform has two surfaces:
+The MCP Platform has three surfaces:
 
 - A **management API** under `/admin/mcp` for registering upstream MCP servers, probing them for tools, controlling which agencies may use each server and tool, and provisioning gateway API keys. It is authenticated with the platform `ADMIN_KEY`.
 - A **gateway** at `/mcp` that speaks JSON-RPC 2.0. External MCP clients call it with an `mcp_` API key to list and execute tools. See [MCP Gateway](/mcp/gateway).
+- A hosted **Settings Server** for agencies to manage a client's analytics settings (insights, dashboards, canvases, destinations, tenant config) with a select-a-client session flow. It uses the same `mcp_` keys and scopes. See [Settings Server](/mcp/settings-server).
 
 ## Base URL
 
