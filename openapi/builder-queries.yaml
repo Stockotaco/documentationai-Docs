@@ -360,6 +360,13 @@ components:
         cached:
           type: boolean
           description: True when served from the server-side cache.
+        sql:
+          type: string
+          description: >-
+            The generated BigQuery SQL. Returned on the key-authed
+            `POST /insights/{id}/query` runner (so builder UIs can show the
+            query), but NOT on the anonymous `POST /public/query` endpoint,
+            which never exposes SQL.
     QueryResponse:
       type: object
       description: Successful raw-SQL result.
