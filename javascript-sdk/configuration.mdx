@@ -126,7 +126,7 @@ The full set of options you can pass to `init(key, config)`.
 ### HIPAA compliance
 
 <ParamField body="hipaa" param-type="boolean" required="false" show-location="false" deprecated="false">
-  Enable HIPAA mode. Applies a `hipaaFilter` to all outgoing events and force-disables autocapture, form identification, input capture, framework extraction, GTM sync, booking/survey listeners, network interception, geolocation, cross-domain tracking, web vitals, and cookies. It also forces `respect_dnt`, `mask_all_text`, `mask_all_element_attributes`, `disable_remote_config`, and `persistence: 'localStorage'`. These overrides are immutable — `updateConfig()` cannot re-enable them. Default: `false`.
+  Enable HIPAA mode. Applies a `hipaaFilter` to all outgoing events (whitelists safe properties, redacts PHI from URLs, and drops `$set`/`$set_once` person-property mutations) and force-disables autocapture, form identification, input capture, framework extraction, GTM sync, booking/survey listeners, network interception, geolocation, cross-domain tracking, web vitals, and cookies. It also forces `respect_dnt`, `mask_all_text`, `mask_all_element_attributes`, `disable_remote_config`, and `persistence: 'localStorage'`. These overrides are immutable — `updateConfig()` cannot re-enable them. Default: `false`.
 </ParamField>
 
 <ParamField body="disable_remote_config" param-type="boolean" required="false" show-location="false" deprecated="false">

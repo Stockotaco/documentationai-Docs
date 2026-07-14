@@ -37,6 +37,10 @@ These fire only when their feature is enabled (most are on by default — see th
   When remote-config tags or snippets fail, the SDK also reports `$tag_error`, `$snippet_error`, and `$snippet_compilation_error`; a failing event transformer reports `$transformer_error`.
 </Callout>
 
+<Callout kind="warning">
+  `form_submitted` never includes `password` or `hidden` inputs, and fields whose names look sensitive (SSN, credit card, CVV, API token, etc.) are redacted before the event is sent. A single user submit produces exactly one `form_submitted` event.
+</Callout>
+
 ## Attribution tracking
 
 When `capture_utm` is enabled (default), the SDK captures UTM parameters and advertising click IDs from the URL:
