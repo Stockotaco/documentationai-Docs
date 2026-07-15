@@ -7,6 +7,14 @@ info:
     analytics through the Mythic Analytics Client API. Mounted at
     `/client/v1`. Authenticated with a client agency key (`ak_`, read-write)
     or location secret key (`sk_`, read-only).
+
+
+    **Where links are served:** a short link with slug `summer-sale` resolves
+    (and records clicks) at the `/r/{slug}` path on the host serving the SDK —
+    typically the client's custom tracking hostname, e.g.
+    `https://pixel.example.com/r/summer-sale`. The `/r/` prefix is the public
+    redirect path; the `/client/v1/links` endpoints below only manage the link
+    records.
 servers:
   - url: https://mythic-analytics.gulp.workers.dev/client/v1
 security:

@@ -17,6 +17,10 @@ All endpoints share the same base URL and version prefix.
 https://mythic-analytics.gulp.workers.dev/api/v1
 ```
 
+<Callout kind="info">
+  The host is deployment-specific. `mythic-analytics.gulp.workers.dev` is the canonical worker host used throughout these docs, but a provisioned deployment may reach the same API through a branded custom domain (for example `api.adberserk.com`) that routes to the identical worker — paths, auth, and response shapes are the same on either host. Use whichever host your integration was provisioned with.
+</Callout>
+
 ## Response envelope
 
 All endpoints return a JSON envelope.

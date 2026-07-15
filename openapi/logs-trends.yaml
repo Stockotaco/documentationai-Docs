@@ -54,10 +54,15 @@ paths:
             type: string
         - name: event_type
           in: query
-          description: Filter by event name. Accepts a comma-separated list.
+          description: >
+            Filter by event name. Accepts a comma-separated list to return
+            several event types in a single request (e.g.
+            `event_type=pageview,form_submitted`) — no need to issue one
+            request per type.
           required: false
           schema:
             type: string
+            example: pageview,form_submitted
       responses:
         "200":
           description: Event activity stream
