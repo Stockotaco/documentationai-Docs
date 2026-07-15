@@ -867,10 +867,15 @@ components:
           default: true
         rate_limit_max:
           type: number
-          description: Optional per-destination rate cap. Must be positive.
+          description: >
+            Per-destination rate cap. Must be positive. Deliveries beyond the cap
+            within the window are dropped (logged as status `skipped`,
+            `rate_limited`). Defaults to 10000 when omitted.
+          default: 10000
         rate_limit_window_seconds:
           type: number
-          description: Optional rate-limit window in seconds. Must be positive.
+          description: Rate-limit window in seconds. Must be positive. Defaults to 3600 (1 hour).
+          default: 3600
     UpdateDestinationRequest:
       type: object
       description: Partial update — only include fields you want to change. `action_type` cannot be changed.
