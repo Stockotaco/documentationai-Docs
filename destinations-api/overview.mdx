@@ -46,7 +46,36 @@ Requires a 10-digit `customer_id` (no dashes) and an `event_mapping` object mapp
 
 ## Trigger rules
 
-Every destination carries `trigger_rules`: an object with a non-empty `rules` array and an optional `operator` (`AND` or `OR`). Each rule requires a string `type`. Rules decide whether a given event fires the destination.
+Every destination carries `trigger_rules`: an object with a non-empty `rules` array and an optional `operator` (`AND` or `OR`, default `AND`). Each rule requires a `type`. The only rule type that filters on the **event name** server-side is `mythic_event`:
+
+```json
+{
+  "operator": "OR",
+  "rules": [
+    { "type": "mythic_event", "eventName": "$pageview", "operator": "equals" }
+  ]
+}
+```
+
+A `mythic_event` rule **must** include:
+
+- `eventName` — the source event name to match (e.g. `$pageview`, `purchase`).
+- `operator` — `equals` or `not_equals` to match on the name, or a `property_*` operator (e.g. `property_equals`) with a `property` to also match an event property.
+
+Allowed `type` values are `mythic_event`, `event_property`, `url_pattern`, `javascript_variable`, `device`, `query_param`, `cookie`, `time`, and `custom_js`. Only `mythic_event` and `event_property` are evaluated server-side; the others are client-side hints and always pass server-side.
+
+<Callout kind="warning">
+  Any other `type` (for example `event_name`) is **rejected** with `400 invalid_config`. Older examples showed `{ "type": "event_name", "value": "..." }` — that shape is not supported. Use `mythic_event` with `eventName` + `operator` instead.
+</Callout>
+
+### How trigger rules interact with `event_mapping`
+
+For `meta_capi` and `google_ads`, an event is delivered only when **both** conditions hold:
+
+1. `trigger_rules` match the event, **and**
+2. the event name is a key in the destination's `action_config.event_mapping`.
+
+`event_mapping` is the effective filter for ad destinations — an event not present there is never forwarded, regardless of trigger rules. In practice, add one `mythic_event` rule per event you map (matching the `event_mapping` keys), so the trigger rules and mapping stay consistent.
 
 ## Credentials
 

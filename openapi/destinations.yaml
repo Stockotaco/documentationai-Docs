@@ -625,17 +625,27 @@ components:
       type: object
       description: >
         Conditions that gate whether a destination fires for a given event.
+        For server-side delivery, the only rule type that filters on the event
+        name is `mythic_event` (with an `eventName` and an `operator`). Unknown
+        types are rejected with `400 invalid_config`. See the "Trigger rules"
+        section of the overview for the full field-by-field contract and how
+        this interacts with `event_mapping`.
       required:
         - rules
       properties:
         operator:
           type: string
           enum: [AND, OR]
-          description: How to combine `rules`. Defaults to matching-all behavior when omitted.
+          description: How to combine `rules`. Defaults to `AND` when omitted.
         rules:
           type: array
           minItems: 1
-          description: Non-empty array of rules. Each rule requires a string `type`.
+          description: >
+            Non-empty array of rules. Each rule requires a `type` from the
+            allowed set (`mythic_event`, `event_property`, `url_pattern`,
+            `javascript_variable`, `device`, `query_param`, `cookie`, `time`,
+            `custom_js`). Only `mythic_event` and `event_property` are evaluated
+            server-side; the rest are client-side hints that pass server-side.
           items:
             type: object
             required:
@@ -643,10 +653,40 @@ components:
             properties:
               type:
                 type: string
-                description: Rule type discriminator (for example an event-name match).
+                enum:
+                  - mythic_event
+                  - event_property
+                  - url_pattern
+                  - javascript_variable
+                  - device
+                  - query_param
+                  - cookie
+                  - time
+                  - custom_js
+                description: Rule type. Use `mythic_event` to fire on an event name.
+              eventName:
+                type: string
+                description: >
+                  Required when `type` is `mythic_event`. The source event name
+                  to match, e.g. `$pageview` or `purchase`.
+              operator:
+                type: string
+                description: >
+                  Required for `mythic_event` — use `equals` (or `not_equals`)
+                  to match on the event name, or a `property_*` operator to also
+                  match an event `property`. Required for `event_property` too.
+                example: equals
+              property:
+                type: string
+                description: >
+                  Event property path for `event_property` rules, or for a
+                  `mythic_event` rule using a `property_*` operator.
+              value:
+                description: Comparison value for property operators.
           example:
-            - type: event_name
-              value: purchase
+            - type: mythic_event
+              eventName: purchase
+              operator: equals
     WebhookConfig:
       type: object
       description: "`action_config` for `action_type: webhook`."
