@@ -384,11 +384,19 @@ paths:
         - name: page_path
           in: query
           required: false
+          description: >
+            Filter to one page path. Case-insensitive and
+            trailing-slash-insensitive (`/About/` matches `/about`).
           schema:
             type: string
         - name: page_url
           in: query
           required: false
+          description: >
+            Filter to one page URL. Case-insensitive,
+            trailing-slash-insensitive, and the query string and fragment are
+            ignored on both sides — pass the URL with or without its
+            `utm_*`/`fbclid` soup and it matches the same page.
           schema:
             type: string
         - name: device_type
