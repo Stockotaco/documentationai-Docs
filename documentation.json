@@ -66,6 +66,11 @@
                 "group": "People & Identity",
                 "icon": "users",
                 "openapi": "openapi/person.yaml"
+              },
+              {
+                "group": "Session Replays",
+                "icon": "play",
+                "openapi": "openapi/replays.yaml"
               }
             ]
           },
@@ -539,6 +544,11 @@
                 "group": "People & Identity",
                 "icon": "users",
                 "openapi": "openapi/person.yaml"
+              },
+              {
+                "group": "Session Replays",
+                "icon": "play",
+                "openapi": "openapi/replays.yaml"
               }
             ]
           },

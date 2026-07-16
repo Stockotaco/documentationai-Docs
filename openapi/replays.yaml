@@ -1,0 +1,244 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Session Replays
+  description: >
+    Read recorded browser sessions (rrweb) for a location. Capture is enabled
+    per client via server config — nothing records until turned on. Recordings
+    expire after 30 days. Served from Mythic Analytics. HIPAA-mode locations
+    are not served.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev/client/v1/data
+security:
+  - BearerAuth: []
+  - AgencyKeyQuery: []
+  - SecretKeyQuery: []
+paths:
+  /replays:
+    get:
+      summary: List session replays
+      operationId: listReplays
+      description: >
+        List recorded sessions for the location, newest-first, cursor-paginated.
+        Each row is enriched with identity, device, duration, and activity
+        counters derived from the recording.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - name: limit
+          in: query
+          required: false
+          description: Max sessions to return (1–1000).
+          schema:
+            type: integer
+            default: 100
+            maximum: 1000
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque pagination cursor returned by a prior response.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Session list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplayListResponse"
+        "400":
+          $ref: "#/components/responses/LocationRequired"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /replays/{sessionId}:
+    get:
+      summary: Get a session recording
+      operationId: getReplay
+      description: >
+        Return the full rrweb event stream for one session (DOM + console +
+        network), concatenated in order. Feed `data.events` straight into an
+        rrweb player such as `rrweb-player`.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - name: sessionId
+          in: path
+          required: true
+          description: The session id from the list endpoint.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Recording events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplayEventsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No recording exists for that session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >
+        Agency key (`ak_`) or location secret key (`sk_`) as a bearer token.
+        Format: `Bearer ak_...` or `Bearer sk_...`.
+    AgencyKeyQuery:
+      type: apiKey
+      in: query
+      name: ak
+      description: Agency key passed as a query parameter. Prefer the `Authorization` header.
+    SecretKeyQuery:
+      type: apiKey
+      in: query
+      name: sk
+      description: Location secret key passed as a query parameter. Prefer the `Authorization` header.
+  parameters:
+    LocationIdHeader:
+      name: X-Location-Id
+      in: header
+      required: false
+      description: >
+        Location to scope the request to. Required for agency (`ak_`) keys.
+        Ignored for secret (`sk_`) keys, which resolve their own location.
+      schema:
+        type: string
+    LocationIdQuery:
+      name: location_id
+      in: query
+      required: false
+      description: >
+        Alternative to the `X-Location-Id` header for agency (`ak_`) keys.
+        Ignored for secret (`sk_`) keys.
+      schema:
+        type: string
+  responses:
+    Unauthorized:
+      description: Missing, malformed, or invalid key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: >
+        Access denied — location not linked to the agency
+        (`location_not_linked`) or the location has HIPAA mode enabled
+        (`hipaa_restricted`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    LocationRequired:
+      description: An agency key called the route without binding a location
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    RateLimited:
+      description: Rate limit exceeded (120 requests per 10 seconds, per location).
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying.
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    ReplaySession:
+      type: object
+      properties:
+        session_id:
+          type: string
+          description: Stable session identifier; use it to fetch the recording.
+        started_at:
+          type: string
+          nullable: true
+          description: When recording started (from the `$replay_started` event).
+        person_id:
+          type: string
+          nullable: true
+          description: Resolved person / user id when identified.
+        distinct_id:
+          type: string
+          nullable: true
+        url:
+          type: string
+          nullable: true
+        browser:
+          type: string
+          nullable: true
+        device_type:
+          type: string
+          nullable: true
+        duration_ms:
+          type: integer
+          nullable: true
+        clicks:
+          type: integer
+        keypresses:
+          type: integer
+        console_errors:
+          type: integer
+        network_count:
+          type: integer
+    ReplayListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReplaySession"
+        cursor:
+          type: string
+          nullable: true
+          description: Pass back as `cursor` to fetch the next page; `null` when done.
+    ReplayEventsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            session_id:
+              type: string
+            events:
+              type: array
+              description: rrweb `eventWithTime` objects, in playback order.
+              items:
+                type: object
+                additionalProperties: true
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: replay_not_found
+            message:
+              type: string
+              example: No recording for that session
