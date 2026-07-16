@@ -309,7 +309,10 @@ components:
       name: landing_page
       in: query
       required: false
-      description: Filter to sessions whose entry path matches (exact).
+      description: >
+        Filter to sessions whose entry path matches. Case-insensitive and
+        trailing-slash-insensitive (`/About/` matches `/about`). Query params
+        never apply — the path is captured without them.
       schema:
         type: string
     FilterEngaged:
