@@ -19,9 +19,10 @@ paths:
       summary: List session replays
       operationId: listReplays
       description: >
-        List recorded sessions for the location, newest-first, cursor-paginated.
-        Each row is enriched with identity, device, duration, and activity
-        counters derived from the recording.
+        List recorded sessions for the location, newest-first (up to the most
+        recent 2000 within the 30-day retention window). Each row is enriched
+        with identity, device, duration, and activity counters derived from the
+        recording.
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
@@ -33,12 +34,6 @@ paths:
             type: integer
             default: 100
             maximum: 1000
-        - name: cursor
-          in: query
-          required: false
-          description: Opaque pagination cursor returned by a prior response.
-          schema:
-            type: string
       responses:
         "200":
           description: Session list
@@ -209,7 +204,7 @@ components:
         cursor:
           type: string
           nullable: true
-          description: Pass back as `cursor` to fetch the next page; `null` when done.
+          description: Reserved; currently always `null` (no pagination beyond the cap).
     ReplayEventsResponse:
       type: object
       properties:
