@@ -38,7 +38,7 @@ Requires a fetchable `url`. Optional `method`, `headers`, `body_template`, `time
 
 ### Meta Conversions API
 
-Requires a `pixel_id` and an `event_mapping` object that maps each source event name to a Meta event name (for example `{"purchase": "Purchase"}`). Optional `test_event_code`, `action_source`, `credential_name`, and `enrichment`. The Meta access token is stored separately as a `meta_capi` credential.
+Requires a `pixel_id` and an `event_mapping` object that maps each source event name to a Meta event name (for example `{"purchase": "Purchase"}`). Optional `test_event_code`, `action_source`, `credential_name`, and `enrichment`. The Meta access token is stored separately as a `meta_capi` credential. When IP/geo enrichment is enabled for your location, the server-side client IP and coarse geo (city, region, postal, country) are captured at ingest and forwarded automatically as `client_ip_address` plus hashed `ct`/`st`/`zp`/`country` in `user_data` — no client-side changes needed. It is off by default (enable it for your location to opt in) and always suppressed for HIPAA-enabled locations.
 
 ### Google Ads
 
