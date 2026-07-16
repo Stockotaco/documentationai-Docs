@@ -420,4 +420,4 @@ components:
       properties:
         error:
           type: string
-          example: unknown filter: foo
+          example: "unknown filter: foo"
