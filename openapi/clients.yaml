@@ -354,8 +354,12 @@ components:
           nullable: true
           description: >
             Session-recording config, served to the SDK via remote config on
-            the next page load (no redeploy). Set `null` to clear. Keys are
-            whitelisted; unknown keys are rejected.
+            the next page load (no redeploy). On PATCH the object is
+            **shallow-merged** into the stored config, so a partial body updates
+            only the keys you send and leaves the rest untouched — sending
+            `{ "enabled": false }` will not reset masking or other tunables.
+            Send `null` to clear the whole config. Keys are whitelisted; unknown
+            keys are rejected.
           properties:
             enabled:
               type: boolean
