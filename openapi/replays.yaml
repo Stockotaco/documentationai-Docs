@@ -7,6 +7,30 @@ info:
     per client via server config — nothing records until turned on. Recordings
     expire after 30 days. Served from Mythic Analytics. HIPAA-mode locations
     are not served.
+
+
+    **Build your own replays page** — Mythic's own admin replays UI is built
+    entirely on this API plus the open-source `rrweb-player`; the full recipe:
+
+    1. Enable/tune recording once per client: `PATCH /api/v1/clients/:id` with
+    `{"session_replay": {"enabled": true, "sampleRate": 1, "minDurationMs": 10000}}`
+    (served to the SDK via remote config on the next page load).
+
+    2. List recordings: `GET /replays` — identity, URL, browser/device,
+    duration, activity counters per row.
+
+    3. Play one: `GET /replays/{sessionId}` → feed `data.events` straight into
+    `rrweb-player`. Console and network entries ride along in the same stream
+    (rrweb Plugin/Custom events) if you want DevTools-style tabs.
+
+    4. Attribution sidebar: `GET /sessions?session_id={id}` (Data API) — one
+    row with source/medium/campaign, click IDs, device, geo.
+
+    5. New vs returning (optional): `GET /people/{distinctId}/summary` —
+    `metrics.session_count > 1` means returning.
+
+    For feeding a model instead of a human, use
+    `GET /replays/{sessionId}/timeline`.
 servers:
   - url: https://mythic-analytics.gulp.workers.dev/client/v1/data
 security:
@@ -83,6 +107,47 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /replays/{sessionId}/timeline:
+    get:
+      summary: Get a session timeline (LLM-ready)
+      operationId: getReplayTimeline
+      description: >
+        Return a compact, chronological timeline of the session — the
+        AI-summarization view, NOT the raw rrweb stream. Turns the event stream
+        into an ordered sequence of meaningful steps (page journey, dwell time,
+        form submissions, field inputs, identify, custom events, and errors).
+        Replay heartbeat/start markers, engagement pings, and web vitals are
+        dropped. Contains no PII — form and input values are excluded, only
+        field metadata. Feed `data` to a model to summarize what the visitor did
+        and where they dropped off.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - name: sessionId
+          in: path
+          required: true
+          description: The session id from the list endpoint.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Max timeline rows (1–2000).
+          schema:
+            type: integer
+            default: 500
+            maximum: 2000
+      responses:
+        "200":
+          description: Session timeline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplayTimelineResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 components:
   securitySchemes:
     BearerAuth:
@@ -222,6 +287,37 @@ components:
               items:
                 type: object
                 additionalProperties: true
+    TimelineEvent:
+      type: object
+      properties:
+        t:
+          type: string
+          description: Event timestamp (UTC).
+        seconds_from_start:
+          type: integer
+          description: Seconds elapsed since the first event in the session.
+        event:
+          type: string
+          example: $pageview
+          description: Event type ($pageview, $pageleave, form_submitted, input_captured, $identify, custom_event, $exception).
+        path:
+          type: string
+          description: URL path the event occurred on.
+        detail:
+          type: string
+          description: Compact, human-readable summary of the event (no PII).
+    ReplayTimelineResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        rows:
+          type: integer
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimelineEvent"
     ErrorResponse:
       type: object
       properties:

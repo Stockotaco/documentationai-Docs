@@ -349,6 +349,55 @@ components:
         proxy_api_key:
           type: string
           nullable: true
+        session_replay:
+          type: object
+          nullable: true
+          description: >
+            Session-recording config, served to the SDK via remote config on
+            the next page load (no redeploy). Set `null` to clear. Keys are
+            whitelisted; unknown keys are rejected.
+          properties:
+            enabled:
+              type: boolean
+              description: Turn recording on for this client.
+            sampleRate:
+              type: number
+              minimum: 0
+              maximum: 1
+              description: Fraction of sessions to record (deterministic per session). Default 1.
+            minDurationMs:
+              type: number
+              minimum: 0
+              description: >
+                Drop bounces — nothing is transmitted until the session has
+                lasted this long. Default 10000 (10s); 0 keeps every recording.
+            maskAllInputs:
+              type: boolean
+              description: Mask all form input values. Default true.
+            captureConsole:
+              type: boolean
+              description: Record console log/warn/error. Default true.
+            captureNetwork:
+              type: boolean
+              description: Record fetch/XHR/resource timing. Default true.
+            recordNetworkHeaders:
+              type: boolean
+              description: Include request/response headers. Default false.
+            recordNetworkBody:
+              type: boolean
+              description: Include response bodies (10 KB cap). Default false.
+            blockSelector:
+              type: string
+              description: CSS selector for elements never recorded.
+            maskTextSelector:
+              type: string
+              description: CSS selector for text recorded as redacted.
+            flushEventThreshold:
+              type: number
+              description: Buffered events before an upload. Default 100.
+            flushIntervalMs:
+              type: number
+              description: Max ms between uploads. Default 5000.
         gcp_project_id:
           type: string
           pattern: "^[a-zA-Z0-9-]{1,128}$"
@@ -414,6 +463,12 @@ components:
         proxy_api_key:
           type: string
           nullable: true
+        session_replay:
+          type: object
+          nullable: true
+          description: >
+            Current session-recording config (same shape as the update field).
+            `null` when recording has never been configured.
         gcp_project_id:
           type: string
           nullable: true
