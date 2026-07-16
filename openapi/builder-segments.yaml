@@ -259,7 +259,7 @@ components:
 
 
         The `attribution` field picks which touch the attribution filters
-        (`channel`, `utm_source`, `utm_campaign`, `country`, `device_type`)
+        (`channel`, `utm_source`, `utm_medium`, `utm_campaign`, `country`, `device_type`)
         match against — `last` (default), `first`, or `session`. Example:
         `{ "utm_source": "fb", "attribution": "session" }` = "everyone who
         ever had a session that arrived via fb".
@@ -272,8 +272,8 @@ components:
             Touch the attribution filters match against. `last` (default):
             the person's most recent touch. `first`: their first-ever touch.
             `session`: the person had ANY session whose entry matches — with
-            this scope only `utm_source`, `utm_campaign`, `country`, and
-            `device_type` may be used (other filters are person-level and are
+            this scope only `utm_source`, `utm_medium`, `utm_campaign`,
+            `country`, and `device_type` may be used (other filters are person-level and are
             rejected rather than half-applied). In the Data API's `segment_id`
             scoping, `session` matches visitors directly against the sessions
             store, so it does not depend on identity-graph coverage.
@@ -292,6 +292,10 @@ components:
           type: string
           description: utm_source (exact), per `attribution` scope.
           example: google
+        utm_medium:
+          type: string
+          description: utm_medium (exact), per `attribution` scope.
+          example: cpc
         utm_campaign:
           type: string
           description: utm_campaign (exact), per `attribution` scope.
