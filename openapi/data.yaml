@@ -143,6 +143,14 @@ paths:
         `pageviews` descending. `value` is an empty string when the dimension
         is not set on an event. `pageviews` always counts `$pageview` events
         regardless of `event_type`.
+
+
+        **Segment scoping**: pass `segment_id` (a segment created via the
+        Segments API) to count only traffic from that segment's members — e.g.
+        top pages read by customers, or by paid-search visitors:
+
+
+        `GET /client/v1/data/events/breakdown?dimension=page&segment_id=9f4e...`
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
@@ -175,6 +183,7 @@ paths:
           description: Filter to a single event type. Default counts all events.
           schema:
             type: string
+        - $ref: "#/components/parameters/SegmentId"
         - name: limit
           in: query
           required: false
@@ -204,6 +213,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/SegmentNotFound"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -226,6 +237,19 @@ paths:
         10 seconds, or fired a non-pageview event; `bounce` is the inverse.
         Empty string on a filter means "no value set". Not yet returned:
         `is_new_visitor` and `converted`/goal fields.
+
+
+        **Segment scoping**: pass `segment_id` (a segment created via the
+        Segments API) to list only sessions by that segment's members —
+        composable with every other filter:
+
+
+        `GET /client/v1/data/sessions?segment_id=9f4e...&engaged=1&device_type=mobile`
+
+
+        Membership is resolved live at query time ("people currently in the
+        segment"), through the identity graph — a session counts when its
+        `distinct_id` maps to a matching person.
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
@@ -248,6 +272,7 @@ paths:
           description: Minimum session duration in seconds.
           schema:
             type: integer
+        - $ref: "#/components/parameters/SegmentId"
         - name: limit
           in: query
           required: false
@@ -284,6 +309,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/SegmentNotFound"
         "429":
           $ref: "#/components/responses/RateLimited"
         "502":
@@ -300,6 +327,14 @@ paths:
         the same filters as `/sessions`, so you can group a filtered set.
         Ordered by `session_count` descending. Single dimension only —
         comma-list multi-dimension group-by is not yet supported.
+
+
+        **Segment scoping**: pass `segment_id` to aggregate only the segment's
+        members' sessions — e.g. which campaigns drive engaged sessions from
+        identified customers:
+
+
+        `GET /client/v1/data/sessions/breakdown?group_by=utm_campaign&segment_id=9f4e...`
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
@@ -322,6 +357,7 @@ paths:
           description: Minimum session duration in seconds.
           schema:
             type: integer
+        - $ref: "#/components/parameters/SegmentId"
         - name: group_by
           in: query
           required: true
@@ -373,6 +409,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/SegmentNotFound"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -545,6 +583,20 @@ components:
       description: Filter to identified (`1`) or anonymous (`0`) sessions.
       schema:
         type: boolean
+    SegmentId:
+      name: segment_id
+      in: query
+      required: false
+      description: >
+        Scope results to members of a saved segment (created via the Segments
+        API). Membership is resolved live at query time — "people currently in
+        the segment" — through the identity graph: a row counts when its
+        `distinct_id` maps to a person matching the segment's definition.
+        Composable with all other filters. Unknown or foreign id →
+        `404 segment_not_found`.
+      schema:
+        type: string
+        format: uuid
   responses:
     Unauthorized:
       description: Missing, malformed, or invalid key
@@ -563,6 +615,12 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     LocationRequired:
       description: An agency key called an event route without binding a location
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    SegmentNotFound:
+      description: "`segment_id` does not exist for this location (`segment_not_found`)"
       content:
         application/json:
           schema:
