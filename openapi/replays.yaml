@@ -115,11 +115,12 @@ paths:
         Return a compact, chronological timeline of the session — the
         AI-summarization view, NOT the raw rrweb stream. Turns the event stream
         into an ordered sequence of meaningful steps (page journey, dwell time,
-        form submissions, field inputs, identify, custom events, and errors).
-        Replay heartbeat/start markers, engagement pings, and web vitals are
-        dropped. Contains no PII — form and input values are excluded, only
-        field metadata. Feed `data` to a model to summarize what the visitor did
-        and where they dropped off.
+        form submissions, field inputs, identify, and custom events). Replay
+        heartbeat/start markers, engagement pings, and web vitals are dropped.
+        Contains no PII — form and input values are excluded, only field
+        metadata. `sessionId` must be a UUIDv7 (all recording session ids are).
+        Feed `data` to a model to summarize what the visitor did and where they
+        dropped off.
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
@@ -299,7 +300,7 @@ components:
         event:
           type: string
           example: $pageview
-          description: Event type ($pageview, $pageleave, form_submitted, input_captured, $identify, custom_event, $exception).
+          description: Event type ($pageview, $pageleave, form_submitted, input_captured, $identify, custom_event).
         path:
           type: string
           description: URL path the event occurred on.
@@ -314,6 +315,11 @@ components:
           example: true
         rows:
           type: integer
+        truncated:
+          type: boolean
+          description: >
+            True when the row cap was hit; the most-recent rows (the session
+            outcome) are kept and earlier rows dropped.
         data:
           type: array
           items:

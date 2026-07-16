@@ -89,6 +89,7 @@ and `select_client` need no scope — agency-wide keys get them automatically.
 | `tags` | `list_tags`, `create_tag`, `update_tag`, `delete_tag` |
 | `snippets` | `list_snippets`, `get_snippet`, `create_snippet`, `update_snippet`, `delete_snippet` |
 | `transformers` | `list_transformers`, `get_transformer`, `create_transformer`, `update_transformer`, `delete_transformer` |
+| `replays` | `get_session_timeline` (read-only) |
 
 Destination writes are validated per type (`webhook`, `meta_capi`, `google_ads`);
 runtime secrets are never exposed. Tag/snippet/transformer writes sync to the
