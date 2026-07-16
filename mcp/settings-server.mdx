@@ -95,6 +95,22 @@ Destination writes are validated per type (`webhook`, `meta_capi`, `google_ads`)
 runtime secrets are never exposed. Tag/snippet/transformer writes sync to the
 edge automatically.
 
+### Summarizing a session with `get_session_timeline`
+
+`get_session_timeline` returns a compact, chronological timeline of one
+recorded visitor session (page journey, dwell time, form submissions, field
+inputs, identify, custom events) — the LLM-ready view of a session, not the
+raw rrweb replay. The connected model does the summarizing; the server runs no
+LLM of its own. No PII: form/input values are excluded, only field metadata.
+
+The MCP has no list tool for recordings — get session ids from the
+[Data API](/data-api/overview):
+`GET /client/v1/data/replays` lists recorded sessions (newest first, with
+duration and activity counters); pass a row's `session_id` (a UUIDv7) to the
+tool. A typical agent flow: pick sessions from the list (e.g. high
+`console_errors` or long duration), call `get_session_timeline` for each, and
+summarize behavior, drop-off, and friction.
+
 ## Rate limiting
 
 Each key's `rate_limit_per_minute` (default 60) is enforced with a shared
