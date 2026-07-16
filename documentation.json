@@ -164,6 +164,11 @@
                 "openapi": "openapi/builder-insights.yaml"
               },
               {
+                "group": "Segments",
+                "icon": "users",
+                "openapi": "openapi/builder-segments.yaml"
+              },
+              {
                 "group": "Dashboards",
                 "icon": "layout-dashboard",
                 "openapi": "openapi/builder-dashboards.yaml"
@@ -445,6 +450,11 @@
                 "group": "Insights",
                 "icon": "bar-chart-2",
                 "openapi": "openapi/builder-insights.yaml"
+              },
+              {
+                "group": "Segments",
+                "icon": "users",
+                "openapi": "openapi/builder-segments.yaml"
               },
               {
                 "group": "Dashboards",

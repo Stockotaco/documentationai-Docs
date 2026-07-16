@@ -1,0 +1,423 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Segments
+  description: >-
+    Reusable audience definitions over resolved people. A segment is a named set
+    of person-attribute filters scoped to a single client location. Members and
+    counts are computed at read time — no membership is stored — so a segment
+    always reflects the current state of the person graph.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev/builder
+security:
+  - BearerAuth: []
+  - AgencyKeyQuery: []
+  - SecretKeyQuery: []
+paths:
+  /segments:
+    get:
+      summary: List segments
+      operationId: listSegments
+      description: >
+        List segments for the resolved location, newest-updated first. Readable
+        with an agency key (`ak_`) or a viewer key (`sk_`). Agency keys must pass
+        `?location_id=`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Segments for the location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SegmentListResponse"
+        "401":
+          description: Authorization key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      summary: Create or update segment
+      operationId: saveSegment
+      description: >
+        Create a new segment, or update an existing one when an `id` is included
+        in the body. Requires an agency key (`ak_`) and `?location_id=`. The
+        `definition` is validated against the filter whitelist; unknown filters
+        or bad types are rejected. Returns the saved row.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveSegmentRequest"
+      responses:
+        "200":
+          description: Segment created or updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SegmentResponse"
+        "400":
+          description: Missing `?location_id=`, missing `name`, or invalid `definition`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Write access requires an agency key (`ak_`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /segments/{id}:
+    get:
+      summary: Retrieve segment
+      operationId: getSegment
+      description: Fetch a single segment by ID. Must belong to the resolved location.
+      parameters:
+        - $ref: "#/components/parameters/SegmentId"
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: The segment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SegmentResponse"
+        "404":
+          description: Segment not found for this location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      summary: Update segment
+      operationId: patchSegment
+      description: >
+        Partially update a segment (`name`, `description`, `is_favorite`,
+        `definition`). A patched `definition` is re-validated. Requires an agency
+        key (`ak_`).
+      parameters:
+        - $ref: "#/components/parameters/SegmentId"
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchSegmentRequest"
+      responses:
+        "200":
+          description: Segment updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Invalid `definition`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Write access requires an agency key (`ak_`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Delete segment
+      operationId: deleteSegment
+      description: Permanently delete a segment scoped to the resolved location. Requires an agency key (`ak_`).
+      parameters:
+        - $ref: "#/components/parameters/SegmentId"
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Segment deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "403":
+          description: Write access requires an agency key (`ak_`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /segments/{id}/count:
+    get:
+      summary: Count segment members
+      operationId: countSegmentMembers
+      description: >
+        Number of people currently matching the segment. Readable with either
+        key type. Computed live against the person graph.
+      parameters:
+        - $ref: "#/components/parameters/SegmentId"
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Member count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    example: 128
+        "404":
+          description: Segment not found for this location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /segments/{id}/members:
+    get:
+      summary: List segment members
+      operationId: listSegmentMembers
+      description: >
+        People currently matching the segment, newest activity first, paginated
+        with `limit`/`offset`. Readable with either key type.
+      parameters:
+        - $ref: "#/components/parameters/SegmentId"
+        - $ref: "#/components/parameters/LocationId"
+        - name: limit
+          in: query
+          required: false
+          description: Max members to return (1–1000).
+          schema:
+            type: integer
+            default: 50
+            maximum: 1000
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Matching people
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SegmentMembersResponse"
+        "404":
+          description: Segment not found for this location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Builder key as a bearer token. Use an agency key for full CRUD
+        (`Bearer ak_...`) or a viewer key for read-only access (`Bearer sk_...`).
+    AgencyKeyQuery:
+      type: apiKey
+      in: query
+      name: ak
+      description: "Agency key passed as a query parameter. Format: `ak_...`."
+    SecretKeyQuery:
+      type: apiKey
+      in: query
+      name: sk
+      description: "Viewer (secret) key passed as a query parameter. Format: `sk_...`."
+  parameters:
+    SegmentId:
+      name: id
+      in: path
+      required: true
+      description: Segment UUID.
+      schema:
+        type: string
+        format: uuid
+    LocationId:
+      name: location_id
+      in: query
+      required: false
+      description: >-
+        Client location to scope the request to. Required when authenticating
+        with an agency key (`ak_`). Ignored for viewer keys (`sk_`).
+      schema:
+        type: string
+        example: acme-retail
+  schemas:
+    SegmentDefinition:
+      type: object
+      description: >-
+        A flat object of person-attribute filters. All present filters combine
+        with AND. Any subset may be used; at least one is required. Unknown keys
+        are rejected.
+      properties:
+        search:
+          type: string
+          description: Case-insensitive substring match on name, email, or company.
+          example: acme
+        has_email:
+          type: boolean
+          description: Only people with a known email.
+        channel:
+          type: string
+          description: Most recent acquisition channel (exact).
+          example: organic
+        utm_source:
+          type: string
+          description: Most recent utm_source (exact).
+          example: google
+        utm_campaign:
+          type: string
+          description: Most recent utm_campaign (exact).
+        country:
+          type: string
+          description: First-seen geo country code (exact).
+          example: US
+        device_type:
+          type: string
+          description: Most recent device type (exact).
+          example: mobile
+        min_sessions:
+          type: integer
+          description: Minimum lifetime session count.
+          example: 3
+        min_identities:
+          type: integer
+          description: Minimum number of merged identities.
+          example: 2
+        active_within_days:
+          type: integer
+          description: Last seen within the last N days.
+          example: 30
+        inactive_days:
+          type: integer
+          description: Last seen more than N days ago (dormant).
+          example: 90
+        first_seen_within_days:
+          type: integer
+          description: First seen within the last N days (new people).
+          example: 7
+    Segment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Active organic (30d)
+        description:
+          type: string
+          nullable: true
+        definition:
+          $ref: "#/components/schemas/SegmentDefinition"
+        is_favorite:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SegmentMember:
+      type: object
+      description: A person matching the segment (subset of the person profile).
+      properties:
+        id:
+          type: string
+        identity_count:
+          type: integer
+        session_count:
+          type: integer
+        first_seen:
+          type: string
+          format: date-time
+        last_seen:
+          type: string
+          format: date-time
+        display_name:
+          type: string
+        email:
+          type: string
+        company:
+          type: string
+        last_channel:
+          type: string
+        first_geo_country:
+          type: string
+        last_device_type:
+          type: string
+    SaveSegmentRequest:
+      type: object
+      required:
+        - name
+        - definition
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Include to update an existing segment; omit to create.
+        name:
+          type: string
+          example: Active organic (30d)
+        description:
+          type: string
+        definition:
+          $ref: "#/components/schemas/SegmentDefinition"
+        is_favorite:
+          type: boolean
+    PatchSegmentRequest:
+      type: object
+      description: At least one field. A patched `definition` is re-validated.
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        is_favorite:
+          type: boolean
+        definition:
+          $ref: "#/components/schemas/SegmentDefinition"
+    SegmentResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Segment"
+    SegmentListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Segment"
+    SegmentMembersResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SegmentMember"
+        rows:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: unknown filter: foo
