@@ -47,13 +47,47 @@ paths:
       summary: List session replays
       operationId: listReplays
       description: >
-        List recorded sessions for the location, newest-first (up to the most
-        recent 2000 within the 30-day retention window). Each row is enriched
-        with identity, device, duration, and activity counters derived from the
-        recording.
+        List recorded sessions for the location, newest-first, within the
+        30-day retention window. Each row carries the session's full entry
+        attribution (UTMs, landing page, referrer, device, geo — the same
+        fields as `GET /sessions` in the Data API) plus identity, duration,
+        and activity counters derived from the recording.
+
+
+        **Filtering**: accepts the same filters as `GET /sessions` —
+        `utm_source`, `utm_medium`, `utm_campaign`, `landing_page`,
+        `device_type`, `browser`, `os`, `country`, `date_from`/`date_to`,
+        `engaged`, `bounce`, `is_identified`, `min_duration` — plus
+        `segment_id` to scope to a saved segment's members:
+
+
+        `GET /client/v1/data/replays?utm_source=Facebook&landing_page=/pricing`
+
+
+        `GET /client/v1/data/replays?segment_id=9f4e...&device_type=mobile`
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+        - $ref: "#/components/parameters/FilterUtmSource"
+        - $ref: "#/components/parameters/FilterUtmMedium"
+        - $ref: "#/components/parameters/FilterUtmCampaign"
+        - $ref: "#/components/parameters/FilterDeviceType"
+        - $ref: "#/components/parameters/FilterBrowser"
+        - $ref: "#/components/parameters/FilterOs"
+        - $ref: "#/components/parameters/FilterCountry"
+        - $ref: "#/components/parameters/FilterLandingPage"
+        - $ref: "#/components/parameters/FilterEngaged"
+        - $ref: "#/components/parameters/FilterBounce"
+        - $ref: "#/components/parameters/FilterIsIdentified"
+        - name: min_duration
+          in: query
+          required: false
+          description: Minimum session duration in seconds.
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/SegmentId"
         - name: limit
           in: query
           required: false
@@ -62,6 +96,13 @@ paths:
             type: integer
             default: 100
             maximum: 1000
+        - name: offset
+          in: query
+          required: false
+          description: Row offset for pagination.
+          schema:
+            type: integer
+            default: 0
       responses:
         "200":
           description: Session list
@@ -75,6 +116,12 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Unknown `segment_id` for this location (`segment_not_found`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "429":
           $ref: "#/components/responses/RateLimited"
   /replays/{sessionId}:
@@ -193,6 +240,112 @@ components:
         Ignored for secret (`sk_`) keys.
       schema:
         type: string
+    DateFrom:
+      name: date_from
+      in: query
+      required: false
+      description: Start date (`YYYY-MM-DD`), on session start time.
+      schema:
+        type: string
+        format: date
+    DateTo:
+      name: date_to
+      in: query
+      required: false
+      description: End date (`YYYY-MM-DD`).
+      schema:
+        type: string
+        format: date
+    FilterUtmSource:
+      name: utm_source
+      in: query
+      required: false
+      description: Filter to sessions with this UTM source. Empty string = "no value set".
+      schema:
+        type: string
+    FilterUtmMedium:
+      name: utm_medium
+      in: query
+      required: false
+      description: Filter to sessions with this UTM medium.
+      schema:
+        type: string
+    FilterUtmCampaign:
+      name: utm_campaign
+      in: query
+      required: false
+      description: Filter to sessions with this UTM campaign.
+      schema:
+        type: string
+    FilterDeviceType:
+      name: device_type
+      in: query
+      required: false
+      description: Filter to sessions on this device type.
+      schema:
+        type: string
+    FilterBrowser:
+      name: browser
+      in: query
+      required: false
+      description: Filter to sessions on this browser.
+      schema:
+        type: string
+    FilterOs:
+      name: os
+      in: query
+      required: false
+      description: Filter to sessions on this operating system.
+      schema:
+        type: string
+    FilterCountry:
+      name: country
+      in: query
+      required: false
+      description: Filter to sessions from this country (ISO code).
+      schema:
+        type: string
+    FilterLandingPage:
+      name: landing_page
+      in: query
+      required: false
+      description: Filter to sessions whose entry path matches (exact).
+      schema:
+        type: string
+    FilterEngaged:
+      name: engaged
+      in: query
+      required: false
+      description: Filter by engagement (`1`/`0`, or `true`/`false`).
+      schema:
+        type: boolean
+    FilterBounce:
+      name: bounce
+      in: query
+      required: false
+      description: Filter by bounce (`1`/`0`, or `true`/`false`).
+      schema:
+        type: boolean
+    FilterIsIdentified:
+      name: is_identified
+      in: query
+      required: false
+      description: Filter to identified (`1`) or anonymous (`0`) sessions.
+      schema:
+        type: boolean
+    SegmentId:
+      name: segment_id
+      in: query
+      required: false
+      description: >
+        Scope results to members of a saved segment (created via the Segments
+        API). The segment decides WHICH PEOPLE qualify (a live definition,
+        evaluated at query time); the date window decides which of their
+        recorded sessions are returned. Composable with all other filters.
+        Unknown or foreign id → `404 segment_not_found`.
+      schema:
+        type: string
+        format: uuid
   responses:
     Unauthorized:
       description: Missing, malformed, or invalid key
@@ -229,6 +382,14 @@ components:
   schemas:
     ReplaySession:
       type: object
+      description: >
+        A recorded session row: the full session record from `GET /sessions`
+        (entry attribution — all UTMs, click IDs, landing/exit page, referrer,
+        device, geo — plus `duration_seconds`, `events`, `pageviews`,
+        `engaged`, `bounce`, `is_identified`) with replay activity counters
+        merged on top. Only replay-specific fields are listed here; see the
+        Data API `SessionRow` schema for the rest.
+      additionalProperties: true
       properties:
         session_id:
           type: string
@@ -236,7 +397,7 @@ components:
         started_at:
           type: string
           nullable: true
-          description: When recording started (from the `$replay_started` event).
+          description: Session start time.
         person_id:
           type: string
           nullable: true
@@ -245,6 +406,20 @@ components:
           type: string
           nullable: true
         url:
+          type: string
+          nullable: true
+          description: Legacy alias of `landing_url`.
+        landing_page:
+          type: string
+          nullable: true
+          description: Entry path of the session.
+        utm_source:
+          type: string
+          nullable: true
+        utm_medium:
+          type: string
+          nullable: true
+        utm_campaign:
           type: string
           nullable: true
         browser:
@@ -256,6 +431,7 @@ components:
         duration_ms:
           type: integer
           nullable: true
+          description: Recorded duration from the replay summary (absent if the tab closed before the summary flushed).
         clicks:
           type: integer
         keypresses:
