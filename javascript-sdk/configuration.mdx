@@ -217,6 +217,28 @@ The full set of options you can pass to `init(key, config)`.
   Capture Core Web Vitals (LCP, FID, CLS, FCP, TTFB, INP). Default: `false`. Pass an object for fine-grained control: `{ enabled: true, metrics: ['LCP', 'CLS', 'INP'], sample_rate: 0.5 }`.
 </ParamField>
 
+### Session replay
+
+<ParamField body="session_replay" param-type="boolean|object" required="false" show-location="false" deprecated="false">
+  Record user sessions (DOM, console, and network activity) with [rrweb](https://github.com/rrweb-io/rrweb) for later playback. Default: `false` (off). Pass `true` to enable with defaults, or an object for control:
+
+  - `enabled` (boolean) — turn recording on. Default: `false`.
+  - `sampleRate` (number, 0–1) — fraction of sessions to record, decided deterministically per session ID. Default: `1`.
+  - `maskAllInputs` (boolean) — mask all form input values. Default: `true`.
+  - `captureConsole` (boolean) — record `console` log/warn/error calls. Default: `true`.
+  - `captureNetwork` (boolean) — record fetch/XHR/resource timing (a waterfall). Default: `true`.
+  - `recordNetworkHeaders` (boolean) — include request/response headers. Default: `false`.
+  - `recordNetworkBody` (boolean) — include response bodies (capped at 10&nbsp;KB). Default: `false`.
+  - `blockSelector` (string) — CSS selector for elements to exclude from the recording.
+  - `maskTextSelector` (string) — CSS selector for text nodes to mask.
+  - `flushEventThreshold` (number) — buffered events before an upload. Default: `100`.
+  - `flushIntervalMs` (number) — maximum milliseconds between uploads. Default: `5000`.
+</ParamField>
+
+<Callout kind="info">
+  Session replay is normally turned on **per client from the server** (via the `/decide` remote config). The server value wins over your local config: an explicit server `enabled: false` disables recording even if you pass `enabled: true` here, and recording only starts after remote config loads. Recording is blocked entirely for HIPAA locations. Recorded sessions are read back through the [Data API](/data-api/overview) and expire after 30 days.
+</Callout>
+
 ### Geolocation
 
 <ParamField body="geolocation" param-type="boolean|object" required="false" show-location="false" deprecated="false">
