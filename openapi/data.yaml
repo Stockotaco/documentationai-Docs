@@ -255,6 +255,15 @@ paths:
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
+        - name: session_id
+          in: query
+          required: false
+          description: >
+            Return just this one session (exact match). Useful for looking up a
+            single session's attribution — e.g. alongside its replay. When set,
+            other filters and the date window are effectively moot.
+          schema:
+            type: string
         - $ref: "#/components/parameters/DateFrom"
         - $ref: "#/components/parameters/DateTo"
         - $ref: "#/components/parameters/FilterUtmSource"
