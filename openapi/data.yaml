@@ -131,6 +131,258 @@ paths:
           $ref: "#/components/responses/UpstreamError"
         "503":
           $ref: "#/components/responses/NotConfigured"
+  /events/breakdown:
+    get:
+      summary: Traffic breakdown by dimension
+      operationId: getEventsBreakdown
+      description: >
+        True pageview volume broken down by a single dimension — the source for
+        Top Pages, Devices, Geo, and Sources reports. Reads raw events (not
+        Core Web Vitals samples), so counts are honest traffic. Each row is
+        `{ value, pageviews, unique_users, unique_sessions }`, ordered by
+        `pageviews` descending. `value` is an empty string when the dimension
+        is not set on an event. `pageviews` always counts `$pageview` events
+        regardless of `event_type`.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+        - name: dimension
+          in: query
+          required: false
+          description: Dimension to group by. Defaults to `page`.
+          schema:
+            type: string
+            default: page
+            enum:
+              - page
+              - page_url
+              - referrer
+              - referring_domain
+              - device
+              - browser
+              - os
+              - country
+              - utm_source
+              - utm_medium
+              - utm_campaign
+              - utm_content
+              - utm_term
+        - name: event_type
+          in: query
+          required: false
+          description: Filter to a single event type. Default counts all events.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Max rows. Default `50`, min `1`, max `1000`.
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 1000
+      responses:
+        "200":
+          description: Breakdown rows
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/RowsResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/BreakdownRow"
+        "400":
+          description: Unknown `dimension` (`invalid_dimension`), or no location bound (`location_required`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/NotConfigured"
+  /sessions:
+    get:
+      summary: Session list
+      operationId: getSessions
+      description: >
+        One row per session, most recent first — the backbone of attribution
+        reporting. Attribution fields (all UTMs, click IDs, referrer, landing
+        page) come from the session's entry properties. `engaged` is derived:
+        a session is engaged if it has more than one pageview, lasted at least
+        10 seconds, or fired a non-pageview event; `bounce` is the inverse.
+        Empty string on a filter means "no value set". Not yet returned:
+        `is_new_visitor` and `converted`/goal fields.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+        - $ref: "#/components/parameters/FilterUtmSource"
+        - $ref: "#/components/parameters/FilterUtmMedium"
+        - $ref: "#/components/parameters/FilterUtmCampaign"
+        - $ref: "#/components/parameters/FilterDeviceType"
+        - $ref: "#/components/parameters/FilterBrowser"
+        - $ref: "#/components/parameters/FilterOs"
+        - $ref: "#/components/parameters/FilterCountry"
+        - $ref: "#/components/parameters/FilterLandingPage"
+        - $ref: "#/components/parameters/FilterEngaged"
+        - $ref: "#/components/parameters/FilterBounce"
+        - $ref: "#/components/parameters/FilterIsIdentified"
+        - name: min_duration
+          in: query
+          required: false
+          description: Minimum session duration in seconds.
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          required: false
+          description: Max rows. Default `100`, min `1`, max `1000`.
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 1000
+        - name: offset
+          in: query
+          required: false
+          description: Row offset for pagination.
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Session rows
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/RowsResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SessionRow"
+        "400":
+          $ref: "#/components/responses/LocationRequired"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/NotConfigured"
+  /sessions/breakdown:
+    get:
+      summary: Session group-by aggregates
+      operationId: getSessionsBreakdown
+      description: >
+        Session aggregates grouped by one dimension: session count, engaged
+        count/rate, bounce rate, average duration and pages per group. Accepts
+        the same filters as `/sessions`, so you can group a filtered set.
+        Ordered by `session_count` descending. Single dimension only —
+        comma-list multi-dimension group-by is not yet supported.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+        - $ref: "#/components/parameters/FilterUtmSource"
+        - $ref: "#/components/parameters/FilterUtmMedium"
+        - $ref: "#/components/parameters/FilterUtmCampaign"
+        - $ref: "#/components/parameters/FilterDeviceType"
+        - $ref: "#/components/parameters/FilterBrowser"
+        - $ref: "#/components/parameters/FilterOs"
+        - $ref: "#/components/parameters/FilterCountry"
+        - $ref: "#/components/parameters/FilterLandingPage"
+        - $ref: "#/components/parameters/FilterEngaged"
+        - $ref: "#/components/parameters/FilterBounce"
+        - $ref: "#/components/parameters/FilterIsIdentified"
+        - name: min_duration
+          in: query
+          required: false
+          description: Minimum session duration in seconds.
+          schema:
+            type: integer
+        - name: group_by
+          in: query
+          required: true
+          description: Dimension to group by.
+          schema:
+            type: string
+            enum:
+              - utm_source
+              - utm_medium
+              - utm_campaign
+              - utm_content
+              - utm_term
+              - device_type
+              - browser
+              - os
+              - country
+              - landing_page
+              - exit_page
+              - referring_domain
+              - engaged
+              - bounce
+              - is_identified
+        - name: limit
+          in: query
+          required: false
+          description: Max groups. Default `50`, min `1`, max `1000`.
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 1000
+      responses:
+        "200":
+          description: Grouped session rows
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/RowsResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SessionBreakdownRow"
+        "400":
+          description: Missing or unknown `group_by` (`invalid_group_by`), or no location bound (`location_required`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/NotConfigured"
   /export:
     get:
       summary: BigQuery export status
@@ -216,6 +468,83 @@ components:
       schema:
         type: string
         format: date
+    FilterUtmSource:
+      name: utm_source
+      in: query
+      required: false
+      description: Filter to sessions with this UTM source. Empty string = "no value set".
+      schema:
+        type: string
+    FilterUtmMedium:
+      name: utm_medium
+      in: query
+      required: false
+      description: Filter to sessions with this UTM medium.
+      schema:
+        type: string
+    FilterUtmCampaign:
+      name: utm_campaign
+      in: query
+      required: false
+      description: Filter to sessions with this UTM campaign.
+      schema:
+        type: string
+    FilterDeviceType:
+      name: device_type
+      in: query
+      required: false
+      description: Filter to sessions on this device type.
+      schema:
+        type: string
+    FilterBrowser:
+      name: browser
+      in: query
+      required: false
+      description: Filter to sessions on this browser.
+      schema:
+        type: string
+    FilterOs:
+      name: os
+      in: query
+      required: false
+      description: Filter to sessions on this operating system.
+      schema:
+        type: string
+    FilterCountry:
+      name: country
+      in: query
+      required: false
+      description: Filter to sessions from this country (ISO code).
+      schema:
+        type: string
+    FilterLandingPage:
+      name: landing_page
+      in: query
+      required: false
+      description: Filter to sessions whose entry path matches.
+      schema:
+        type: string
+    FilterEngaged:
+      name: engaged
+      in: query
+      required: false
+      description: Filter by engagement (`1`/`0`, or `true`/`false`).
+      schema:
+        type: boolean
+    FilterBounce:
+      name: bounce
+      in: query
+      required: false
+      description: Filter by bounce (`1`/`0`, or `true`/`false`).
+      schema:
+        type: boolean
+    FilterIsIdentified:
+      name: is_identified
+      in: query
+      required: false
+      description: Filter to identified (`1`) or anonymous (`0`) sessions.
+      schema:
+        type: boolean
   responses:
     Unauthorized:
       description: Missing, malformed, or invalid key
@@ -286,6 +615,93 @@ components:
         rows:
           type: integer
           description: Number of rows returned.
+    BreakdownRow:
+      type: object
+      description: One dimension value with its traffic counts.
+      properties:
+        value:
+          type: string
+          description: The dimension value (e.g. `/pricing`). Empty string when unset.
+          example: /pricing
+        pageviews:
+          type: integer
+          example: 1240
+        unique_users:
+          type: integer
+          example: 830
+        unique_sessions:
+          type: integer
+          example: 910
+    SessionRow:
+      type: object
+      description: One session.
+      properties:
+        session_id: { type: string }
+        distinct_id: { type: string }
+        user_id: { type: string, nullable: true }
+        is_identified: { type: boolean }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time }
+        duration_seconds: { type: integer }
+        events: { type: integer }
+        pageviews: { type: integer }
+        engaged: { type: boolean }
+        bounce: { type: boolean }
+        landing_page: { type: string }
+        landing_url: { type: string }
+        exit_page: { type: string }
+        referrer: { type: string }
+        referring_domain: { type: string }
+        utm_source: { type: string }
+        utm_medium: { type: string }
+        utm_campaign: { type: string }
+        utm_content: { type: string }
+        utm_term: { type: string }
+        utm_id: { type: string }
+        gclid: { type: string }
+        gbraid: { type: string }
+        wbraid: { type: string }
+        fbclid: { type: string }
+        msclkid: { type: string }
+        ttclid: { type: string }
+        twclid: { type: string }
+        li_fat_id: { type: string }
+        epik: { type: string }
+        sccid: { type: string }
+        device_type: { type: string }
+        browser: { type: string }
+        os: { type: string }
+        country: { type: string }
+        city: { type: string }
+        timezone: { type: string }
+    SessionBreakdownRow:
+      type: object
+      description: Session aggregates for one group.
+      properties:
+        value:
+          type: string
+          description: The group value. For boolean group_by (`engaged`/`bounce`/`is_identified`) this is `"true"`/`"false"`.
+          example: google
+        session_count:
+          type: integer
+          example: 1204
+        engaged_count:
+          type: integer
+          example: 812
+        engaged_rate:
+          type: number
+          description: Engaged sessions as a percentage.
+          example: 67.4
+        bounce_rate:
+          type: number
+          description: Bounced sessions as a percentage.
+          example: 32.6
+        avg_duration_seconds:
+          type: number
+          example: 84.2
+        avg_pageviews:
+          type: number
+          example: 2.7
     ExportResponse:
       type: object
       properties:

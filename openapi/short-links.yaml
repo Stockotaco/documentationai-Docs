@@ -427,11 +427,23 @@ paths:
         - $ref: "#/components/parameters/LimitQuery"
       responses:
         "200":
-          description: Tinybird CWV result
+          description: >
+            Tinybird CWV result. One row per metric (per time bucket when
+            `granularity` is set, per dimension value when `breakdown` is set).
+            `time_bucket` is present only with `granularity`; `breakdown_value`
+            only with `breakdown`. Values are grouped in the `data` array.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TinybirdResponse"
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CwvMetricsRow"
+                  rows:
+                    type: integer
+                    description: Number of rows returned.
         "401":
           $ref: "#/components/responses/Unauthorized"
         "503":
@@ -780,6 +792,66 @@ components:
           type: integer
           description: Number of links returned in this page.
           example: 25
+    CwvMetricsRow:
+      type: object
+      description: >
+        One Core Web Vitals aggregation. Column values are numeric strings in
+        the raw Tinybird envelope; percentiles/units follow the metric.
+      properties:
+        metric_name:
+          type: string
+          description: Metric, uppercased.
+          enum: [LCP, FCP, CLS, TTFB, FID, INP]
+          example: LCP
+        metric_unit:
+          type: string
+          description: "`ms` for timing metrics, `score` for CLS."
+          example: ms
+        time_bucket:
+          type: string
+          description: Present only when `granularity` is set — start of the bucket (date or datetime).
+          example: "2026-02-25"
+        breakdown_value:
+          type: string
+          description: Present only when `breakdown` is set — the dimension value.
+          example: /pricing
+        sample_count:
+          type: integer
+          description: Number of web-vital samples in the group.
+          example: 7694
+        unique_users:
+          type: integer
+          example: 4678
+        unique_sessions:
+          type: integer
+          example: 5901
+        p50: { type: number, example: 1030 }
+        p75:
+          type: number
+          description: The headline percentile for CWV.
+          example: 2200
+        p90: { type: number, example: 4500 }
+        p95: { type: number, example: 8200 }
+        p99: { type: number, example: 45000 }
+        avg_value: { type: number, example: 2770 }
+        min_value: { type: number, example: 50 }
+        max_value: { type: number, example: 120000 }
+        good_count:
+          type: integer
+          description: Samples rated "good".
+          example: 6125
+        needs_improvement_count:
+          type: integer
+          example: 953
+        poor_count:
+          type: integer
+          example: 616
+        good_pct:
+          type: number
+          description: Percentage of samples rated "good".
+          example: 79.6
+        needs_improvement_pct: { type: number, example: 12.4 }
+        poor_pct: { type: number, example: 8.0 }
     TinybirdResponse:
       type: object
       description: Raw Tinybird pipe JSON response, proxied through unchanged.
