@@ -256,7 +256,27 @@ components:
         A flat object of person-attribute filters. All present filters combine
         with AND. Any subset may be used; at least one is required. Unknown keys
         are rejected.
+
+
+        The `attribution` field picks which touch the attribution filters
+        (`channel`, `utm_source`, `utm_campaign`, `country`, `device_type`)
+        match against — `last` (default), `first`, or `session`. Example:
+        `{ "utm_source": "fb", "attribution": "session" }` = "everyone who
+        ever had a session that arrived via fb".
       properties:
+        attribution:
+          type: string
+          enum: [first, last, session]
+          default: last
+          description: >-
+            Touch the attribution filters match against. `last` (default):
+            the person's most recent touch. `first`: their first-ever touch.
+            `session`: the person had ANY session whose entry matches — with
+            this scope only `utm_source`, `utm_campaign`, `country`, and
+            `device_type` may be used (other filters are person-level and are
+            rejected rather than half-applied). In the Data API's `segment_id`
+            scoping, `session` matches visitors directly against the sessions
+            store, so it does not depend on identity-graph coverage.
         search:
           type: string
           description: Case-insensitive substring match on name, email, or company.
@@ -266,22 +286,22 @@ components:
           description: Only people with a known email.
         channel:
           type: string
-          description: Most recent acquisition channel (exact).
+          description: Acquisition channel (exact), per `attribution` scope (first/last only).
           example: organic
         utm_source:
           type: string
-          description: Most recent utm_source (exact).
+          description: utm_source (exact), per `attribution` scope.
           example: google
         utm_campaign:
           type: string
-          description: Most recent utm_campaign (exact).
+          description: utm_campaign (exact), per `attribution` scope.
         country:
           type: string
-          description: First-seen geo country code (exact).
+          description: Geo country code (exact), per `attribution` scope.
           example: US
         device_type:
           type: string
-          description: Most recent device type (exact).
+          description: Device type (exact), per `attribution` scope.
           example: mobile
         min_sessions:
           type: integer

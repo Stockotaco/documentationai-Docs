@@ -590,8 +590,11 @@ components:
       description: >
         Scope results to members of a saved segment (created via the Segments
         API). Membership is resolved live at query time — "people currently in
-        the segment" — through the identity graph: a row counts when its
-        `distinct_id` maps to a person matching the segment's definition.
+        the segment". For `first`/`last` attribution scopes this runs through
+        the identity graph (a row counts when its `distinct_id` maps to a
+        matching person); a segment with `attribution: "session"` instead
+        matches visitors directly against the sessions store ("ever had a
+        session that arrived via X"), with no identity-graph dependency.
         Composable with all other filters. Unknown or foreign id →
         `404 segment_not_found`.
       schema:
