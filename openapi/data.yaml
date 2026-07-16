@@ -247,9 +247,11 @@ paths:
         `GET /client/v1/data/sessions?segment_id=9f4e...&engaged=1&device_type=mobile`
 
 
-        Membership is resolved live at query time ("people currently in the
-        segment"), through the identity graph — a session counts when its
-        `distinct_id` maps to a matching person.
+        The segment decides *which people* qualify (evaluated live at query
+        time); the date window decides *which of their sessions* are returned —
+        a qualifying person contributes all their in-window sessions, including
+        ones unrelated to how they qualified. See the `segment_id` parameter
+        for attribution-scope and identity-graph details.
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
@@ -589,8 +591,13 @@ components:
       required: false
       description: >
         Scope results to members of a saved segment (created via the Segments
-        API). Membership is resolved live at query time — "people currently in
-        the segment". For `first`/`last` attribution scopes this runs through
+        API). Two independent time filters apply: the segment decides WHICH
+        PEOPLE qualify (a live definition, evaluated at query time — not
+        stored membership), and `date_from`/`date_to` decides WHICH OF THEIR
+        ROWS are returned. A person who qualifies today contributes all their
+        sessions/events inside the date window — including ones unrelated to
+        how they qualified; there is no "only rows from while they were a
+        member". For `first`/`last` attribution scopes membership runs through
         the identity graph (a row counts when its `distinct_id` maps to a
         matching person); a segment with `attribution: "session"` instead
         matches visitors directly against the sessions store ("ever had a
