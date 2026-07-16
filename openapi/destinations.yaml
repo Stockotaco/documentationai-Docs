@@ -449,6 +449,58 @@ paths:
           $ref: "#/components/responses/UpstreamError"
         "503":
           $ref: "#/components/responses/AnalyticsNotConfigured"
+  /client/v1/destinations/{id}/deliveries/{eventUuid}:
+    get:
+      summary: Delivery detail (sent payload + destination response)
+      operationId: getDestinationDelivery
+      description: >
+        Fetch the full detail for one delivery — the request payload sent to the
+        destination and the raw response it returned — so a failure can be
+        diagnosed without leaving the dashboard. The delivery-list rows are lean
+        (metadata only); these heavy fields are fetched only on drill-down.
+
+
+        Keyed by the source `event_uuid` from a list row (there is one delivery
+        record per destination + event). `request_body` is returned as a parsed
+        object when it is JSON. Secret-bearing request headers are redacted at
+        capture time; for webhook rows, `request_body`/`request_headers` are
+        additionally redacted to `***` for read-only (`sk_`) keys. HIPAA-enabled
+        locations do not store request/response bodies — those fields are `null`,
+        though `fbtrace_id`, `response_status`, and `error` remain.
+      parameters:
+        - $ref: "#/components/parameters/DestinationId"
+        - name: eventUuid
+          in: path
+          required: true
+          description: The `event_uuid` of the source event, taken from a delivery-list row.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Delivery detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/DeliveryDetail"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Destination not found, or no delivery for this event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /client/v1/destinations/{id}/test:
     post:
       summary: Test a destination
@@ -973,6 +1025,80 @@ components:
           nullable: true
         enrichment_applied:
           type: boolean
+    DeliveryDetail:
+      type: object
+      description: >
+        One delivery record with its captured payloads. Returned by the delivery
+        detail endpoint.
+      properties:
+        id:
+          type: string
+          format: uuid
+        action_id:
+          type: string
+          format: uuid
+        event_name:
+          type: string
+        event_uuid:
+          type: string
+        destination_type:
+          type: string
+          enum: [webhook, meta_capi, google_ads]
+        destination_event_name:
+          type: string
+        status:
+          type: string
+          enum: [success, failed, skipped]
+        attempt_count:
+          type: integer
+        max_attempts:
+          type: integer
+        response_status:
+          type: integer
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        request_body:
+          nullable: true
+          description: >
+            The payload sent to the destination (Meta CAPI event payload, Google
+            Ads conversion, or the rendered webhook body). Parsed to an object
+            when JSON. Captured for **failed** deliveries only — `null` on
+            success, `null` for HIPAA locations, and `"***"` for webhook rows
+            read with a viewer (`sk_`) key.
+        response_body:
+          type: string
+          nullable: true
+          description: >
+            Raw response returned by the destination (truncated to 8 KB).
+            Captured for **failed** deliveries only — `null` on success and for
+            HIPAA locations.
+        request_headers:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: string
+          description: Redacted request headers (webhook only). `Authorization`/`Cookie` are `***`.
+        response_headers:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: string
+          description: Redacted response headers.
+        fbtrace_id:
+          type: string
+          nullable: true
+          description: Meta trace id parsed from the response — what Meta support asks for. Retained even for HIPAA locations.
+        enrichment_applied:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
     Health:
       type: object
       properties:

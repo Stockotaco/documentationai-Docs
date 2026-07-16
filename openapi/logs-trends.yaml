@@ -52,6 +52,14 @@ paths:
           required: false
           schema:
             type: string
+        - name: uuid
+          in: query
+          description: >
+            Resolve a single event by its `event_uuid`. Lets a destination
+            delivery-log row link straight to the source event that triggered it.
+          required: false
+          schema:
+            type: string
         - name: event_type
           in: query
           description: >

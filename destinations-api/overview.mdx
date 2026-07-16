@@ -77,13 +77,18 @@ For `meta_capi` and `google_ads`, an event is delivered only when **both** condi
 
 `event_mapping` is the effective filter for ad destinations — an event not present there is never forwarded, regardless of trigger rules. In practice, add one `mythic_event` rule per event you map (matching the `event_mapping` keys), so the trigger rules and mapping stay consistent.
 
+## Rate limiting
+
+Each destination has an optional per-destination delivery cap, set with `rate_limit_max` (deliveries) over `rate_limit_window_seconds` (window) on create or update. Deliveries beyond the cap within the window are dropped and logged with status `skipped` and error `rate_limited` — they are **not** retried. When omitted, a destination defaults to **10000 deliveries per 3600 seconds** (1 hour). Set an explicit `rate_limit_max` if your event volume warrants a different ceiling.
+
 ## Credentials
 
 Ad destinations (`meta_capi`, `google_ads`) read their secrets from a separate, never-readable credential store keyed by `(location_id, destination_type, credential_name)`. Store or rotate a credential with `PUT /credentials/{type}`; list metadata with `GET /credentials`. Credential values are write-only — no endpoint ever returns them. Webhooks carry their auth inline in `action_config` instead.
 
 ## Delivery logs & health
 
-- `GET /deliveries` returns individual delivery attempts (newest first), filterable by destination, status, source event, and time range. It defaults to the last 7 days.
+- `GET /deliveries` returns individual delivery attempts (newest first), filterable by destination, status, source event, and time range. It defaults to the last 7 days. Rows are lean — metadata only, no payloads.
+- `GET /{id}/deliveries/{eventUuid}` returns the **detail** for one delivery: the `request_body` sent to the destination and the raw `response_body` it returned, plus redacted `request_headers`/`response_headers` and the Meta `fbtrace_id`. Key it with the `event_uuid` from a list row. Use it to answer "what did we send, and what did the destination say back?" on a failed delivery. Bodies are captured for **failed** deliveries only — that's the diagnosis case, and it keeps the audit table small at high volume; successful deliveries keep `fbtrace_id` + `response_status`, and you can still reach the source event via `/logs?uuid=`. HIPAA-enabled locations omit bodies entirely (kept: `fbtrace_id`, `response_status`, `error`); webhook request bodies/headers are redacted for read-only (`sk_`) keys.
 - `GET /health` returns per-destination aggregates over a rolling window (default 24 hours): success rate, failure counts, latency percentiles, and a `credential_ok` flag that flips to `false` when the most recent failure was a 401/403.
 
 ## Testing
