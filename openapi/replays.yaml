@@ -21,7 +21,11 @@ info:
 
     3. Play one: `GET /replays/{sessionId}` → feed `data.events` straight into
     `rrweb-player`. Console and network entries ride along in the same stream
-    (rrweb Plugin/Custom events) if you want DevTools-style tabs.
+    (rrweb Plugin/Custom events) if you want DevTools-style tabs. Version
+    note: streams are recorded with rrweb 2.1.0 — pin `rrweb-player` to
+    exactly `2.0.0-alpha.20` (the stable 2.0.x/2.1.x ESM builds ship without
+    the replay engine and crash on load); a custom player on `@rrweb/replay`
+    2.1.0 works.
 
     4. Attribution sidebar: `GET /sessions?session_id={id}` (Data API) — one
     row with source/medium/campaign, click IDs, device, geo.
@@ -80,7 +84,10 @@ paths:
       description: >
         Return the full rrweb event stream for one session (DOM + console +
         network), concatenated in order. Feed `data.events` straight into an
-        rrweb player such as `rrweb-player`.
+        rrweb player such as `rrweb-player` — pinned to exactly
+        `2.0.0-alpha.20` (streams are rrweb 2.1.0; the stable 2.0.x/2.1.x
+        rrweb-player ESM builds ship without the replay engine and crash on
+        load).
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
