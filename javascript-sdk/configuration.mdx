@@ -224,7 +224,7 @@ The full set of options you can pass to `init(key, config)`.
 
   - `enabled` (boolean) — turn recording on. Default: `false`.
   - `sampleRate` (number, 0–1) — fraction of sessions to record, decided deterministically per session ID. Default: `1`.
-  - `minDurationMs` (number) — only keep a recording once the session has lasted this long. Events buffer from the start, but nothing is transmitted (and no recording appears) until the threshold is crossed, so shorter bounce sessions send zero data. Default: `0` (keep from the first upload).
+  - `minDurationMs` (number) — only keep a recording once the session has lasted this long (measured on session age, across page loads). Events buffer from the start, but nothing is transmitted (and no recording appears) until the threshold is crossed, so shorter bounce sessions send zero data. Default: `10000` (10s); set `0` to keep every recording.
   - `maskAllInputs` (boolean) — mask all form input values. Default: `true`.
   - `captureConsole` (boolean) — record `console` log/warn/error calls. Default: `true`.
   - `captureNetwork` (boolean) — record fetch/XHR/resource timing (a waterfall). Default: `true`.
