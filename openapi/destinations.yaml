@@ -455,18 +455,26 @@ paths:
       operationId: getDestinationDelivery
       description: >
         Fetch the full detail for one delivery — the request payload sent to the
-        destination and the raw response it returned — so a failure can be
-        diagnosed without leaving the dashboard. The delivery-list rows are lean
-        (metadata only); these heavy fields are fetched only on drill-down.
+        destination and the raw response it returned — for both successful and
+        failed deliveries. The delivery-list rows are lean (metadata only); these
+        heavy fields are fetched only on drill-down.
 
 
-        Keyed by the source `event_uuid` from a list row (there is one delivery
-        record per destination + event). `request_body` is returned as a parsed
-        object when it is JSON. Secret-bearing request headers are redacted at
-        capture time; for webhook rows, `request_body`/`request_headers` are
-        additionally redacted to `***` for read-only (`sk_`) keys. HIPAA-enabled
-        locations do not store request/response bodies — those fields are `null`,
-        though `fbtrace_id`, `response_status`, and `error` remain.
+        Keyed by the source `event_uuid` from a list row. There is exactly one
+        delivery record per (destination, event), upserted across retry attempts
+        (`attempt_count` reflects the latest attempt); the per-attempt stream is
+        in the delivery list. `request_body` is returned as a parsed object when
+        it is JSON. Bodies are truncated to 8 KB and the row is retained for 30
+        days. Secret-bearing request headers are redacted at capture time; for
+        webhook rows, `request_body`/`request_headers` are additionally redacted
+        to `***` for read-only (`sk_`) keys. HIPAA-enabled locations do not store
+        request/response bodies — those fields are `null`, though `fbtrace_id`,
+        `response_status`, and `error` remain.
+
+
+        Test fires (`POST /{id}/test`) are not persisted, so this endpoint
+        returns `404 not_found` for a synthetic `test-…` event — expected, not a
+        bug.
       parameters:
         - $ref: "#/components/parameters/DestinationId"
         - name: eventUuid
@@ -494,7 +502,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
-          description: Destination not found, or no delivery for this event
+          description: >
+            Destination not found, or no delivery for this event — including
+            synthetic `test-…` events from `POST /{id}/test`, which are not
+            persisted.
           content:
             application/json:
               schema:
@@ -1064,16 +1075,16 @@ components:
           description: >
             The payload sent to the destination (Meta CAPI event payload, Google
             Ads conversion, or the rendered webhook body). Parsed to an object
-            when JSON. Captured for **failed** deliveries only — `null` on
-            success, `null` for HIPAA locations, and `"***"` for webhook rows
-            read with a viewer (`sk_`) key.
+            when JSON. Captured on both successful and failed deliveries — `null`
+            for HIPAA locations, and `"***"` for webhook rows read with a viewer
+            (`sk_`) key.
         response_body:
           type: string
           nullable: true
           description: >
             Raw response returned by the destination (truncated to 8 KB).
-            Captured for **failed** deliveries only — `null` on success and for
-            HIPAA locations.
+            Captured on both successful and failed deliveries — `null` for HIPAA
+            locations.
         request_headers:
           type: object
           nullable: true
