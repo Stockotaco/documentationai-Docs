@@ -1021,10 +1021,14 @@ components:
       properties:
         event_uuid: { type: string }
         timestamp: { type: string, format: date-time }
-        message: { type: string }
+        message: { type: string, description: "Emails are redacted to `[email]`." }
         browser: { type: string, example: Chrome }
         os: { type: string, example: Windows }
-        url: { type: string }
+        url:
+          type: string
+          description: >
+            Query string and fragment are stripped — they routinely carry
+            click ids (`fbclid`), UTMs, session tokens, and occasionally PII.
         session_id:
           type: string
           description: Deep-links to the session replay for this occurrence.
@@ -1047,7 +1051,7 @@ components:
         stack_raw:
           type: string
           nullable: true
-          description: The original error.stack string.
+          description: The original error.stack string, with embedded URL query strings stripped and emails redacted.
     SessionRow:
       type: object
       description: One session.
