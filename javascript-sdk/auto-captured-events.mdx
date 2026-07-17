@@ -18,6 +18,7 @@ The SDK automatically captures these events when the corresponding config option
 | `$create_alias` | Alias creation (via `alias()`) | Always on |
 | `$set` | Person-property update (via `identify()` or `setPersonProperties()`) | Always on |
 | `$autocapture` | Clicks, form submissions, and input changes. The `$event_type` property is `click`, `submit`, or `change` | `autocapture` |
+| `$exception` | Uncaught JS errors and unhandled promise rejections, with `$exception_type`, `$exception_message`, and `$exception_stack` | `error_tracking` |
 
 ## Feature-module events
 
