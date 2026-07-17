@@ -555,6 +555,16 @@ components:
         last_device_type:
           type: string
           example: desktop
+        first_landing_page:
+          type: string
+          description: >
+            Entry URL of the person's first session — same value format as
+            `landing_page` on `/sessions` rows.
+          example: https://example.com/pricing
+        last_landing_page:
+          type: string
+          description: Entry URL of the person's most recent session.
+          example: https://example.com/blog/launch
         properties:
           type: object
           description: >
