@@ -452,9 +452,11 @@ paths:
       description: >
         The error-tracking issue list. `$exception` events (uncaught JS errors
         and unhandled promise rejections captured by the SDK) are grouped into
-        issues by a **stable server-side fingerprint**: `issue_id` =
+        issues by a **stable server-side fingerprint**: `issue_id` = `v1:` +
         md5(exception_type + normalized message, with digits stripped so
-        per-instance values collapse). The fingerprint deliberately **excludes
+        per-instance values collapse). The `v1:` prefix versions the grouping
+        algorithm — a future change ships as `v2:`, a clean migration rather
+        than a silent remint of your saved state. The fingerprint deliberately **excludes
         the stack trace**, so minified frame names churning across deploys can
         never mint a new id — persist your own resolve/ignore state against
         `issue_id` and it stays put.
@@ -982,8 +984,13 @@ components:
       properties:
         issue_id:
           type: string
-          description: Stable md5 fingerprint of exception_type + normalized message.
-          example: 1d908dc6145bd8dc7982aff9366b5042
+          description: >
+            Stable, versioned fingerprint — `v1:` + md5(exception_type +
+            normalized message). Stable across requests and deploys; persist
+            resolve/ignore state against it. The version prefix means any
+            future change to the grouping algorithm ships as `v2:` — a clean
+            migration, never a silent remint of your saved state.
+          example: v1:1d908dc6145bd8dc7982aff9366b5042
         exception_type:
           type: string
           example: TypeError
