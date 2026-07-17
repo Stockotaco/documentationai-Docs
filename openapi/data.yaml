@@ -252,6 +252,15 @@ paths:
         a qualifying person contributes all their in-window sessions, including
         ones unrelated to how they qualified. See the `segment_id` parameter
         for attribution-scope and identity-graph details.
+
+
+        **Person scoping (profile views)**: pass `person_id` (canonical id
+        from the People API) or `distinct_id` (any raw identity value) to list
+        one person's sessions — resolved through the identity graph, so
+        anonymous pre-identification sessions are included:
+
+
+        `GET /client/v1/data/sessions?person_id=019f69bc-...&date_from=2026-01-01`
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
@@ -277,6 +286,8 @@ paths:
         - $ref: "#/components/parameters/FilterEngaged"
         - $ref: "#/components/parameters/FilterBounce"
         - $ref: "#/components/parameters/FilterIsIdentified"
+        - $ref: "#/components/parameters/FilterPersonId"
+        - $ref: "#/components/parameters/FilterDistinctId"
         - name: min_duration
           in: query
           required: false
@@ -362,6 +373,8 @@ paths:
         - $ref: "#/components/parameters/FilterEngaged"
         - $ref: "#/components/parameters/FilterBounce"
         - $ref: "#/components/parameters/FilterIsIdentified"
+        - $ref: "#/components/parameters/FilterPersonId"
+        - $ref: "#/components/parameters/FilterDistinctId"
         - name: min_duration
           in: query
           required: false
@@ -597,6 +610,35 @@ components:
       description: Filter to identified (`1`) or anonymous (`0`) sessions.
       schema:
         type: boolean
+    FilterPersonId:
+      name: person_id
+      in: query
+      required: false
+      description: >
+        Scope to one person's sessions: the canonical person id from the
+        People API (`GET /people`, `GET /people/{personId}`). Matches every
+        session whose visitor id belongs to that person in the identity graph
+        (anonymous ids, user ids, emails), so pre-identification sessions are
+        included. Powers per-person Sessions/Recordings tabs on a profile
+        view. Composable with all other filters and the date window; widen
+        `date_from` for history older than the 30-day default.
+      schema:
+        type: string
+    FilterDistinctId:
+      name: distinct_id
+      in: query
+      required: false
+      description: >
+        Scope to one person's sessions by any raw identity value (anonymous
+        id, user id, or email). Resolved through the identity graph to the
+        owning person's full identity set — same resolution as
+        `GET /people/{personId}` — so it returns the same rows as `person_id`
+        for the same person. A value not in the graph (a never-identified
+        visitor) falls back to an exact `distinct_id` match. If `person_id`
+        is also given, both conditions must match (AND) — pass one or the
+        other.
+      schema:
+        type: string
     SegmentId:
       name: segment_id
       in: query

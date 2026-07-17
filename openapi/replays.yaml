@@ -65,6 +65,15 @@ paths:
 
 
         `GET /client/v1/data/replays?segment_id=9f4e...&device_type=mobile`
+
+
+        **Recordings tab (person scoping)**: pass `person_id` (canonical id
+        from the People API) or `distinct_id` (any raw identity value) to
+        list one person's recordings, resolved through the identity graph —
+        no more fetching the recent list and filtering client-side:
+
+
+        `GET /client/v1/data/replays?person_id=019f69bc-...`
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
@@ -81,6 +90,8 @@ paths:
         - $ref: "#/components/parameters/FilterEngaged"
         - $ref: "#/components/parameters/FilterBounce"
         - $ref: "#/components/parameters/FilterIsIdentified"
+        - $ref: "#/components/parameters/FilterPersonId"
+        - $ref: "#/components/parameters/FilterDistinctId"
         - name: min_duration
           in: query
           required: false
@@ -336,6 +347,31 @@ components:
       description: Filter to identified (`1`) or anonymous (`0`) sessions.
       schema:
         type: boolean
+    FilterPersonId:
+      name: person_id
+      in: query
+      required: false
+      description: >
+        Scope to one person's recordings: the canonical person id from the
+        People API. Matches every recorded session whose visitor id belongs
+        to that person in the identity graph (anonymous ids, user ids,
+        emails), so pre-identification recordings are included. Powers a
+        profile view's Recordings tab. Composable with all other filters and
+        the date window.
+      schema:
+        type: string
+    FilterDistinctId:
+      name: distinct_id
+      in: query
+      required: false
+      description: >
+        Scope to one person's recordings by any raw identity value (anonymous
+        id, user id, or email), resolved through the identity graph to the
+        owning person's full identity set. A value not in the graph (a
+        never-identified visitor) falls back to an exact `distinct_id` match.
+        Pass either this or `person_id`, not both (they AND together).
+      schema:
+        type: string
     SegmentId:
       name: segment_id
       in: query
@@ -404,7 +440,11 @@ components:
         person_id:
           type: string
           nullable: true
-          description: Resolved person / user id when identified.
+          description: >
+            Legacy identity value (the session's `user_id`, falling back to
+            `distinct_id`) — NOT the canonical person id from the People API.
+            To filter recordings by this value, pass it as `distinct_id`; the
+            `person_id` query filter expects a People API id.
         distinct_id:
           type: string
           nullable: true
