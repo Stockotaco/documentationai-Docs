@@ -50,7 +50,21 @@ paths:
             minimum: 0
         - name: search
           in: query
-          description: Substring match against name, email, or company.
+          description: >
+            Substring match against name, email, or company. Composes with
+            `segment_id` (and overrides the segment's own stored `search`
+            filter, if it has one).
+          required: false
+          schema:
+            type: string
+        - name: segment_id
+          in: query
+          description: >
+            Scope the list to a stored segment's members (same segments as
+            `GET /builder/segments`), keeping this endpoint's full row shape —
+            the same scoping already available on `/sessions`,
+            `/sessions/breakdown`, and `/replays`. `search`, `limit`, and
+            `offset` compose. Unknown ids return `404 segment_not_found`.
           required: false
           schema:
             type: string
@@ -63,6 +77,8 @@ paths:
                 $ref: "#/components/schemas/PeopleListResponse"
         "400":
           $ref: "#/components/responses/LocationRequired"
+        "404":
+          description: "`segment_not_found` — unknown `segment_id` for this location"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -530,6 +546,13 @@ components:
         last_geo_country_name:
           type: string
           example: United States
+        first_geo_country:
+          type: string
+          description: ISO country code of the person's first touch.
+          example: US
+        last_device_type:
+          type: string
+          example: desktop
         properties:
           type: object
           description: >
