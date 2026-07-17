@@ -71,6 +71,11 @@
                 "group": "Session Replays",
                 "icon": "play",
                 "openapi": "openapi/replays.yaml"
+              },
+              {
+                "group": "Settings",
+                "icon": "shield",
+                "openapi": "openapi/settings.yaml"
               }
             ]
           },
@@ -559,6 +564,11 @@
                 "group": "Session Replays",
                 "icon": "play",
                 "openapi": "openapi/replays.yaml"
+              },
+              {
+                "group": "Settings",
+                "icon": "shield",
+                "openapi": "openapi/settings.yaml"
               }
             ]
           },

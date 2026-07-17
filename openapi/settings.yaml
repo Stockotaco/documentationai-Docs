@@ -1,0 +1,164 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Settings
+  description: >-
+    Per-location ingestion controls. Currently exposes the **origin allowlist**
+    that bounds which sites may send events with a location's publishable key.
+
+
+    Publishable keys (`pk_`) live in the browser and are public by design — they
+    cannot be kept secret, so a copied snippet can send events from anywhere. The
+    origin allowlist lets an agency restrict a location's browser ingestion to a
+    known set of domains, so a snippet placed on the wrong site is dropped at the
+    edge rather than polluting the location's data.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev/client/v1/settings
+security:
+  - BearerAuth: []
+  - AgencyKeyQuery: []
+  - SecretKeyQuery: []
+paths:
+  /allowed-origins:
+    get:
+      summary: Get the ingestion origin allowlist
+      operationId: getAllowedOrigins
+      description: >
+        Return the location's current allowed origins. Readable with an agency
+        key (`ak_`, pass `?location_id=`) or a viewer key (`sk_`). An empty array
+        means enforcement is off — the location accepts events from any origin.
+      responses:
+        "200":
+          description: The current allowlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AllowedOriginsResponse"
+        "401":
+          description: Authorization key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Replace the ingestion origin allowlist
+      operationId: putAllowedOrigins
+      description: >
+        Replace the location's allowed origins with the supplied list. Requires
+        an agency key (`ak_`) and `?location_id=`; viewer keys get `403
+        agency_required`.
+
+
+        Each entry is normalized to a bare, lowercase hostname: full URLs,
+        `host:port`, a leading `*.`, and trailing dots are all accepted and
+        reduced to the host. Entries must be valid hostnames with at least one
+        dot (so `localhost` or a bare label is rejected); up to 50 are allowed.
+        Duplicates are removed. **Send an empty array to turn enforcement off.**
+
+
+        Enforcement semantics once the list is non-empty:
+
+        - Applies only to browser ingestion (`/e`). Server-side ingestion
+          (`/ingest` with a Bearer key) is never restricted.
+        - A bare domain **covers its subdomains**: `acme.com` matches `acme.com`
+          and `app.acme.com`, but not `notacme.com` or `acme.com.evil.com`.
+        - **Lenient on a missing origin**: a request that sends no `Origin` or
+          `Referer` (server calls, `sendBeacon`, privacy tools) is allowed
+          through. Only a *present* host that isn't covered is rejected
+          (`403 origin not allowed` from `/e`).
+        - `Origin`/`Referer` are spoofable by a non-browser client, so this stops
+          casual snippet reuse, not a determined attacker. To disable a key
+          entirely, deactivate the location.
+
+
+        Changes take effect within about a minute (the edge config cache TTL).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AllowedOriginsRequest"
+      responses:
+        "200":
+          description: Updated — returns the normalized allowlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AllowedOriginsResponse"
+        "400":
+          description: Body isn't JSON, or `allowed_origins` is invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Write access requires an agency key (`ak_`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Builder/client key as a bearer token. Agency key for read-write
+        (`Bearer ak_...`) or viewer key for read-only (`Bearer sk_...`).
+    AgencyKeyQuery:
+      type: apiKey
+      in: query
+      name: ak
+      description: "Agency key as a query parameter. Format: `ak_...`."
+    SecretKeyQuery:
+      type: apiKey
+      in: query
+      name: sk
+      description: "Viewer (secret) key as a query parameter. Format: `sk_...`."
+  schemas:
+    AllowedOriginsRequest:
+      type: object
+      required:
+        - allowed_origins
+      properties:
+        allowed_origins:
+          type: array
+          description: >-
+            Bare hostnames to allow (subdomains included). Empty array turns
+            enforcement off.
+          items:
+            type: string
+          example:
+            - acme.com
+            - shop.acme.com
+    AllowedOriginsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            allowed_origins:
+              type: array
+              items:
+                type: string
+              example:
+                - acme.com
+                - shop.acme.com
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: invalid_allowed_origins
+            message:
+              type: string
+              example: "invalid hostname: localhost"
