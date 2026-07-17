@@ -227,7 +227,9 @@ The full set of options you can pass to `init(key, config)`.
 ### Error tracking
 
 <ParamField body="error_tracking" param-type="boolean|object" required="false" show-location="false" deprecated="false">
-  Capture uncaught JS errors and unhandled promise rejections as `$exception` events (with type, message, and stack). Default: `true`. Pass an object for control: `{ maxPerPage: 20 }` — a hard cap on exceptions reported per page load so a broken page can't flood ingestion. Grouping into issues happens in the read layer; the SDK ships the raw fields. Force-disabled under HIPAA.
+  Capture uncaught JS errors and unhandled promise rejections as `$exception` events (with type, message, and stack). Default: `true`. Grouping into issues happens in the read layer; the SDK ships the raw fields. Force-disabled under HIPAA.
+
+  A per-exception-type token bucket keeps a page that throws in a loop from flooding ingestion: each error type gets `burst` events, then one every `refillSeconds`, while other types keep their own budget. Pass an object to tune it: `{ burst: 10, refillSeconds: 10, maxPerPage: 100 }` (`maxPerPage` is a coarse backstop across all types). When errors are suppressed, the next `$exception` that gets through carries an `$exception_suppressed` count.
 </ParamField>
 
 ### Session replay
