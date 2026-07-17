@@ -184,14 +184,16 @@ paths:
         - name: hours_back
           in: query
           description: >
-            Look-back window in hours. Default `720` (30 days, the maximum) —
-            pass a smaller value to narrow the window. Min `1`, max `720`.
+            Look-back window in hours. Default `720` (30 days); max `43800`
+            (5 years — effectively full history, since raw events are retained
+            indefinitely). A person's `first_seen_at` can predate the default
+            window — raise `hours_back` to retrieve their full stream.
           required: false
           schema:
             type: integer
             default: 720
             minimum: 1
-            maximum: 720
+            maximum: 43800
         - name: limit
           in: query
           description: Maximum events to return. Default `100`, min `1`, max `1000`.
