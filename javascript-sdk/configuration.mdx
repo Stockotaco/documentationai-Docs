@@ -57,6 +57,13 @@ The full set of options you can pass to `init(key, config)`.
 
 <ParamField body="persistence" param-type="string" required="false" show-location="false" deprecated="false">
   Storage strategy. Options: `'localStorage'`, `'cookie'`, `'memory'`, `'localStorage+cookie'`. Default: `'localStorage+cookie'`.
+  When the browser blocks localStorage (private browsing, Firefox Focus), the
+  localStorage modes degrade to tab-scoped `sessionStorage` — a multi-page visit
+  keeps one device/session id (and one session replay) instead of minting fresh
+  ids on every navigation, while nothing outlives the tab, honoring the
+  browser's privacy stance. If sessionStorage is also blocked, `'localStorage'`
+  falls to memory and `'localStorage+cookie'` to cookies. Explicit `'memory'`
+  is never escalated.
 </ParamField>
 
 <ParamField body="persistence_name" param-type="string" required="false" show-location="false" deprecated="false">
