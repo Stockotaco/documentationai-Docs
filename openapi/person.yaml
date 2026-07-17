@@ -205,7 +205,19 @@ paths:
             maximum: 1000
         - name: event_type
           in: query
-          description: Restrict to a single event type.
+          description: >
+            Restrict to these event types (comma-separated allow-list, e.g.
+            `$pageview,$identify`).
+          required: false
+          schema:
+            type: string
+        - name: exclude_event_type
+          in: query
+          description: >
+            Omit these event types (comma-separated deny-list). Applied *before*
+            the `limit`, so high-volume telemetry like `$replay_summary` (which
+            fires ~once per minute per recorded session) cannot push a visitor's
+            real events past the row cap. e.g. `exclude_event_type=$replay_summary`.
           required: false
           schema:
             type: string

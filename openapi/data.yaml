@@ -1072,8 +1072,29 @@ components:
         exit_page: { type: string }
         referrer: { type: string }
         referring_domain: { type: string }
-        utm_source: { type: string }
-        utm_medium: { type: string }
+        has_recording:
+          type: boolean
+          description: >
+            True when a session recording is still retrievable — a
+            `$replay_started` within the 30-day retention window. False once the
+            recording has aged out (distinct from "never recorded").
+        recording_available_until:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the recording ages out of retention; null when there is no recording.
+        utm_source:
+          type: string
+          description: >
+            The real UTM source when the session is tagged; otherwise derived
+            from the referrer (the referring domain for search/referral traffic).
+            Blank for untagged direct traffic.
+        utm_medium:
+          type: string
+          description: >
+            The real UTM medium when tagged; otherwise derived from the referrer —
+            `organic` for known search engines, `ai` for known AI assistants,
+            `referral` for any other referring domain. Blank for direct traffic.
         utm_campaign: { type: string }
         utm_content: { type: string }
         utm_term: { type: string }
