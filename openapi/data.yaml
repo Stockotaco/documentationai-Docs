@@ -445,6 +445,206 @@ paths:
           $ref: "#/components/responses/UpstreamError"
         "503":
           $ref: "#/components/responses/NotConfigured"
+  /exceptions/issues:
+    get:
+      summary: Grouped exception issues
+      operationId: getExceptionIssues
+      description: >
+        The error-tracking issue list. `$exception` events (uncaught JS errors
+        and unhandled promise rejections captured by the SDK) are grouped into
+        issues by a **stable server-side fingerprint**: `issue_id` =
+        md5(exception_type + normalized message, with digits stripped so
+        per-instance values collapse). The fingerprint deliberately **excludes
+        the stack trace**, so minified frame names churning across deploys can
+        never mint a new id — persist your own resolve/ignore state against
+        `issue_id` and it stays put.
+
+
+        Each row carries `occurrences` / `sessions` / `users`, `first_seen` /
+        `last_seen`, a `culprit` (top in-app stack frame, for the list
+        subtitle), and a `volume_series` bucketed to the window (hourly for
+        short ranges, else daily) for the sparkline.
+
+
+        **Time window**: `date_from`/`date_to`, or `hours_back` for a window
+        ending now. **Segment scoping**: pass `segment_id` to count only errors
+        from that segment's members.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+        - name: hours_back
+          in: query
+          required: false
+          description: Alternative to `date_from` — window of the last N hours ending now.
+          schema: { type: integer }
+        - name: search
+          in: query
+          required: false
+          description: Substring match over exception type and message.
+          schema: { type: string }
+        - name: sort_by
+          in: query
+          required: false
+          description: Sort column. Default `last_seen`.
+          schema:
+            type: string
+            default: last_seen
+            enum: [last_seen, occurrences, sessions, users]
+        - name: order
+          in: query
+          required: false
+          schema:
+            type: string
+            default: desc
+            enum: [asc, desc]
+        - $ref: "#/components/parameters/SegmentId"
+        - name: limit
+          in: query
+          required: false
+          description: Max rows. Default `50`, min `1`, max `200`.
+          schema: { type: integer, default: 50, minimum: 1, maximum: 200 }
+        - name: offset
+          in: query
+          required: false
+          description: Row offset for pagination.
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: Issue rows
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/RowsResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ExceptionIssue"
+        "400":
+          $ref: "#/components/responses/LocationRequired"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/SegmentNotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/NotConfigured"
+  /exceptions/issues/{id}:
+    get:
+      summary: Single exception issue
+      operationId: getExceptionIssue
+      description: >
+        The detail-header view: the same aggregates and `volume_series` as a
+        list row, fetched by the stable `issue_id`. Returns `404`
+        (`issue_not_found`) when no occurrences match the id in the window.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - name: id
+          in: path
+          required: true
+          description: The stable `issue_id` from the issue list.
+          schema: { type: string }
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+        - name: hours_back
+          in: query
+          required: false
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Issue
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    $ref: "#/components/schemas/ExceptionIssue"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Unknown issue for this location and date range
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/NotConfigured"
+  /exceptions/issues/{id}/occurrences:
+    get:
+      summary: Occurrences of one exception issue
+      operationId: getExceptionOccurrences
+      description: >
+        Paginated raw `$exception` events belonging to the issue, most recent
+        first — powers the occurrence list and the stack-trace / session panels
+        of the detail view. Each row carries `browser` / `os` / `url`, a
+        `session_id` for deep-linking to the session replay, and
+        worker-parsed `stack_frames` (the original string is kept in
+        `stack_raw`).
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - name: id
+          in: path
+          required: true
+          description: The stable `issue_id` from the issue list.
+          schema: { type: string }
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+        - name: hours_back
+          in: query
+          required: false
+          schema: { type: integer }
+        - name: limit
+          in: query
+          required: false
+          description: Max rows. Default `50`, min `1`, max `200`.
+          schema: { type: integer, default: 50, minimum: 1, maximum: 200 }
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: Occurrence rows
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/RowsResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ExceptionOccurrence"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/NotConfigured"
   /export:
     get:
       summary: BigQuery export status
@@ -754,6 +954,73 @@ components:
         unique_sessions:
           type: integer
           example: 910
+    ExceptionIssue:
+      type: object
+      description: >
+        One grouped exception issue. `issue_id` is stable across requests and
+        deploys — persist resolve/ignore state against it.
+      properties:
+        issue_id:
+          type: string
+          description: Stable md5 fingerprint of exception_type + normalized message.
+          example: 1d908dc6145bd8dc7982aff9366b5042
+        exception_type:
+          type: string
+          example: TypeError
+        message:
+          type: string
+          example: "Cannot read properties of null (reading 'addEventListener')"
+        culprit:
+          type: string
+          nullable: true
+          description: Top in-app stack frame ("function in file"), for the list subtitle.
+          example: "handler in app.js"
+        first_seen: { type: string, format: date-time }
+        last_seen: { type: string, format: date-time }
+        occurrences: { type: integer, example: 366 }
+        sessions: { type: integer, example: 204 }
+        users: { type: integer, example: 183 }
+        volume_series:
+          type: array
+          description: Counts bucketed (hourly or daily) across the window, for the sparkline.
+          items:
+            type: object
+            properties:
+              bucket: { type: string, format: date-time }
+              count: { type: integer }
+    ExceptionOccurrence:
+      type: object
+      description: One raw `$exception` event belonging to an issue.
+      properties:
+        event_uuid: { type: string }
+        timestamp: { type: string, format: date-time }
+        message: { type: string }
+        browser: { type: string, example: Chrome }
+        os: { type: string, example: Windows }
+        url: { type: string }
+        session_id:
+          type: string
+          description: Deep-links to the session replay for this occurrence.
+        distinct_id:
+          type: string
+          description: Raw identity value. Canonical person_id resolution is a planned follow-up.
+        stack_frames:
+          type: array
+          description: Stack parsed into frames from the raw error.stack string.
+          items:
+            type: object
+            properties:
+              function: { type: string, nullable: true }
+              file: { type: string }
+              line: { type: integer, nullable: true }
+              col: { type: integer, nullable: true }
+              in_app:
+                type: boolean
+                description: False for third-party frames (gtm.js, node_modules, cdn, chunks…).
+        stack_raw:
+          type: string
+          nullable: true
+          description: The original error.stack string.
     SessionRow:
       type: object
       description: One session.
