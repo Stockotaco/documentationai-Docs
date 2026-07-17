@@ -149,6 +149,14 @@ paths:
         Recent events for a person within a look-back window. `personId` is
         resolved through the identity graph, so any linked identity value
         returns the same activity.
+
+
+        Each row carries a `uuid` (the source event's id). To show whether an
+        event was forwarded to a destination, pass a page of these uuids as a
+        comma-separated `event_uuid` list to
+        `GET /client/v1/destinations/deliveries` (status per destination), and
+        drill into `GET /client/v1/destinations/{id}/deliveries/{eventUuid}`
+        for the sent request and destination response bodies.
       parameters:
         - $ref: "#/components/parameters/PersonId"
         - $ref: "#/components/parameters/LocationId"

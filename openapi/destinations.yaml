@@ -226,6 +226,19 @@ paths:
         List destination delivery attempts for the calling location, newest
         first. Backed by analytics; defaults to the last 7 days when no `since`
         is given. Both agency and viewer keys may read.
+
+
+        **Associating deliveries with events (profile activity stream).** Every
+        delivery records the `event_uuid` of the event that triggered it, which
+        is the same value as the `uuid` field on rows from the activity
+        endpoints (e.g. `GET /client/v1/data/people/{personId}/activity`). To
+        show "this event was sent to a destination" indicators across a page of
+        activity, pass that page's event uuids as a comma-separated
+        `event_uuid` list (up to 200) in a single call, then group the returned
+        rows by `event_uuid` client-side. Widen `since` to cover the activity
+        window (the default is only 7 days). For the sent request body and the
+        destination's response body, drill into
+        `GET /client/v1/destinations/{id}/deliveries/{eventUuid}`.
       parameters:
         - $ref: "#/components/parameters/ActionIdQuery"
         - $ref: "#/components/parameters/DeliveryStatus"
@@ -621,7 +634,12 @@ components:
     EventUuid:
       name: event_uuid
       in: query
-      description: Filter to deliveries triggered by a single source event.
+      description: >
+        Filter to deliveries triggered by a source event. Accepts a single
+        event uuid, or a comma-separated list (up to 200) to resolve delivery
+        status for a whole batch of events in one request — see the endpoint
+        description for the profile activity-stream use case. Each value matches
+        the `uuid` field on an event returned by the activity endpoints.
       required: false
       schema:
         type: string
@@ -646,13 +664,13 @@ components:
     DeliveryLimit:
       name: limit
       in: query
-      description: Maximum rows. Default `50`, min `1`, max `200`.
+      description: Maximum rows. Default `50`, min `1`, max `500`.
       required: false
       schema:
         type: integer
         default: 50
         minimum: 1
-        maximum: 200
+        maximum: 500
     DeliveryOffset:
       name: offset
       in: query
