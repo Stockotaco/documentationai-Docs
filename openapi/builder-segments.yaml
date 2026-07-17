@@ -351,9 +351,16 @@ components:
           format: date-time
     SegmentMember:
       type: object
-      description: A person matching the segment (subset of the person profile).
+      description: >
+        A person matching the segment. Same column set as a
+        `GET /client/v1/data/people` list row (the two are served by
+        sibling pipes and kept in sync), except session-store timestamps are
+        exposed as `first_seen`/`last_seen` here rather than
+        `first_seen_at`/`last_seen_at`.
       properties:
         id:
+          type: string
+        location_id:
           type: string
         identity_count:
           type: integer
@@ -369,13 +376,32 @@ components:
           type: string
         email:
           type: string
+        user_id:
+          type: string
+          description: The person's first user_id-type identity (empty if anonymous).
         company:
           type: string
+        avatar:
+          type: string
+        first_channel:
+          type: string
         last_channel:
+          type: string
+        last_utm_source:
+          type: string
+        last_utm_medium:
+          type: string
+        last_utm_campaign:
+          type: string
+        last_geo_country_name:
           type: string
         first_geo_country:
           type: string
         last_device_type:
+          type: string
+        first_landing_page:
+          type: string
+        last_landing_page:
           type: string
     SaveSegmentRequest:
       type: object
