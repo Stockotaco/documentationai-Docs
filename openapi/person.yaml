@@ -22,8 +22,13 @@ paths:
       operationId: listPeople
       description: >
         List resolved person profiles for the location, most-recent first.
-        Each row carries the identity count and a small set of display
-        properties. Use `search` to match against name, email, or company.
+        Each row carries resolved display fields top-level — `display_name`,
+        `email` (falls back to an email-type identity when no `$email`
+        property is set), and `user_id` (the person's first user_id-type
+        identity) — so list UIs can label rows (e.g. user_id → email → name)
+        without a per-row `GET /people/{personId}` fetch. Rows also include
+        `company`, `avatar`, `session_count`, and first/last-touch channel
+        fields. Use `search` to match against name, email, or identities.
       parameters:
         - $ref: "#/components/parameters/LocationId"
         - name: limit
@@ -481,9 +486,54 @@ components:
         location_id:
           type: string
           example: acme-retail
+        display_name:
+          type: string
+          description: >
+            Resolved display name from `$name` (or `$first_name`/`$last_name`)
+            person properties. Empty string when unset.
+          example: Dana Reyes
+        email:
+          type: string
+          description: >
+            `$email` person property, falling back to the person's first
+            email-type identity. Empty string when the person has neither.
+          example: dana@example.com
+        user_id:
+          type: string
+          description: >
+            The person's first user_id-type identity (the value passed to
+            `identify()`). Empty string when the person is anonymous.
+          example: usr_2841
+        company:
+          type: string
+          example: Example Co
+        avatar:
+          type: string
+          example: https://cdn.example.com/avatars/dana.png
+        session_count:
+          type: integer
+          example: 17
+        first_channel:
+          type: string
+          example: paid/google
+        last_channel:
+          type: string
+          example: direct/none
+        last_utm_source:
+          type: string
+        last_utm_medium:
+          type: string
+        last_utm_campaign:
+          type: string
+        last_geo_country_name:
+          type: string
+          example: United States
         properties:
           type: object
-          description: Display properties. Keys are omitted when unset.
+          description: >
+            Legacy mirror of the display fields (`$name`, `$email`, `$company`,
+            `$avatar`); keys are omitted when unset. Prefer the top-level
+            `display_name` / `email` / `company` / `avatar` fields.
           properties:
             $name:
               type: string
