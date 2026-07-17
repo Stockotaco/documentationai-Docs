@@ -33,6 +33,18 @@ Key capabilities:
     ```html
     <script src="https://api.adberserk.com/cdn/m.js"></script>
     ```
+
+    <Callout kind="warning">
+      **Place the loader high in `<head>`, before any tag manager.** The loader
+      installs its uncaught-error / unhandled-rejection listeners synchronously
+      the moment it runs, so errors thrown *before* it executes can't be
+      captured. If you inject the loader **through** Google Tag Manager (or load
+      it after GTM), GTM's own initialization errors fire before the loader
+      exists and won't appear in error tracking. Load it directly in `<head>`
+      above the GTM container — the loader snippet from
+      `GET /api/v1/clients/{id}/loader` already includes the early error-capture
+      stub for exactly this reason.
+    </Callout>
   </Step>
 
   <Step title="Initialize" icon="code" titleType="p">

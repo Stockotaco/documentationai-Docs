@@ -42,6 +42,12 @@ description: >-
 - **Buffering for framework data**: with `auto_framework_extract` enabled, the first events are briefly buffered until page context is extracted (up to a 2s safety timeout). Set `wait_for_page_data: false` to disable this.
 - **Bot detection**: requests from user agents detected as bots are still captured, but you can check `isBot()` to gate your own calls.
 
+### Error tracking captures manual test throws but no real errors
+
+If a manual throw from the console (e.g. `setTimeout(() => { null.boom }, 0)`) produces an `$exception` but the site's *actual* load-time errors never appear, the loader is being installed **too late** — usually because it's injected through a tag manager (e.g. GTM). The loader can only capture errors thrown after it executes, so a tag manager's own initialization errors (and anything before the container) fire before the listeners exist.
+
+Fix: load the CDN loader directly in `<head>`, **above** the tag-manager container. Confirm with `window.__mythicErr` in the console — it should be an object (`{ q, sink }`); if it's `undefined`, the early error-capture stub hasn't run yet on the page. `window.mythic.getConfig().error_tracking` should be `true`.
+
 ### Network requests blocked
 
 - If blocked by ad blockers or CSP, serve Mythic via a custom subdomain and update `api_host`.
