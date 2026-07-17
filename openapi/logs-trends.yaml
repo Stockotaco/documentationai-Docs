@@ -90,6 +90,47 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /clients/{id}/last-event:
+    get:
+      summary: Get last event heartbeat
+      operationId: getClientLastEvent
+      description: >
+        Lightweight tracking heartbeat: the timestamp of the most recent event
+        and the event count for a client tenant within the lookback window.
+        Backed by the Tinybird `client_last_event` pipe, which reads only the
+        timestamp column — orders of magnitude cheaper than `/logs`. Use this
+        for high-frequency "is the pixel installed / still sending" checks
+        instead of polling `/logs` with `limit=1`.
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - name: hours_back
+          in: query
+          description: How many hours back to include. Default `24`, min `1`, max `720`.
+          required: false
+          schema:
+            type: integer
+            default: 24
+            minimum: 1
+            maximum: 720
+      responses:
+        "200":
+          description: Last event heartbeat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LastEventResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Analytics service not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /clients/{id}/trend:
     get:
       summary: Get event trend
@@ -413,6 +454,26 @@ components:
           type: integer
           description: Number of events returned.
           example: 250
+    LastEventResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            events:
+              type: integer
+              description: Number of events in the lookback window.
+              example: 27090
+            last_event_at:
+              type: string
+              nullable: true
+              description: >
+                Timestamp of the most recent event (`YYYY-MM-DD HH:MM:SS`,
+                UTC), or `null` when no events occurred in the window.
+              example: "2026-07-17 05:04:13"
     TrendResponse:
       type: object
       properties:
