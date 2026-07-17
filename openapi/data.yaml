@@ -500,6 +500,7 @@ paths:
             default: desc
             enum: [asc, desc]
         - $ref: "#/components/parameters/SegmentId"
+        - $ref: "#/components/parameters/ExcludeSegmentId"
         - name: limit
           in: query
           required: false
@@ -560,6 +561,8 @@ paths:
           in: query
           required: false
           schema: { type: integer }
+        - $ref: "#/components/parameters/SegmentId"
+        - $ref: "#/components/parameters/ExcludeSegmentId"
       responses:
         "200":
           description: Issue
@@ -621,6 +624,8 @@ paths:
           in: query
           required: false
           schema: { type: integer, default: 0 }
+        - $ref: "#/components/parameters/SegmentId"
+        - $ref: "#/components/parameters/ExcludeSegmentId"
       responses:
         "200":
           description: Occurrence rows
@@ -858,6 +863,21 @@ components:
         session that arrived via X"), with no identity-graph dependency.
         Composable with all other filters. Unknown or foreign id →
         `404 segment_not_found`.
+      schema:
+        type: string
+        format: uuid
+    ExcludeSegmentId:
+      name: exclude_segment_id
+      in: query
+      required: false
+      description: >
+        Scope results OUT — exclude rows from members of a saved segment
+        (the inverse of `segment_id`, evaluated the same live way). Fully
+        composable with `segment_id`: scope to one segment and exclude another
+        simultaneously. The primary use is stripping your own QA/test traffic —
+        which is often anonymous, so a rule-based segment (email domain, known
+        ids) catches it with no SDK changes on the client's site. Unknown or
+        foreign id → `404 exclude_segment_not_found`.
       schema:
         type: string
         format: uuid
