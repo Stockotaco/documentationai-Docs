@@ -370,6 +370,10 @@ For the classic shape and `tableId: "events"` series, these are the built-in `ev
   The legacy dimension name `event` is accepted and auto-mapped to `event_name`. New configs should use `event_name`.
 </Callout>
 
+<Callout kind="tip">
+  Building dropdowns? Don't hardcode this list. `GET /schema` returns the full tables-and-columns catalog for a location, and `GET /schema/events`, `GET /schema/events/{event}/properties`, and `GET /schema/columns/{table}/{column}/values` return live event names, property keys, and filter values. See [Schema Discovery](/builder-api).
+</Callout>
+
 ## Identity resolution
 
 `config.resolveIdentities: true` counts distinct users, and joins funnel steps, on the canonical **resolved person** instead of the raw per-event `distinct_id` — so a visitor merged across devices, or from anonymous to identified, counts once and a funnel doesn't break across the merge.

@@ -1,0 +1,323 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Schema Discovery
+  description: >-
+    Populate a builder's dropdowns without hand-writing SQL: the static
+    tables-and-columns catalog for a location, plus live event names,
+    event-property keys, and distinct column values discovered from the
+    client's data. Read-only — an agency key (`ak_`) or a viewer key (`sk_`).
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev/builder
+security:
+  - BearerAuth: []
+  - AgencyKeyQuery: []
+  - SecretKeyQuery: []
+paths:
+  /schema:
+    get:
+      summary: Table + column catalog
+      operationId: getSchema
+      description: >
+        The full catalog of tables available in the location's dataset, each
+        with its visible columns and the flags a builder needs (`filterable`,
+        `groupable`, `aggregatable`) to decide where a column can go. Static —
+        no query is run, so this is free to call as often as you like. Hidden
+        internal columns are omitted.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: The dataset catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchemaCatalog"
+        "400":
+          description: Missing `?location_id=` when using an agency key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /schema/events:
+    get:
+      summary: List event names
+      operationId: getEventNames
+      description: >
+        Distinct `event_name` values seen on the events table over the last 30
+        days, alphabetically. Runs a small BigQuery query, cached ~10 minutes.
+        Charges the query rate-limit allowance.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Event names
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventNamesResponse"
+        "400":
+          description: Query error, or missing `?location_id=`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Query rate limit exceeded for this location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /schema/events/{event}/properties:
+    get:
+      summary: List event property keys
+      operationId: getEventProperties
+      description: >
+        Keys inside the events' `properties_json`, discovered by sampling recent
+        rows. Use `path` to drill into a nested object — e.g. `$` returns the
+        top-level keys, `$.properties` returns the keys one level in. Pass a
+        literal `*` for `event` to sample across all events. Runs a small
+        BigQuery query, cached ~10 minutes.
+      parameters:
+        - name: event
+          in: path
+          required: true
+          description: >-
+            Event name to sample, or `*` for all events.
+          schema:
+            type: string
+            example: purchase
+        - name: path
+          in: query
+          required: false
+          description: >-
+            JSON path to drill into before reading keys. Defaults to `$` (top
+            level). Only `$` plus dotted identifier segments are accepted.
+          schema:
+            type: string
+            example: $.properties
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Property keys at the requested path
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventPropertiesResponse"
+        "400":
+          description: Invalid `path`, query error, or missing `?location_id=`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Query rate limit exceeded for this location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /schema/columns/{table}/{column}/values:
+    get:
+      summary: Distinct column values
+      operationId: getColumnValues
+      description: >
+        Distinct values for a filterable column, for filter autocomplete. Looks
+        back 7 days for cost, runs a small BigQuery query, cached ~5 minutes.
+        The `table` and `column` are validated against the catalog — a
+        non-filterable or unknown column is rejected without a query.
+      parameters:
+        - name: table
+          in: path
+          required: true
+          description: Table id from `GET /schema` (e.g. `events`).
+          schema:
+            type: string
+            example: events
+        - name: column
+          in: path
+          required: true
+          description: A filterable column on that table.
+          schema:
+            type: string
+            example: utm_source
+        - name: search
+          in: query
+          required: false
+          description: Case-sensitive `LIKE` substring filter on the value.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Max values to return. Defaults to `20`, capped at `100`.
+          schema:
+            type: integer
+            example: 20
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Distinct values
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ColumnValuesResponse"
+        "400":
+          description: Column is not filterable, query error, or missing `?location_id=`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Unknown table or column
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Query rate limit exceeded for this location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Builder key as a bearer token — an agency key (`Bearer ak_...`) or a
+        viewer key (`Bearer sk_...`).
+    AgencyKeyQuery:
+      type: apiKey
+      in: query
+      name: ak
+      description: "Agency key as a query parameter. Format: `ak_...`."
+    SecretKeyQuery:
+      type: apiKey
+      in: query
+      name: sk
+      description: "Viewer key as a query parameter. Format: `sk_...`."
+  parameters:
+    LocationId:
+      name: location_id
+      in: query
+      required: false
+      description: >-
+        Client location to scope the request to. Required with an agency key
+        (`ak_`); ignored for viewer keys (`sk_`), which are bound to one
+        location.
+      schema:
+        type: string
+        example: acme-retail
+  schemas:
+    SchemaCatalog:
+      type: object
+      properties:
+        dataset:
+          type: string
+          description: The BigQuery dataset id backing this location.
+          example: acme_retail
+        tables:
+          type: array
+          items:
+            $ref: "#/components/schemas/TableDef"
+    TableDef:
+      type: object
+      properties:
+        id:
+          type: string
+          example: events
+        label:
+          type: string
+          example: All Events
+        category:
+          type: string
+          enum: [crm, ads, analytics, commerce, reference]
+        description:
+          type: string
+        timeColumn:
+          type: string
+          description: The column used for date filtering.
+          example: event_timestamp
+        isView:
+          type: boolean
+        columns:
+          type: array
+          items:
+            $ref: "#/components/schemas/ColumnDef"
+    ColumnDef:
+      type: object
+      properties:
+        name:
+          type: string
+          example: utm_source
+        label:
+          type: string
+          example: UTM Source
+        type:
+          type: string
+          enum: [STRING, INTEGER, FLOAT, NUMERIC, BOOLEAN, TIMESTAMP, DATE, DATETIME, JSON, RECORD]
+        category:
+          type: string
+          enum: [dimension, metric, metadata, identifier]
+        filterable:
+          type: boolean
+          description: Can be used in a filter (and in `GET /schema/columns/.../values`).
+        groupable:
+          type: boolean
+          description: Can be used as a breakdown / GROUP BY.
+        aggregatable:
+          type: boolean
+          description: Numeric — can be summed/averaged.
+        description:
+          type: string
+    EventNamesResponse:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            type: string
+          example: ["$identify", "$pageview", "add_to_cart", "purchase"]
+        cached:
+          type: boolean
+          description: Whether the result was served from cache.
+    EventPropertiesResponse:
+      type: object
+      properties:
+        event:
+          type: string
+          nullable: true
+          example: purchase
+        path:
+          type: string
+          example: $
+        properties:
+          type: array
+          items:
+            type: string
+          example: ["amount", "currency", "product_id"]
+        cached:
+          type: boolean
+    ColumnValuesResponse:
+      type: object
+      properties:
+        table:
+          type: string
+          example: events
+        column:
+          type: string
+          example: utm_source
+        values:
+          type: array
+          items:
+            type: string
+          example: ["facebook", "google", "newsletter"]
+        cached:
+          type: boolean
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Column "email" is not filterable
