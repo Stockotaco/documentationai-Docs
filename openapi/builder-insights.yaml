@@ -242,7 +242,10 @@ components:
           type: object
           description: >-
             Visualization + query definition (metrics, dimensions, filters,
-            date range, layout). Shape depends on `insight_type`.
+            date range, layout). Shape depends on `insight_type`. See the
+            [Insight config reference](/builder-api/insight-config) for
+            copy-pasteable examples per type, the full field list, and the
+            required-vs-optional rules.
 
 
             **`config.resolveIdentities`** (boolean, optional, default `false`):
@@ -346,10 +349,25 @@ components:
         config:
           type: object
           description: >-
-            Query + visualization definition. Set `config.resolveIdentities:
+            Query + visualization definition. Shape depends on `insight_type` —
+            see the [Insight config reference](/builder-api/insight-config) for
+            a filled example per type and the field list. The server does **not**
+            validate this object on write; an invalid config saves fine and only
+            fails when the insight is queried. Set `config.resolveIdentities:
             true` to count funnels and distinct users on the canonical resolved
             person rather than the raw `distinct_id` (BigQuery events insights
-            only; ~24h snapshot lag). See the `Insight.config` description.
+            only; ~24h snapshot lag).
+          example:
+            metrics:
+              - label: Unique Users
+                metric: unique_users
+                aggregate: COUNT_DISTINCT
+                format: number
+            dateRange:
+              preset: 7d
+            filters: []
+            compareWith: previous_period
+            showTrend: true
         generated_sql:
           type: string
           description: Optional pre-compiled SQL.

@@ -160,6 +160,11 @@
                     "title": "Authentication",
                     "path": "builder-api/authentication",
                     "icon": "lock"
+                  },
+                  {
+                    "title": "Insight config reference",
+                    "path": "builder-api/insight-config",
+                    "icon": "sliders-horizontal"
                   }
                 ]
               },
@@ -448,6 +453,11 @@
                     "title": "Authentication",
                     "path": "builder-api/authentication",
                     "icon": "lock"
+                  },
+                  {
+                    "title": "Insight config reference",
+                    "path": "builder-api/insight-config",
+                    "icon": "sliders-horizontal"
                   }
                 ]
               },

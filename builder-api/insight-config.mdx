@@ -1,0 +1,410 @@
+---
+title: "Insight config reference"
+description: >-
+  The shape of the config object on POST /builder/insights, with copy-pasteable
+  examples for every insight_type, the full field reference, and validation
+  rules.
+---
+
+## Overview
+
+`config` is the query-and-visualization definition on an insight — the field the server compiles SQL from. It is a required, free-form JSON object on [`POST /builder/insights`](/builder-api), and its shape depends on `insight_type`. This page documents that shape so you can author a working insight programmatically instead of cloning one built in the UI.
+
+There are two config shapes, and both are live:
+
+- **Classic** — a per-type shape (`metrics` / `columns` / `steps`) that queries the client's `events` table. Simplest for web analytics. This is what the built-in defaults produce.
+- **Series builder** — `useSeriesBuilder: true` plus a `series[]` array. Required to query non-event tables (CRM `contacts`, `opportunities`, ad-platform tables) and to build working `line` and `scorecard` insights.
+
+<Callout kind="alert">
+  The server does **not** validate `config` on write. `POST /builder/insights` stores whatever JSON you send verbatim — an unknown key, a missing array, or a bad `insight_type` all save with a `200`. Invalid config only fails later, at **query time**, when [`POST /insights/{id}/query`](/builder-api) compiles and runs the SQL. Validate before you POST — this page lists what each type requires.
+</Callout>
+
+## Which shape per type
+
+| `insight_type` | Shape | Notes |
+|----------------|-------|-------|
+| `number`       | Classic `metrics` **or** series | Single big-number KPI, optional sparkline. |
+| `table`        | Classic `columns` | Rows of grouped aggregates. |
+| `bar` / `pie`  | Classic `columns` | Same shape as `table`; visualization differs. |
+| `line`         | **Series only** | The classic shape has no time bucket and fails at query time — use `useSeriesBuilder`. |
+| `funnel`       | Classic `steps` | Do **not** set `useSeriesBuilder` on funnels (see below). |
+| `scorecard`    | **Series only** | Not handled by the classic generator; requires `useSeriesBuilder`. |
+
+## Classic shape — filled examples
+
+### number
+
+One aggregate rendered as a big number, with an optional comparison and trend sparkline.
+
+```json config.json
+{
+  "metrics": [
+    { "label": "Unique Users", "metric": "unique_users", "aggregate": "COUNT_DISTINCT", "format": "number" }
+  ],
+  "dateRange": { "preset": "7d" },
+  "filters": [],
+  "compareWith": "previous_period",
+  "showTrend": true,
+  "granularity": "day"
+}
+```
+
+### table (and bar, pie)
+
+Grouped aggregates. `bar` and `pie` use the identical shape — only the rendering differs.
+
+```json config.json
+{
+  "columns": [
+    { "name": "event_name" },
+    { "name": "event_count", "aggregate": "COUNT" },
+    { "name": "unique_users", "aggregate": "COUNT_DISTINCT" }
+  ],
+  "groupBy": ["event_name"],
+  "orderBy": { "column": "event_count", "direction": "DESC" },
+  "dateRange": { "preset": "7d" },
+  "filters": [],
+  "limit": 20
+}
+```
+
+A `bar` chart of traffic sources, filtered and capped:
+
+```json config.json
+{
+  "columns": [
+    { "name": "referring_domain" },
+    { "name": "unique_users", "aggregate": "COUNT_DISTINCT" }
+  ],
+  "groupBy": ["referring_domain"],
+  "orderBy": { "column": "unique_users", "direction": "DESC" },
+  "dateRange": { "preset": "30d" },
+  "filters": [{ "column": "event_name", "operator": "=", "value": "$pageview" }],
+  "limit": 8
+}
+```
+
+Reading an event property out of JSON (BigQuery only) — use `jsonPath` and give the column an `alias`:
+
+```json config.json
+{
+  "columns": [
+    { "name": "product", "jsonPath": "$.properties.activity_name", "alias": "product" },
+    { "name": "amount", "jsonPath": "$.properties.meta_amount", "alias": "amount" },
+    { "name": "event_count", "aggregate": "COUNT" }
+  ],
+  "groupBy": ["product"],
+  "orderBy": { "column": "event_count", "direction": "DESC" },
+  "dateRange": { "preset": "30d" },
+  "filters": [{ "column": "event_name", "operator": "=", "value": "product_purchased" }],
+  "limit": 20
+}
+```
+
+### funnel
+
+Ordered conversion steps. Each step is an event; users are counted through the steps within `conversionWindow`.
+
+```json config.json
+{
+  "steps": [
+    { "event": "$pageview", "label": "Viewed page" },
+    { "event": "add_to_cart", "label": "Added to cart" },
+    { "event": "purchase", "label": "Purchased" }
+  ],
+  "dateRange": { "preset": "30d" },
+  "conversionWindow": "7d",
+  "stepOrder": "sequential",
+  "layout": "vertical",
+  "resolveIdentities": true
+}
+```
+
+<Callout kind="alert">
+  A funnel's identity is its `steps` array. Do **not** add `useSeriesBuilder`/`series` to a funnel config — the runner routes any `useSeriesBuilder` insight through the series-table generator, which ignores `steps`, `conversionWindow`, and `stepOrder` and produces a non-funnel result.
+</Callout>
+
+## Series-builder shape — filled examples
+
+Set `useSeriesBuilder: true` and describe one or more `series`. Each series targets a `tableId` (a per-client BigQuery table) with its own aggregate, filters, and optional breakdown. This is the only working shape for `line` and `scorecard`, and the only way to query non-event tables.
+
+### number (series)
+
+```json config.json
+{
+  "useSeriesBuilder": true,
+  "series": [
+    { "tableId": "events", "eventName": "purchase", "aggregate": "COUNT", "filters": [] }
+  ],
+  "dateRange": { "preset": "7d" },
+  "compareWith": "previous_period",
+  "showTrend": true,
+  "granularity": "day"
+}
+```
+
+### line (series)
+
+A time series with one line per series. `line` **must** use this shape — the classic `columns` shape has no day bucket and errors at query time.
+
+```json config.json
+{
+  "useSeriesBuilder": true,
+  "series": [
+    { "tableId": "events", "aggregate": "COUNT", "filters": [], "label": "Events" },
+    { "tableId": "events", "aggregate": "COUNT_DISTINCT", "aggregateColumn": "distinct_id", "filters": [], "label": "Unique users" }
+  ],
+  "dateRange": { "preset": "30d" },
+  "granularity": "day",
+  "limit": 365
+}
+```
+
+### series with a breakdown (table / bar / pie / scorecard)
+
+Group a series by a column (or a custom SQL expression) to get one row per value:
+
+```json config.json
+{
+  "useSeriesBuilder": true,
+  "series": [
+    {
+      "tableId": "events",
+      "aggregate": "COUNT_DISTINCT",
+      "aggregateColumn": "distinct_id",
+      "filters": [{ "column": "event_name", "operator": "=", "value": "$pageview" }],
+      "breakdownColumn": "utm_source",
+      "label": "Users by source"
+    }
+  ],
+  "dateRange": { "preset": "30d" },
+  "limit": 20,
+  "orderDirection": "DESC"
+}
+```
+
+## Field reference
+
+### Shared fields
+
+<ResponseField name="dateRange" field-type="object" required="true">
+  Time window. Accepts the same shape the query runner takes.
+
+  <Expandable title="dateRange properties" default-open="false">
+    <ResponseField name="preset" field-type="string" required="true">
+      One of `1h`, `24h`, `7d`, `14d`, `30d`, `90d`, `365d`, or `custom`.
+    </ResponseField>
+    <ResponseField name="from" field-type="string" required="false">
+      ISO datetime. Required when `preset` is `custom`.
+    </ResponseField>
+    <ResponseField name="to" field-type="string" required="false">
+      ISO datetime. Required when `preset` is `custom`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="filters" field-type="array" required="false">
+  Array of filter objects, ANDed together. Defaults to `[]`.
+
+  <Expandable title="filter properties" default-open="false">
+    <ResponseField name="column" field-type="string" required="true">
+      Column name (see [dimensions](#events-columns)).
+    </ResponseField>
+    <ResponseField name="operator" field-type="string" required="true">
+      One of `=`, `!=`, `>`, `<`, `>=`, `<=`, `LIKE`, `NOT LIKE`, `IN`, `NOT IN`.
+    </ResponseField>
+    <ResponseField name="value" field-type="string" required="true">
+      A string or number, or an array of strings for `IN` / `NOT IN`.
+    </ResponseField>
+    <ResponseField name="jsonPath" field-type="string" required="false">
+      BigQuery only. Extract a value from the event `properties` JSON, e.g. `$.properties.plan`. When set, `column` is a label, not a real column.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="granularity" field-type="string" required="false">
+  Trend/line time bucket: `day` (default), `week`, or `month`. BigQuery only.
+</ResponseField>
+
+<ResponseField name="resolveIdentities" field-type="boolean" required="false">
+  Count distinct users and join funnel steps on the canonical **resolved person** rather than the raw `distinct_id`. See [Identity resolution](#identity-resolution). Default `false`.
+</ResponseField>
+
+### number fields
+
+<ResponseField name="metrics" field-type="array" required="true">
+  One or more metrics. Each is rendered as a value; the first drives the big number.
+
+  <Expandable title="metric properties" default-open="false">
+    <ResponseField name="label" field-type="string" required="true">
+      Display label. Also becomes the result column alias.
+    </ResponseField>
+    <ResponseField name="metric" field-type="string" required="true">
+      Metric name — see [metrics catalog](#events-columns).
+    </ResponseField>
+    <ResponseField name="aggregate" field-type="string" required="true">
+      `COUNT`, `COUNT_DISTINCT`, or `SUM`. For the known catalog metrics the aggregate is fixed server-side, so match the metric (e.g. `COUNT_DISTINCT` for `unique_users`).
+    </ResponseField>
+    <ResponseField name="format" field-type="string" required="false">
+      Display format: `number`, `percent`, `currency`, or `duration`.
+    </ResponseField>
+    <ResponseField name="filters" field-type="array" required="false">
+      Per-metric filters, applied as conditional aggregation (independent of the top-level `filters`).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="compareWith" field-type="string" required="false">
+  `previous_period`, `previous_year`, or `none`. Drives the comparison delta.
+</ResponseField>
+
+<ResponseField name="showTrend" field-type="boolean" required="false">
+  When `true`, also computes a sparkline bucketed by `granularity`.
+</ResponseField>
+
+### table / bar / pie fields
+
+<ResponseField name="columns" field-type="array" required="true">
+  Columns to select. A column with no `aggregate` is a dimension (group it); a column with an `aggregate` is a measure.
+
+  <Expandable title="column properties" default-open="false">
+    <ResponseField name="name" field-type="string" required="true">
+      Column name, or a label when `jsonPath` is set.
+    </ResponseField>
+    <ResponseField name="aggregate" field-type="string" required="false">
+      `COUNT`, `COUNT_DISTINCT`, or `SUM`. Omit for a plain dimension.
+    </ResponseField>
+    <ResponseField name="alias" field-type="string" required="false">
+      Output column name. Recommended when using `jsonPath`.
+    </ResponseField>
+    <ResponseField name="jsonPath" field-type="string" required="false">
+      BigQuery only. Extract from event `properties` JSON, e.g. `$.properties.meta_amount`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="groupBy" field-type="array" required="true">
+  Column names to `GROUP BY`. Match the non-aggregated columns. Use `[]` for a single total row.
+</ResponseField>
+
+<ResponseField name="orderBy" field-type="object" required="false">
+  `{ "column": "<alias-or-name>", "direction": "ASC" | "DESC" }`.
+</ResponseField>
+
+<ResponseField name="limit" field-type="integer" required="false">
+  Row cap. Defaults to `20`.
+</ResponseField>
+
+### funnel fields
+
+<ResponseField name="steps" field-type="array" required="true">
+  Ordered steps. Each is `{ "event": "<event_name>", "label": "<display>", "filters"?: [...] }`. Event names must match what the SDK captures — pageviews and identifies are `$pageview` / `$identify` (with the `$`).
+</ResponseField>
+
+<ResponseField name="conversionWindow" field-type="string" required="true">
+  Max time to complete the funnel from step 1, e.g. `7d` or `1h`. Accepts `<n>d` or `<n>h`.
+</ResponseField>
+
+<ResponseField name="stepOrder" field-type="string" required="false">
+  `sequential` (steps must occur in order, default) or `any_order` (independent per-step counts).
+</ResponseField>
+
+<ResponseField name="layout" field-type="string" required="false">
+  Display hint: `vertical` or `horizontal`.
+</ResponseField>
+
+### series fields
+
+<ResponseField name="useSeriesBuilder" field-type="boolean" required="true">
+  Must be `true` to use the series shape.
+</ResponseField>
+
+<ResponseField name="series" field-type="array" required="true">
+  One or more series. `line`/`number` render one value/line per series; `table`/`bar`/`pie`/`scorecard` combine them into columns with an optional breakdown.
+
+  <Expandable title="series properties" default-open="false">
+    <ResponseField name="tableId" field-type="string" required="true">
+      Table to query, e.g. `events`, `contacts`, `opportunities`, `form_submissions`, ad-platform tables.
+    </ResponseField>
+    <ResponseField name="eventName" field-type="string" required="false">
+      When `tableId` is `events`, restrict to one event name.
+    </ResponseField>
+    <ResponseField name="aggregate" field-type="string" required="true">
+      `COUNT`, `COUNT_DISTINCT`, `SUM`, `AVG`, `MIN`, or `MAX`.
+    </ResponseField>
+    <ResponseField name="aggregateColumn" field-type="string" required="false">
+      Column to aggregate. Required for `SUM`/`AVG`/`MIN`/`MAX`; use `distinct_id` for a unique-user `COUNT_DISTINCT`.
+    </ResponseField>
+    <ResponseField name="filters" field-type="array" required="true">
+      Series filters. Each is `{ column, operator, value }`, or `{ customSql }` for a raw expression. Use `[]` for none.
+    </ResponseField>
+    <ResponseField name="breakdownColumn" field-type="string" required="false">
+      Group this series by a column (one row per value).
+    </ResponseField>
+    <ResponseField name="customBreakdownSql" field-type="string" required="false">
+      Raw SQL breakdown expression, e.g. `JSON_VALUE(properties, '$.plan')`. Pair with `breakdownAlias`.
+    </ResponseField>
+    <ResponseField name="label" field-type="string" required="false">
+      Series display label.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="limit" field-type="integer" required="false">
+  Row cap for series table/bar/pie/scorecard. Defaults to `20`.
+</ResponseField>
+
+<ResponseField name="orderDirection" field-type="string" required="false">
+  `ASC` or `DESC` (default) for the leading metric.
+</ResponseField>
+
+### events columns
+
+For the classic shape and `tableId: "events"` series, these are the built-in `events`-table columns.
+
+**Dimensions:** `event_name`, `utm_source`, `utm_medium`, `utm_campaign`, `referring_domain`, `session_entry_url`, `device_type`, `browser`, `os`, `geo_country`, `pathname`, `host`. (For any other event property, use `jsonPath` / `customBreakdownSql`.)
+
+**Metrics** (classic `metric` / column `name`): `event_count`, `unique_users`, `unique_sessions`, `unique_devices`, `identified_users`, `pageviews`, `bounce_sessions`. Non-event `tableId`s expose their own columns.
+
+<Callout kind="tip">
+  The legacy dimension name `event` is accepted and auto-mapped to `event_name`. New configs should use `event_name`.
+</Callout>
+
+## Identity resolution
+
+`config.resolveIdentities: true` counts distinct users, and joins funnel steps, on the canonical **resolved person** instead of the raw per-event `distinct_id` — so a visitor merged across devices, or from anonymous to identified, counts once and a funnel doesn't break across the merge.
+
+- **BigQuery `events` data only.** Other tables and non-identity aggregates (sessions, devices, revenue) ignore the flag, so setting it there is a harmless no-op.
+- Honored by `funnel`, and by any `number`/`table`/`bar`/`pie` metric or series that counts distinct users (`COUNT_DISTINCT` on `distinct_id` / `unique_users`).
+- Resolution reads a **daily** identity snapshot, so merges are reflected up to ~24 hours later.
+
+## Validating before you POST
+
+Because the API stores config unchecked, run this checklist before writing:
+
+<Steps>
+  <Step title="insight_type matches the shape" titleType="p">
+    `line` and `scorecard` require `useSeriesBuilder: true`; `funnel` must **not** set it.
+  </Step>
+  <Step title="Required arrays are present and non-empty" titleType="p">
+    `metrics` (number), `columns` + `groupBy` (table/bar/pie), `steps` + `conversionWindow` (funnel), `series` (series). A missing array is silently defaulted and yields an empty or wrong result, not an error.
+  </Step>
+  <Step title="Columns exist" titleType="p">
+    Use the [events columns](#events-columns), the target table's columns, or a `jsonPath`/`customSql` expression. A typo'd column surfaces as a BigQuery error only at query time.
+  </Step>
+  <Step title="Dry-run it" titleType="p">
+    POST the insight, then call [`POST /insights/{id}/query`](/builder-api). A `200` with data confirms the config compiles; a `4xx`/`5xx` carries the BigQuery error message.
+  </Step>
+</Steps>
+
+## Dashboards: filters and theme
+
+`POST /builder/dashboards` takes `filters` and `theme` objects, both `{}` by default.
+
+<ResponseField name="filters" field-type="object" required="false">
+  Default date range and granularity applied to every tile on load. Shape: `{ "dateRange": { "preset": "7d" }, "granularity": "day" }` (same `dateRange` as insights). Embed viewers can override via `?date_range=`/`?granularity=` query params.
+</ResponseField>
+
+<ResponseField name="theme" field-type="object" required="false">
+  Reserved; currently unused — leave it `{}`. Embed theming is driven by query params on the embed URL (`theme`, `theme_primary`, `theme_secondary`, `theme_heading_font`, `theme_body_font`, `transparent`, `hideHeader`, `branding`), not by this stored object.
+</ResponseField>
