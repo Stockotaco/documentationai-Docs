@@ -405,6 +405,48 @@ Because the API stores config unchecked, run this checklist before writing:
   Building a live preview (a "Run" button on an unsaved draft)? Use [`POST /insights/preview`](/builder-api) — it runs an in-memory `config` and returns the same `data`/`comparisonData`/`trendData`/`sql` payload as the saved runner, with no write and no junk row. Pair it with [`POST /insights/validate`](/builder-api) for a cheap per-keystroke shape check.
 </Callout>
 
+## Reading the results
+
+`POST /insights/preview` and `POST /insights/{id}/query` return the same result payload:
+
+| Field | What it is |
+|-------|-----------|
+| `data` | Main result rows. |
+| `comparisonData` | Previous-period rows — present when `config.compareWith` is set. |
+| `trendData` | Time-bucketed rows for the sparkline/line — present for a `number` with `showTrend`, and for series `line`/`number`. |
+| `rows` | Row count of `data`. |
+| `config` | The config echoed back, enriched with the column→label mapping (below). |
+| `sql` | The generated SQL for the main query. |
+
+`data`, `comparisonData`, and `trendData` are all **arrays of flat row objects keyed by SQL column alias**. The aliases are deterministic — here's how to find them per shape.
+
+### Column keys per shape
+
+**Series insights** (`useSeriesBuilder: true`) — the runner rewrites `config.metrics` in the *response* so each entry's `metric` **is** the result column key and `label` is the display name; the breakdown dimension key is `config.breakdownColumn`:
+
+```json
+"config": {
+  "metrics": [{ "metric": "purchases_0", "label": "Purchases" }],
+  "breakdownColumn": "utm_source"
+}
+```
+
+So a row reads `{ "utm_source": "google", "purchases_0": 42 }`.
+
+**Classic `number`** — the key is the metric's `label`, lowercased with every non-alphanumeric replaced by `_`. `"Unique Users"` → `unique_users`.
+
+**Classic `table` / `bar` / `pie`** — you control the keys: each column's `alias` (or its `name` when no alias). No `trendData`.
+
+**Classic `funnel`** — one row with `step_0_users`, `step_1_users`, … in `steps` order.
+
+### Building the series × buckets table
+
+When present, every `trendData` row has a `day` column (the time bucket, granularity per `config.granularity`) plus one column per measure. To render "Detailed results": take the bucket axis from the distinct `day` values, and one series per `config.metrics[]` entry, reading `row[metric.metric]`.
+
+<Callout kind="tip">
+  Read measure keys from the returned `config.metrics` rather than hardcoding them — for series insights the runner computes the aliases, and they change if you reorder or relabel series.
+</Callout>
+
 ## Dashboards: filters and theme
 
 `POST /builder/dashboards` takes `filters` and `theme` objects, both `{}` by default.

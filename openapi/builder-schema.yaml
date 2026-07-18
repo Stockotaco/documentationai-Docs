@@ -24,6 +24,17 @@ paths:
         `groupable`, `aggregatable`) to decide where a column can go. Static —
         no query is run, so this is free to call as often as you like. Hidden
         internal columns are omitted.
+
+
+        Events-table columns also carry a `group` (`event` / `person` /
+        `session`) for rendering PostHog-style grouped property pickers.
+
+
+        **Cohorts** are your saved **segments** — list them with `GET /segments`
+        (they're first-class filter targets). Discovering a location's custom
+        **person** property keys/values is not yet exposed here; use
+        `/schema/columns/{table}/{column}/values` for the values of any listed
+        column.
       parameters:
         - $ref: "#/components/parameters/LocationId"
       responses:
@@ -260,6 +271,12 @@ components:
         category:
           type: string
           enum: [dimension, metric, metadata, identifier]
+        group:
+          type: string
+          enum: [event, person, session]
+          description: >-
+            PostHog-style property group, for rendering grouped pickers. Present
+            only on the `events` table (every other table is a single entity).
         filterable:
           type: boolean
           description: Can be used in a filter (and in `GET /schema/columns/.../values`).
