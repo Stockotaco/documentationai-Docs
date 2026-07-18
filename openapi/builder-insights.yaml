@@ -83,6 +83,93 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /insights/preview:
+    post:
+      summary: Preview an unsaved config
+      operationId: previewInsight
+      description: >
+        Run an insight `config` in-memory and return the same payload as the
+        saved-insight runner — **without persisting anything**. Use it for a
+        builder's live "Run" on a draft config. Requires an agency key (`ak_`)
+        and `?location_id=`. Charges the query rate-limit allowance (not the
+        write allowance). Compile and query errors return `400` with the error
+        message so a builder can render it in the preview pane.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PreviewInsightRequest"
+      responses:
+        "200":
+          description: Query result for the draft config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreviewInsightResponse"
+        "400":
+          description: >-
+            Missing `insight_type`/`config`, or the config failed to compile or
+            query. The `error` field carries the message.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Preview requires an agency key (`ak_`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Query rate limit exceeded for this location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /insights/validate:
+    post:
+      summary: Validate a config (no query)
+      operationId: validateInsight
+      description: >
+        Cheap shape check for an insight `config` — **no BigQuery runs**.
+        Catches the footguns the SQL generators fail silently on (empty
+        `series`, `useSeriesBuilder` on a funnel, a classic `line`/`scorecard`
+        that compiles to broken SQL, missing required arrays) plus anything the
+        generator throws on. Requires an agency key (`ak_`) and `?location_id=`.
+        Use it to validate on every edit without a billed query; run
+        `/insights/preview` when you also need result data.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidateInsightRequest"
+      responses:
+        "200":
+          description: 'The config is well-formed (`{ "ok": true }`)'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidateInsightResponse"
+        "400":
+          description: >-
+            The config is invalid (`{ "ok": false, "error": "..." }`), or
+            `insight_type`/`config` was missing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidateInsightResponse"
+        "403":
+          description: Requires an agency key (`ak_`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /insights/{id}:
     get:
       summary: Retrieve insight
@@ -379,6 +466,86 @@ components:
             The KV cache floor is 60s, so `0` (or any value below 60) disables
             caching and forces a fresh query every render.
           example: 300
+    PreviewInsightRequest:
+      type: object
+      required:
+        - insight_type
+        - config
+      properties:
+        insight_type:
+          type: string
+          enum: [number, table, funnel, scorecard, bar, pie, line]
+          example: line
+        config:
+          type: object
+          description: >-
+            The draft config to run. Same shape as a saved insight's `config` —
+            see the [Insight config reference](/builder-api/insight-config).
+        dateRange:
+          type: object
+          description: >-
+            Optional override of the config's date range, e.g.
+            `{ "preset": "7d" }` or `{ "preset": "custom", "from": "...",
+            "to": "..." }`.
+        granularity:
+          type: string
+          enum: [day, week, month]
+          description: Optional trend/line bucket override.
+    PreviewInsightResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        insight_type:
+          type: string
+          example: line
+        data:
+          type: array
+          items:
+            type: object
+          description: Main result rows.
+        comparisonData:
+          type: array
+          items:
+            type: object
+          description: Previous-period rows when `config.compareWith` is set.
+        trendData:
+          type: array
+          items:
+            type: object
+          description: Time-bucketed sparkline/line rows when applicable.
+        rows:
+          type: integer
+          description: Row count of the main result.
+        config:
+          type: object
+          description: Chart-ready config (series label/breakdown mapping baked in).
+        sql:
+          type: string
+          description: The generated SQL for the main query.
+    ValidateInsightRequest:
+      type: object
+      required:
+        - insight_type
+        - config
+      properties:
+        insight_type:
+          type: string
+          enum: [number, table, funnel, scorecard, bar, pie, line]
+        config:
+          type: object
+    ValidateInsightResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: false
+        error:
+          type: string
+          description: Present only when `ok` is `false`.
+          example: >-
+            line insights require useSeriesBuilder: true with a series array
     PatchInsightRequest:
       type: object
       description: >-

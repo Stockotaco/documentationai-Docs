@@ -393,9 +393,13 @@ Because the API stores config unchecked, run this checklist before writing:
     Use the [events columns](#events-columns), the target table's columns, or a `jsonPath`/`customSql` expression. A typo'd column surfaces as a BigQuery error only at query time.
   </Step>
   <Step title="Dry-run it" titleType="p">
-    POST the insight, then call [`POST /insights/{id}/query`](/builder-api). A `200` with data confirms the config compiles; a `4xx`/`5xx` carries the BigQuery error message.
+    Call [`POST /insights/validate`](/builder-api) for an instant, non-billed shape check (`{ "ok": true }` or `{ "ok": false, "error": "..." }`), or [`POST /insights/preview`](/builder-api) to run the draft config and get back data plus the generated SQL — neither persists anything. Preview a draft rather than the old create → run → delete workaround.
   </Step>
 </Steps>
+
+<Callout kind="tip">
+  Building a live preview (a "Run" button on an unsaved draft)? Use [`POST /insights/preview`](/builder-api) — it runs an in-memory `config` and returns the same `data`/`comparisonData`/`trendData`/`sql` payload as the saved runner, with no write and no junk row. Pair it with [`POST /insights/validate`](/builder-api) for a cheap per-keystroke shape check.
+</Callout>
 
 ## Dashboards: filters and theme
 
