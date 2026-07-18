@@ -1,8 +1,8 @@
 ---
 title: BigQuery Export
 description: >-
-  Provision per-agency BigQuery datasets of raw events and identity state, and
-  run SQL queries against BigQuery through the Mythic Analytics admin API.
+  Provision per-agency or per-location BigQuery datasets of raw events and
+  identity state, and run SQL queries through the Mythic Analytics admin API.
 ---
 
 ## Overview
@@ -41,6 +41,16 @@ Provisioning creates a per-agency dataset and populates it with views filtered t
 </Steps>
 
 Provisioning is idempotent — repeat calls re-derive the location list and refresh the views. Reconciliation runs the same logic without changing principals; call it after linking or unlinking locations.
+
+## Per-location grain (IAM-isolated)
+
+For a structural client boundary — where a cross-client query fails with IAM permission-denied rather than relying on a `location_id` filter — provision a **per-location** dataset instead of (or alongside) the per-agency one. A dataset `mythic-data.client_<location_id>` is filtered to that single location, and a per-client reader service account is granted `READER` on it alone.
+
+The provisioning routes mirror the agency ones under `/admin/bigquery-exports/location/:locationId` (`provision`, `GET`, `reconcile`). It's a **two-step flow**: provision the dataset on client create/link with no body (no service account required), then re-POST with `{ "principals": ["serviceAccount:..."] }` to attach `READER` once the SA exists — principals merge, so the attach is retryable.
+
+<Callout kind="info">
+  Consumers resolve dataset coordinates and read the semantic catalog from the Data API, not here: `GET /client/v1/data/export?location_id=<loc>` returns the per-location dataset, and `GET /client/v1/data/export/schema` returns the versioned, additive-only column/table catalog for building a picker.
+</Callout>
 
 ## Views
 

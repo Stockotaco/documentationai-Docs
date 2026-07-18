@@ -657,9 +657,25 @@ paths:
       summary: BigQuery export status
       operationId: getExport
       description: >
-        Return the agency's BigQuery export dataset status. Agency-wide — this
-        is the only route that does not require a bound location. Requires an
-        agency (`ak_`) key; secret keys receive `403`.
+        Resolve the BigQuery export dataset coordinates. Two grains:
+
+
+        **Per-location** (recommended): pass a `location_id` with an agency
+        (`ak_`) key, or use a location secret (`sk_`) key, to resolve that
+        client's IAM-isolated dataset `mythic-data.client_<location_id>`
+        (`grain: "location"`). A per-client reader service account is granted
+        READER on this dataset only.
+
+
+        **Agency-wide**: an `ak_` key with no location returns the agency
+        dataset `mythic-data.agency_<id>` spanning all linked locations
+        (`grain: "agency"`).
+
+
+        Resolve coordinates here rather than hand-computing dataset names.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/LocationIdHeader"
       responses:
         "200":
           description: BigQuery export dataset status
@@ -670,17 +686,47 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: Route requires an agency (`ak_`) key
+          description: Agency-wide mode requires an agency (`ak_`) key
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
-          description: No BigQuery export provisioned for the agency
+          description: No BigQuery export provisioned for the agency/location
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /export/schema:
+    get:
+      summary: Export semantic catalog
+      operationId: getExportSchema
+      description: >
+        The export's semantic catalog — the single source of truth for building
+        an insight/breakdown picker. Static and identical for every caller; no
+        bound location required. Versioned and **additive-only** (columns and
+        tables are only added, never renamed or removed without a version bump).
+
+
+        Per column: `name`, `type`, `filterable`, `groupable`, `aggregatable`,
+        `group` (entity-only: `event` | `person` | `session`), `label`.
+        Per table: `source` and `shape` (`event` = row-per-event; `metric` =
+        row-per-period/entity).
+
+
+        This describes the export views only — not the `hello-conversions`
+        insights catalog, whose column set differs.
+      responses:
+        "200":
+          description: Export catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportSchemaResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "429":
           $ref: "#/components/responses/RateLimited"
 components:
@@ -1155,15 +1201,24 @@ components:
             dataset:
               type: string
               description: Fully-qualified BigQuery dataset (`mythic-data.<dataset_name>`).
-              example: mythic-data.agency_acme
+              example: mythic-data.client_acme_retail
+            grain:
+              type: string
+              enum: [location, agency]
+              description: Isolation grain of the returned dataset.
+            location_id:
+              type: string
+              nullable: true
+              description: Present when `grain` is `location`.
             tables:
               type: array
               items:
                 type: string
-              example: ["events"]
+              description: View ids available in the dataset (see `/export/schema`).
+              example: ["events", "person_events", "sessions", "attribution_default", "person_profiles", "identities", "person_merges"]
             location_count:
               type: integer
-              description: Number of locations included in the export dataset.
+              description: Number of locations in the dataset. Agency grain only.
             status:
               type: string
               description: Provisioning status of the export dataset.
@@ -1175,6 +1230,49 @@ components:
               type: string
               format: date-time
               nullable: true
+    ExportSchemaResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            version:
+              type: string
+              example: "1.0.0"
+            stability:
+              type: string
+              example: additive-only
+            partition_filter:
+              type: object
+              description: Views with an enforced partition filter, mapped to the required timestamp column.
+              additionalProperties:
+                type: string
+              example: { events: event_timestamp, person_events: event_timestamp, sessions: started_at }
+            tables:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string, example: events }
+                  label: { type: string, example: Events }
+                  source: { type: string, enum: [mythic-activity, mythic-identity] }
+                  shape: { type: string, enum: [event, metric] }
+                  freshness: { type: string, enum: [realtime, daily] }
+                  columns:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        label: { type: string }
+                        type: { type: string }
+                        filterable: { type: boolean }
+                        groupable: { type: boolean }
+                        aggregatable: { type: boolean }
+                        group: { type: string, enum: [event, person, session] }
     ErrorResponse:
       type: object
       properties:
