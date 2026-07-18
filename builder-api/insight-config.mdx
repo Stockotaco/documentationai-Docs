@@ -330,10 +330,16 @@ Group a series by a column (or a custom SQL expression) to get one row per value
       When `tableId` is `events`, restrict to one event name.
     </ResponseField>
     <ResponseField name="aggregate" field-type="string" required="true">
-      `COUNT`, `COUNT_DISTINCT`, `SUM`, `AVG`, `MIN`, or `MAX`.
+      One of `COUNT`, `COUNT_DISTINCT`, `UNIQUE_SESSIONS`, `SUM`, `AVG`, `MIN`, `MAX`, `MEDIAN`, `PERCENTILE`, or `CUSTOM`. See [aggregate reference](#series-aggregates) for the value-column and companion-field rules.
     </ResponseField>
     <ResponseField name="aggregateColumn" field-type="string" required="false">
-      Column to aggregate. Required for `SUM`/`AVG`/`MIN`/`MAX`; use `distinct_id` for a unique-user `COUNT_DISTINCT`.
+      Column to aggregate. Required for `SUM`/`AVG`/`MIN`/`MAX`/`MEDIAN`/`PERCENTILE`; use `distinct_id` for a unique-user `COUNT_DISTINCT`. Ignored by `UNIQUE_SESSIONS` (always `session_id`) and `CUSTOM`.
+    </ResponseField>
+    <ResponseField name="percentile" field-type="integer" required="false">
+      0–100, required when `aggregate` is `PERCENTILE` (e.g. `90` for p90). Computed with `APPROX_QUANTILES`.
+    </ResponseField>
+    <ResponseField name="customSql" field-type="string" required="false">
+      Raw SQL aggregate expression, required when `aggregate` is `CUSTOM` — e.g. `SUM(amount)/COUNT(DISTINCT distinct_id)`. Injected as-authored (agency-key scoped).
     </ResponseField>
     <ResponseField name="filters" field-type="array" required="true">
       Series filters. Each is `{ column, operator, value }`, or `{ customSql }` for a raw expression. Use `[]` for none.
@@ -357,6 +363,31 @@ Group a series by a column (or a custom SQL expression) to get one row per value
 <ResponseField name="orderDirection" field-type="string" required="false">
   `ASC` or `DESC` (default) for the leading metric.
 </ResponseField>
+
+### Series aggregates
+
+| `aggregate` | Meaning | Requires |
+|-------------|---------|----------|
+| `COUNT` | Row count | — |
+| `COUNT_DISTINCT` | Distinct values of a column | `aggregateColumn` (use `distinct_id` for unique users) |
+| `UNIQUE_SESSIONS` | Distinct `session_id` | — |
+| `SUM` / `AVG` / `MIN` / `MAX` | Numeric aggregate | `aggregateColumn` |
+| `MEDIAN` | 50th percentile (`APPROX_QUANTILES`) | `aggregateColumn` |
+| `PERCENTILE` | p-th percentile | `aggregateColumn` + `percentile` (0–100) |
+| `CUSTOM` | Raw SQL aggregate expression | `customSql` |
+
+```json config.json
+{
+  "useSeriesBuilder": true,
+  "series": [
+    { "tableId": "events", "aggregate": "UNIQUE_SESSIONS", "filters": [], "label": "Sessions" },
+    { "tableId": "events", "aggregate": "PERCENTILE", "aggregateColumn": "time_on_page", "percentile": 90, "filters": [], "label": "p90 time on page" },
+    { "tableId": "events", "aggregate": "CUSTOM", "customSql": "SUM(time_on_page)/COUNT(DISTINCT distinct_id)", "filters": [], "label": "Avg time per user" }
+  ],
+  "dateRange": { "preset": "30d" },
+  "granularity": "day"
+}
+```
 
 ### events columns
 
