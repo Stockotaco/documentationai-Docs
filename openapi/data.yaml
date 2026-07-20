@@ -445,6 +445,102 @@ paths:
           $ref: "#/components/responses/UpstreamError"
         "503":
           $ref: "#/components/responses/NotConfigured"
+  /exceptions/digest:
+    get:
+      summary: Error-tracking weekly digest
+      operationId: getExceptionDigest
+      description: >
+        Everything needed for a "weekly digest" error-tracking email in one
+        call. Returns a `summary` block with the current window's totals and the
+        week-over-week `change_pct` versus the equal-length window immediately
+        before it — `total_exceptions`, `total_sessions`, and
+        `crash_free_sessions` (the fraction of sessions with no `$exception`, as
+        a 0–1 rate). `daily_exceptions` is the current window's per-day counts,
+        **zero-filled** across every day in the range so the bar chart always
+        has one bar per day. `top_issues` are this window's issues sorted by
+        occurrences; `new_issues` are issues **first seen in this window** —
+        i.e. not seen in the `new_lookback_days` before it — also sorted by
+        occurrences. Both lists carry the same fields as `GET
+        /exceptions/issues` rows.
+
+
+        **Time window**: defaults to the last 7 full UTC days; pass
+        `date_from`/`date_to` (YYYY-MM-DD) to override. **Segment scoping**:
+        pass `segment_id` / `exclude_segment_id` to scope the whole digest.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+        - name: top_limit
+          in: query
+          required: false
+          description: Max top-issue rows. Default `5`, min `1`, max `25`.
+          schema: { type: integer, default: 5, minimum: 1, maximum: 25 }
+        - name: new_limit
+          in: query
+          required: false
+          description: Max new-issue rows. Default `5`, min `1`, max `25`.
+          schema: { type: integer, default: 5, minimum: 1, maximum: 25 }
+        - name: new_lookback_days
+          in: query
+          required: false
+          description: >
+            How far back (before `date_from`) an issue must be absent to count
+            as "new this window". Default `90`, min `1`, max `365`.
+          schema: { type: integer, default: 90, minimum: 1, maximum: 365 }
+        - $ref: "#/components/parameters/SegmentId"
+        - $ref: "#/components/parameters/ExcludeSegmentId"
+      responses:
+        "200":
+          description: Digest payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      range:
+                        type: object
+                        properties:
+                          date_from: { type: string, example: "2026-07-13" }
+                          date_to: { type: string, example: "2026-07-19" }
+                      summary:
+                        type: object
+                        properties:
+                          total_exceptions: { $ref: "#/components/schemas/DigestMetric" }
+                          total_sessions: { $ref: "#/components/schemas/DigestMetric" }
+                          crash_free_sessions: { $ref: "#/components/schemas/DigestMetric" }
+                      daily_exceptions:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            date: { type: string, example: "2026-07-17" }
+                            count: { type: integer }
+                      top_issues:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ExceptionIssue"
+                      new_issues:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ExceptionIssue"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/SegmentNotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/NotConfigured"
   /exceptions/issues:
     get:
       summary: Grouped exception issues
@@ -1022,6 +1118,17 @@ components:
         unique_sessions:
           type: integer
           example: 910
+    DigestMetric:
+      type: object
+      description: >
+        A digest summary metric: the current window value, the previous
+        equal-length window value, and the relative % change (null when the
+        previous value is 0). Counts are integers; `crash_free_sessions` is a
+        0–1 rate.
+      properties:
+        current: { type: number, example: 473 }
+        previous: { type: number, example: 119, nullable: true }
+        change_pct: { type: integer, nullable: true, example: 297 }
     ExceptionIssue:
       type: object
       description: >
