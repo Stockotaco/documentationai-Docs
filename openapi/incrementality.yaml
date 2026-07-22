@@ -5,11 +5,11 @@ info:
   description: >
     Geo-holdout incrementality testing and per-channel coefficient derivation.
     Define a test (test/control regions + before/after windows), compute the
-    difference-in-differences iROAS from your BigQuery dataset (events revenue +
-    Airbyte Meta spend), and read back a confidence-weighted running median
-    coefficient per channel. Client-scoped: an agency key (`ak_`) has read-write
-    access to a single named location; a location secret key (`sk_`) is a
-    read-only viewer of its own location.
+    weighted-synthetic-control diff-in-diff iROAS from your BigQuery dataset
+    (events revenue + Airbyte Meta spend), and read back a precision-weighted
+    running median coefficient per measurement series. Client-scoped: an
+    agency key (`ak_`) has read-write access to a single named location; a
+    location secret key (`sk_`) is a read-only viewer of its own location.
 servers:
   - url: https://mythic-analytics.gulp.workers.dev
 security:
@@ -23,11 +23,13 @@ paths:
       operationId: checkEligibility
       description: >
         Pre-flight before any experiment: is this client a viable geo-testing
-        candidate? Four checks — geo coverage (share of revenue carrying a
-        region), history depth (≥28 days), matchable market count (≥6 regions
-        with meaningful revenue), and detectability (the daily budget the
-        client's noise floor implies for a conclusive 30-day break-even test;
-        judged against `daily_budget` when provided).
+        candidate? Five checks — geo coverage (share of revenue carrying a
+        region), history depth (≥28 days), market count (≥6 regions with
+        meaningful revenue), matchability (the largest markets have at least
+        one other market that moves with them, Pearson ≥ 0.5), and
+        detectability (the daily budget the client's noise floor implies for a
+        conclusive 30-day break-even test; judged against `daily_budget` when
+        provided).
       parameters:
         - name: daily_budget
           in: query
@@ -50,7 +52,9 @@ paths:
             type: string
         - name: json_path
           in: query
-          description: JSON path to revenue in properties_json (default `$.properties.value`).
+          description: >
+            JSON path to revenue in properties_json (default `$.value` —
+            properties_json IS the event's properties object).
           required: false
           schema:
             type: string
@@ -107,7 +111,9 @@ paths:
             type: string
         - name: json_path
           in: query
-          description: JSON path to revenue in properties_json (default `$.properties.value`).
+          description: >
+            JSON path to revenue in properties_json (default `$.value` —
+            properties_json IS the event's properties object).
           required: false
           schema:
             type: string
@@ -157,9 +163,14 @@ paths:
       operationId: createExperiment
       description: >
         Create a geo-holdout experiment. Requires an agency (`ak_`) key. The
-        `definition` is validated by building the compute query — an
-        uncomputable definition (bad regions, windows, or identifiers) is
-        rejected with `400 invalid_definition`.
+        `definition` is validated strictly — real calendar dates, pre window
+        ending before the test window, non-overlapping normalized region
+        lists, known enum values — and by building both compute queries, so an
+        uncomputable definition is rejected with `400 invalid_definition`.
+        v1 supports `channel: "meta"` only. If the test window overlaps an
+        existing experiment on the same channel, the 201 response carries a
+        top-level `warnings` array (overlapping tests are not independent
+        measurements).
       requestBody:
         required: true
         content:
@@ -216,11 +227,38 @@ paths:
       summary: Compute experiment
       operationId: computeExperiment
       description: >
-        Run the difference-in-differences query for this experiment against the
-        location's BigQuery dataset, store the metrics on the experiment's
-        `result`, and set `status` to `computed`. Requires an agency (`ak_`) key.
+        Run the weighted-synthetic-control diff-in-diff inference for this
+        experiment against the location's BigQuery dataset, store the metrics
+        on the experiment's `result`, and set `status` to `computed`. Requires
+        an agency (`ak_`) key.
+
+        Compute is gated on the measured window (test window + cooldown):
+        before it closes the endpoint returns `409 window_not_complete`.
+        Pass `{ "allow_partial": true }` for a provisional mid-window read —
+        it is stamped `result.partial: true` and excluded from `/coefficients`
+        until a full compute overwrites it.
+
+        Compute also refuses to produce silently-wrong numbers: no revenue in
+        the test or control regions (`422 no_revenue_in_regions` /
+        `no_revenue_in_controls`), a truncated BigQuery page
+        (`422 result_truncated`), a missing Meta insights table
+        (`422 spend_table_missing`), mixed account currencies
+        (`422 mixed_currencies` — set `spend.account_id`), or Meta spend data
+        that ends well before the measured window (`409 stale_spend_data` —
+        wait for the next Airbyte sync).
       parameters:
         - $ref: "#/components/parameters/ExperimentId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                allow_partial:
+                  type: boolean
+                  default: false
+                  description: Compute before the measured window closes (provisional; excluded from /coefficients).
       responses:
         "200":
           description: Computed experiment (result populated)
@@ -246,6 +284,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Measured window still open (window_not_complete) or Meta spend data stale (stale_spend_data)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Not computable — no revenue in regions, truncated result, missing spend table, or mixed currencies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: BigQuery is not configured in this environment
           content:
@@ -265,11 +315,14 @@ paths:
       description: >
         Before the test starts: an A/A placebo — the pre period is split in
         half and the exact inference runs with the second half as a fake post.
-        A significant placebo lift (`aa_pass: false`) means the market pairing
-        is invalid; `market_match_quality` is the synthetic-control fit R².
-        While running: an interim drift check — lift so far (labeled
-        `peeking: true`), and `drift_detected` when the control blend has
-        shifted level vs the pre period.
+        A placebo lift significant in EITHER direction (`aa_pass: false`,
+        abs(z) ≥ 1.96) means the market pairing is invalid;
+        `market_match_quality` is the synthetic-control fit R².
+        While running: an interim read — lift so far (labeled
+        `peeking: true`), and `drift_detected` when outlier days appear
+        inside the test window. `control_shift_z` is reported but is
+        informational only: control regions are held out, so their level
+        shift vs pre is the intended treatment contrast, not drift.
       parameters:
         - $ref: "#/components/parameters/ExperimentId"
       responses:
@@ -335,8 +388,11 @@ paths:
       operationId: getCoefficientHistory
       description: >
         Every computed experiment's coefficient in computed_at order, each with
-        the running confidence-weighted median at that point — watch the
-        progressive truth converge test by test.
+        the running precision-weighted median at that point — watch the
+        progressive truth converge test by test. Grouped by `series_key`:
+        only experiments measuring the same estimand (channel + revenue
+        definition + spend scope) pool together. Partial (mid-window)
+        computes and poor-control-fit results are excluded.
       parameters:
         - name: channel
           in: query
@@ -360,9 +416,13 @@ paths:
       summary: Get coefficients (progressive truth)
       operationId: getCoefficients
       description: >
-        Return the confidence-weighted median coefficient per channel across all
-        computed experiments for the location. Tighter tests (smaller
-        `ci_width`) pull the median more strongly.
+        Return the inverse-variance weighted median coefficient per
+        measurement series across computed experiments for the location.
+        Weight = 1/se_coefficient² — precision, not effect size, so a huge
+        noisy lift earns no extra say. Partial (mid-window) computes and
+        poor-control-fit results are excluded. Each entry carries the
+        `series_key` identifying the exact estimand (channel + revenue
+        definition + spend scope/conversion).
       parameters:
         - name: channel
           in: query
@@ -449,8 +509,18 @@ components:
           example: purchase
         json_path:
           type: string
-          description: (source=event) JSON path to the revenue value in properties_json.
-          example: "$.properties.value"
+          description: >
+            (source=event) JSON path to the revenue value in properties_json.
+            Default `$.value` — properties_json IS the event's properties
+            object (e.g. capture('purchase', { value: 99 })).
+          example: "$.value"
+        timezone:
+          type: string
+          description: >
+            (source=event) IANA timezone for the revenue day boundary (e.g.
+            `America/New_York`). Defaults to UTC. Meta spend dates always
+            follow the ad account's timezone.
+          example: "America/New_York"
         table:
           type: string
           description: (source=table) Commerce table name in the dataset.
@@ -488,7 +558,14 @@ components:
           description: (source=campaigns) Campaign ids targeting the test regions.
         name_pattern:
           type: string
-          description: (source=campaigns) Substring matched against campaign_name.
+          description: (source=campaigns) Literal substring matched against campaign_name (`%`/`_` are escaped, not wildcards).
+        account_id:
+          type: string
+          description: >
+            Restrict spend to one Meta ad account. Required in practice when
+            the location dataset receives multiple connections — otherwise
+            whole-account fallback sums every account, and mixed currencies
+            are rejected with `422 mixed_currencies`.
         purchase_action_type:
           type: string
           description: >
@@ -601,8 +678,16 @@ components:
       properties:
         phase:
           type: string
-          enum: [pending, running, awaiting_compute, computed]
+          enum: [pending, running, cooldown, awaiting_compute, computed]
+          description: >
+            `cooldown` = test window closed but the measured window (test +
+            cooldown_days) is still accumulating lagged conversions.
         days_total:
+          type: integer
+          description: Measured window length (test days + cooldown days).
+        test_days:
+          type: integer
+        cooldown_days:
           type: integer
         days_elapsed:
           type: integer
@@ -616,7 +701,7 @@ components:
         underpowered:
           type: boolean
           nullable: true
-          description: True when the planned window is shorter than recommended_days.
+          description: True when the planned test window is shorter than recommended_days.
     ExperimentResult:
       type: object
       description: Computed metrics (present once status is `computed`).
@@ -636,31 +721,59 @@ components:
           example: 1.15
         ci_width:
           type: number
-          description: Relative 95% CI width used to weight the running median.
+          description: Relative CI half-width (90% two-sided) — display only; weighting uses se_coefficient.
         se_lift:
           type: number
           description: Standard error of the incremental-revenue estimate.
+        sigma_daily:
+          type: number
+          description: Daily residual noise floor (dof-corrected for the fitted control weights).
+        se_iroas:
+          type: number
+          description: se_lift ÷ test_spend.
+        se_coefficient:
+          type: number
+          description: se_lift ÷ platform_revenue — drives inverse-variance weighting in /coefficients.
         z_score:
           type: number
         confidence:
           type: number
-          description: One-sided probability the lift is real (e.g. 0.97).
+          description: One-sided confidence the lift is positive, Φ(z) (e.g. 0.97).
           example: 0.97
         p_value:
           type: number
+          description: One-sided p-value.
         significant:
           type: boolean
-          description: True when p_value ≤ 0.05.
+          description: True at one-sided 95% (p_value ≤ 0.05) — consistent with coefficient_ci excluding 0.
+        two_sided_significant:
+          type: boolean
+          description: "|z| ≥ 1.96 — watches both tails; the A/A placebo criterion."
         iroas_ci:
           type: array
           items:
             type: number
-          description: 95% confidence interval on iROAS, [low, high].
+          description: 90% two-sided interval on iROAS, [low, high] (±1.645 SE — consistent with the one-sided 95% test).
         coefficient_ci:
           type: array
           items:
             type: number
-          description: 95% confidence interval on the coefficient, [low, high].
+          description: 90% two-sided interval on the coefficient, [low, high].
+        partial:
+          type: boolean
+          description: True when computed mid-window via allow_partial (excluded from /coefficients until recomputed).
+        series_key:
+          type: string
+          description: Estimand identity (channel + revenue def + spend scope) — /coefficients pools only matching keys.
+        spend_currency:
+          type: string
+          nullable: true
+          description: Meta account currency of the spend scope.
+        spend_data_through:
+          type: string
+          format: date
+          nullable: true
+          description: Latest Meta spend date available at compute time (freshness signal).
         pre_days:
           type: integer
         post_days:
@@ -688,12 +801,18 @@ components:
         control_shift_z:
           type: number
           nullable: true
-          description: Control-blend level shift vs pre period, in SE units — the drift stat.
+          description: >
+            Control-blend level shift vs pre period, in two-sample SE units.
+            INFORMATIONAL: control regions are held out, so a shift here is
+            the intended treatment contrast — not by itself evidence of drift.
         warnings:
           type: array
           items:
             type: string
-          description: e.g. windows_not_whole_weeks, short_pre_period, weights_fallback_single_k.
+          description: >
+            e.g. windows_not_whole_weeks, short_pre_period,
+            weights_fallback_single_k, poor_control_fit (excluded from
+            /coefficients), spend_data_recent_partial, no_spend_data.
         test_pre:
           type: number
         test_post:
@@ -744,7 +863,9 @@ components:
           example: "Q3 Meta geo holdout — West"
         channel:
           type: string
+          enum: [meta]
           default: meta
+          description: v1 is Meta-only (spend + launch-plan adapters are Meta-specific).
         definition:
           $ref: "#/components/schemas/ExperimentDefinition"
     ExperimentResponse:
@@ -781,14 +902,20 @@ components:
               type: string
             aa_pass:
               type: boolean
-              description: (mode=aa) Placebo lift NOT significant — pairing is valid.
+              description: (mode=aa) Placebo lift NOT significant in either direction (|z| < 1.96) — pairing is valid.
             market_match_quality:
               type: number
               nullable: true
               description: (mode=aa) Synthetic-control fit R².
             drift_detected:
               type: boolean
-              description: (mode=interim) Control blend shifted vs pre period.
+              description: (mode=interim) Outlier days appeared inside the test window.
+            drift_outlier_days:
+              type: array
+              items:
+                type: string
+                format: date
+              description: (mode=interim) The outlier days behind drift_detected.
             peeking:
               type: boolean
               description: (mode=interim) Interim numbers are not a result.
@@ -834,6 +961,18 @@ components:
                     viable_markets:
                       type: integer
                       description: Regions carrying ≥2% of regional revenue.
+                matchability:
+                  type: object
+                  properties:
+                    pass:
+                      type: boolean
+                    best_match_correlation:
+                      type: number
+                      nullable: true
+                      description: >
+                        Best cross-market Pearson correlation among the largest
+                        viable markets — big markets you can't match are not
+                        test cells. Pass at ≥ 0.5.
                 detectability:
                   type: object
                   properties:
@@ -901,6 +1040,9 @@ components:
               channel:
                 type: string
                 example: meta
+              series_key:
+                type: string
+                description: Estimand identity this coefficient pools over.
               coefficient:
                 type: number
                 nullable: true
@@ -919,6 +1061,14 @@ components:
             strategy:
               type: string
               example: holdout
+            launchable:
+              type: boolean
+              description: False when any control region is unresolved — the targeting change would exclude nothing and the experiment would be invalid.
+            launch_blockers:
+              type: array
+              items:
+                type: string
+              description: Present when launchable=false — what must be resolved first.
             summary:
               type: string
             apply_on:
@@ -983,6 +1133,8 @@ components:
               channel:
                 type: string
                 example: meta
+              series_key:
+                type: string
               points:
                 type: array
                 description: Computed experiments in computed_at order.

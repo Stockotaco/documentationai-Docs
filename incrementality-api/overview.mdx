@@ -3,14 +3,14 @@ title: Incrementality API
 description: >-
   Run Meta geo-holdout incrementality tests and derive your own per-channel
   coefficient — the multiplier that converts platform-reported ROAS into true
-  incremental ROAS, maintained always-on as a confidence-weighted running median.
+  incremental ROAS, maintained always-on as a precision-weighted running median.
 ---
 
 ## Overview
 
 The Incrementality API lets an agency run **geo-holdout tests** on Meta and derive its own **incrementality coefficient** per channel — the `iROAS ÷ platform_ROAS` multiplier that converts Meta's reported ROAS into *true* incremental ROAS.
 
-You define a test (which regions get ads, which are held out, and the before/after windows), we compute the lift entirely from data already in your BigQuery dataset, and the coefficient is served back as a **confidence-weighted running median** over every test you've run — a "progressive truth" that keeps improving as you accumulate experiments.
+You define a test (which regions get ads, which are held out, and the before/after windows), we compute the lift entirely from data already in your BigQuery dataset, and the coefficient is served back as a **precision-weighted running median** over every test you've run — a "progressive truth" that keeps improving as you accumulate experiments.
 
 All three inputs come from data you already have — no new connector, no manual data entry:
 
@@ -39,7 +39,7 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
     curl "$BASE/eligibility?daily_budget=500" -H "Authorization: Bearer $AK"
     ```
 
-    Four checks: **geo coverage** (share of revenue that carries a region — requires IP/geo enrichment), **history** (≥28 days of data), **market count** (≥6 regions with meaningful revenue), and **detectability** — the daily budget the client's revenue noise floor implies for a conclusive 30-day test (`daily_budget_for_30d_test`). If that number dwarfs the client's realistic spend, a geo test can never conclude for them — better to know before running one.
+    Five checks: **geo coverage** (share of revenue that carries a region — requires IP/geo enrichment), **history** (≥28 days of data), **market count** (≥6 regions with meaningful revenue), **matchability** (the largest markets have at least one other market that moves with them — big but uncorrelated regions are not test cells), and **detectability** — the daily budget the client's revenue noise floor implies for a conclusive 30-day test (`daily_budget_for_30d_test`). If that number dwarfs the client's realistic spend, a geo test can never conclude for them — better to know before running one.
   </Step>
   <Step title="Pick matched markets">
     Propose your test states and let the API rank control candidates by how closely their daily revenue tracks the test set:
@@ -75,6 +75,8 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
     ```
 
     The plan is the complete ad-side recipe: control regions resolved to Meta targeting region keys, the exact `excluded_geo_locations` change, apply/revert dates, a step-by-step checklist, and paste-ready Marketing API calls (read-targeting-first, merge, apply — plus a key-verification call). Mythic never touches the ad account; the plan removes every thinking step from doing it yourself in Ads Manager (Ad set → Locations → Exclude).
+
+    Check `launchable` before acting: if any control region can't be resolved to a targeting key (e.g. non-US regions), the plan returns `launchable: false` with `launch_blockers` — launching anyway would exclude nothing and invalidate the test.
   </Step>
   <Step title="Track progress">
     Every experiment read carries a derived `progress` object — poll it while the test runs:
@@ -82,21 +84,26 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
     ```json
     "progress": {
       "phase": "running",
-      "days_total": 30, "days_elapsed": 12, "days_remaining": 18,
+      "days_total": 30, "test_days": 30, "cooldown_days": 0,
+      "days_elapsed": 12, "days_remaining": 18,
       "percent": 40, "recommended_days": 28, "underpowered": false
     }
     ```
 
-    Phases: `pending` → `running` → `awaiting_compute` → `computed`.
+    Phases: `pending` → `running` → (`cooldown`, when `cooldown_days` is set) → `awaiting_compute` → `computed`. Progress tracks the **measured** window — test days plus cooldown — so `awaiting_compute` only begins once lagged conversions have had their chance to land.
   </Step>
   <Step title="Compute — with a confidence level">
-    After the test window closes:
+    After the measured window closes (test + cooldown):
 
     ```bash
     curl -X POST "$BASE/experiments/{id}/compute" -H "Authorization: Bearer $AK"
     ```
 
-    The result now answers "how sure are we?": `confidence` (probability the lift is real, e.g. `0.97`), `p_value`, `significant` (95% threshold), and 95% confidence intervals on both iROAS (`iroas_ci`) and the coefficient (`coefficient_ci`).
+    Compute is gated: before the measured window closes it returns `409 window_not_complete`. You can force a provisional read with `{ "allow_partial": true }` — it is stamped `result.partial: true` and excluded from `/coefficients` until a full compute overwrites it.
+
+    The result answers "how sure are we?": `confidence` (one-sided confidence the lift is positive, e.g. `0.97`), `p_value`, `significant` (one-sided 95% threshold), and 90% two-sided intervals on both iROAS (`iroas_ci`) and the coefficient (`coefficient_ci`) — chosen so `significant: true` always coincides with the interval excluding zero.
+
+    Compute refuses to store silently-wrong numbers. It errors instead of guessing when test/control regions match no revenue (`422 no_revenue_in_regions` / `no_revenue_in_controls` — check region names against `GET /markets`), when the Meta insights table is missing (`422 spend_table_missing` — sync an ads-insights action-type stream or set `spend.table`), when spend covers multiple account currencies (`422 mixed_currencies` — set `spend.account_id`), or when Meta spend data hasn't caught up with the window (`409 stale_spend_data` — wait for the next Airbyte sync).
   </Step>
   <Step title="Read the coefficient">
     ```bash
@@ -104,35 +111,39 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
     ```
 
     Multiply Meta's reported ROAS by this coefficient to get incremental ROAS. Every additional test sharpens it — and `GET /coefficients/history` returns the full series: each test's coefficient plus the running weighted median at that point, so you can watch the progressive truth converge over time.
+
+    Coefficients pool per `series_key` — an estimand identity built from the channel, the revenue definition, and the spend scope/conversion. Two experiments only pool when they measure the same thing; a lead-gen test and a purchase test (or different campaign scopes) each get their own series.
   </Step>
 </Steps>
 
 ## Statistical model
 
-Inference is **weighted synthetic control** difference-in-differences: a non-negative weighted blend of the control regions is fit on the pre period to reproduce the test regions' daily revenue (weights and fit quality are reported as `control_weights` / `fit_r2`), the daily residual `test − blend` gives the noise floor, and the mean-adjusted post-period residual sum **is** the incremental revenue. Its standard error (from pre-period residual variance, corrected for the fit being estimated) yields the z-score behind `confidence`, `p_value`, and the CIs. The create-time power analysis solves the same model forward: `recommended_days = ((z_α + z_power) · σ / (daily_budget × mde_iroas))²`, with `mde_iroas` defaulting to `1.0` — "detect it if the channel at least breaks even."
+Inference is **weighted synthetic control** difference-in-differences: a non-negative weighted blend of the control regions is fit on the pre period to reproduce the test regions' daily revenue (weights and fit quality are reported as `control_weights` / `fit_r2`), the daily residual `test − blend` gives the noise floor, and the mean-adjusted post-period residual sum **is** the incremental revenue. Its standard error comes from pre-period residual variance, inflated by a degrees-of-freedom correction for the fitted weights. Significance is **one-sided** at 95% ("did the channel drive anything?") and the reported intervals are 90% two-sided, so the verdict and the interval never disagree. The create-time power analysis solves the same model forward: `recommended_days = ((z_α + z_power) · σ / (daily_budget × mde_iroas))²`, with `mde_iroas` defaulting to `1.0` — "detect it if the channel at least breaks even."
+
+Every calendar day in the measured windows counts: a day with zero conversions is a zero, not a missing observation.
 
 ### Validation, seasonality, and data quality
 
-- **A/A placebo before launch** — `GET /experiments/{id}/validate` (while the test hasn't started) splits the pre period in half and runs the exact inference with the second half as a fake "post". True lift is zero by construction, so a *significant* placebo lift (`aa_pass: false`) means the market pairing is invalid — fix the regions before spending a dollar. `market_match_quality` is the synthetic-control fit R².
-- **Drift monitoring while running** — the same endpoint in a running test returns interim lift (labeled `peeking: true` — not a result), and `drift_detected` when the control blend's level has shifted vs the pre period (a validity threat regardless of test-side behavior). Set `definition.alert_webhook_url` (https) and Mythic checks daily, POSTing an `incrementality.drift_alert` webhook when drift or new in-window outlier days appear.
+- **A/A placebo before launch** — `GET /experiments/{id}/validate` (while the test hasn't started) splits the pre period in half and runs the exact inference with the second half as a fake "post". True lift is zero by construction, so a placebo lift significant in *either* direction (`aa_pass: false`, |z| ≥ 1.96) means the market pairing is invalid — fix the regions before spending a dollar. `market_match_quality` is the synthetic-control fit R².
+- **Drift monitoring while running** — the same endpoint in a running test returns interim lift (labeled `peeking: true` — not a result), and `drift_detected` when outlier days appear inside the test window. (`control_shift_z` is reported but informational: control regions are held out, so their level shift vs pre is the intended treatment contrast — not drift.) Set `definition.alert_webhook_url` (https) and Mythic checks daily through the test *and* cooldown, POSTing an `incrementality.drift_alert` webhook only when the outlier set *changes* — alert state is persisted, so the same condition never alerts twice. Webhook requests carry `X-Mythic-Event: incrementality.drift_alert` and `X-Mythic-Experiment-Id` headers.
 - **Seasonality** — matched controls absorb *shared* seasonality by construction (both groups live through the same holidays and promos). What they don't absorb is guarded: non-whole-week windows bias the fit via day-of-week composition (`windows_not_whole_weeks` warning — size windows in multiples of 7), and region-specific drift is what the weighted blend minimizes.
 - **Outliers** — days whose residual is >3σ off the pre-period distribution are reported in `outlier_days`, never silently removed. Exclude them explicitly with `definition.exclude_dates`.
 - **Conversion lag** — `definition.cooldown_days` extends the measured window past the test window so lagged conversions land inside the measurement; the launch plan keeps geo exclusions in place through the cooldown.
 
 ## How the coefficient is computed
 
-We run a single **difference-in-differences** query against your per-location BigQuery dataset:
+Two queries against your per-location BigQuery dataset — daily revenue-by-region, and the Meta spend row — with inference in between:
 
-1. Sum revenue in the **test** and **control** regions across the **pre** and **test** windows.
-2. Model the counterfactual: the control regions' growth (`control_post ÷ control_pre`) is what the test regions *would* have done without the extra ads.
-3. `incremental_revenue = test_post − (test_pre × control_growth)`.
+1. Build daily revenue series for the **test** and **control** regions across the **pre** and **test** windows (every calendar day counts, zeros included).
+2. Fit the counterfactual: a non-negative weighted blend of the control regions that reproduces the test regions' pre-period daily revenue (weighted synthetic control).
+3. `incremental_revenue` = the mean-adjusted sum of post-period residuals `test − blend`.
 4. `iROAS = incremental_revenue ÷ test_spend`, where test spend comes from Meta.
 5. `coefficient = iROAS ÷ platform_ROAS` (equivalently `incremental_revenue ÷ platform_reported_revenue`).
 
 A coefficient of `1.0` means Meta's reported ROAS is exactly right; `1.15` means Meta *under*-reports; `0.25` means three-quarters of that reported ROAS was not incremental.
 
 <Callout kind="info">
-  v1 uses difference-in-differences with matched control regions — a pure BigQuery query, no external stats service. For heavier rigor (synthetic control), export the geo-daily data and run [GeoLift](https://github.com/facebookincubator/GeoLift) externally; the coefficient store still holds the results.
+  v1 runs weighted synthetic control diff-in-differences in BigQuery + the API — no external stats service. For heavier rigor (augmented SCM, permutation p-values), export the geo-daily data and run [GeoLift](https://github.com/facebookincubator/GeoLift) externally; the coefficient store still holds the results.
 </Callout>
 
 ## Defining an experiment
@@ -141,35 +152,37 @@ The `definition` object on an experiment carries the full test spec:
 
 | Field | Description |
 |-------|-------------|
-| `test_regions[]` | Regions (US state names, matched against `geo_region_name`/`geo_region`) where ads run. |
-| `control_regions[]` | Held-out regions used as the counterfactual. |
+| `test_regions[]` | Regions (US state names, matched exactly against `geo_region_name`/`geo_region`) where ads run. Trimmed + deduped at create. |
+| `control_regions[]` | Held-out regions used as the counterfactual. Must carry pre-period revenue — compute fails loudly (`no_revenue_in_controls`) rather than degrading into a before/after comparison. |
 | `pre_window` | *(optional)* `{ from, to }` (YYYY-MM-DD) — the baseline period. Defaults to the same-length period immediately before `test_window`. |
 | `test_window` | `{ from, to }` — the period ads ran in the test regions. |
 | `revenue` | Where revenue comes from (see below). |
 | `spend` | How Meta spend is attributed to the test (see below). |
-| `cooldown_days` | *(optional)* Extend the measured window past `test_window.to` to capture lagged conversions. |
+| `cooldown_days` | *(optional)* Extend the measured window past `test_window.to` to capture lagged conversions. Note this is a measurement *extension*, not a washout: keep ads and exclusions exactly as they were through the cooldown. Compute waits for it. |
 | `exclude_dates` | *(optional)* Dates to drop from the analysis (use for reported `outlier_days`). |
-| `alert_webhook_url` | *(optional, https)* Daily drift alerts while the test runs. |
+| `alert_webhook_url` | *(optional, https)* Daily drift alerts while the test runs (and through cooldown). Alerts fire only when the outlier set changes — no repeat alerts for the same condition. Unsigned blind POST with a fixed payload; use a dedicated, unguessable endpoint URL. |
 
 ### Revenue source (`revenue`)
 
 Configurable per experiment, because revenue lives in different places for different clients:
 
-- **Event JSON** (default) — `{ "source": "event", "event_name": "purchase", "json_path": "$.properties.value" }`. Reads revenue from the tracked conversion event; region comes from the event's geo.
+- **Event JSON** (default) — `{ "source": "event", "event_name": "purchase", "json_path": "$.value" }`. Reads revenue from the tracked conversion event; region comes from the event's geo. `properties_json` IS the event's properties object, so the default path is `$.value`. Add `"timezone": "America/New_York"` to align the revenue day boundary with the ad account (default UTC).
 - **Commerce table** — `{ "source": "table", "table": "transactions", "column": "amount", "region_col": "state", "date_col": "created_date" }`. Uses a structured table; that table must carry its own region and date columns to be geo-splittable.
 
 ### Spend attribution (`spend`)
 
-- **Geo stream** (preferred) — `{ "source": "geo_stream", "region_col": "region" }`. Uses a region-broken Meta insights stream (a custom Airbyte report with a `region`/`dma` breakdown), so test-region spend is read directly from Meta.
-- **Campaigns** — `{ "source": "campaigns", "campaign_ids": ["123"] }` or `{ "source": "campaigns", "name_pattern": "GEOTEST" }`. Attributes spend to the test by which campaigns target the test regions, for accounts without the geo stream.
+- **Geo stream** (preferred) — `{ "source": "geo_stream", "table": "your_geo_insights_table", "region_col": "region" }`. Uses a region-broken Meta insights stream (a custom Airbyte report with a `region`/`dma` breakdown), so test-region spend is read directly from Meta. The default Meta insights table has no region column, so a geo stream always needs its own `table`.
+- **Campaigns** — `{ "source": "campaigns", "campaign_ids": ["123"] }` or `{ "source": "campaigns", "name_pattern": "GEOTEST" }` (a literal substring — `%`/`_` are not wildcards). Attributes spend to the test by which campaigns target the test regions, for accounts without the geo stream. Add `"account_id": "act_…"` when the dataset receives more than one Meta connection.
+
+With no geo/campaign filter, spend falls back to whole-account — which is only meaningful because the holdout excludes control regions (account spend ≈ test spend). Always scope spend explicitly for partial holdouts or multi-account datasets.
 
 Platform-reported conversion value is read from Meta's `action_values` using **one canonical action type** — `omni_purchase`, falling back to `purchase` (Meta reports the same conversion under several overlapping types, so they are never summed together). Lead-gen accounts can override with `"purchase_action_type": "lead"` (or any Meta action type) on the `spend` object.
 
 ## The result
 
-After `POST /experiments/{id}/compute`, the experiment's `result` holds the computed metrics: `incremental_revenue`, `test_spend`, `platform_revenue`, `iroas`, `platform_roas`, `coefficient`, `ci_width` (a relative-standard-error proxy from daily variance, used to weight the running median), plus the raw `test_pre`/`test_post`/`control_pre`/`control_post` and `computed_at`.
+After `POST /experiments/{id}/compute`, the experiment's `result` holds the computed metrics: `incremental_revenue`, `test_spend`, `platform_revenue`, `iroas`, `platform_roas`, `coefficient`, the absolute standard errors (`se_lift`, `se_iroas`, `se_coefficient`), `ci_width` (relative 90% CI half-width, display only), `series_key`, `spend_currency`, `spend_data_through`, plus the raw `test_pre`/`test_post`/`control_pre`/`control_post` (note: the control totals are the *weighted blend*, scaled to match test) and `computed_at`.
 
-`GET /coefficients` returns the confidence-weighted median coefficient per channel across all computed experiments — tighter tests (smaller `ci_width`) pull the median more strongly.
+`GET /coefficients` returns the **inverse-variance weighted median** coefficient per `series_key` across computed experiments — weight = `1/se_coefficient²`, so *precision* (not effect size) determines pull, and a huge noisy lift earns no extra say. Results computed mid-window (`partial`) or with a poor control fit (`poor_control_fit` warning) are excluded.
 
 ## Response envelope
 
@@ -191,10 +204,12 @@ All endpoints return a JSON envelope.
 
 | Status | Meaning |
 |--------|---------|
-| `400` | Invalid body, or an uncomputable `definition` (bad regions, windows, or identifiers) |
+| `400` | Invalid body, or an uncomputable `definition` (bad regions, windows, enums, or identifiers); `unsupported_channel` for non-`meta` channels |
 | `401` | Key missing or invalid |
 | `403` | Write attempted with a read-only secret (`sk_`) key, or HIPAA-restricted location |
 | `404` | Experiment not found for this location |
+| `409` | `window_not_complete` (compute before the measured window closes — see `allow_partial`) or `stale_spend_data` (Meta sync hasn't caught up) |
+| `422` | Uncomputable without guessing: `insufficient_data`, `no_revenue_in_regions`, `no_revenue_in_controls`, `result_truncated`, `spend_table_missing`, `mixed_currencies` |
 | `429` | Rate limit exceeded (120 requests per 10s per location) |
 | `500` | BigQuery not configured in this environment |
 | `502` | Compute query failed or the result could not be saved |
