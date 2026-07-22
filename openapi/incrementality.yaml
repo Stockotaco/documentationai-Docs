@@ -30,7 +30,20 @@ paths:
         detectability (the daily budget the client's noise floor implies for a
         conclusive 30-day break-even test; judged against `daily_budget` when
         provided).
+
+        Pass `auto=true` to skip guessing event names: the API inventories
+        the location's top conversion-ish (non-$) events, detects which
+        carry revenue (and at which JSON path), runs the full assessment per
+        event, and returns the best candidate plus every event's verdict
+        with `suggested_measure` / `suggested_json_path`.
       parameters:
+        - name: auto
+          in: query
+          description: When `true`, assess every candidate conversion event and return the best one (ignores event_name/json_path/measure).
+          required: false
+          schema:
+            type: string
+            enum: ["true"]
         - name: daily_budget
           in: query
           description: Planned daily test spend to judge detectability against.

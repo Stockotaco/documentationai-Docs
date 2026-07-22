@@ -36,10 +36,16 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
     Is this client even a viable geo-testing candidate?
 
     ```bash
+    # easiest: let the API find and assess every conversion event for you
+    curl "$BASE/eligibility?auto=true" -H "Authorization: Bearer $AK"
+
+    # or assess one revenue source explicitly:
     curl "$BASE/eligibility?daily_budget=500" -H "Authorization: Bearer $AK"
     # lead-gen client? assess a geo'd browser conversion instead:
     curl "$BASE/eligibility?event_name=form_submitted&measure=count" -H "Authorization: Bearer $AK"
     ```
+
+    With `auto=true` the API inventories the client's top conversion-ish events, detects which carry revenue (and at which JSON path), runs all five checks per event, and returns the best candidate plus every event's verdict with a `suggested_measure`/`suggested_json_path` you can paste straight into an experiment definition.
 
     Five checks: **geo coverage** (share of revenue that carries a region — requires IP/geo enrichment), **history** (≥28 days of data), **market count** (≥6 regions with meaningful revenue), **matchability** (the largest markets have at least one other market that moves with them — big but uncorrelated regions are not test cells), and **detectability** — the daily budget the client's revenue noise floor implies for a conclusive 30-day test (`daily_budget_for_30d_test`). If that number dwarfs the client's realistic spend, a geo test can never conclude for them — better to know before running one.
 
