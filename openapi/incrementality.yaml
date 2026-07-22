@@ -503,6 +503,16 @@ components:
           type: string
           enum: [event, table]
           default: event
+        measure:
+          type: string
+          enum: [revenue, count]
+          default: revenue
+          description: >
+            `revenue` sums the value at json_path (or the table column);
+            `count` counts matching rows instead — the lead-gen mode for
+            conversion events that carry no monetary value (e.g.
+            form_submitted). With count, iROAS reads as incremental
+            conversions per dollar.
         event_name:
           type: string
           description: (source=event) Conversion event name.

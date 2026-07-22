@@ -167,6 +167,11 @@ The `definition` object on an experiment carries the full test spec:
 Configurable per experiment, because revenue lives in different places for different clients:
 
 - **Event JSON** (default) — `{ "source": "event", "event_name": "purchase", "json_path": "$.value" }`. Reads revenue from the tracked conversion event; region comes from the event's geo. `properties_json` IS the event's properties object, so the default path is `$.value`. Add `"timezone": "America/New_York"` to align the revenue day boundary with the ad account (default UTC).
+- **Lead-gen count mode** — `{ "source": "event", "event_name": "form_submitted", "measure": "count" }`. Counts matching events instead of summing a value, for conversion events that carry no monetary amount (form fills, lead captures). `iroas` then reads as *incremental conversions per dollar*; pair with `"spend": { "purchase_action_type": "lead" }` so the platform side reads Meta's lead metric. Count-mode and revenue-mode experiments pool in separate coefficient series.
+
+<Callout kind="warn">
+  Revenue must be **geo-splittable** to be testable: the region comes from the browser event's geo enrichment. Server-side conversion events (CRM/order webhooks) usually carry no region — the eligibility check fails such setups on `geo_coverage` instead of computing a meaningless zero. For server-side revenue, use the commerce-table source with a region column, or measure a geo'd browser conversion (lead mode).
+</Callout>
 - **Commerce table** — `{ "source": "table", "table": "transactions", "column": "amount", "region_col": "state", "date_col": "created_date" }`. Uses a structured table; that table must carry its own region and date columns to be geo-splittable.
 
 ### Spend attribution (`spend`)
