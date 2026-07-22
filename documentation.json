@@ -144,6 +144,28 @@
             ]
           },
           {
+            "tab": "Incrementality",
+            "icon": "trending-up",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "incrementality-api/overview",
+                    "icon": "file-text"
+                  }
+                ]
+              },
+              {
+                "group": "Experiments",
+                "icon": "flask-conical",
+                "openapi": "openapi/incrementality.yaml"
+              }
+            ]
+          },
+          {
             "tab": "Builder",
             "icon": "layout",
             "groups": [

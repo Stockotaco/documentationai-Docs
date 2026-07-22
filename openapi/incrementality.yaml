@@ -1,0 +1,531 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Incrementality
+  description: >
+    Geo-holdout incrementality testing and per-channel coefficient derivation.
+    Define a test (test/control regions + before/after windows), compute the
+    difference-in-differences iROAS from your BigQuery dataset (events revenue +
+    Airbyte Meta spend), and read back a confidence-weighted running median
+    coefficient per channel. Client-scoped: an agency key (`ak_`) has read-write
+    access to a single named location; a location secret key (`sk_`) is a
+    read-only viewer of its own location.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+  - AgencyKeyQuery: []
+  - SecretKeyQuery: []
+paths:
+  /client/v1/incrementality/markets:
+    get:
+      summary: Rank control markets
+      operationId: rankControlMarkets
+      description: >
+        Daily revenue by region over a lookback window (default 90 days),
+        with candidate control markets ranked by Pearson correlation of daily
+        revenue against the proposed test set. Use this to design a test:
+        propose `test_regions`, take the top-correlated candidates as controls.
+        Omit `test_regions` to just inventory revenue by region.
+      parameters:
+        - name: test_regions
+          in: query
+          description: Comma-separated proposed test regions (e.g. `California,Texas`).
+          required: false
+          schema:
+            type: string
+        - name: lookback_days
+          in: query
+          description: Days of history to correlate over. Default `90`, min `14`, max `365`.
+          required: false
+          schema:
+            type: integer
+            default: 90
+        - name: event_name
+          in: query
+          description: Conversion event name (default `purchase`).
+          required: false
+          schema:
+            type: string
+        - name: json_path
+          in: query
+          description: JSON path to revenue in properties_json (default `$.properties.value`).
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Ranked control-market candidates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketsResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          description: BigQuery is not configured in this environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Markets query failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /client/v1/incrementality/experiments:
+    get:
+      summary: List experiments
+      operationId: listExperiments
+      description: List the calling location's geo experiments, newest first. Both `ak_` and `sk_` keys may read.
+      responses:
+        "200":
+          description: List of experiments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentListResponse"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    post:
+      summary: Create experiment
+      operationId: createExperiment
+      description: >
+        Create a geo-holdout experiment. Requires an agency (`ak_`) key. The
+        `definition` is validated by building the compute query — an
+        uncomputable definition (bad regions, windows, or identifiers) is
+        rejected with `400 invalid_definition`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateExperimentRequest"
+      responses:
+        "201":
+          description: Experiment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentResponse"
+        "400":
+          description: Invalid body or definition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Operation requires an agency (`ak_`) key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+  /client/v1/incrementality/experiments/{id}:
+    get:
+      summary: Get experiment
+      operationId: getExperiment
+      description: Fetch one experiment (with its computed `result`, if any) for the calling location.
+      parameters:
+        - $ref: "#/components/parameters/ExperimentId"
+      responses:
+        "200":
+          description: The experiment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentResponse"
+        "404":
+          description: Experiment not found for this location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /client/v1/incrementality/experiments/{id}/compute:
+    post:
+      summary: Compute experiment
+      operationId: computeExperiment
+      description: >
+        Run the difference-in-differences query for this experiment against the
+        location's BigQuery dataset, store the metrics on the experiment's
+        `result`, and set `status` to `computed`. Requires an agency (`ak_`) key.
+      parameters:
+        - $ref: "#/components/parameters/ExperimentId"
+      responses:
+        "200":
+          description: Computed experiment (result populated)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentResponse"
+        "400":
+          description: Definition is invalid or failed the tenant-scope guard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Operation requires an agency (`ak_`) key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Experiment not found for this location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: BigQuery is not configured in this environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Compute query failed or the result could not be saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /client/v1/incrementality/coefficients:
+    get:
+      summary: Get coefficients (progressive truth)
+      operationId: getCoefficients
+      description: >
+        Return the confidence-weighted median coefficient per channel across all
+        computed experiments for the location. Tighter tests (smaller
+        `ci_width`) pull the median more strongly.
+      parameters:
+        - name: channel
+          in: query
+          description: Restrict to one channel (e.g. `meta`).
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Per-channel coefficients
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CoefficientsResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >
+        Client key as bearer token. Use an agency key (`Bearer ak_...`) for
+        read-write access or a location secret key (`Bearer sk_...`) for
+        read-only access.
+    AgencyKeyQuery:
+      type: apiKey
+      in: query
+      name: ak
+      description: Agency key as a query parameter. Prefer the `Authorization` header.
+    SecretKeyQuery:
+      type: apiKey
+      in: query
+      name: sk
+      description: Secret key as a query parameter. Prefer the `Authorization` header.
+  parameters:
+    ExperimentId:
+      name: id
+      in: path
+      required: true
+      description: Experiment identifier.
+      schema:
+        type: string
+        format: uuid
+  responses:
+    RateLimited:
+      description: >
+        Rate limit exceeded (120 requests per 10s per location). A `Retry-After`
+        header indicates when to retry.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    UpstreamError:
+      description: Upstream data store returned an error.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    Window:
+      type: object
+      required: [from, to]
+      properties:
+        from:
+          type: string
+          format: date
+          example: "2026-05-01"
+        to:
+          type: string
+          format: date
+          example: "2026-05-31"
+    RevenueConfig:
+      type: object
+      description: Where conversion revenue comes from.
+      properties:
+        source:
+          type: string
+          enum: [event, table]
+          default: event
+        event_name:
+          type: string
+          description: (source=event) Conversion event name.
+          example: purchase
+        json_path:
+          type: string
+          description: (source=event) JSON path to the revenue value in properties_json.
+          example: "$.properties.value"
+        table:
+          type: string
+          description: (source=table) Commerce table name in the dataset.
+          example: transactions
+        column:
+          type: string
+          description: (source=table) Revenue column.
+          example: amount
+        region_col:
+          type: string
+          description: (source=table) Region column on the table.
+          example: state
+        date_col:
+          type: string
+          description: (source=table) Date/timestamp column on the table.
+          example: created_date
+    SpendConfig:
+      type: object
+      description: How Meta spend is attributed to the test.
+      properties:
+        source:
+          type: string
+          enum: [geo_stream, campaigns]
+        region_col:
+          type: string
+          description: (source=geo_stream) Region column on the region-broken Meta stream.
+          example: region
+        table:
+          type: string
+          description: Meta insights table (defaults to meta_ads_ads_insights_action_type).
+        campaign_ids:
+          type: array
+          items:
+            type: string
+          description: (source=campaigns) Campaign ids targeting the test regions.
+        name_pattern:
+          type: string
+          description: (source=campaigns) Substring matched against campaign_name.
+        purchase_action_type:
+          type: string
+          description: >
+            Meta action type to read conversion value from (e.g. `lead` for
+            lead-gen). Defaults to `omni_purchase` with `purchase` fallback.
+            Exactly one type is read — Meta reports the same conversion under
+            several overlapping action types, so they are never summed.
+          example: lead
+    ExperimentDefinition:
+      type: object
+      required: [test_regions, control_regions, test_window]
+      properties:
+        test_regions:
+          type: array
+          items:
+            type: string
+          example: ["California", "Texas"]
+        control_regions:
+          type: array
+          items:
+            type: string
+          example: ["Ohio", "Georgia"]
+        pre_window:
+          allOf:
+            - $ref: "#/components/schemas/Window"
+          description: >
+            Optional baseline period. Defaults to the same-length period
+            immediately before test_window.
+        test_window:
+          $ref: "#/components/schemas/Window"
+        revenue:
+          $ref: "#/components/schemas/RevenueConfig"
+        spend:
+          $ref: "#/components/schemas/SpendConfig"
+    ExperimentResult:
+      type: object
+      description: Computed metrics (present once status is `computed`).
+      properties:
+        incremental_revenue:
+          type: number
+        test_spend:
+          type: number
+        platform_revenue:
+          type: number
+        iroas:
+          type: number
+        platform_roas:
+          type: number
+        coefficient:
+          type: number
+          example: 1.15
+        ci_width:
+          type: number
+          description: Relative-standard-error proxy used to weight the running median.
+        test_pre:
+          type: number
+        test_post:
+          type: number
+        control_pre:
+          type: number
+        control_post:
+          type: number
+        computed_at:
+          type: string
+          format: date-time
+    Experiment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        location_id:
+          type: string
+        name:
+          type: string
+        channel:
+          type: string
+          example: meta
+        status:
+          type: string
+          enum: [draft, computed]
+        definition:
+          $ref: "#/components/schemas/ExperimentDefinition"
+        result:
+          $ref: "#/components/schemas/ExperimentResult"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CreateExperimentRequest:
+      type: object
+      required: [name, definition]
+      properties:
+        name:
+          type: string
+          example: "Q3 Meta geo holdout — West"
+        channel:
+          type: string
+          default: meta
+        definition:
+          $ref: "#/components/schemas/ExperimentDefinition"
+    ExperimentResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/Experiment"
+    ExperimentListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Experiment"
+    MarketsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            window:
+              $ref: "#/components/schemas/Window"
+            test_regions:
+              type: array
+              items:
+                type: string
+            test_total_revenue:
+              type: number
+            days:
+              type: integer
+              description: Number of days in the correlated series.
+            candidates:
+              type: array
+              description: Control candidates, best-correlated first.
+              items:
+                type: object
+                properties:
+                  region:
+                    type: string
+                    example: Ohio
+                  correlation:
+                    type: number
+                    nullable: true
+                    description: Pearson correlation of daily revenue vs the test set.
+                    example: 0.93
+                  total_revenue:
+                    type: number
+                  volume_ratio:
+                    type: number
+                    nullable: true
+                    description: Candidate revenue ÷ test-set revenue over the window.
+    CoefficientsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              channel:
+                type: string
+                example: meta
+              coefficient:
+                type: number
+                nullable: true
+                example: 1.15
+              test_count:
+                type: integer
+                example: 3
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                type: object

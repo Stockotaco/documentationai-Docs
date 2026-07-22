@@ -1,0 +1,153 @@
+---
+title: Incrementality API
+description: >-
+  Run Meta geo-holdout incrementality tests and derive your own per-channel
+  coefficient — the multiplier that converts platform-reported ROAS into true
+  incremental ROAS, maintained always-on as a confidence-weighted running median.
+---
+
+## Overview
+
+The Incrementality API lets an agency run **geo-holdout tests** on Meta and derive its own **incrementality coefficient** per channel — the `iROAS ÷ platform_ROAS` multiplier that converts Meta's reported ROAS into *true* incremental ROAS.
+
+You define a test (which regions get ads, which are held out, and the before/after windows), we compute the lift entirely from data already in your BigQuery dataset, and the coefficient is served back as a **confidence-weighted running median** over every test you've run — a "progressive truth" that keeps improving as you accumulate experiments.
+
+All three inputs come from data you already have — no new connector, no manual data entry:
+
+- **Revenue by region** — your resolved conversion events (which carry `geo_region`).
+- **Ad spend + platform-reported purchase value** — your Airbyte-synced Meta Ads insights.
+
+## Base URL
+
+All endpoints are mounted under the `/client/v1/incrementality` prefix.
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/incrementality
+```
+
+## Authentication
+
+Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_`, read + write, bind a location with `?location_id=` or the `X-Location-Id` header) or a **secret key** (`sk_`, read-only viewer, auto-scoped to its location). Creating and computing experiments requires an `ak_` key; reads accept either.
+
+## Quickstart — four calls to a coefficient
+
+<Steps>
+  <Step title="Pick matched markets">
+    Propose your test states and let the API rank control candidates by how closely their daily revenue tracks the test set:
+
+    ```bash
+    curl "$BASE/markets?test_regions=California,Texas" -H "Authorization: Bearer $AK"
+    ```
+
+    Take the top 2–3 `candidates` (highest `correlation`, reasonable `volume_ratio`) as your controls.
+  </Step>
+  <Step title="Create the experiment">
+    Only regions and the test window are required — `pre_window` defaults to the same-length period immediately before the test, and revenue defaults to the `purchase` event:
+
+    ```bash
+    curl -X POST "$BASE/experiments" -H "Authorization: Bearer $AK" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "name": "Q3 Meta geo holdout",
+        "definition": {
+          "test_regions": ["California", "Texas"],
+          "control_regions": ["Ohio", "Georgia"],
+          "test_window": { "from": "2026-06-01", "to": "2026-06-30" }
+        }
+      }'
+    ```
+
+    Then run the test in Meta Ads Manager: ads **on** in the test states, **excluded** in the controls.
+  </Step>
+  <Step title="Compute">
+    After the test window closes:
+
+    ```bash
+    curl -X POST "$BASE/experiments/{id}/compute" -H "Authorization: Bearer $AK"
+    ```
+  </Step>
+  <Step title="Read the coefficient">
+    ```bash
+    curl "$BASE/coefficients?channel=meta" -H "Authorization: Bearer $AK"
+    ```
+
+    Multiply Meta's reported ROAS by this coefficient to get incremental ROAS. Every additional test sharpens it.
+  </Step>
+</Steps>
+
+## How the coefficient is computed
+
+We run a single **difference-in-differences** query against your per-location BigQuery dataset:
+
+1. Sum revenue in the **test** and **control** regions across the **pre** and **test** windows.
+2. Model the counterfactual: the control regions' growth (`control_post ÷ control_pre`) is what the test regions *would* have done without the extra ads.
+3. `incremental_revenue = test_post − (test_pre × control_growth)`.
+4. `iROAS = incremental_revenue ÷ test_spend`, where test spend comes from Meta.
+5. `coefficient = iROAS ÷ platform_ROAS` (equivalently `incremental_revenue ÷ platform_reported_revenue`).
+
+A coefficient of `1.0` means Meta's reported ROAS is exactly right; `1.15` means Meta *under*-reports; `0.25` means three-quarters of that reported ROAS was not incremental.
+
+<Callout kind="info">
+  v1 uses difference-in-differences with matched control regions — a pure BigQuery query, no external stats service. For heavier rigor (synthetic control), export the geo-daily data and run [GeoLift](https://github.com/facebookincubator/GeoLift) externally; the coefficient store still holds the results.
+</Callout>
+
+## Defining an experiment
+
+The `definition` object on an experiment carries the full test spec:
+
+| Field | Description |
+|-------|-------------|
+| `test_regions[]` | Regions (US state names, matched against `geo_region_name`/`geo_region`) where ads run. |
+| `control_regions[]` | Held-out regions used as the counterfactual. |
+| `pre_window` | *(optional)* `{ from, to }` (YYYY-MM-DD) — the baseline period. Defaults to the same-length period immediately before `test_window`. |
+| `test_window` | `{ from, to }` — the period ads ran in the test regions. |
+| `revenue` | Where revenue comes from (see below). |
+| `spend` | How Meta spend is attributed to the test (see below). |
+
+### Revenue source (`revenue`)
+
+Configurable per experiment, because revenue lives in different places for different clients:
+
+- **Event JSON** (default) — `{ "source": "event", "event_name": "purchase", "json_path": "$.properties.value" }`. Reads revenue from the tracked conversion event; region comes from the event's geo.
+- **Commerce table** — `{ "source": "table", "table": "transactions", "column": "amount", "region_col": "state", "date_col": "created_date" }`. Uses a structured table; that table must carry its own region and date columns to be geo-splittable.
+
+### Spend attribution (`spend`)
+
+- **Geo stream** (preferred) — `{ "source": "geo_stream", "region_col": "region" }`. Uses a region-broken Meta insights stream (a custom Airbyte report with a `region`/`dma` breakdown), so test-region spend is read directly from Meta.
+- **Campaigns** — `{ "source": "campaigns", "campaign_ids": ["123"] }` or `{ "source": "campaigns", "name_pattern": "GEOTEST" }`. Attributes spend to the test by which campaigns target the test regions, for accounts without the geo stream.
+
+Platform-reported conversion value is read from Meta's `action_values` using **one canonical action type** — `omni_purchase`, falling back to `purchase` (Meta reports the same conversion under several overlapping types, so they are never summed together). Lead-gen accounts can override with `"purchase_action_type": "lead"` (or any Meta action type) on the `spend` object.
+
+## The result
+
+After `POST /experiments/{id}/compute`, the experiment's `result` holds the computed metrics: `incremental_revenue`, `test_spend`, `platform_revenue`, `iroas`, `platform_roas`, `coefficient`, `ci_width` (a relative-standard-error proxy from daily variance, used to weight the running median), plus the raw `test_pre`/`test_post`/`control_pre`/`control_post` and `computed_at`.
+
+`GET /coefficients` returns the confidence-weighted median coefficient per channel across all computed experiments — tighter tests (smaller `ci_width`) pull the median more strongly.
+
+## Response envelope
+
+All endpoints return a JSON envelope.
+
+<ResponseField name="success" field-type="boolean" required="true" deprecated="false">
+  Whether the request succeeded.
+</ResponseField>
+
+<ResponseField name="data" field-type="object|array" required="false" deprecated="false">
+  Resource payload. Shape depends on the endpoint.
+</ResponseField>
+
+<ResponseField name="error" field-type="object" required="false" deprecated="false">
+  Present on failed requests. Contains `code`, `message`, and optionally `details`.
+</ResponseField>
+
+## Error handling
+
+| Status | Meaning |
+|--------|---------|
+| `400` | Invalid body, or an uncomputable `definition` (bad regions, windows, or identifiers) |
+| `401` | Key missing or invalid |
+| `403` | Write attempted with a read-only secret (`sk_`) key, or HIPAA-restricted location |
+| `404` | Experiment not found for this location |
+| `429` | Rate limit exceeded (120 requests per 10s per location) |
+| `500` | BigQuery not configured in this environment |
+| `502` | Compute query failed or the result could not be saved |
