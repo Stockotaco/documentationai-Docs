@@ -29,9 +29,18 @@ https://mythic-analytics.gulp.workers.dev/client/v1/incrementality
 
 Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_`, read + write, bind a location with `?location_id=` or the `X-Location-Id` header) or a **secret key** (`sk_`, read-only viewer, auto-scoped to its location). Creating and computing experiments requires an `ak_` key; reads accept either.
 
-## Quickstart — four calls to a coefficient
+## Quickstart — from "should we?" to a coefficient
 
 <Steps>
+  <Step title="Check eligibility">
+    Is this client even a viable geo-testing candidate?
+
+    ```bash
+    curl "$BASE/eligibility?daily_budget=500" -H "Authorization: Bearer $AK"
+    ```
+
+    Four checks: **geo coverage** (share of revenue that carries a region — requires IP/geo enrichment), **history** (≥28 days of data), **market count** (≥6 regions with meaningful revenue), and **detectability** — the daily budget the client's revenue noise floor implies for a conclusive 30-day test (`daily_budget_for_30d_test`). If that number dwarfs the client's realistic spend, a geo test can never conclude for them — better to know before running one.
+  </Step>
   <Step title="Pick matched markets">
     Propose your test states and let the API rank control candidates by how closely their daily revenue tracks the test set:
 
@@ -41,8 +50,8 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
 
     Take the top 2–3 `candidates` (highest `correlation`, reasonable `volume_ratio`) as your controls.
   </Step>
-  <Step title="Create the experiment">
-    Only regions and the test window are required — `pre_window` defaults to the same-length period immediately before the test, and revenue defaults to the `purchase` event:
+  <Step title="Create the experiment — and get told how long to run it">
+    Only regions and the test window are required — `pre_window` defaults to the same-length period immediately before the test, and revenue defaults to the `purchase` event. Include `daily_budget` and the response carries a **power analysis** (`design.recommended_days`): how many days the test must run to detect break-even incrementality at 95% confidence / 80% power, given this client's noise floor.
 
     ```bash
     curl -X POST "$BASE/experiments" -H "Authorization: Bearer $AK" \
@@ -52,19 +61,35 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
         "definition": {
           "test_regions": ["California", "Texas"],
           "control_regions": ["Ohio", "Georgia"],
-          "test_window": { "from": "2026-06-01", "to": "2026-06-30" }
+          "test_window": { "from": "2026-06-01", "to": "2026-06-30" },
+          "daily_budget": 500
         }
       }'
     ```
 
-    Then run the test in Meta Ads Manager: ads **on** in the test states, **excluded** in the controls.
+    If `progress.underpowered` is `true`, your window is shorter than `design.recommended_days` — widen it before launch. Then run the test in Meta Ads Manager: ads **on** in the test states, **excluded** in the controls.
   </Step>
-  <Step title="Compute">
+  <Step title="Track progress">
+    Every experiment read carries a derived `progress` object — poll it while the test runs:
+
+    ```json
+    "progress": {
+      "phase": "running",
+      "days_total": 30, "days_elapsed": 12, "days_remaining": 18,
+      "percent": 40, "recommended_days": 28, "underpowered": false
+    }
+    ```
+
+    Phases: `pending` → `running` → `awaiting_compute` → `computed`.
+  </Step>
+  <Step title="Compute — with a confidence level">
     After the test window closes:
 
     ```bash
     curl -X POST "$BASE/experiments/{id}/compute" -H "Authorization: Bearer $AK"
     ```
+
+    The result now answers "how sure are we?": `confidence` (probability the lift is real, e.g. `0.97`), `p_value`, `significant` (95% threshold), and 95% confidence intervals on both iROAS (`iroas_ci`) and the coefficient (`coefficient_ci`).
   </Step>
   <Step title="Read the coefficient">
     ```bash
@@ -74,6 +99,10 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
     Multiply Meta's reported ROAS by this coefficient to get incremental ROAS. Every additional test sharpens it.
   </Step>
 </Steps>
+
+## Statistical model
+
+Inference is residual-based difference-in-differences: a scaling factor `k` is fit on pre-period totals (test ÷ control), the daily residual `test − k·control` gives the noise floor, and the post-period residual sum **is** the incremental revenue. Its standard error (from pre-period residual variance, with a correction for `k` being estimated) yields the z-score behind `confidence`, `p_value`, and the CIs. The create-time power analysis solves the same model forward: `recommended_days = ((z_α + z_power) · σ / (daily_budget × mde_iroas))²`, with `mde_iroas` defaulting to `1.0` — "detect it if the channel at least breaks even."
 
 ## How the coefficient is computed
 

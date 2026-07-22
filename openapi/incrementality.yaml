@@ -17,6 +17,64 @@ security:
   - AgencyKeyQuery: []
   - SecretKeyQuery: []
 paths:
+  /client/v1/incrementality/eligibility:
+    get:
+      summary: Check geo-testing eligibility
+      operationId: checkEligibility
+      description: >
+        Pre-flight before any experiment: is this client a viable geo-testing
+        candidate? Four checks — geo coverage (share of revenue carrying a
+        region), history depth (≥28 days), matchable market count (≥6 regions
+        with meaningful revenue), and detectability (the daily budget the
+        client's noise floor implies for a conclusive 30-day break-even test;
+        judged against `daily_budget` when provided).
+      parameters:
+        - name: daily_budget
+          in: query
+          description: Planned daily test spend to judge detectability against.
+          required: false
+          schema:
+            type: number
+        - name: lookback_days
+          in: query
+          description: Days of history to assess. Default `90`, min `14`, max `365`.
+          required: false
+          schema:
+            type: integer
+            default: 90
+        - name: event_name
+          in: query
+          description: Conversion event name (default `purchase`).
+          required: false
+          schema:
+            type: string
+        - name: json_path
+          in: query
+          description: JSON path to revenue in properties_json (default `$.properties.value`).
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Eligibility verdict with per-check detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EligibilityResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          description: BigQuery is not configured in this environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Eligibility query failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /client/v1/incrementality/markets:
     get:
       summary: Rank control markets
@@ -368,6 +426,81 @@ components:
           $ref: "#/components/schemas/RevenueConfig"
         spend:
           $ref: "#/components/schemas/SpendConfig"
+        daily_budget:
+          type: number
+          description: >
+            Planned daily test spend. When present, a power analysis runs at
+            create time and the experiment carries a `design` with
+            `recommended_days`.
+          example: 500
+        mde_iroas:
+          type: number
+          default: 1.0
+          description: >
+            Minimum detectable iROAS for the power analysis. Default 1.0 =
+            size the test to detect break-even incrementality.
+        design_lookback_days:
+          type: integer
+          default: 90
+          description: Days of history the power analysis fits the noise floor on.
+    ExperimentDesign:
+      type: object
+      description: Power-analysis output (computed at create when daily_budget is set).
+      properties:
+        ok:
+          type: boolean
+        reason:
+          type: string
+          description: Present when ok=false (insufficient_history, no_revenue_in_regions, no_variance).
+        recommended_days:
+          type: integer
+          description: Minimum test length to conclude at the stated assumptions (floor 7).
+          example: 28
+        raw_days:
+          type: integer
+        sigma_daily:
+          type: number
+          description: Daily residual noise floor the recommendation rests on.
+        scaling_k:
+          type: number
+          description: Pre-period test/control scaling factor.
+        baseline_days:
+          type: integer
+        baseline_window:
+          $ref: "#/components/schemas/Window"
+        assumptions:
+          type: object
+          properties:
+            daily_budget:
+              type: number
+            mde_iroas:
+              type: number
+            alpha:
+              type: number
+            power:
+              type: number
+    ExperimentProgress:
+      type: object
+      description: Derived lifecycle position (computed at read time).
+      properties:
+        phase:
+          type: string
+          enum: [pending, running, awaiting_compute, computed]
+        days_total:
+          type: integer
+        days_elapsed:
+          type: integer
+        days_remaining:
+          type: integer
+        percent:
+          type: integer
+        recommended_days:
+          type: integer
+          nullable: true
+        underpowered:
+          type: boolean
+          nullable: true
+          description: True when the planned window is shorter than recommended_days.
     ExperimentResult:
       type: object
       description: Computed metrics (present once status is `computed`).
@@ -387,7 +520,35 @@ components:
           example: 1.15
         ci_width:
           type: number
-          description: Relative-standard-error proxy used to weight the running median.
+          description: Relative 95% CI width used to weight the running median.
+        se_lift:
+          type: number
+          description: Standard error of the incremental-revenue estimate.
+        z_score:
+          type: number
+        confidence:
+          type: number
+          description: One-sided probability the lift is real (e.g. 0.97).
+          example: 0.97
+        p_value:
+          type: number
+        significant:
+          type: boolean
+          description: True when p_value ≤ 0.05.
+        iroas_ci:
+          type: array
+          items:
+            type: number
+          description: 95% confidence interval on iROAS, [low, high].
+        coefficient_ci:
+          type: array
+          items:
+            type: number
+          description: 95% confidence interval on the coefficient, [low, high].
+        pre_days:
+          type: integer
+        post_days:
+          type: integer
         test_pre:
           type: number
         test_post:
@@ -417,6 +578,10 @@ components:
           enum: [draft, computed]
         definition:
           $ref: "#/components/schemas/ExperimentDefinition"
+        design:
+          $ref: "#/components/schemas/ExperimentDesign"
+        progress:
+          $ref: "#/components/schemas/ExperimentProgress"
         result:
           $ref: "#/components/schemas/ExperimentResult"
         created_at:
@@ -453,6 +618,63 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Experiment"
+    EligibilityResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            window:
+              $ref: "#/components/schemas/Window"
+            eligible:
+              type: boolean
+            failing_checks:
+              type: array
+              items:
+                type: string
+            checks:
+              type: object
+              properties:
+                geo_coverage:
+                  type: object
+                  properties:
+                    pass:
+                      type: boolean
+                    share_with_region:
+                      type: number
+                      example: 0.94
+                history:
+                  type: object
+                  properties:
+                    pass:
+                      type: boolean
+                    days_with_data:
+                      type: integer
+                market_count:
+                  type: object
+                  properties:
+                    pass:
+                      type: boolean
+                    viable_markets:
+                      type: integer
+                      description: Regions carrying ≥2% of regional revenue.
+                detectability:
+                  type: object
+                  properties:
+                    pass:
+                      type: boolean
+                    sigma_daily:
+                      type: number
+                    daily_budget_for_30d_test:
+                      type: number
+                      description: >
+                        Daily spend needed to detect break-even iROAS in a
+                        30-day test given this client's noise floor.
+                    daily_budget:
+                      type: number
+                      description: Echoed when provided.
     MarketsResponse:
       type: object
       properties:
