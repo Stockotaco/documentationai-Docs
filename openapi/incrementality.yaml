@@ -222,6 +222,54 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
           $ref: "#/components/responses/RateLimited"
+    delete:
+      summary: Delete experiment
+      operationId: deleteExperiment
+      description: >
+        Delete an experiment (any status). Requires an agency (`ak_`) key.
+        There is no edit endpoint — fix a typo'd definition by deleting and
+        recreating. Deleting a computed experiment also removes its
+        coefficient from the progressive-truth median.
+      parameters:
+        - $ref: "#/components/parameters/ExperimentId"
+      responses:
+        "200":
+          description: Experiment deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                      status:
+                        type: string
+                      deleted:
+                        type: boolean
+        "403":
+          description: Operation requires an agency (`ak_`) key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Experiment not found for this location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
   /client/v1/incrementality/experiments/{id}/compute:
     post:
       summary: Compute experiment
