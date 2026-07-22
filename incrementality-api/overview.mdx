@@ -176,12 +176,12 @@ Configurable per experiment, because revenue lives in different places for diffe
 
 ### Spend attribution (`spend`)
 
-- **Geo stream** (preferred) — `{ "source": "geo_stream", "table": "your_geo_insights_table", "region_col": "region" }`. Uses a region-broken Meta insights stream (a custom Airbyte report with a `region`/`dma` breakdown), so test-region spend is read directly from Meta. The default Meta insights table has no region column, so a geo stream always needs its own `table`.
+- **Geo stream** (preferred) — `{ "source": "geo_stream", "region_col": "region" }`. Uses the region-broken Meta insights stream (`meta_ads_ads_insights_region`, synced by default on platform-created Meta connections), so test-region spend is read directly from Meta. Set `"table"` only if your geo-broken insights live in a custom table.
 - **Campaigns** — `{ "source": "campaigns", "campaign_ids": ["123"] }` or `{ "source": "campaigns", "name_pattern": "GEOTEST" }` (a literal substring — `%`/`_` are not wildcards). Attributes spend to the test by which campaigns target the test regions, for accounts without the geo stream. Add `"account_id": "act_…"` when the dataset receives more than one Meta connection.
 
 With no geo/campaign filter, spend falls back to whole-account — which is only meaningful because the holdout excludes control regions (account spend ≈ test spend). Always scope spend explicitly for partial holdouts or multi-account datasets.
 
-Platform-reported conversion value is read from Meta's `action_values` using **one canonical action type** — `omni_purchase`, falling back to `purchase` (Meta reports the same conversion under several overlapping types, so they are never summed together). Lead-gen accounts can override with `"purchase_action_type": "lead"` (or any Meta action type) on the `spend` object.
+Platform-reported conversion value is read from Meta's `action_values` using **one canonical action type** — `omni_purchase`, falling back to `purchase` (Meta reports the same conversion under several overlapping types, so they are never summed together). Lead-gen accounts can override with `"purchase_action_type": "lead"` (or any Meta action type) on the `spend` object. The default table is `meta_ads_ads_insights_action_type`, also synced by default on platform-created Meta connections.
 
 ## The result
 

@@ -608,7 +608,11 @@ components:
           example: region
         table:
           type: string
-          description: Meta insights table (defaults to meta_ads_ads_insights_action_type).
+          description: >
+            Meta insights table. Defaults to
+            `meta_ads_ads_insights_action_type` (source=campaigns) or
+            `meta_ads_ads_insights_region` (source=geo_stream) — both synced
+            by the platform's default Meta connection.
         campaign_ids:
           type: array
           items:
