@@ -37,9 +37,13 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
 
     ```bash
     curl "$BASE/eligibility?daily_budget=500" -H "Authorization: Bearer $AK"
+    # lead-gen client? assess a geo'd browser conversion instead:
+    curl "$BASE/eligibility?event_name=form_submitted&measure=count" -H "Authorization: Bearer $AK"
     ```
 
     Five checks: **geo coverage** (share of revenue that carries a region — requires IP/geo enrichment), **history** (≥28 days of data), **market count** (≥6 regions with meaningful revenue), **matchability** (the largest markets have at least one other market that moves with them — big but uncorrelated regions are not test cells), and **detectability** — the daily budget the client's revenue noise floor implies for a conclusive 30-day test (`daily_budget_for_30d_test`). If that number dwarfs the client's realistic spend, a geo test can never conclude for them — better to know before running one.
+
+    The default revenue source is the `purchase` event at `$.value` — clients whose conversions are named differently must pass `event_name` (and `json_path` for where the value lives, e.g. `$.meta_amount`) or every check correctly returns zeros. If purchase events arrive via server-side CRM webhooks they carry no region (coverage 0) — assess a geo'd browser conversion with `measure=count` instead.
   </Step>
   <Step title="Pick matched markets">
     Propose your test states and let the API rank control candidates by how closely their daily revenue tracks the test set:

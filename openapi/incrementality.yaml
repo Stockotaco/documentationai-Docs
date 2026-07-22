@@ -58,6 +58,16 @@ paths:
           required: false
           schema:
             type: string
+        - name: measure
+          in: query
+          description: >
+            `revenue` (default) sums the value at json_path; `count` counts
+            matching events instead — the lead-gen mode (e.g.
+            `?event_name=form_submitted&measure=count`).
+          required: false
+          schema:
+            type: string
+            enum: [revenue, count]
       responses:
         "200":
           description: Eligibility verdict with per-check detail
@@ -117,6 +127,16 @@ paths:
           required: false
           schema:
             type: string
+        - name: measure
+          in: query
+          description: >
+            `revenue` (default) sums the value at json_path; `count` counts
+            matching events instead — the lead-gen mode (e.g.
+            `?event_name=form_submitted&measure=count`).
+          required: false
+          schema:
+            type: string
+            enum: [revenue, count]
       responses:
         "200":
           description: Ranked control-market candidates
