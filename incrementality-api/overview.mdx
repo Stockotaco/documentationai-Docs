@@ -109,7 +109,15 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
 
 ## Statistical model
 
-Inference is residual-based difference-in-differences: a scaling factor `k` is fit on pre-period totals (test ÷ control), the daily residual `test − k·control` gives the noise floor, and the post-period residual sum **is** the incremental revenue. Its standard error (from pre-period residual variance, with a correction for `k` being estimated) yields the z-score behind `confidence`, `p_value`, and the CIs. The create-time power analysis solves the same model forward: `recommended_days = ((z_α + z_power) · σ / (daily_budget × mde_iroas))²`, with `mde_iroas` defaulting to `1.0` — "detect it if the channel at least breaks even."
+Inference is **weighted synthetic control** difference-in-differences: a non-negative weighted blend of the control regions is fit on the pre period to reproduce the test regions' daily revenue (weights and fit quality are reported as `control_weights` / `fit_r2`), the daily residual `test − blend` gives the noise floor, and the mean-adjusted post-period residual sum **is** the incremental revenue. Its standard error (from pre-period residual variance, corrected for the fit being estimated) yields the z-score behind `confidence`, `p_value`, and the CIs. The create-time power analysis solves the same model forward: `recommended_days = ((z_α + z_power) · σ / (daily_budget × mde_iroas))²`, with `mde_iroas` defaulting to `1.0` — "detect it if the channel at least breaks even."
+
+### Validation, seasonality, and data quality
+
+- **A/A placebo before launch** — `GET /experiments/{id}/validate` (while the test hasn't started) splits the pre period in half and runs the exact inference with the second half as a fake "post". True lift is zero by construction, so a *significant* placebo lift (`aa_pass: false`) means the market pairing is invalid — fix the regions before spending a dollar. `market_match_quality` is the synthetic-control fit R².
+- **Drift monitoring while running** — the same endpoint in a running test returns interim lift (labeled `peeking: true` — not a result), and `drift_detected` when the control blend's level has shifted vs the pre period (a validity threat regardless of test-side behavior). Set `definition.alert_webhook_url` (https) and Mythic checks daily, POSTing an `incrementality.drift_alert` webhook when drift or new in-window outlier days appear.
+- **Seasonality** — matched controls absorb *shared* seasonality by construction (both groups live through the same holidays and promos). What they don't absorb is guarded: non-whole-week windows bias the fit via day-of-week composition (`windows_not_whole_weeks` warning — size windows in multiples of 7), and region-specific drift is what the weighted blend minimizes.
+- **Outliers** — days whose residual is >3σ off the pre-period distribution are reported in `outlier_days`, never silently removed. Exclude them explicitly with `definition.exclude_dates`.
+- **Conversion lag** — `definition.cooldown_days` extends the measured window past the test window so lagged conversions land inside the measurement; the launch plan keeps geo exclusions in place through the cooldown.
 
 ## How the coefficient is computed
 
@@ -139,6 +147,9 @@ The `definition` object on an experiment carries the full test spec:
 | `test_window` | `{ from, to }` — the period ads ran in the test regions. |
 | `revenue` | Where revenue comes from (see below). |
 | `spend` | How Meta spend is attributed to the test (see below). |
+| `cooldown_days` | *(optional)* Extend the measured window past `test_window.to` to capture lagged conversions. |
+| `exclude_dates` | *(optional)* Dates to drop from the analysis (use for reported `outlier_days`). |
+| `alert_webhook_url` | *(optional, https)* Daily drift alerts while the test runs. |
 
 ### Revenue source (`revenue`)
 

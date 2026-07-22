@@ -258,6 +258,43 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /client/v1/incrementality/experiments/{id}/validate:
+    get:
+      summary: Validate experiment (A/A placebo or drift check)
+      operationId: validateExperiment
+      description: >
+        Before the test starts: an A/A placebo — the pre period is split in
+        half and the exact inference runs with the second half as a fake post.
+        A significant placebo lift (`aa_pass: false`) means the market pairing
+        is invalid; `market_match_quality` is the synthetic-control fit R².
+        While running: an interim drift check — lift so far (labeled
+        `peeking: true`), and `drift_detected` when the control blend has
+        shifted level vs the pre period.
+      parameters:
+        - $ref: "#/components/parameters/ExperimentId"
+      responses:
+        "200":
+          description: Validation verdict with full inference detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidateResponse"
+        "404":
+          description: Experiment not found for this location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Not enough data (pre window too short for an A/A split, or too few days)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
   /client/v1/incrementality/experiments/{id}/launch-plan:
     get:
       summary: Get launch plan
@@ -503,6 +540,25 @@ components:
           type: integer
           default: 90
           description: Days of history the power analysis fits the noise floor on.
+        cooldown_days:
+          type: integer
+          description: >
+            Extend the measured window this many days past test_window.to so
+            lagged conversions land inside the measurement. The launch plan
+            keeps geo exclusions in place through the cooldown.
+        exclude_dates:
+          type: array
+          items:
+            type: string
+            format: date
+          description: >
+            Dates dropped from the analysis. Use for reported outlier_days —
+            outliers are never removed silently.
+        alert_webhook_url:
+          type: string
+          description: >
+            https URL POSTed an incrementality.drift_alert payload by the
+            daily drift sweep while the test is running.
     ExperimentDesign:
       type: object
       description: Power-analysis output (computed at create when daily_budget is set).
@@ -609,6 +665,35 @@ components:
           type: integer
         post_days:
           type: integer
+        control_weights:
+          type: object
+          description: Fitted synthetic-control weight per control region.
+          additionalProperties:
+            type: number
+        fit_r2:
+          type: number
+          nullable: true
+          description: Pre-period fit quality of the control blend.
+        outlier_days:
+          type: array
+          items:
+            type: string
+            format: date
+          description: Days whose residual is >3σ off the pre-period distribution (reported, not removed).
+        excluded_dates:
+          type: array
+          items:
+            type: string
+            format: date
+        control_shift_z:
+          type: number
+          nullable: true
+          description: Control-blend level shift vs pre period, in SE units — the drift stat.
+        warnings:
+          type: array
+          items:
+            type: string
+          description: e.g. windows_not_whole_weeks, short_pre_period, weights_fallback_single_k.
         test_pre:
           type: number
         test_post:
@@ -678,6 +763,35 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Experiment"
+    ValidateResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          description: >
+            Mode-specific verdict fields plus the full inference detail
+            (same fields as ExperimentResult, without spend ratios).
+          properties:
+            mode:
+              type: string
+              enum: [aa, interim]
+            phase:
+              type: string
+            aa_pass:
+              type: boolean
+              description: (mode=aa) Placebo lift NOT significant — pairing is valid.
+            market_match_quality:
+              type: number
+              nullable: true
+              description: (mode=aa) Synthetic-control fit R².
+            drift_detected:
+              type: boolean
+              description: (mode=interim) Control blend shifted vs pre period.
+            peeking:
+              type: boolean
+              description: (mode=interim) Interim numbers are not a result.
     EligibilityResponse:
       type: object
       properties:
