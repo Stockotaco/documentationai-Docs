@@ -258,6 +258,66 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /client/v1/incrementality/experiments/{id}/launch-plan:
+    get:
+      summary: Get launch plan
+      operationId: getLaunchPlan
+      description: >
+        The complete Meta ad-side recipe for conducting the holdout: control
+        regions resolved to Marketing API targeting region keys, the exact
+        `excluded_geo_locations` change, apply/revert dates, a step-by-step
+        checklist, and paste-ready API calls. Instructions only — Mythic never
+        mutates the ad account. Non-US regions are returned under
+        `unresolved_regions` with a Targeting Search call to resolve them.
+      parameters:
+        - $ref: "#/components/parameters/ExperimentId"
+      responses:
+        "200":
+          description: The launch plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LaunchPlanResponse"
+        "400":
+          description: Experiment definition has no test window
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Experiment not found for this location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /client/v1/incrementality/coefficients/history:
+    get:
+      summary: Coefficient history (progressive truth over time)
+      operationId: getCoefficientHistory
+      description: >
+        Every computed experiment's coefficient in computed_at order, each with
+        the running confidence-weighted median at that point — watch the
+        progressive truth converge test by test.
+      parameters:
+        - name: channel
+          in: query
+          description: Restrict to one channel (e.g. `meta`).
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Per-channel coefficient time series
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CoefficientHistoryResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
   /client/v1/incrementality/coefficients:
     get:
       summary: Get coefficients (progressive truth)
@@ -734,6 +794,111 @@ components:
               test_count:
                 type: integer
                 example: 3
+    LaunchPlanResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            strategy:
+              type: string
+              example: holdout
+            summary:
+              type: string
+            apply_on:
+              type: string
+              format: date
+            revert_on:
+              type: string
+              format: date
+              description: The day AFTER the test window ends.
+            control_regions:
+              type: array
+              items:
+                $ref: "#/components/schemas/RegionKey"
+            test_regions:
+              type: array
+              items:
+                $ref: "#/components/schemas/RegionKey"
+            unresolved_regions:
+              type: array
+              items:
+                type: string
+              description: Regions not in the built-in US key map — resolve via the verify call.
+            targeting_change:
+              type: object
+              description: The exact excluded_geo_locations object to merge into each ad set's targeting.
+            steps:
+              type: array
+              items:
+                type: string
+            api_calls:
+              type: object
+              properties:
+                verify_region_keys:
+                  type: string
+                read_targeting:
+                  type: string
+                apply_exclusions:
+                  type: string
+            notes:
+              type: array
+              items:
+                type: string
+    RegionKey:
+      type: object
+      properties:
+        key:
+          type: string
+          example: "3878"
+        name:
+          type: string
+          example: Ohio
+    CoefficientHistoryResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              channel:
+                type: string
+                example: meta
+              points:
+                type: array
+                description: Computed experiments in computed_at order.
+                items:
+                  type: object
+                  properties:
+                    experiment_id:
+                      type: string
+                      format: uuid
+                    name:
+                      type: string
+                    computed_at:
+                      type: string
+                      format: date-time
+                    test_window:
+                      $ref: "#/components/schemas/Window"
+                    coefficient:
+                      type: number
+                      description: This experiment's own coefficient.
+                    ci_width:
+                      type: number
+                      nullable: true
+                    confidence:
+                      type: number
+                      nullable: true
+                    running_coefficient:
+                      type: number
+                      description: Weighted median across all tests up to this point.
+                    test_count:
+                      type: integer
     ErrorResponse:
       type: object
       properties:

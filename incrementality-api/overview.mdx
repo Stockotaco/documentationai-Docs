@@ -67,7 +67,14 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
       }'
     ```
 
-    If `progress.underpowered` is `true`, your window is shorter than `design.recommended_days` — widen it before launch. Then run the test in Meta Ads Manager: ads **on** in the test states, **excluded** in the controls.
+    If `progress.underpowered` is `true`, your window is shorter than `design.recommended_days` — widen it before launch.
+  </Step>
+  <Step title="Conduct it in Meta — from the launch plan">
+    ```bash
+    curl "$BASE/experiments/{id}/launch-plan" -H "Authorization: Bearer $AK"
+    ```
+
+    The plan is the complete ad-side recipe: control regions resolved to Meta targeting region keys, the exact `excluded_geo_locations` change, apply/revert dates, a step-by-step checklist, and paste-ready Marketing API calls (read-targeting-first, merge, apply — plus a key-verification call). Mythic never touches the ad account; the plan removes every thinking step from doing it yourself in Ads Manager (Ad set → Locations → Exclude).
   </Step>
   <Step title="Track progress">
     Every experiment read carries a derived `progress` object — poll it while the test runs:
@@ -96,7 +103,7 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
     curl "$BASE/coefficients?channel=meta" -H "Authorization: Bearer $AK"
     ```
 
-    Multiply Meta's reported ROAS by this coefficient to get incremental ROAS. Every additional test sharpens it.
+    Multiply Meta's reported ROAS by this coefficient to get incremental ROAS. Every additional test sharpens it — and `GET /coefficients/history` returns the full series: each test's coefficient plus the running weighted median at that point, so you can watch the progressive truth converge over time.
   </Step>
 </Steps>
 
