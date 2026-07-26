@@ -58,7 +58,9 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
     curl "$BASE/markets?test_regions=California,Texas" -H "Authorization: Bearer $AK"
     ```
 
-    Take the top 2–3 `candidates` (highest `correlation`, reasonable `volume_ratio`) as your controls.
+    Take the top 2–3 `candidates` as your controls. Candidates are ranked **usable first, then by correlation** — correlation alone is not a safe ranking, because a region with a single conversion can score arbitrarily high against a spike in a field of zeros, and following such a top-3 produces an experiment that cannot compute.
+
+    A candidate is `usable: false` when it holds under 5% of the test cell's volume (`min_volume_ratio`) or is active on too few days (`min_active_days`). Unusable candidates are still returned, each with an `excluded_reason`, so a missing region is explained rather than silently absent. `usable_candidates` counts how many cleared both floors — if it is under 2, this test set has no viable control and no amount of correlation will fix it.
   </Step>
   <Step title="Create the experiment — and get told how long to run it">
     Only regions and the test window are required — `pre_window` defaults to the same-length period immediately before the test, and revenue defaults to the `purchase` event. Include `daily_budget` and the response carries a **power analysis** (`design.recommended_days`): how many days the test must run to detect break-even incrementality at 95% confidence / 80% power, given this client's noise floor.
@@ -112,6 +114,8 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
     Compute is gated: before the measured window closes it returns `409 window_not_complete`. You can force a provisional read with `{ "allow_partial": true }` — it is stamped `result.partial: true` and excluded from `/coefficients` until a full compute overwrites it.
 
     The result answers "how sure are we?": `confidence` (one-sided confidence the lift is positive, e.g. `0.97`), `p_value`, `significant` (one-sided 95% threshold), and 90% two-sided intervals on both iROAS (`iroas_ci`) and the coefficient (`coefficient_ci`) — chosen so `significant: true` always coincides with the interval excluding zero.
+
+    **`confidence` is directional, not a quality score.** It is `P(lift > 0)`, so a *low* value means the lift is probably not positive — it does not mean the estimate is imprecise. Seeing `confidence: 0.09` beside `p_value: 0.91` is the same statement twice, not a contradiction. The response carries `confidence_means` spelling this out; render that string rather than the bare number if the reader is not the person who designed the test.
 
     Compute refuses to store silently-wrong numbers. It errors instead of guessing when test/control regions match no revenue (`422 no_revenue_in_regions` / `no_revenue_in_controls` — check region names against `GET /markets`), when the Meta insights table is missing (`422 spend_table_missing` — sync an ads-insights action-type stream or set `spend.table`), when spend covers multiple account currencies (`422 mixed_currencies` — set `spend.account_id`), or when Meta spend data hasn't caught up with the window (`409 stale_spend_data` — wait for the next Airbyte sync).
   </Step>
@@ -177,7 +181,15 @@ The `definition` object on an experiment carries the full test spec:
 Configurable per experiment, because revenue lives in different places for different clients:
 
 - **Event JSON** (default) — `{ "source": "event", "event_name": "purchase", "json_path": "$.value" }`. Reads revenue from the tracked conversion event; region comes from the event's geo. `properties_json` IS the event's properties object, so the default path is `$.value`. Add `"timezone": "America/New_York"` to align the revenue day boundary with the ad account (default UTC).
+
+  <Callout kind="warn">
+    **The default path is right for SDK `capture()` revenue and wrong for most CRM streams.** GoHighLevel `transaction_completed` events, for example, carry the amount at `$.meta_amount` and are **0%** populated at `$.value`.
+
+    A path that extracts nothing does not error — every revenue figure simply becomes `0`, which also drives revenue-weighted `geo_coverage` to 0. The eligibility check now separates the two cases: when matching events exist and carry a region but no number at the configured path, `root_cause.check` is **`revenue_value`** (fix the path) rather than `geo_coverage` (fix tracking). Run `GET /incrementality/eligibility?auto=1` to see the path each event actually uses.
+  </Callout>
 - **Lead-gen count mode** — `{ "source": "event", "event_name": "form_submitted", "measure": "count" }`. Counts matching events instead of summing a value, for conversion events that carry no monetary amount (form fills, lead captures). `iroas` then reads as *incremental conversions per dollar*; pair with `"spend": { "purchase_action_type": "lead" }` so the platform side reads Meta's lead metric. Count-mode and revenue-mode experiments pool in separate coefficient series.
+
+  Count-mode results are self-describing so the units cannot be misread: `measure: "count"`, `lift_units: "conversions"`, `iroas_units`, and `cost_per_incremental_conversion` (the number most readers actually want). **`coefficient` is always `null` in count mode** — it is revenue-denominated by construction, so a conversion count cannot produce one. `coefficient_unavailable_reason` says so on the response. If you need the coefficient, you need `measure: "revenue"` with a populated `json_path`.
 
 <Callout kind="warn">
   Revenue must be **geo-splittable** to be testable. Server-side conversion events (CRM/order webhooks) carry no region of their own — geo is stamped from the request at ingest, and those events never touch the browser.
