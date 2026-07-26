@@ -49,7 +49,9 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
 
     Five checks: **geo coverage** (share of revenue that carries a region — requires IP/geo enrichment), **history** (≥28 days of data), **market count** (≥6 regions with meaningful revenue), **matchability** (the largest markets have at least one other market that moves with them — big but uncorrelated regions are not test cells), and **detectability** — the daily budget the client's revenue noise floor implies for a conclusive 30-day test (`daily_budget_for_30d_test`). If that number dwarfs the client's realistic spend, a geo test can never conclude for them — better to know before running one.
 
-    The default revenue source is the `purchase` event at `$.value` — clients whose conversions are named differently must pass `event_name` (and `json_path` for where the value lives, e.g. `$.meta_amount`) or every check correctly returns zeros. If purchase events arrive via server-side CRM webhooks they carry no region (coverage 0) — assess a geo'd browser conversion with `measure=count` instead.
+    The default revenue source is the `purchase` event at `$.value` — clients whose conversions are named differently must pass `event_name` (and `json_path` for where the value lives, e.g. `$.meta_amount`). A path that extracts nothing does not error; it returns zeros, and because `geo_coverage` is revenue-weighted it also drives coverage to 0. The check now separates that case (`root_cause.check: "revenue_value"`) from a genuine geo gap.
+
+    When exactly one check fails, `root_cause` names it and carries a remedy — including the most useful verdict this endpoint produces, a **detectability-only** failure: everything else passes and the answer is a number. Required budget scales with `1/sqrt(days)`, so roughly 4x the days lets you halve the daily budget.
   </Step>
   <Step title="Pick matched markets">
     Propose your test states and let the API rank control candidates by how closely their daily revenue tracks the test set:
@@ -117,7 +119,7 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
 
     **`confidence` is directional, not a quality score.** It is `P(lift > 0)`, so a *low* value means the lift is probably not positive — it does not mean the estimate is imprecise. Seeing `confidence: 0.09` beside `p_value: 0.91` is the same statement twice, not a contradiction. The response carries `confidence_means` spelling this out; render that string rather than the bare number if the reader is not the person who designed the test.
 
-    Compute refuses to store silently-wrong numbers. It errors instead of guessing when test/control regions match no revenue (`422 no_revenue_in_regions` / `no_revenue_in_controls` — check region names against `GET /markets`), when the Meta insights table is missing (`422 spend_table_missing` — sync an ads-insights action-type stream or set `spend.table`), when spend covers multiple account currencies (`422 mixed_currencies` — set `spend.account_id`), or when Meta spend data hasn't caught up with the window (`409 stale_spend_data` — wait for the next Airbyte sync).
+    Compute refuses to store silently-wrong numbers. It errors instead of guessing when test/control regions match no revenue (`422 no_revenue_in_regions` / `no_revenue_in_controls` — check region names against `GET /markets`), when the **pre window itself is empty** (`422 pre_window_empty` — no revenue in *any* region there, so there is no baseline; the response carries `earliest_data_date`), when the Meta insights table is missing (`422 spend_table_missing` — sync an ads-insights action-type stream or set `spend.table`), when spend covers multiple account currencies (`422 mixed_currencies` — set `spend.account_id`), or when Meta spend data hasn't caught up with the window (`409 stale_spend_data` — wait for the next Airbyte sync).
   </Step>
   <Step title="Read the coefficient">
     ```bash
@@ -266,7 +268,7 @@ All endpoints return a JSON envelope.
 | `403` | Write attempted with a read-only secret (`sk_`) key, or HIPAA-restricted location |
 | `404` | Experiment not found for this location |
 | `409` | `window_not_complete` (compute before the measured window closes — see `allow_partial`) or `stale_spend_data` (Meta sync hasn't caught up) |
-| `422` | Uncomputable without guessing: `insufficient_data`, `no_revenue_in_regions`, `no_revenue_in_controls`, `result_truncated`, `spend_table_missing`, `mixed_currencies` |
+| `422` | Uncomputable without guessing: `insufficient_data`, `pre_window_empty`, `no_revenue_in_regions`, `no_revenue_in_controls`, `result_truncated`, `spend_table_missing`, `mixed_currencies` |
 | `429` | Rate limit exceeded (120 requests per 10s per location) |
 | `500` | BigQuery not configured in this environment |
 | `502` | Compute query failed or the result could not be saved |
