@@ -202,6 +202,16 @@ Configurable per experiment, because revenue lives in different places for diffe
 
   If coverage is still too low, the eligibility check fails on `geo_coverage` and tells you so via `root_cause` rather than computing a meaningless zero. Fall back to the commerce-table source with a region column, or measure a geo'd browser conversion in lead mode.
 </Callout>
+<Callout kind="warn">
+  **`spend.source: "geo_stream"` can never produce a coefficient — this is a Meta platform rule, not a data gap.**
+
+  Meta classifies `region` as a **Type 1 breakdown**, and [its Insights API docs](https://developers.facebook.com/docs/marketing-api/insights/breakdowns/) state it "will not return unsupported off-Meta metrics (for example, an actions metric with Type 1 breakdowns)." On-Meta metrics — impressions, link clicks, post engagement — still come back; **offsite purchase conversions and their values do not**, for every advertiser. No Airbyte field selection or connector change alters this.
+
+  Since `coefficient = iROAS ÷ platform_ROAS` needs Meta's reported conversion value, a region-broken spend stream yields `coefficient: null` with `coefficient_unavailable_reason` explaining it. **iROAS is unaffected** — it is denominated in your own measured revenue.
+
+  **To get a coefficient, scope spend by campaign:** `{ "source": "campaigns", "campaign_ids": ["..."] }`. A correctly launched geo test already excludes the control regions from those campaigns (see the launch plan), so for the test window those campaigns *are* the test cell — campaign-scoped spend and campaign-scoped platform revenue are region-consistent by construction, and the action-type stream carries both.
+</Callout>
+
 - **Commerce table** — `{ "source": "table", "table": "transactions", "column": "amount", "region_col": "state", "date_col": "created_date" }`. Uses a structured table; that table must carry its own region and date columns to be geo-splittable.
 
 <Callout kind="warn">
