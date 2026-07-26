@@ -180,13 +180,41 @@ Configurable per experiment, because revenue lives in different places for diffe
 - **Lead-gen count mode** — `{ "source": "event", "event_name": "form_submitted", "measure": "count" }`. Counts matching events instead of summing a value, for conversion events that carry no monetary amount (form fills, lead captures). `iroas` then reads as *incremental conversions per dollar*; pair with `"spend": { "purchase_action_type": "lead" }` so the platform side reads Meta's lead metric. Count-mode and revenue-mode experiments pool in separate coefficient series.
 
 <Callout kind="warn">
-  Revenue must be **geo-splittable** to be testable: the region comes from the browser event's geo enrichment. Server-side conversion events (CRM/order webhooks) usually carry no region — the eligibility check fails such setups on `geo_coverage` instead of computing a meaningless zero. For server-side revenue, use the commerce-table source with a region column, or measure a geo'd browser conversion (lead mode).
+  Revenue must be **geo-splittable** to be testable. Server-side conversion events (CRM/order webhooks) carry no region of their own — geo is stamped from the request at ingest, and those events never touch the browser.
+
+  **`geo_inherit` (default `true`) solves this**, and is why server-side revenue is testable at all: when a conversion carries no region, it inherits one from the person who converted — the modal `geo_region` across that same `distinct_id`'s pixel events in the window. Modal rather than most-recent, because people travel and an arbitrary pick shifts the per-region revenue split the holdout is built from.
+
+  In practice this moves CRM revenue from 0% geo coverage to the same coverage as the client's pixel traffic. It only works for buyers who also browsed: a customer whose only pixel visits predate the lookback stays unmatched, so coverage tracks how well the pixel is deployed. Set `geo_inherit: false` to require a region on the conversion row itself.
+
+  If coverage is still too low, the eligibility check fails on `geo_coverage` and tells you so via `root_cause` rather than computing a meaningless zero. Fall back to the commerce-table source with a region column, or measure a geo'd browser conversion in lead mode.
 </Callout>
 - **Commerce table** — `{ "source": "table", "table": "transactions", "column": "amount", "region_col": "state", "date_col": "created_date" }`. Uses a structured table; that table must carry its own region and date columns to be geo-splittable.
 
+<Callout kind="warn">
+  **Which conversion event you pick changes the answer, and the wrong pick fails silently.** A single order commonly emits several events carrying the same value — an order-level event, a per-charge transaction event, and a per-line-item event. They are alternative *views* of one sale, never additive: summing across them inflates revenue (~1.76x on measured GHL data).
+
+  Prefer the **per-charge transaction event** as the revenue series. Order-level events miss subscription rebills entirely where the rebill is emitted by a reconciliation sweep with no matching order webhook — on measured data that undercounts subscription revenue by roughly 60%. Line-item events are a decomposition of the order-level event, so they inherit the same gap.
+
+  This matters because spend is unaffected by the choice: pick a series that undercounts revenue and `iROAS` is understated by the same proportion, with no error anywhere. Use `GET /eligibility?auto=true` — it assesses every candidate event and reports coverage per event, which surfaces this before you commit to a definition.
+</Callout>
+
 ### Spend attribution (`spend`)
 
-- **Geo stream** (preferred) — `{ "source": "geo_stream", "region_col": "region" }`. Uses the region-broken Meta insights stream (`meta_ads_ads_insights_region`, synced by default on platform-created Meta connections), so test-region spend is read directly from Meta. Set `"table"` only if your geo-broken insights live in a custom table.
+- **Geo stream** (preferred) — `{ "source": "geo_stream", "region_col": "region" }`. Uses the region-broken Meta insights stream (`meta_ads_ads_insights_region`), so test-region spend is read directly from Meta. Set `"table"` only if your geo-broken insights live in a custom table.
+
+  <Callout kind="warn">
+  **The region stream is a prerequisite, and older connections do not have it.** It is a
+  default on Meta connections created by the platform *today*, but a connection created
+  before the stream was added does not gain it retroactively — enabling a stream on a
+  live connection is an explicit action, because it triggers a full backfill from the
+  source's `start_date`. On a two-year history that first sync can take many hours.
+
+  If `spend.source` is `geo_stream` and the table is absent you get `422
+  spend_table_missing`. Enable `ads_insights_region` on the connection (or use
+  `source: "campaigns"` meanwhile) and wait for the backfill to finish before trusting
+  a result — a partially-synced region table yields spend that is real but incomplete,
+  which is worse than a missing one because it still produces a number.
+  </Callout>
 - **Campaigns** — `{ "source": "campaigns", "campaign_ids": ["123"] }` or `{ "source": "campaigns", "name_pattern": "GEOTEST" }` (a literal substring — `%`/`_` are not wildcards). Attributes spend to the test by which campaigns target the test regions, for accounts without the geo stream. Add `"account_id": "act_…"` when the dataset receives more than one Meta connection.
 
 With no geo/campaign filter, spend falls back to whole-account — which is only meaningful because the holdout excludes control regions (account spend ≈ test spend). Always scope spend explicitly for partial holdouts or multi-account datasets.
