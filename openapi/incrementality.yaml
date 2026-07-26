@@ -96,8 +96,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          $ref: "#/components/responses/ScanLimitExceeded"
+        "424":
+          $ref: "#/components/responses/DatasetMissing"
         "502":
-          description: Eligibility query failed
+          description: Eligibility query failed for an unrecognised reason. Recognised BigQuery failures return 413/424 instead.
           content:
             application/json:
               schema:
@@ -165,8 +169,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          $ref: "#/components/responses/ScanLimitExceeded"
+        "424":
+          $ref: "#/components/responses/DatasetMissing"
         "502":
-          description: Markets query failed
+          description: Markets query failed for an unrecognised reason. Recognised BigQuery failures return 413/424 instead.
           content:
             application/json:
               schema:
@@ -563,6 +571,27 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    DatasetMissing:
+      description: >
+        `dataset_missing` — this client has no BigQuery event dataset, so
+        incrementality cannot be assessed. It needs a BigQuery export
+        provisioned (and `api_metadata.client_project_id` set if its data lives
+        in a shared project). Distinguished from a 5xx on purpose: nothing is
+        broken, the client just isn't set up yet.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ScanLimitExceeded:
+      description: >
+        `scan_limit_exceeded` — the dataset is too large to scan under the
+        API's bytes-billed cap, even after one automatic retry at half the
+        requested lookback. Retry with a smaller `lookback_days`. The message
+        reports how many GB the query needed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
   schemas:
     Window:
       type: object
@@ -695,6 +724,25 @@ components:
           $ref: "#/components/schemas/RevenueConfig"
         spend:
           $ref: "#/components/schemas/SpendConfig"
+        geo_inherit:
+          type: boolean
+          default: true
+          description: >
+            Inherit a conversion's region from the person who converted when
+            the event itself carries none: the modal `geo_region` across that
+            `distinct_id`'s own pixel events in the window.
+
+            Server-to-server conversions (CRM/webhook streams) can never carry
+            ingest geo, because region is stamped from the request at the edge
+            and those events never touch it. On a real client this moved
+            geo coverage from 0% to ~88%, turning revenue-based iROAS from
+            unmeasurable into measurable. The event's own region always wins
+            where present; this is a fallback, never an override.
+
+            Pinned per experiment at create time so region assignment cannot
+            shift under a running test. Set `false` to require geo on the
+            conversion row itself. Only applies to `revenue.source = event` —
+            a commerce table brings its own `region_col`.
         daily_budget:
           type: number
           description: >
@@ -1046,6 +1094,11 @@ components:
                   properties:
                     pass:
                       type: boolean
+                    blocked_by:
+                      type: string
+                      description: >
+                        Set to `geo_coverage` when this check failed only because
+                        coverage did. Render as not-assessable, not as a failure.
                     days_with_data:
                       type: integer
                 market_count:
@@ -1053,6 +1106,11 @@ components:
                   properties:
                     pass:
                       type: boolean
+                    blocked_by:
+                      type: string
+                      description: >
+                        Set to `geo_coverage` when this check failed only because
+                        coverage did. Render as not-assessable, not as a failure.
                     viable_markets:
                       type: integer
                       description: Regions carrying ≥2% of regional revenue.
@@ -1061,6 +1119,11 @@ components:
                   properties:
                     pass:
                       type: boolean
+                    blocked_by:
+                      type: string
+                      description: >
+                        Set to `geo_coverage` when this check failed only because
+                        coverage did. Render as not-assessable, not as a failure.
                     best_match_correlation:
                       type: number
                       nullable: true
@@ -1073,6 +1136,11 @@ components:
                   properties:
                     pass:
                       type: boolean
+                    blocked_by:
+                      type: string
+                      description: >
+                        Set to `geo_coverage` when this check failed only because
+                        coverage did. Render as not-assessable, not as a failure.
                     sigma_daily:
                       type: number
                     daily_budget_for_30d_test:
@@ -1083,6 +1151,59 @@ components:
                     daily_budget:
                       type: number
                       description: Echoed when provided.
+            root_cause:
+              type: object
+              nullable: true
+              description: >
+                Present only when `geo_coverage` fails. Every other check is
+                computed from region-attributed revenue, so when coverage fails
+                they all fail with it — reporting five independent failures
+                points at the wrong fix ("spend more") instead of the real one
+                ("the conversions carry no region"). Render this instead of the
+                five failures; `failing_checks` and `checks[].pass` are
+                unchanged for backwards compatibility.
+              properties:
+                check:
+                  type: string
+                  example: geo_coverage
+                share_with_region:
+                  type: number
+                  example: 0
+                blocks:
+                  type: array
+                  description: The downstream checks that failed only as a consequence.
+                  items:
+                    type: string
+                  example: [history, market_count, matchability, detectability]
+                remedy:
+                  type: string
+                  description: Human-readable next step, safe to surface verbatim.
+                  example: >
+                    No revenue can be placed in a region. These conversions
+                    carry no geo — typically server-side/CRM events, which never
+                    pass through the edge that stamps it. This is a tracking
+                    gap, not a budget problem.
+            window_narrowed:
+              type: object
+              nullable: true
+              description: >
+                Present when the requested window was too large for the
+                BigQuery bytes-billed cap and the assessment was retried at half
+                the lookback. The verdict describes `used_lookback_days`, NOT
+                the window you asked for — surface this, or a narrowed result
+                is indistinguishable from one that answered the question asked.
+                Narrowing is attempted once and never below 28 days; if the
+                halved window also fails you get `413 scan_limit_exceeded`.
+              properties:
+                requested_lookback_days:
+                  type: integer
+                  example: 90
+                used_lookback_days:
+                  type: integer
+                  example: 45
+                reason:
+                  type: string
+                  example: scan_limit_exceeded
     MarketsResponse:
       type: object
       properties:
@@ -1271,8 +1392,19 @@ components:
           properties:
             code:
               type: string
+              description: >
+                Stable machine-readable code — branch on this, not on the
+                message text. Recognised BigQuery failures use
+                `dataset_missing` (424) and `scan_limit_exceeded` (413).
             message:
               type: string
+              description: Human-readable and safe to surface verbatim.
+            cause:
+              type: string
+              description: >
+                Raw upstream text behind a humanised message, when there is
+                one. Intended for logs, not for display — without it the true
+                cause is lost at the API boundary.
             details:
               type: array
               items:
