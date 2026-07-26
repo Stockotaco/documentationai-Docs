@@ -205,7 +205,9 @@ Configurable per experiment, because revenue lives in different places for diffe
 <Callout kind="warn">
   **`spend.source: "geo_stream"` can never produce a coefficient — this is a Meta platform rule, not a data gap.**
 
-  Meta classifies `region` as a **Type 1 breakdown**, and [its Insights API docs](https://developers.facebook.com/docs/marketing-api/insights/breakdowns/) state it "will not return unsupported off-Meta metrics (for example, an actions metric with Type 1 breakdowns)." On-Meta metrics — impressions, link clicks, post engagement — still come back; **offsite purchase conversions and their values do not**, for every advertiser. No Airbyte field selection or connector change alters this.
+  Meta classifies `region` as a **Type 1 breakdown**, and [its Insights API docs](https://developers.facebook.com/docs/marketing-api/insights/breakdowns/) state it "will not return unsupported off-Meta metrics (for example, an actions metric with Type 1 breakdowns)." On-Meta metrics still come back **faithfully** — impressions, link clicks, and on-Meta conversions such as `onsite_conversion.lead_grouped` match the unbroken stream exactly. What does not come back is **off-Meta (pixel/CAPI) conversions and their values**, for every advertiser. No Airbyte field selection or custom stream alters this: the connector passes `breakdowns` straight to Meta, so a custom region stream requesting `action_values` syncs the nothing Meta returns.
+
+  Practical consequence: a **lead-gen count-mode test CAN use `geo_stream`** (set `spend.purchase_action_type` to your on-Meta lead action) — what you lose is *values*, and therefore ROAS and the coefficient, not conversions.
 
   Since `coefficient = iROAS ÷ platform_ROAS` needs Meta's reported conversion value, a region-broken spend stream yields `coefficient: null` with `coefficient_unavailable_reason` explaining it. **iROAS is unaffected** — it is denominated in your own measured revenue.
 
