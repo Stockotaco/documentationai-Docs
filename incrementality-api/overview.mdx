@@ -191,9 +191,11 @@ Configurable per experiment, because revenue lives in different places for diffe
 - **Commerce table** — `{ "source": "table", "table": "transactions", "column": "amount", "region_col": "state", "date_col": "created_date" }`. Uses a structured table; that table must carry its own region and date columns to be geo-splittable.
 
 <Callout kind="warn">
-  **Which conversion event you pick changes the answer, and the wrong pick fails silently.** A single order commonly emits several events carrying the same value — an order-level event, a per-charge transaction event, and a per-line-item event. They are alternative *views* of one sale, never additive: summing across them inflates revenue (~1.76x on measured GHL data).
+  **Which conversion event you pick changes the answer, and the wrong pick fails silently.** A single order commonly emits several events carrying the same value — an order-level event, a per-charge transaction event, and a per-line-item event. They are alternative *views* of one sale, never additive. Summing across them multiplies revenue by roughly **the number of event types you summed** — up to 3x per order, and higher where one order spans several line items.
 
-  Prefer the **per-charge transaction event** as the revenue series. Order-level events miss subscription rebills entirely where the rebill is emitted by a reconciliation sweep with no matching order webhook — on measured data that undercounts subscription revenue by roughly 60%. Line-item events are a decomposition of the order-level event, so they inherit the same gap.
+  Prefer the **per-charge transaction event** as the revenue series. Order-level events miss subscription rebills entirely where the rebill is emitted by a reconciliation sweep with no matching order webhook. Line-item events are a decomposition of the order-level event, so they inherit the same gap.
+
+  How much you lose depends **entirely on that client's subscription share, and the range is the full one**. Measured across ten live accounts, order-level revenue ran anywhere from **0% to 100%** of true revenue: for a pure one-time-purchase client it matched exactly, and for a pure subscription client it was **zero**. There is no useful average here — a fleet-wide figure is wrong for essentially every individual account, so measure the client in front of you rather than applying a rule of thumb.
 
   This matters because spend is unaffected by the choice: pick a series that undercounts revenue and `iROAS` is understated by the same proportion, with no error anywhere. Use `GET /eligibility?auto=true` — it assesses every candidate event and reports coverage per event, which surfaces this before you commit to a definition.
 </Callout>
