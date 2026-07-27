@@ -60,7 +60,7 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
     curl "$BASE/markets?test_regions=California,Texas" -H "Authorization: Bearer $AK"
     ```
 
-    Take the top 2–3 `candidates` as your controls. Candidates are ranked **usable first, then by correlation** — correlation alone is not a safe ranking, because a region with a single conversion can score arbitrarily high against a spike in a field of zeros, and following such a top-3 produces an experiment that cannot compute.
+    Take the top 2–3 `candidates` as your controls. Candidates are ranked **usable first, then by `match_score`** — volume parity × day coverage × correlation. Correlation alone does **not** predict whether a synthetic control will fit: measured on a live account, the correlation leaders (8.7% of test volume, active 14/51 days) fit at **−0.7145**, while two markets ranked below them on correlation but near volume parity and active 36–42 days fit at **+0.3127**. Correlation stays in the score as a factor — a market that doesn't co-move isn't a control — but parity decides the order. `ranked_by` on the response states this. Older behaviour ranked on correlation — correlation alone is not a safe ranking, because a region with a single conversion can score arbitrarily high against a spike in a field of zeros, and following such a top-3 produces an experiment that cannot compute.
 
     A candidate is `usable: false` when it holds under 5% of the test cell's volume (`min_volume_ratio`) or is active on too few days (`min_active_days`). Unusable candidates are still returned, each with an `excluded_reason`, so a missing region is explained rather than silently absent. `usable_candidates` counts how many cleared both floors — if it is under 2, this test set has no viable control and no amount of correlation will fix it.
   </Step>
@@ -177,6 +177,12 @@ The `definition` object on an experiment carries the full test spec:
 | `cooldown_days` | *(optional)* Extend the measured window past `test_window.to` to capture lagged conversions. Note this is a measurement *extension*, not a washout: keep ads and exclusions exactly as they were through the cooldown. Compute waits for it. |
 | `exclude_dates` | *(optional)* Dates to drop from the analysis (use for reported `outlier_days`). |
 | `alert_webhook_url` | *(optional, https)* Daily drift alerts while the test runs (and through cooldown). Alerts fire only when the outlier set changes — no repeat alerts for the same condition. Unsigned blind POST with a fixed payload; use a dedicated, unguessable endpoint URL. |
+
+<Callout kind="info">
+  **Count mode has its own coefficient.** For high-ticket, low-volume advertisers, revenue-mode variance can be unfittable — where individual sales are several times the daily mean of a region, no synthetic control tracks the series. Counting conversions removes that variance (one live account: `sigma_daily` 3.28 in count mode vs 2,685 in revenue mode, so 7 days to conclude instead of 56–179).
+
+  In count mode the response carries **`conversion_coefficient`** — incremental conversions per Meta-reported conversion — with `se_conversion_coefficient` and `platform_conversions`. Same estimand on both sides. The revenue-denominated `coefficient` is always `null` there by construction, and `/coefficients` reports count series with `kind: "conversion"` so the two are never averaged together.
+</Callout>
 
 ### Revenue source (`revenue`)
 
