@@ -106,6 +106,17 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
 
     Phases: `pending` → `running` → (`cooldown`, when `cooldown_days` is set) → `awaiting_compute` → `computed`. Progress tracks the **measured** window — test days plus cooldown — so `awaiting_compute` only begins once lagged conversions have had their chance to land.
   </Step>
+  <Step title="Read the verdict — check `inference_valid` first">
+    Before `iroas`, `coefficient`, `significant` or `p_value`, check **`inference_valid`**. When it is `false` the estimator is telling you this experiment cannot support a verdict at all: `significant` and `two_sided_significant` come back `null` (not `false` — "we can't judge", not "no effect"), `coefficient` and its interval are `null`, `estimate_uninformative` is `true`, and `inference_invalid_reason` says which of two things went wrong.
+
+    **The control does not fit** (`fit_r2 < 0`). The synthetic control tracks the pre period *worse than a flat mean*, so it is not a counterfactual. `confidence` and `p_value` are computed from pre-period residual variance under that same broken fit and must not be interpreted.
+
+    **The counterfactual is an extrapolation** (`counterfactual_ratio > 5`). The control can fit the pre window well and still behave impossibly afterwards — measured on a live A/A placebo, a control fitted to match 12,687 exactly then predicted 296,566 against a test cell of 12,332, producing a confident iROAS of −19 with a tight interval on data with no effect in it. The bound is on the ratio to the **test cell**, not the control's own growth, so market-wide seasonality (every region grows over a holiday) does not trip it. There is deliberately **no lower bound**: a control much smaller than the test cell is what a large genuine win looks like.
+
+    <Callout kind="warn">
+      `inference_valid: true` requires `fit_r2 > 0`, which means *no worse than a flat mean* — not *good*. A run at `fit_r2 0.013` returns a full verdict and carries a `poor_control_fit` warning (threshold 0.3). Treat a significant result with that warning present as unproven until the controls are improved.
+    </Callout>
+  </Step>
   <Step title="Compute — with a confidence level">
     After the measured window closes (test + cooldown):
 
