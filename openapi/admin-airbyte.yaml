@@ -1055,6 +1055,21 @@ components:
         error_message:
           type: string
           nullable: true
+        loading_method:
+          type: string
+          enum: ["Standard", "GCS Staging"]
+          description: The destination's load path, derived from its real configuration.
+        destination_adopted:
+          type: boolean
+          description: >
+            true = the destination was supplied by the agency and is managed by
+            them; Mythic never modifies or deletes it. false = Mythic created it
+            and updates it in place on reprovision.
+        has_airbyte_credentials:
+          type: boolean
+          description: >
+            true = the agency brought its own Airbyte application credentials,
+            so every Airbyte call for it runs in the agency's own org.
         has_credentials:
           type: boolean
         created_at:

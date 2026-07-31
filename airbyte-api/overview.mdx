@@ -186,6 +186,8 @@ Platforms whose catalog entry has `supportsOauth: true` can be connected without
   </Step>
 </Steps>
 
+A failed consent leaves nothing behind in Airbyte: if the connection cannot be created, the source created moments earlier is deleted too, so retrying does not accumulate half-built sources.
+
 `/oauth/initiate` validates your request **before** it checks whether the agency is provisioned, so `missing_account_id`, `return_url_not_allowed` and `unsupported_platform` come back with their own codes even on an agency that has never provisioned. `not_provisioned` therefore means the request itself was fine.
 
 `mythic_error_code` comes from a closed set you can branch on — `state_invalid`, `missing_secret_id`, `missing_account_id`, `not_configured`, `not_provisioned`, `source_config_rejected`, `oauth_secret_expired`, `account_not_accessible`, `connection_failed`. They differ in who can fix them:
@@ -197,7 +199,7 @@ Platforms whose catalog entry has `supportsOauth: true` can be connected without
 | `account_not_accessible` | You, by correcting the account id sent at initiation — the consent itself worked. |
 | `connection_failed` | Unknown; read the sync-event row below. | Exception text never travels in the URL; it stays in server logs. Errors from `/oauth/initiate` carry the same idea as a `code` field in the JSON body (`return_url_not_allowed`, `missing_account_id`, and so on) — switch on `code`, not on the prose in `error`.
 
-A failed callback also writes a sync-event row with `error_origin: oauth_callback` and the underlying Airbyte message in `error_message`, readable at `GET /sync-events?client_id=…`. That is the only trail a failed consent leaves — no connection row is created — so surface it when a user comes back with `mythic_oauth=error`.
+A failed callback also writes a sync-event row with `error_origin: oauth_callback`, the code in `error_type`, and the underlying Airbyte message in `error_message`, readable at `GET /sync-events?client_id=…`. Because no connection exists yet, its `connection_id` is the sentinel `oauth:<platform>:<client_id>` rather than a UUID, so these rows are easy to filter. That is the only trail a failed consent leaves — no connection row is created — so surface it when a user comes back with `mythic_oauth=error`.
 
 The `state` token is also your correlation handle: the connection id does not exist until the callback finishes, so hold `state` against whatever you are provisioning in your own UI.
 
@@ -216,6 +218,17 @@ Both ends are rate limited: 20 initiations per 10 minutes per agency, and 20 cal
 Every incremental stream is sent to Airbyte as `incremental_deduped_history`, which upserts on the stream's primary key. That matters for daily insights tables keyed on composites like `(date_start, account_id, ad_id, region)`: a resync re-keys those rows rather than appending them, so spend is not double counted. Append-only incremental is not offered.
 
 `incremental` and `full_refresh` are accepted as aliases of `incremental_deduped_history` and `full_refresh_overwrite` when you send a `streams` array, and older stored selections may still read back in the short form.
+
+### Stream names come from the connector, not the ad platform
+
+A connector's stream names are its own, and they routinely differ from what the platform's UI calls the same thing — Meta's "Ad sets" is the stream `ad_sets`, not `adsets`. Airbyte rejects the first unrecognised name outright (`No streams found with name [...]`) and only reveals the next one after that is fixed.
+
+So Mythic reconciles against the source's discovered catalog when a connection is created:
+
+- **You omit `streams`** — the platform defaults are used, filtered to what the source actually offers. A default the connector has since renamed is dropped and logged rather than failing your connection.
+- **You supply `streams`** — an unrecognised name is rejected with `400 unknown_streams` and the response lists the names this source does offer. Nothing you explicitly asked for is ever silently dropped.
+
+The stored connection's `tables_json` always reflects the streams actually configured, so read it back if you want to know what a connection ended up with.
 
 <Callout kind="tip">
   `defaultStreams` is read once, when a connection is created — adding a stream to the catalog does not reach connections that already exist. Send an explicit `streams` array to `PUT /connections/{id}` to add one to a live connection, remembering that enabling a stream triggers a backfill from the source's start date.
@@ -242,6 +255,7 @@ You send the cadence, not a cron expression. Internally these become Quartz cron
 | `401` | Authorization missing or invalid |
 | `403` | Write attempted with a read-only `sk_` key, or client not linked to the agency |
 | `404` | Config or connection not found (or not owned by the calling agency) |
+| `502` | `airbyte_unavailable` — Airbyte returned something that is not a valid response. Distinct from an empty result, which is a real answer |
 | `409` | `dataset_in_use` — provisioning would create a second Airbyte destination against a dataset already holding Airbyte-managed tables |
 | `429` | Rate limited — `POST /oauth/initiate` (per agency) and the OAuth callback (per IP) allow 20 per 10 minutes |
 | `502` | `provision_failed` — Airbyte rejected the provisioning request; the upstream reason is in `error` |

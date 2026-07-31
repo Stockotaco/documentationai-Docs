@@ -295,6 +295,17 @@ paths:
         BigQuery destination. The `client_id` must belong to the calling agency
         and the agency workspace must already be provisioned and active.
         Requires an agency key (`ak_`).
+
+
+        **Streams are reconciled against the source's real catalog.** Omit
+        `streams` and you get the platform's defaults, filtered to what this
+        source actually offers — a default a connector has since renamed is
+        dropped rather than failing your whole connection. Supply `streams`
+        yourself and any name the source does not offer is rejected with `400
+        unknown_streams`, listing the valid names, because silently dropping a
+        stream you asked for would lose data you expect. Stream names are the
+        CONNECTOR's, not the ad platform's UI labels — Meta's "Ad sets" is the
+        stream `ad_sets`.
       requestBody:
         required: true
         content:
@@ -315,7 +326,10 @@ paths:
                   data:
                     $ref: "#/components/schemas/Connection"
         "400":
-          description: Missing `client_id`, unsupported platform, or workspace not active
+          description: >
+            Missing `client_id`, unsupported platform, workspace not active, or
+            `unknown_streams` — a supplied stream name is not offered by this
+            source; the message lists the valid ones.
           content:
             application/json:
               schema:
@@ -629,6 +643,19 @@ paths:
         Each job is Airbyte's own record passed through unchanged (see the `Job`
         schema for exact field names). Airbyte's `next`/`previous` paging fields
         are not forwarded.
+
+
+        An empty `data` array means this connection has genuinely never run. It
+        is never a symptom: an unreachable Airbyte, a rejected token, or a
+        malformed upstream response all raise (`401` upstream errors surface as
+        a failure, and a 200 without a job array returns `502
+        airbyte_unavailable`) rather than being flattened into "no runs". Render
+        `[]` as fact and the error as "could not reach the sync provider".
+
+
+        This is the only endpoint on this surface that reads Airbyte live.
+        `GET /connections` and `GET /sync-events` read Mythic's own database, so
+        no Airbyte outage can turn them into a false empty either.
       parameters:
         - $ref: "#/components/parameters/ConnectionId"
         - name: limit
@@ -660,6 +687,14 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/ConnectionNotFound"
+        "502":
+          description: >
+            `airbyte_unavailable` — Airbyte answered with something that is not
+            a job list. Distinct from an empty list, which is a real answer.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /connections/{id}/schedule:
     patch:
       summary: Update schedule
@@ -1234,9 +1269,14 @@ components:
           example: Acme — Google Ads
         account_id:
           type: string
+          nullable: true
           description: >
             Platform account identifier. Falls back to the platform's account-ID
-            field within `source_config` if omitted.
+            field within `source_config` if omitted. NULL for connectors that
+            have no scalar account id — `bing_ads` selects accounts with
+            `account_names` predicates, and `tiktok_ads` has no advertiser id in
+            its OAuth flow at all. Do not rely on this being populated for every
+            platform.
           example: 123-456-7890
         source_config:
           type: object
@@ -1479,6 +1519,12 @@ components:
           nullable: true
         connection_id:
           type: string
+          description: >
+            The Airbyte connection id for a sync row. For a FAILED OAUTH ATTEMPT
+            there is no connection yet, so this carries the sentinel
+            `oauth:<platform>:<client_id>` — filterable, and never collides with
+            a real (UUID) connection id.
+          example: oauth:meta_ads:acme-retail
         platform:
           type: string
           nullable: true
@@ -1487,9 +1533,29 @@ components:
           nullable: true
         success:
           type: boolean
+        error_origin:
+          type: string
+          nullable: true
+          description: >
+            `oauth_callback` on a row recorded by a failed consent — the only
+            trail such an attempt leaves, since no connection is created. Absent
+            or null on ordinary sync rows.
+          example: oauth_callback
+        error_type:
+          type: string
+          nullable: true
+          description: >
+            The machine-readable failure code, matching the
+            `mythic_error_code` the callback redirected with (e.g.
+            `source_config_rejected`). Present on OAuth-failure rows.
         error_message:
           type: string
           nullable: true
+          description: >
+            The underlying reason, including the upstream Airbyte message. This
+            is where the detail lives that the redirect deliberately omits — a
+            redirect URL is readable by the landing page and its analytics, so
+            only the code travels there.
         started_at:
           type: string
           format: date-time
