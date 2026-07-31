@@ -280,24 +280,74 @@ paths:
                       benchmarks:
                         type: object
                         description: >
-                          The rate per step each row was actually judged against —
-                          an agency override where supplied, otherwise the account's
-                          own pooled rate.
+                          The **account-level** rate per step: a request override where
+                          supplied, else your stored account default, else the account's
+                          own pooled rate. A campaign with a stored target of its own is
+                          NOT judged against this — read that row's own `benchmarks`.
                         additionalProperties: { type: number, nullable: true }
                       benchmark_sources:
                         type: object
                         description: >
-                          Per step, `override` or `pooled`. Lets a caller comparing two
-                          runs tell whether a verdict moved because performance changed
-                          or because the target did.
-                        additionalProperties: { type: string, enum: [override, pooled] }
+                          Where each account-level benchmark came from. Lets a caller
+                          comparing two runs tell whether a verdict moved because
+                          performance changed or because the target did.
+                        additionalProperties: { type: string, enum: [override, stored_default, pooled] }
                       pooled_rates:
                         type: object
                         description: >
                           What the account actually does, per step — reported even where
-                          an override replaced it. A target far above the pooled rate makes
+                          a target replaced it. A target far above the pooled rate makes
                           every campaign report the same constraint.
                         additionalProperties: { type: number, nullable: true }
+                      stored_benchmarks:
+                        type: object
+                        description: >
+                          The stored targets in play, and what they did. Present whenever
+                          the stored targets could be read (an empty `default` and
+                          `campaigns` simply means none are set).
+                        properties:
+                          default:
+                            type: object
+                            additionalProperties: { type: number }
+                          default_notes:
+                            type: object
+                            additionalProperties: { type: string }
+                          campaigns:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                campaign: { type: string }
+                                benchmarks:
+                                  type: object
+                                  additionalProperties: { type: number }
+                                notes:
+                                  type: object
+                                  additionalProperties: { type: string }
+                                matched_rows:
+                                  type: integer
+                                  description: >
+                                    How many rows this scope was applied to. **0 means the
+                                    target hit nothing** in this window — a renamed
+                                    campaign, a typo, or no spend. Otherwise a stale
+                                    target is silently dead weight.
+                          not_applicable_steps:
+                            type: array
+                            description: >
+                              Stored steps this funnel shape has no slot for — a `site`
+                              target while `lead_event` splits the funnel into
+                              landing + sales. Legal and expected; reported so it is
+                              distinguishable from a target being ignored. Present only
+                              when non-empty.
+                            items: { type: string }
+                          not_applicable_reason: { type: string }
+                      stored_benchmarks_unavailable:
+                        type: string
+                        description: >
+                          Present only if the stored targets could not be read. The
+                          analysis is still valid — every step was judged against the
+                          pooled rate or a request param — but your stored targets were
+                          NOT applied. Never silently omitted.
                       tracking:
                         type: object
                         description: The credibility of everything else in the response.
@@ -384,6 +434,24 @@ paths:
                               type: object
                               description: Rate per step, keyed `<from>_to_<to>`. `null` where the denominator is zero.
                               additionalProperties: { type: number, nullable: true }
+                            benchmarks:
+                              type: object
+                              description: >
+                                The bar **this row** was judged against, per step. Differs
+                                from the account-level `benchmarks` when the row's campaign
+                                has a stored target of its own. Always present, even when
+                                identical.
+                              additionalProperties: { type: number, nullable: true }
+                            benchmark_sources:
+                              type: object
+                              description: >
+                                Where each of this row's benchmarks came from:
+                                `override` (request param), `stored_campaign` (a target
+                                stored for this campaign), `stored_default` (your account
+                                default), or `pooled` (the account's measured rate).
+                              additionalProperties:
+                                type: string
+                                enum: [override, stored_campaign, stored_default, pooled]
                             status:
                               type: string
                               enum: [constrained, healthy]
@@ -397,6 +465,16 @@ paths:
                                 diagnosis: { type: string }
                                 rate: { type: number }
                                 benchmark_rate: { type: number }
+                                benchmark_source:
+                                  type: string
+                                  enum: [override, stored_campaign, stored_default, pooled]
+                                  description: >
+                                    Which bar produced this verdict, stated at the verdict
+                                    itself — otherwise "ad-constrained" can't be checked
+                                    without cross-referencing by hand.
+                                benchmark_note:
+                                  type: string
+                                  description: The note stored with that target, if any (e.g. "Q3 client contract"). Present only for stored benchmarks that carry one.
                                 rate_vs_benchmark:
                                   type: number
                                   nullable: true
@@ -566,6 +644,169 @@ paths:
                         items: { type: string }
                       defaults: { type: object }
                       hints: { type: object }
+
+  /client/v1/constraints/benchmarks:
+    get:
+      summary: List stored benchmark targets
+      operationId: listConstraintBenchmarks
+      description: >
+        The standing targets on file for this location: an account-wide default
+        scope, plus one entry per campaign. These are applied automatically by
+        the analysis endpoint — you never pass them on the request.
+
+        Every response restates `precedence`, the order the analysis resolves a
+        step's benchmark in: a `benchmark_<step>` query param beats a stored
+        campaign target, which beats the stored account default, which beats the
+        account's own pooled rate.
+      parameters:
+        - name: location_id
+          in: query
+          description: Location to scope to. Required for `ak_` keys (or send the `X-Location-Id` header); ignored for `sk_`.
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The stored state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: "#/components/schemas/BenchmarkState" }
+    put:
+      summary: Set the benchmark targets for one scope
+      operationId: setConstraintBenchmarks
+      description: >
+        Store targets for the account (omit `campaign`) or for a single campaign
+        (`campaign` = its Meta id or name, matched case-insensitively against
+        both). Requires an agency key (`ak_`) — `sk_` keys are read-only.
+
+        **This REPLACES the scope.** The body is the complete set of targets for
+        it, so a step you previously stored and now omit is cleared and falls
+        back to the next source in `precedence`. The response echoes the
+        resulting state so the replacement is never invisible.
+
+        Rates are fractions between 0 and 1 — a 2% CTR target is `0.02`. A value
+        above 1 is rejected rather than interpreted.
+
+        Prefer keying by campaign **id**: a name-keyed target stops matching when
+        the campaign is renamed. The analysis reports `matched_rows: 0` for a
+        target that hit nothing, which is how you spot one that has gone stale.
+      parameters:
+        - name: location_id
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [benchmarks]
+              properties:
+                campaign:
+                  type: string
+                  description: Campaign id or name. Omit (or send null) for the account-wide default scope.
+                benchmarks:
+                  type: object
+                  description: >
+                    Step → rate. Valid steps are `ad`, `tracking`, `landing`,
+                    `sales`, `site`. Unlike the query params, a stored scope may
+                    hold both `site` and `landing`/`sales` targets — which apply
+                    depends on whether the analysis request passes `lead_event`,
+                    and the analysis reports any that sat out.
+                  additionalProperties:
+                    type: number
+                    minimum: 0
+                    exclusiveMinimum: true
+                    maximum: 1
+                  example: { ad: 0.02, landing: 0.1 }
+                note:
+                  type: string
+                  maxLength: 500
+                  description: Where the target came from (client contract, category median). Surfaced next to the verdict it produced, so a benchmark is always traceable.
+            example:
+              campaign: "120210000000000000"
+              benchmarks: { ad: 0.02, landing: 0.1 }
+              note: "Q3 client contract"
+      responses:
+        "200":
+          description: Saved, with the resulting state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/BenchmarkState"
+                      - type: object
+                        properties:
+                          saved:
+                            type: object
+                            properties:
+                              scope: { type: string, description: "`account_default` or the campaign key." }
+                              campaign: { type: string, nullable: true }
+                              benchmarks: { type: object, additionalProperties: { type: number } }
+                          note: { type: string, description: Reminder that PUT replaces the scope. }
+        "400":
+          description: A rate outside 0–1, an unknown step, an empty `benchmarks`, or a blank `campaign`.
+        "403":
+          description: Writes require an agency key (`ak_`).
+    delete:
+      summary: Clear a scope, or one step of it
+      operationId: deleteConstraintBenchmarks
+      description: >
+        Clears the account default (no `campaign`) or one campaign's scope.
+        Narrow it to a single step with `step=`. Never clears more than the one
+        scope named. Requires an agency key (`ak_`).
+      parameters:
+        - name: campaign
+          in: query
+          description: Campaign scope to clear. Omit to clear the account-wide default — symmetric with PUT.
+          required: false
+          schema:
+            type: string
+        - name: step
+          in: query
+          description: Clear only this step. Omit to clear every step in the scope.
+          required: false
+          schema:
+            type: string
+            enum: [ad, tracking, landing, sales, site]
+        - name: location_id
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Cleared, with the resulting state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/BenchmarkState"
+                      - type: object
+                        properties:
+                          cleared:
+                            type: object
+                            properties:
+                              scope: { type: string }
+                              campaign: { type: string, nullable: true }
+                              step: { type: string, description: The step cleared, or `all`. }
+                              removed: { type: integer, description: How many stored targets were removed. }
+        "403":
+          description: Writes require an agency key (`ak_`).
 components:
   securitySchemes:
     BearerAuth:
@@ -580,3 +821,44 @@ components:
       type: apiKey
       in: query
       name: sk
+  schemas:
+    BenchmarkState:
+      type: object
+      description: The stored benchmark targets for a location, returned by every /benchmarks call.
+      properties:
+        default:
+          type: object
+          description: Account-wide targets, step → rate. Applies to any campaign without one of its own.
+          additionalProperties: { type: number }
+          example: { ad: 0.015 }
+        default_notes:
+          type: object
+          description: Present only where a note was stored.
+          additionalProperties: { type: string }
+        campaigns:
+          type: array
+          description: One entry per campaign scope on file.
+          items:
+            type: object
+            properties:
+              campaign:
+                type: string
+                description: The id or name this scope is keyed on. Ids survive a rename; names do not.
+              benchmarks:
+                type: object
+                additionalProperties: { type: number }
+              notes:
+                type: object
+                additionalProperties: { type: string }
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Most recent write across every scope.
+        precedence:
+          type: array
+          description: The resolution order, highest first — restated on every response because it is the rule most easily got wrong.
+          items: { type: string }
+        valid_steps:
+          type: array
+          items: { type: string, enum: [ad, tracking, landing, sales, site] }

@@ -129,20 +129,84 @@ curl "$BASE/client/v1/constraints?location_id=$LOC&lead_event=lead\
 
 Valid step names are `ad`, `tracking`, `landing`, `sales`, and `site` — matching the funnel shape you asked for. A benchmark for a step your funnel doesn't have is a `400` rather than a silent no-op, since a target that quietly did nothing is worse than an error.
 
-The response reports where every benchmark came from, so a verdict is always traceable:
+<Callout kind="alert">
+Benchmarks are rates, not percentages. A 2% CTR target is `0.02`. Anything above `1` is rejected rather than interpreted, because `2` is ambiguous — read as 200% instead of 2% it would make every campaign in the account look ad-constrained, and you'd have no way to tell from the output.
+</Callout>
 
-```json
-"benchmarks":        { "ad": 0.02, "tracking": 0.9, "landing": 0.10, "sales": 0.2 },
-"benchmark_sources": { "ad": "override", "tracking": "pooled", "landing": "override", "sales": "pooled" },
-"pooled_rates":      { "ad": 0.004, "tracking": 0.9, "landing": 0.03, "sales": 0.2 }
+## Storing targets, per account and per campaign
+
+Query params set a target for one request. `/client/v1/constraints/benchmarks` stores them as standing policy — including **per campaign**, because a cold-prospecting campaign and a retargeting campaign have no business being held to the same click-through rate. Stored targets are applied automatically; you don't pass anything on the analysis request.
+
+```bash
+# an account-wide floor
+curl -X PUT "$BASE/client/v1/constraints/benchmarks?location_id=$LOC" \
+  -H "Authorization: Bearer $AK" -H 'Content-Type: application/json' \
+  -d '{"benchmarks":{"ad":0.015,"landing":0.08}}'
+
+# ...and a higher bar for one campaign, with the reason on the record
+curl -X PUT "$BASE/client/v1/constraints/benchmarks?location_id=$LOC" \
+  -H "Authorization: Bearer $AK" -H 'Content-Type: application/json' \
+  -d '{"campaign":"120210000000000000","benchmarks":{"ad":0.03},"note":"Q3 client contract"}'
+
+curl "$BASE/client/v1/constraints/benchmarks?location_id=$LOC" -H "Authorization: Bearer $AK"   # what's on file
+curl -X DELETE "$BASE/client/v1/constraints/benchmarks?location_id=$LOC&step=ad" -H "Authorization: Bearer $AK"
 ```
 
+Writes need an agency key (`ak_`); `sk_` keys can read. `campaign` matches the Meta campaign **id or name**, case-insensitively — the same rule as the `campaign` filter.
+
+### Which target wins
+
+Four sources, highest first. Every response repeats this list under `precedence`, and every row reports which one it actually used.
+
+| Source | Set by | Scope |
+|---|---|---|
+| `override` | `benchmark_<step>` on the request | This call only |
+| `stored_campaign` | `PUT` with a `campaign` | That campaign (and its ad sets / ads) |
+| `stored_default` | `PUT` without a `campaign` | Every campaign with no target of its own |
+| `pooled` | Nothing — measured | The account's own rate across the window |
+
+Because targets can differ per campaign, **each row carries its own `benchmarks` and `benchmark_sources`**, and the winning step names its source right at the verdict:
+
+```json
+{
+  "campaign_name": "Cold — Broad",
+  "benchmarks":        { "ad": 0.03, "tracking": 0.9, "site": 0.02 },
+  "benchmark_sources": { "ad": "stored_campaign", "tracking": "pooled", "site": "stored_default" },
+  "status": "constrained",
+  "constraint": {
+    "step": "ad", "rate": 0.004, "benchmark_rate": 0.03,
+    "benchmark_source": "stored_campaign", "benchmark_note": "Q3 client contract",
+    "rate_vs_benchmark": 0.133, "recoverable_conversions": 468
+  }
+}
+```
+
+The top-level `benchmarks` stays the **account-level** answer (override → stored default → pooled), so it never silently reflects one campaign's target. `pooled_rates` is always what the account actually does, even where a target replaced it — keep both in view, because a target far above the pooled rate makes every campaign report the same constraint, which tells you the target is aspirational rather than that every campaign has the same problem.
+
+### How a stored target tells you it's stale
+
+Two things quietly rot: a target keyed to a renamed campaign, and a target for a step the current funnel shape doesn't have. Both are reported rather than dropped.
+
+```json
+"stored_benchmarks": {
+  "default": { "ad": 0.015 },
+  "campaigns": [
+    { "campaign": "120210000000000000", "benchmarks": { "ad": 0.03 }, "matched_rows": 1 },
+    { "campaign": "Summer Sale 2024",   "benchmarks": { "ad": 0.05 }, "matched_rows": 0 }
+  ],
+  "not_applicable_steps": ["site"],
+  "not_applicable_reason": "This funnel's steps are ad, tracking, landing, sales — stored targets for other steps sit out."
+}
+```
+
+`matched_rows: 0` means that target hit nothing this window. Prefer keying by campaign **id**: it survives a rename, a name does not.
+
 <Callout kind="info">
-`pooled_rates` is always what the account actually does, even where you overrode it. Keep both in view: if your target sits far above the pooled rate, every campaign will report the same constraint — which tells you the target is aspirational, not that every campaign has the same problem.
+`PUT` **replaces** a scope — the body is the complete set of targets for it, so a step you previously stored and now omit falls back to the next source. The response echoes the resulting state, so a replacement is never invisible. To clear one step, `DELETE ...&step=ad`.
 </Callout>
 
 <Callout kind="alert">
-Benchmarks are rates, not percentages. A 2% CTR target is `0.02`. Anything above `1` is rejected rather than interpreted, because `2` is ambiguous — read as 200% instead of 2% it would make every campaign in the account look ad-constrained, and you'd have no way to tell from the output.
+If the stored targets can't be read, the analysis still runs against pooled rates but the response carries `stored_benchmarks_unavailable` — your targets were **not** applied. Check for that field before trusting a verdict, because a benchmark that silently reverted to pooled is the one failure that misleads without looking wrong.
 </Callout>
 
 ## Choosing your events
