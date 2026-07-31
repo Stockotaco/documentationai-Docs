@@ -847,6 +847,22 @@ components:
         credential_name:
           type: string
           description: Named credential to use. Defaults to `default`.
+        default_country_code:
+          type: string
+          description: >
+            Calling code (digits, no `+`) used to expand national phone numbers
+            to their country-coded form before hashing — e.g. `1` turns
+            `5125550123` into `15125550123`, the form Meta matches against.
+            Without it both forms are sent and Meta matches whichever it holds.
+          example: "1"
+        fbc_subdomain_index:
+          type: integer
+          description: >
+            Subdomain index used only when an `fbc` has to be built from a bare
+            `fbclid` (no `_fbc` cookie was observed). Defaults to `1`, which is
+            correct for an ordinary `example.com` domain; set `2` for a deeper
+            cookie domain such as `example.co.uk`.
+          default: 1
         enrichment:
           type: object
           description: Optional enrichment configuration.
