@@ -30,7 +30,9 @@ The full set of options you can pass to `init(key, config)`.
 ### Auto-capture
 
 <ParamField body="autocapture" param-type="boolean|object" required="false" show-location="false" deprecated="false">
-  Enable automatic capture of clicks, form submissions, and DOM interactions. Default: `true`. Pass an object to limit to specific element types: `{ elements: ['links', 'buttons', 'forms'] }`.
+  Enable automatic capture of clicks and form submissions. Default: `true`, which captures `links` and `forms` only — note `buttons` is **not** in the default set, so `<button>` clicks need `{ elements: [...] }`. Pass an object to choose element types: `{ elements: ['links', 'forms', 'buttons'] }`. Valid types: `links`, `forms`, `buttons`, `inputs`, `selects`, `textareas`, `changes`.
+
+  A per-location override set through the Settings API (`PUT /client/v1/settings/autocapture`) **takes precedence over this option**, so an agency can turn autocapture off or change its element types without editing this snippet. The override does not reach sites that set `disable_remote_config: true`.
 </ParamField>
 
 <ParamField body="capture_pageview" param-type="boolean" required="false" show-location="false" deprecated="false">
@@ -137,7 +139,7 @@ The full set of options you can pass to `init(key, config)`.
 </ParamField>
 
 <ParamField body="disable_remote_config" param-type="boolean" required="false" show-location="false" deprecated="false">
-  Prevent loading server-defined tags, snippets, and transformers from the `/decide` endpoint. Force-enabled in HIPAA mode. Default: `false`.
+  Prevent loading server-defined configuration from the `/decide` endpoint: tags, snippets, transformers, and the per-location `session_replay`, `error_tracking`, and `autocapture` overrides. Setting this cuts the site off from server-side control, so those overrides can no longer be changed without editing the snippet. Force-enabled in HIPAA mode. Default: `false`.
 </ParamField>
 
 <ParamField body="disable_cookie" param-type="boolean" required="false" show-location="false" deprecated="false">

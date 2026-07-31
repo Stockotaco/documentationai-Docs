@@ -159,6 +159,11 @@ paths:
         wins over the site's `init()` configuration. Browsers pick the change up
         on their next remote-config fetch; already-open pages keep their current
         behaviour until they reload.
+
+
+        Two cases where the override does **not** apply: a site that sets
+        `disable_remote_config: true` never fetches remote config, and HIPAA-mode
+        locations always have autocapture off regardless of what is stored here.
       requestBody:
         required: true
         content:
