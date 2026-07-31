@@ -895,12 +895,27 @@ components:
           type: array
           description: >
             Keys the caller must STILL supply in `source_config` after
-            consenting — i.e. `requiredFields` without the `oauth` flag. Empty
-            means the consent flow supplies everything. Use this rather than
-            inferring inputs from `supportsOauth`.
+            consenting — `requiredFields` minus everything flagged `oauth` or
+            `optional`. Empty means the consent flow supplies everything. Use
+            this rather than inferring inputs from `supportsOauth`. Every key
+            here is a real property of the connector's own spec, verified
+            against Airbyte's published connector registry.
           items:
             type: string
-          example: ["account_id", "customer_id", "developer_token"]
+          example: ["developer_token", "tenant_id"]
+        preConsentFields:
+          type: array
+          description: >
+            Subset of `manualFields` that must be known BEFORE the consent
+            redirect, because the provider's login URL is built from them —
+            `bing_ads.tenant_id` selects the Microsoft tenant,
+            `salesforce.is_sandbox` selects the login host. Send them in
+            `source_config` on `POST /oauth/initiate`; they are forwarded to the
+            provider as OAuth input. Collecting them after the redirect is too
+            late.
+          items:
+            type: string
+          example: ["tenant_id"]
         requiredFields:
           type: array
           description: Configuration fields the source requires.
@@ -920,6 +935,26 @@ components:
                 type: string
                 description: Rendering hint, e.g. `json` or `secret`. Absent for plain text.
                 example: secret
+              optional:
+                type: boolean
+                description: >
+                  Not required to create a connection. Excluded from
+                  `manualFields` so a portal does not render it as mandatory —
+                  e.g. `bing_ads.account_names`, a list of
+                  `{ name, operator }` predicates that filters which accounts
+                  sync; omitted, the connector syncs every account the user can
+                  see.
+              preConsent:
+                type: boolean
+                description: >
+                  Must be supplied at `POST /oauth/initiate`, not afterwards —
+                  the provider's login URL is built from it.
+              sourceField:
+                type: string
+                description: >
+                  The connector property this value lands in, when it differs
+                  from `key`. `meta_ads.account_id` is a caller-facing alias for
+                  the connector's `account_ids`.
               oauth:
                 type: boolean
                 description: >
