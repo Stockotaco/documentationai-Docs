@@ -236,16 +236,34 @@ The stored connection's `tables_json` always reflects the streams actually confi
 
 ## Sync frequency
 
-Connections sync on one of a fixed set of cadences. Cron-based cadences run on a shared schedule; `manual` disables automatic syncing so you control it with `POST /connections/{id}/sync`.
+**`manual` is the default.** A connection created without an explicit `sync_frequency` does not sync on a schedule — you trigger it with `POST /connections/{id}/sync`. Scheduled syncing is something you opt into.
 
-| Value | Cadence | Schedule |
-|-------|---------|----------|
-| `24h` | Once daily | 02:00 |
-| `12h` | Every 12 hours | 00:00, 12:00 |
-| `6h` | Every 6 hours | 00:00, 06:00, 12:00, 18:00 |
-| `manual` | No automatic syncs | — |
+| Value | Cadence |
+|-------|---------|
+| `manual` | No automatic syncs (default) |
+| `24h` | Once daily |
+| `12h` | Every 12 hours |
+| `6h` | Every 6 hours |
 
-You send the cadence, not a cron expression. Internally these become Quartz cron (six fields, seconds first) because that is what Airbyte's scheduler accepts; a five-field Unix expression is rejected outright.
+### Choosing the hour
+
+`sync_hour_utc` (0–23) sets when a cadence runs, in UTC. It is accepted on `POST /connections`, `PUT /connections/{id}` and `PATCH /connections/{id}/schedule`, and defaults to `2` when unset.
+
+Sub-daily cadences anchor on `hour % interval`, so the hour you ask for is always one of the run times **and** the runs stay evenly spaced:
+
+| `sync_frequency` | `sync_hour_utc` | Runs at (UTC) |
+|------------------|-----------------|---------------|
+| `24h` | `8` | 08:00 |
+| `24h` | unset | 02:00 |
+| `12h` | `8` | 08:00, 20:00 |
+| `6h` | `8` | 02:00, 08:00, 14:00, 20:00 |
+| `6h` | unset | 02:00, 08:00, 14:00, 20:00 |
+
+Responses from the schedule endpoints include `runs_at_utc`, the concrete list above, so you can tell a client when their data lands without decoding a cron expression. Changing `sync_frequency` alone keeps the connection's existing hour rather than resetting it.
+
+<Callout kind="info">
+  You send a cadence and an hour, never a cron expression. Internally these become Quartz cron (six fields, seconds first), which is what Airbyte's scheduler accepts — a five-field Unix expression is rejected outright.
+</Callout>
 
 ## Error handling
 

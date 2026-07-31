@@ -700,9 +700,17 @@ paths:
       summary: Update schedule
       operationId: updateAirbyteSchedule
       description: >
-        Change the sync frequency for a connection. Cron-based frequencies are
-        pushed to Airbyte; `manual` switches the connection to manual triggering.
-        Requires an agency key (`ak_`).
+        Change the sync frequency, and optionally the hour it runs at, for a
+        connection. Scheduled frequencies are pushed to Airbyte; `manual`
+        switches the connection to manual triggering. Requires an agency key
+        (`ak_`).
+
+
+        Sending `sync_frequency` alone KEEPS the connection's existing
+        `sync_hour_utc` rather than resetting it to the default, so changing
+        cadence never silently moves a client's sync to a different time of
+        day. The response returns `runs_at_utc`, the concrete hours this
+        schedule fires at.
       parameters:
         - $ref: "#/components/parameters/ConnectionId"
       requestBody:
@@ -716,6 +724,8 @@ paths:
               properties:
                 sync_frequency:
                   $ref: "#/components/schemas/SyncFrequency"
+                sync_hour_utc:
+                  $ref: "#/components/schemas/SyncHourUtc"
       responses:
         "200":
           description: Schedule updated
@@ -729,8 +739,21 @@ paths:
                     example: true
                   sync_frequency:
                     $ref: "#/components/schemas/SyncFrequency"
+                  sync_hour_utc:
+                    $ref: "#/components/schemas/SyncHourUtc"
+                  runs_at_utc:
+                    type: array
+                    description: >
+                      The hours (UTC) this schedule actually fires at — empty
+                      for `manual`. Provided so a caller never has to decode a
+                      cron expression to tell a client when their data lands.
+                    items:
+                      type: integer
+                    example: [2, 8, 14, 20]
         "400":
-          description: Missing `sync_frequency`
+          description: >
+            Missing `sync_frequency`, or `invalid_sync_hour` — `sync_hour_utc`
+            must be an integer 0-23.
           content:
             application/json:
               schema:
@@ -1294,6 +1317,8 @@ components:
             connection later.
         sync_frequency:
           $ref: "#/components/schemas/SyncFrequency"
+        sync_hour_utc:
+          $ref: "#/components/schemas/SyncHourUtc"
         streams:
           type: array
           description: >
@@ -1342,6 +1367,8 @@ components:
           example: act_123456789
         sync_frequency:
           $ref: "#/components/schemas/SyncFrequency"
+        sync_hour_utc:
+          $ref: "#/components/schemas/SyncHourUtc"
         streams:
           type: array
           description: Stream selection. Defaults to the platform's `defaultStreams`.
@@ -1375,6 +1402,8 @@ components:
           example: Acme — Google Ads (Prod)
         sync_frequency:
           $ref: "#/components/schemas/SyncFrequency"
+        sync_hour_utc:
+          $ref: "#/components/schemas/SyncHourUtc"
         streams:
           type: array
           items:
@@ -1415,6 +1444,8 @@ components:
           example: active
         sync_frequency:
           $ref: "#/components/schemas/SyncFrequency"
+        sync_hour_utc:
+          $ref: "#/components/schemas/SyncHourUtc"
         tables_json:
           type: array
           description: Resolved stream selection stored for the connection.
@@ -1430,13 +1461,27 @@ components:
         created_at:
           type: string
           format: date-time
+    SyncHourUtc:
+      type: integer
+      minimum: 0
+      maximum: 23
+      nullable: true
+      description: >
+        Hour of day, UTC, the cadence is anchored to. Defaults to `2` when
+        unset. Sub-daily cadences anchor on `hour % interval`, so the hour you
+        ask for is always one of the run times and the runs stay evenly spaced
+        — `6h` at `8` runs at 02:00, 08:00, 14:00 and 20:00. Ignored when
+        `sync_frequency` is `manual`.
+      example: 8
     SyncFrequency:
       type: string
       description: >
-        Sync cadence. `24h`, `12h`, and `6h` map to cron schedules; `manual`
-        disables automatic syncing.
-      enum: ["24h", "12h", "6h", "manual"]
-      example: 24h
+        Sync cadence. `24h`, `12h` and `6h` schedule automatic syncs at
+        `sync_hour_utc`; `manual` disables them, and is the DEFAULT — a
+        connection created without this field does not sync on a schedule.
+      enum: ["manual", "24h", "12h", "6h"]
+      default: manual
+      example: manual
     Job:
       type: object
       description: >
