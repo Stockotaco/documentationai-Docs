@@ -798,7 +798,26 @@ components:
           description: Request timeout in milliseconds. Must be positive.
         retry_count:
           type: number
-          description: Retry attempts on failure. Must be non-negative.
+          description: >
+            Retry attempts on failure. Must be non-negative. Total BullMQ
+            attempts are `retry_count + 1` (default 3).
+        enrichment:
+          type: object
+          description: >
+            Merged-profile enrichment, used to fill `{{profile.x}}` tokens in
+            `body_template`. On by default — webhooks share the ad destinations'
+            delivery pipeline. The former `full_profile` opt-in is ignored.
+          properties:
+            enabled:
+              type: boolean
+              default: true
+              description: >
+                Set false to skip the profile lookup. `{{profile.x}}` tokens are
+                then left verbatim rather than blanked.
+            attribution_model:
+              type: string
+              enum: [last_touch, first_touch]
+              default: last_touch
     MetaCapiConfig:
       type: object
       description: "`action_config` for `action_type: meta_capi`."
