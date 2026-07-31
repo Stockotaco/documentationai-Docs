@@ -28,6 +28,9 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    example: true
                   data:
                     type: array
                     items:
@@ -50,6 +53,9 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    example: true
                   data:
                     $ref: "#/components/schemas/Config"
         "401":
@@ -142,6 +148,9 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    example: true
                   data:
                     type: array
                     items:
@@ -170,6 +179,9 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    example: true
                   data:
                     $ref: "#/components/schemas/Connection"
         "400":
@@ -201,6 +213,9 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    example: true
                   data:
                     $ref: "#/components/schemas/Connection"
         "401":
@@ -230,6 +245,9 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    example: true
                   data:
                     $ref: "#/components/schemas/Connection"
         "401":
@@ -319,6 +337,9 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    example: true
                   data:
                     type: array
                     description: Jobs, newest first.
@@ -429,6 +450,9 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    example: true
                   data:
                     type: array
                     items:
@@ -460,6 +484,9 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    example: true
                   data:
                     $ref: "#/components/schemas/Stats"
         "401":
@@ -480,6 +507,9 @@ paths:
               schema:
                 type: object
                 properties:
+                  success:
+                    type: boolean
+                    example: true
                   data:
                     $ref: "#/components/schemas/Health"
         "401":
@@ -993,6 +1023,9 @@ components:
     ErrorResponse:
       type: object
       properties:
+        success:
+          type: boolean
+          example: false
         error:
           type: string
           example: Missing authorization
