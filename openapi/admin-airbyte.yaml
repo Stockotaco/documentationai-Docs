@@ -301,9 +301,17 @@ paths:
             application/json:
               schema:
                 type: object
+                description: >
+                  The job array is double-wrapped — jobs are at `data.data`.
                 properties:
                   data:
                     type: object
+                    properties:
+                      data:
+                        type: array
+                        description: Jobs, newest first.
+                        items:
+                          $ref: "#/components/schemas/Job"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -714,9 +722,17 @@ paths:
             application/json:
               schema:
                 type: object
+                description: >
+                  The job array is double-wrapped — jobs are at `data.data`.
                 properties:
                   data:
                     type: object
+                    properties:
+                      data:
+                        type: array
+                        description: Jobs, newest first.
+                        items:
+                          $ref: "#/components/schemas/Job"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -1138,16 +1154,63 @@ components:
           $ref: "#/components/schemas/SyncFrequency"
     Job:
       type: object
+      description: >
+        Airbyte job record, passed through verbatim from Airbyte's public API
+        (`GET /v1/jobs`) with no renaming or added fields. There is no
+        `createdAt`, `updatedAt`, `endTime`, or `lastAttempt` on this payload.
+      required: [jobId, status, jobType, startTime, connectionId]
       properties:
         jobId:
           type: integer
-          example: 1234567
+          format: int64
+          example: 68374749
         status:
           type: string
-          example: running
+          description: >
+            `succeeded`, `failed`, `cancelled`, and `incomplete` are terminal;
+            `pending` and `running` are in flight. Only `succeeded` is a clean
+            sync.
+          enum: [pending, running, incomplete, failed, succeeded, cancelled]
+          example: succeeded
         jobType:
           type: string
+          description: >
+            Mythic only triggers `sync`; `reset` appears if a reset is run from
+            the Airbyte UI. Newer Airbyte versions may also report `clear` and
+            `refresh`.
+          enum: [sync, reset]
           example: sync
+        connectionId:
+          type: string
+          format: uuid
+          description: Airbyte's connection UUID, not the Mythic connection `id`.
+          example: 871f879d-9c37-426b-be7b-eeaca16333f3
+        startTime:
+          type: string
+          format: date-time
+          description: Job start, UTC ISO 8601. The only start timestamp.
+          example: "2026-01-30T10:14:37Z"
+        lastUpdatedAt:
+          type: string
+          format: date-time
+          description: >
+            Last state change — finish time for a terminal job. Optional: absent
+            while still `pending`.
+          example: "2026-01-30T10:17:22Z"
+        duration:
+          type: string
+          description: ISO 8601 duration. Optional.
+          example: PT2M45S
+        bytesSynced:
+          type: integer
+          format: int64
+          description: Bytes synced. Optional.
+          example: 307376
+        rowsSynced:
+          type: integer
+          format: int64
+          description: Records synced. Optional.
+          example: 132
     SyncEvent:
       type: object
       properties:
