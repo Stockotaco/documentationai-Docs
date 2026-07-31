@@ -3,8 +3,10 @@ info:
   version: 1.0.0
   title: Settings
   description: >-
-    Per-location ingestion controls. Currently exposes the **origin allowlist**
-    that bounds which sites may send events with a location's publishable key.
+    Per-location ingestion controls: the **origin allowlist** that bounds which
+    sites may send events with a location's publishable key, and the
+    **autocapture override** that controls server-side whether the SDK records
+    clicks and form submissions.
 
 
     Publishable keys (`pk_`) live in the browser and are public by design — they
@@ -97,6 +99,91 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /autocapture:
+    get:
+      summary: Get the autocapture override
+      operationId: getAutocapture
+      description: >
+        Return the location's autocapture override plus the resulting effective
+        behaviour. Readable with an agency key (`ak_`, pass `?location_id=`) or a
+        viewer key (`sk_`).
+
+
+        `autocapture` is the stored override and may be `null`, `false`, `true`,
+        or an object. `null` means no override, so the SDK default applies —
+        which is **enabled**, capturing links and form submissions. Because
+        `null` and `false` mean opposite things, read `effective` when you want
+        to know what the location is actually doing.
+      responses:
+        "200":
+          description: The current override and its effective behaviour
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutocaptureResponse"
+        "401":
+          description: Authorization key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Set the autocapture override
+      operationId: putAutocapture
+      description: >
+        Set the location's autocapture override. Requires an agency key (`ak_`)
+        and `?location_id=`; viewer keys get `403 agency_required`.
+
+
+        Accepted values for `autocapture`:
+
+        - `false` — turn autocapture off for this location. This is the only
+          server-side kill switch; it overrides whatever the site's own
+          `init()` snippet asks for.
+        - `true` — on with SDK defaults (`links` and `forms`).
+        - `{ "elements": [...] }` — on, capturing only those element types.
+          Valid values: `links`, `forms`, `buttons`, `inputs`, `selects`,
+          `textareas`, `changes`. An empty array is rejected — send `false` to
+          disable instead. Unknown names are rejected rather than ignored, so a
+          typo cannot silently stop capture.
+        - `null` — clear the override and fall back to the SDK default (on,
+          links + forms).
+
+
+        Note that `buttons` is **not** in the default set, so `<button>` clicks
+        are not captured unless you ask for them. Sites whose calls to action are
+        `<a>` elements styled as buttons are covered by `links`.
+
+
+        The override is served to the SDK via the remote config endpoint and
+        wins over the site's `init()` configuration. Browsers pick the change up
+        on their next remote-config fetch; already-open pages keep their current
+        behaviour until they reload.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutocaptureRequest"
+      responses:
+        "200":
+          description: Updated — returns the stored override
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutocaptureUpdateResponse"
+        "400":
+          description: Body isn't JSON, or `autocapture` is missing/invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Write access requires an agency key (`ak_`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   securitySchemes:
     BearerAuth:
@@ -147,6 +234,71 @@ components:
               example:
                 - acme.com
                 - shop.acme.com
+    AutocaptureRequest:
+      type: object
+      required:
+        - autocapture
+      properties:
+        autocapture:
+          description: >-
+            `false` to disable, `true` for SDK defaults, an object to choose
+            element types, or `null` to clear the override.
+          oneOf:
+            - type: boolean
+            - type: "null"
+            - type: object
+              properties:
+                elements:
+                  type: array
+                  items:
+                    type: string
+                    enum: [links, forms, buttons, inputs, selects, textareas, changes]
+              additionalProperties: false
+          example:
+            elements: [links, forms, buttons]
+    AutocaptureResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            autocapture:
+              description: The stored override; `null` means no override (SDK default applies).
+              nullable: true
+              example: null
+            effective:
+              type: object
+              description: What the location actually does, with the default resolved.
+              properties:
+                enabled:
+                  type: boolean
+                  example: true
+                elements:
+                  type: array
+                  items:
+                    type: string
+                  example: [links, forms]
+            valid_elements:
+              type: array
+              items:
+                type: string
+              example: [links, forms, buttons, inputs, selects, textareas, changes]
+    AutocaptureUpdateResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            autocapture:
+              nullable: true
+              example:
+                elements: [links, forms, buttons]
     ErrorResponse:
       type: object
       properties:
