@@ -318,6 +318,66 @@ Two related distinctions in the same numbers:
 
 Both paths key on `(connection_id, job_id)`, so a backfill never duplicates a notification, re-running one is a no-op, and a re-delivered notification never double-counts. Jobs still running are skipped rather than recorded as failures; the response reports how many under `skipped_in_flight`.
 
+## Orchestrated syncs
+
+By default each connection runs on its own Airbyte schedule. That is fine until something has to run **after** the data lands — a transform, an export, your own pipeline. Twelve connections on twelve independent crons never produce a moment that means "today's data is here", so a consumer either guesses a time and is sometimes wrong, or polls forever.
+
+A **pipeline** fixes that. Its connections go to `manual`, Mythic triggers them, and once the whole set is done Mythic POSTs to a URL you provide.
+
+<Steps>
+  <Step title="Pick the scope" titleType="h3">
+`GET /pipelines/{clientId}/candidates` lists the client's connections with a `suggested` flag. Use it to pre-tick boxes — but let a human confirm the set. Which connections belong to a client is not reliably answerable from an Airbyte workspace: real ones mix per-connector namespaces with per-client ones, and a bare-uuid namespace can turn out to belong to somebody else. Syncing a neighbour's connection on this client's schedule and omitting a source your transform needs are both more expensive than one click.
+  </Step>
+  <Step title="Create it" titleType="h3">
+```bash
+curl -X POST https://mythic-analytics.gulp.workers.dev/client/v1/airbyte/pipelines/acme-retail \
+  -X PUT -H "Authorization: Bearer ak_..." -H "Content-Type: application/json" \
+  -d '{"enabled": true, "connection_ids": ["...","..."], "run_hour_utc": 8,
+       "webhook_url": "https://you.example.com/hooks/mythic",
+       "webhook_secret": "a-secret-you-generate"}'
+```
+  </Step>
+  <Step title="Receive the completion" titleType="h3">
+Your endpoint gets a `POST` with `X-Mythic-Run-Id` and, if you set a secret, `X-Mythic-Signature: sha256=<hex>` — an HMAC-SHA256 of the raw body.
+  </Step>
+</Steps>
+
+<Callout kind="warning">
+  **Enabling a pipeline takes the schedules over.** Every in-scope connection is set to `manual` in Airbyte, because a run can only mean anything if Mythic is what triggers the syncs. The original schedule is stashed and handed back when a connection leaves scope or the pipeline is disabled — but if you change those schedules directly in the Airbyte UI while a pipeline owns them, that connection will sync twice a day and the completion signal stops meaning what it says.
+</Callout>
+
+### What "done" means
+
+A run holds rather than lying. The rules, in order:
+
+1. **Skipped connections never gate.** A connection disabled in Airbyte can't sync, and must not block the transform every day forever.
+2. **A first-time backfill doesn't gate** — it can legitimately run for days and nothing downstream references it yet. **Unless it failed**, in which case that connection has never delivered anything and someone should know. A re-sync of a connection that *had* data always gates, because that is exactly when a consumer would publish half-rebuilt history as if it were complete.
+3. **Anything still running → wait.**
+4. **Anything failed → hold.** The run stays open, retries the failed steps every five minutes, and completes on its own the moment they pass. `held` is a parking state, not an outcome.
+5. **Otherwise → done**, and the webhook fires.
+
+Failed steps are retried twice, then wait for a person. `POST .../retry` resets them once the cause is fixed upstream; `POST .../force` closes a held run anyway.
+
+<Callout kind="note">
+  Forcing is deliberately a per-run decision, not a pipeline setting. The moment "partial is acceptable" becomes configuration, nobody looks at a held run again and the whole gate becomes decoration. A forced run carries `forced: true` in its webhook forever, because everything built on it was built on knowingly incomplete data.
+</Callout>
+
+### Reading the payload
+
+The body is `{type: "airbyte.pipeline.completed", delivered_at, data}` where `data` is a `PipelineRun`. Three fields deserve attention:
+
+- **`complete`, not `status`.** They are different questions. `status: "succeeded"` with two connections skipped is a real and normal outcome; `complete` is what tells you whether *everything that could sync, did*.
+- **`connections[].reason`.** `skipped` alone collapses "disabled on purpose", "inactive", and "first-time backfill" into one word, and only some of those mean data you expected is missing.
+- **`connections[].last_success_at`.** "All done" next to a source that last succeeded nine days ago is a very different message, and you cannot work that out from a run that skipped it today.
+
+Delivery is **at-least-once**: retry it, dedupe on `run_id`, and don't fail closed on a duplicate. A delivery failure marks the run but never un-finishes it — the syncs really did complete, and a run that flipped back to held because your endpoint was briefly down would be a lie about the data. `POST .../redeliver` re-sends on demand.
+
+### Timing and guarantees
+
+Runs are advanced by a five-minute tick, so completion is detected within about five minutes of the last sync finishing — not instantly. Nothing anywhere is blocked waiting on a sync, which is what lets a first historical backfill run for days without holding a connection open.
+
+Exactly **one run per client per day**, enforced in the database. A run already in flight rejects a manual start with `409 run_in_flight`, since a second run would stack a duplicate sync on every connection the first one owns. A run that somehow wedges — nothing in flight, no progress for 36 hours — fails itself loudly rather than leaving the client unable to ever refresh again.
+
 ## Error handling
 
 | Status | Meaning |
@@ -331,6 +391,10 @@ Both paths key on `(connection_id, job_id)`, so a backfill never duplicates a no
 | `429` | Rate limited — `POST /oauth/initiate` (per agency) and the OAuth callback (per IP) allow 20 per 10 minutes |
 | `502` | `provision_failed` — Airbyte rejected the provisioning request; the upstream reason is in `error` |
 | `409` | `notifications_conflict` — the workspace already posts sync notifications to another URL; retry with `overwrite_notifications: true` |
+| `409` | `run_in_flight` — a pipeline run is already running for this client; a second would duplicate every sync |
+| `409` | `run_exists_today` — runs are one per client per day; retry the existing run's failed steps instead |
+| `400` | `unknown_connections` — a `connection_ids` entry does not belong to this client |
+| `400` | `empty_scope` / `not_held` — the pipeline has no connections, or the run being forced is not held |
 | `400` | `invalid_customer_id` — a Google Ads customer ID that is not 10 digits after stripping dashes and spaces |
 | `503` | Server-side encryption key not configured |
 | `500` | Internal server error |

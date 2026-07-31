@@ -838,6 +838,362 @@ paths:
           $ref: "#/components/responses/WriteForbidden"
         "404":
           $ref: "#/components/responses/ConnectionNotFound"
+  /pipelines/{clientId}:
+    get:
+      summary: Get pipeline
+      operationId: getAirbytePipeline
+      description: Orchestration config for a client — scope, run hour, and completion webhook.
+      parameters:
+        - $ref: "#/components/parameters/PipelineClientId"
+      responses:
+        "200":
+          description: Pipeline
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    $ref: "#/components/schemas/Pipeline"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: "No pipeline for this client (`code: no_pipeline`)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Create or update pipeline
+      operationId: putAirbytePipeline
+      description: >
+        Set which connections a run waits for, when it starts, and where the
+        completion webhook goes.
+
+
+        ENABLING TAKES SCHEDULES OVER. Every in-scope connection is set to
+        `manual` in Airbyte and its previous schedule stashed, because a run can
+        only be a meaningful unit if Mythic is what triggers the syncs. Anything
+        DROPPED from scope, or in the pipeline when it is disabled, gets its
+        original schedule handed back — a connection left on `manual` with
+        nothing triggering it does not error, it simply stops updating. The
+        response reports both under `schedule_changes`.
+
+
+        `connection_ids` must be connections belonging to this client;
+        otherwise `400 unknown_connections`. Requires an agency key (`ak_`).
+      parameters:
+        - $ref: "#/components/parameters/PipelineClientId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                connection_ids:
+                  type: array
+                  description: >
+                    Mythic connection ids a run waits for. Authoritative — never
+                    inferred at run time. Use `GET /pipelines/{clientId}/candidates`
+                    to populate a picker.
+                  items:
+                    type: string
+                run_hour_utc:
+                  type: integer
+                  minimum: 0
+                  maximum: 23
+                  default: 2
+                  description: Hour (UTC) the daily run starts.
+                webhook_url:
+                  type: string
+                  description: HTTPS endpoint POSTed once the run completes.
+                webhook_secret:
+                  type: string
+                  description: >
+                    Used to HMAC-SHA256 the request body into `X-Mythic-Signature`.
+                    Write-only; never returned.
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/Pipeline"
+                      - type: object
+                        properties:
+                          schedule_changes:
+                            type: object
+                            properties:
+                              taken_over: { type: array, items: { type: object } }
+                              handed_back: { type: array, items: { type: object } }
+                              errors: { type: array, items: { type: object } }
+        "400":
+          description: "`unknown_connections`, `invalid_sync_hour`, or `invalid_webhook_url`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+  /pipelines/{clientId}/candidates:
+    get:
+      summary: List scope candidates
+      operationId: listAirbytePipelineCandidates
+      description: >
+        This client's connections, each flagged `in_scope` and `suggested`.
+
+
+        Discovery proposes; it never decides. Which connections belong to a
+        client is not reliably answerable from an Airbyte workspace — real ones
+        mix per-connector and per-client namespaces, and a bare-uuid namespace
+        can belong to someone else entirely. Use `suggested` to pre-tick boxes,
+        and let a human confirm: syncing a neighbour's connection on this
+        client's schedule, or omitting a source the consumer needs, both cost
+        more than one click.
+      parameters:
+        - $ref: "#/components/parameters/PipelineClientId"
+      responses:
+        "200":
+          description: Candidates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        connection_id: { type: string }
+                        platform: { type: string }
+                        display_name: { type: string, nullable: true }
+                        status: { type: string }
+                        in_scope: { type: boolean }
+                        suggested: { type: boolean }
+                        managed_by_pipeline:
+                          type: boolean
+                          description: Mythic currently owns this connection's schedule.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /pipelines/{clientId}/runs:
+    get:
+      summary: List runs
+      operationId: listAirbytePipelineRuns
+      parameters:
+        - $ref: "#/components/parameters/PipelineClientId"
+        - name: limit
+          in: query
+          schema: { type: integer, default: 30, maximum: 100 }
+      responses:
+        "200":
+          description: Runs, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PipelineRun"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      summary: Start a run now
+      operationId: startAirbytePipelineRun
+      description: >
+        Trigger every in-scope connection immediately.
+
+
+        A RUNNING run blocks this with `409 run_in_flight` — it owns live
+        Airbyte jobs, and a second run would stack a duplicate sync on each of
+        them. A HELD run does not block: a hold is a run parked waiting for a
+        person, and that person asking for a fresh run IS the decision, so the
+        held run is closed as `skipped` (superseded) and a new one starts.
+
+
+        Runs are one per client per day, so a same-day rerun returns
+        `409 run_exists_today` — retry the failed steps instead. Requires `ak_`.
+      parameters:
+        - $ref: "#/components/parameters/PipelineClientId"
+      responses:
+        "200":
+          description: Run started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    $ref: "#/components/schemas/PipelineRun"
+        "400":
+          description: "`empty_scope` — the pipeline has no connections"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+        "409":
+          description: "`run_in_flight` or `run_exists_today`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /pipelines/{clientId}/runs/{runId}:
+    get:
+      summary: Get a run
+      operationId: getAirbytePipelineRun
+      parameters:
+        - $ref: "#/components/parameters/PipelineClientId"
+        - name: runId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Run
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    $ref: "#/components/schemas/PipelineRun"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFoundRun"
+  /pipelines/{clientId}/runs/{runId}/retry:
+    post:
+      summary: Retry failed steps
+      operationId: retryAirbytePipelineRun
+      description: >
+        Reset the attempt counters on failed steps and reopen the run. The next
+        tick triggers them again. Use this when the cause was fixed upstream —
+        a re-granted ad account, a restored credential. Requires `ak_`.
+      parameters:
+        - $ref: "#/components/parameters/PipelineClientId"
+        - name: runId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Run reopened
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    $ref: "#/components/schemas/PipelineRun"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+        "404":
+          $ref: "#/components/responses/NotFoundRun"
+  /pipelines/{clientId}/runs/{runId}/force:
+    post:
+      summary: Complete a held run anyway
+      operationId: forceAirbytePipelineRun
+      description: >
+        Close a held run as succeeded despite failed syncs, and fire the
+        completion webhook.
+
+
+        Deliberately a per-run decision and NOT a pipeline setting. The moment
+        "partial is acceptable" becomes configuration, nobody looks at a held
+        run again and the gate quietly becomes decoration.
+
+
+        `forced: true` is stamped on the run and travels in the webhook
+        permanently, because everything built on this run was built on knowingly
+        incomplete data. Requires `ak_`.
+      parameters:
+        - $ref: "#/components/parameters/PipelineClientId"
+        - name: runId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Run closed and webhook attempted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    $ref: "#/components/schemas/PipelineRun"
+        "400":
+          description: "`not_held` — only a held run can be forced"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+        "404":
+          $ref: "#/components/responses/NotFoundRun"
+  /pipelines/{clientId}/runs/{runId}/redeliver:
+    post:
+      summary: Re-send the completion webhook
+      operationId: redeliverAirbytePipelineRun
+      description: >
+        Re-POST the completion payload. Delivery is at-least-once and the
+        payload carries the run id, so a receiver that already processed it
+        should dedupe rather than reject. Requires `ak_`.
+      parameters:
+        - $ref: "#/components/parameters/PipelineClientId"
+        - name: runId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Delivery attempted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      delivered: { type: boolean }
+                      error: { type: string, nullable: true }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+        "404":
+          $ref: "#/components/responses/NotFoundRun"
   /sync-events:
     get:
       summary: List sync events
@@ -998,6 +1354,13 @@ components:
         read-only access; the agency is resolved from the location. Write
         endpoints return `403`. May also be passed as an `sk` query parameter.
   parameters:
+    PipelineClientId:
+      name: clientId
+      in: path
+      required: true
+      description: Client (location) identifier the pipeline belongs to.
+      schema:
+        type: string
     ConnectionId:
       name: id
       in: path
@@ -1014,6 +1377,12 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     WriteForbidden:
       description: Write access requires an agency key (`ak_`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFoundRun:
+      description: Run not found, or it belongs to another client
       content:
         application/json:
           schema:
@@ -1162,6 +1531,132 @@ components:
             type: array
             items:
               type: string
+    Pipeline:
+      type: object
+      properties:
+        id: { type: string }
+        client_id: { type: string }
+        agency_id: { type: string }
+        enabled:
+          type: boolean
+          description: >
+            While enabled, Mythic owns the Airbyte schedule of every in-scope
+            connection — they are set to `manual` and triggered by runs.
+        connection_ids:
+          type: array
+          description: The connections a run waits for. Authoritative, never inferred at run time.
+          items: { type: string }
+        run_hour_utc:
+          type: integer
+          minimum: 0
+          maximum: 23
+          description: >
+            Hour (UTC) the daily run starts. The check is "this hour or later,
+            and no run today", so a worker that was down at the hour still
+            starts the run when it recovers rather than skipping the day.
+        webhook_url:
+          type: string
+          nullable: true
+        has_webhook_secret:
+          type: boolean
+          description: Whether a signing secret is stored. The secret itself is never returned.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    PipelineRun:
+      type: object
+      description: >
+        One client's syncs for one day. Also the body of the completion webhook,
+        under `data`.
+      properties:
+        run_id: { type: string }
+        client_id: { type: string }
+        run_date: { type: string, format: date }
+        status:
+          type: string
+          enum: ["running", "held", "succeeded", "failed", "skipped"]
+          description: >
+            `running` — syncs in flight or waiting to be triggered.
+
+            `held` — at least one sync FAILED and a human has to decide. Resumable:
+            it retries every tick and self-heals the moment the sync passes, so it
+            is a parking state, not an outcome.
+
+            `succeeded` — the gate opened.
+
+            `failed` — a timeout, or the run wedged with nothing in flight.
+
+            `skipped` — administratively closed (superseded by a manual run, or the
+            pipeline was disabled while it was open).
+        complete:
+          type: boolean
+          description: >
+            SEPARATE from `status`, and the field to branch on. Succeeded-with-two-skipped
+            and succeeded-with-everything are different facts, and only this one
+            distinguishes them without parsing prose.
+        forced:
+          type: boolean
+          description: >
+            A human closed a held run over its failures. Everything built on this
+            run was built on knowingly incomplete data — that is why the flag
+            travels downstream permanently rather than living in an audit log.
+        held_reason:
+          type: string
+          nullable: true
+          description: Prose naming the connections that failed and why. People read the sentence, not the status.
+        triggered_by:
+          type: string
+          enum: ["schedule", "manual"]
+        started_at: { type: string, format: date-time, nullable: true }
+        finished_at: { type: string, format: date-time, nullable: true }
+        totals:
+          type: object
+          properties:
+            total: { type: integer }
+            succeeded: { type: integer }
+            failed: { type: integer }
+            skipped:
+              type: integer
+              description: >
+                Its OWN denominator, not folded into the others: counted as failed
+                the run looks worse than it is, counted as succeeded it looks better.
+            records_committed: { type: integer }
+        connections:
+          type: array
+          items:
+            type: object
+            properties:
+              connection_id: { type: string }
+              name: { type: string, nullable: true }
+              platform: { type: string, nullable: true }
+              status:
+                type: string
+                enum: ["pending", "running", "succeeded", "failed", "skipped"]
+              reason:
+                type: string
+                nullable: true
+                description: >
+                  WHY, specifically. `skipped` alone collapses "disabled on purpose",
+                  "inactive in Mythic" and "first-time backfill still running" into
+                  one word, and only some of those mean data is missing that
+                  should be there.
+              job_id: { type: integer, nullable: true }
+              records: { type: integer, nullable: true }
+              bytes: { type: integer, nullable: true }
+              duration_seconds: { type: integer, nullable: true }
+              first_time:
+                type: boolean
+                description: >
+                  This connection had never synced when the run started. A first
+                  backfill can run for days, so it does not hold the gate — unless
+                  it fails.
+              last_success_at:
+                type: string
+                format: date-time
+                nullable: true
+                description: >
+                  "All done" alongside a source that last succeeded nine days ago is
+                  a very different message, and a consumer cannot derive that from a
+                  run that skipped the connection today.
     Config:
       type: object
       properties:
