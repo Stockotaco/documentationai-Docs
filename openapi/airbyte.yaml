@@ -840,23 +840,27 @@ components:
           type: string
           format: date-time
           description: >
-            Last state change — the finish time for a terminal job. Optional:
-            absent on jobs that have not progressed past `pending`.
+            Last state change — the finish time for a terminal job. Omitted
+            entirely while a job is still in flight (`pending`/`running`), so use
+            `startTime` for ordering and treat this as the finish time only.
           example: "2026-01-30T10:17:22Z"
         duration:
           type: string
           description: >
-            ISO 8601 duration. Optional: absent on jobs that have not run.
+            ISO 8601 duration. Present on in-flight jobs too, where it is elapsed
+            time so far, not the final runtime.
           example: PT2M45S
         bytesSynced:
           type: integer
           format: int64
-          description: Bytes synced by the job. Optional; `0` on a job that moved nothing.
+          description: >
+            Bytes synced. `0` on an in-flight job or one that moved nothing.
           example: 307376
         rowsSynced:
           type: integer
           format: int64
-          description: Records synced by the job. Optional; `0` on a job that moved nothing.
+          description: >
+            Records synced. `0` on an in-flight job or one that moved nothing.
           example: 132
     SyncEvent:
       type: object

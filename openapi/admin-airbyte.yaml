@@ -1194,22 +1194,23 @@ components:
           type: string
           format: date-time
           description: >
-            Last state change — finish time for a terminal job. Optional: absent
-            while still `pending`.
+            Last state change — finish time for a terminal job. Omitted entirely
+            while a job is in flight (`pending`/`running`).
           example: "2026-01-30T10:17:22Z"
         duration:
           type: string
-          description: ISO 8601 duration. Optional.
+          description: >
+            ISO 8601 duration; elapsed-so-far on an in-flight job.
           example: PT2M45S
         bytesSynced:
           type: integer
           format: int64
-          description: Bytes synced. Optional.
+          description: Bytes synced. `0` on an in-flight job.
           example: 307376
         rowsSynced:
           type: integer
           format: int64
-          description: Records synced. Optional.
+          description: Records synced. `0` on an in-flight job.
           example: 132
     SyncEvent:
       type: object
