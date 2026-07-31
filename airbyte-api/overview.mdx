@@ -39,7 +39,7 @@ https://mythic-analytics.gulp.workers.dev/client/v1/airbyte
 
 <Steps>
   <Step title="Provision or adopt the destination" titleType="h3">
-    Call `POST /config/provision` once — with your BigQuery project, dataset, and GCP service-account credentials to have Mythic create the workspace and destination, or with `airbyte_workspace_id` + `airbyte_destination_id` to adopt an Airbyte setup you already run. See [Provisioning](#provisioning).
+    Call `POST /config/provision` — with your BigQuery project, dataset, and GCP service-account credentials to have Mythic create the workspace and destination, or with `airbyte_workspace_id` + `airbyte_destination_id` to adopt an Airbyte setup you already run. Safe to re-run: it updates in place rather than accumulating destinations. See [Provisioning](#provisioning).
   </Step>
   <Step title="Discover platforms" titleType="h3">
     Call `GET /platforms` to see supported sources and the fields each one requires.
@@ -99,6 +99,19 @@ When you adopt a destination, the BigQuery fields are not required: the destinat
 <Callout kind="warning">
   In **create** mode Mythic lists the target dataset first and refuses with `409 dataset_in_use` if it already holds Airbyte-managed tables. Two Airbyte workspaces writing the same streams into one dataset duplicate rows and split incremental cursor state, and neither side reports an error — you find out from the numbers or the invoice. Adopt the existing destination, pick another dataset, or resend with `confirm_shared_dataset: true` if the sharing is intended.
 </Callout>
+
+### Re-running provision
+
+Provision is the natural thing to re-run when changing dataset or loading method, so it is built to repeat:
+
+| Resource | On a repeat call |
+|----------|------------------|
+| Workspace | Reused. Never duplicated. |
+| Destination created by Mythic | **Updated in place** — same `destination_id`, new configuration. Existing connections keep working, since they reference it by id. |
+| Destination you adopted | **Untouched.** It is yours and may serve your own pipelines. A later create-mode provision builds a separate Mythic-owned destination instead of rewriting yours. |
+| Stored credentials | Replaced only by a call that supplies them. |
+
+The response's `destination_reused` tells you which path ran, and `GET /config` reports `destination_adopted` so you always know whose destination is in play.
 
 ### Staging is optional, and all-or-nothing
 
@@ -169,7 +182,14 @@ Platforms whose catalog entry has `supportsOauth: true` can be connected without
 
 `/oauth/initiate` validates your request **before** it checks whether the agency is provisioned, so `missing_account_id`, `return_url_not_allowed` and `unsupported_platform` come back with their own codes even on an agency that has never provisioned. `not_provisioned` therefore means the request itself was fine.
 
-`mythic_error_code` comes from a closed set you can branch on — `state_invalid`, `missing_secret_id`, `missing_account_id`, `not_configured`, `not_provisioned`, `oauth_secret_expired`, `oauth_credentials_missing`, `account_not_accessible`, `connection_failed`. The three OAuth-specific ones tell a human what to do: `oauth_secret_expired` means start the connection again, `account_not_accessible` means consent worked but the account id sent at initiation is not one that user can reach, and `connection_failed` is the catch-all for everything else. Exception text never travels in the URL; it stays in server logs. Errors from `/oauth/initiate` carry the same idea as a `code` field in the JSON body (`return_url_not_allowed`, `missing_account_id`, and so on) — switch on `code`, not on the prose in `error`.
+`mythic_error_code` comes from a closed set you can branch on — `state_invalid`, `missing_secret_id`, `missing_account_id`, `not_configured`, `not_provisioned`, `source_config_rejected`, `oauth_secret_expired`, `account_not_accessible`, `connection_failed`. They differ in who can fix them:
+
+| Code | Who fixes it |
+|------|--------------|
+| `source_config_rejected` | **Mythic.** Airbyte refused the source payload against the connector's schema. Consenting again cannot help — surface it, do not prompt a retry. |
+| `oauth_secret_expired` | The user, by starting the connection again. |
+| `account_not_accessible` | You, by correcting the account id sent at initiation — the consent itself worked. |
+| `connection_failed` | Unknown; read the sync-event row below. | Exception text never travels in the URL; it stays in server logs. Errors from `/oauth/initiate` carry the same idea as a `code` field in the JSON body (`return_url_not_allowed`, `missing_account_id`, and so on) — switch on `code`, not on the prose in `error`.
 
 A failed callback also writes a sync-event row with `error_origin: oauth_callback` and the underlying Airbyte message in `error_message`, readable at `GET /sync-events?client_id=…`. That is the only trail a failed consent leaves — no connection row is created — so surface it when a user comes back with `mythic_oauth=error`.
 

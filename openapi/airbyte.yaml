@@ -136,9 +136,22 @@ paths:
       operationId: provisionAirbyteWorkspace
       description: >
         Point the agency at an Airbyte workspace and a BigQuery destination,
-        either by CREATING them or by ADOPTING ones it already runs. Idempotent
-        for the workspace — an existing or supplied workspace is reused.
-        Requires an agency key (`ak_`).
+        either by CREATING them or by ADOPTING ones it already runs. Requires an
+        agency key (`ak_`).
+
+
+        **What repeats safely.** The workspace is reused, never duplicated. A
+        destination Mythic created is UPDATED IN PLACE, so re-running provision
+        to change dataset, location or loading method repoints the same
+        destination instead of leaving the previous one orphaned in Airbyte. A
+        destination you ADOPTED is never modified or deleted — it is yours, and
+        may serve your own pipelines; a later create-mode provision builds a
+        separate Mythic-owned destination rather than rewriting yours. The
+        response reports `destination_reused` so you can tell which happened.
+
+
+        Connections are unaffected either way: they reference the destination by
+        id, and updating in place keeps that id.
 
 
         **Adopt what you already run.** If the agency already syncs these
@@ -513,9 +526,12 @@ paths:
         `mythic_error_code` is drawn from a closed set you can switch on:
         `state_invalid` (expired, already used, or unreadable), `missing_secret_id`,
         `missing_account_id`, `not_configured`, `not_provisioned`,
+        `source_config_rejected` (Airbyte refused the source payload against the
+        connector's schema — a Mythic-side bug that consenting again cannot fix,
+        so do NOT prompt the user to retry; report it),
         `oauth_secret_expired` (the provider credential Airbyte minted was gone
         by the time the source was created — start the connection again),
-        `oauth_credentials_missing`, `account_not_accessible` (consent succeeded
+        `account_not_accessible` (consent succeeded
         but the account named at initiation is not one that user can reach —
         fix the account id, not the consent), `connection_failed` (anything
         else). Exception messages are never placed in the URL — they stay in
@@ -1000,6 +1016,13 @@ components:
           type: boolean
           description: Whether encrypted GCP credentials are stored. The credentials themselves are never returned.
           example: true
+        destination_adopted:
+          type: boolean
+          description: >
+            `true` when `destination_id` was supplied by the agency and is
+            managed by them — Mythic never modifies or deletes it. `false` when
+            Mythic created it and updates it in place on reprovision.
+          example: false
         has_airbyte_credentials:
           type: boolean
           description: >
@@ -1139,6 +1162,13 @@ components:
           description: The destination's load path — `Standard` or `GCS Staging`.
           enum: ["Standard", "GCS Staging"]
           example: Standard
+        destination_reused:
+          type: boolean
+          description: >
+            `true` when this call updated the agency's existing Mythic-owned
+            destination in place; `false` when a destination was created (first
+            provision, or the stored one was gone). Adopted destinations are
+            never modified, so this is always `false` for them.
         adopted:
           type: object
           description: Which parts of this config came from an existing setup rather than being created.
