@@ -86,9 +86,9 @@ Each step's rate is compared against the **pooled rate across every row in your 
 
 The constraint is then the step with the highest **`recoverable_conversions`**: the extra conversions that closing the gap to the pooled rate would produce, *after carrying that row's own downstream rates*. That last clause is what makes the answer actionable — doubling the click-through rate into a page that converts nobody is worth nothing, and this reports it as worth nothing.
 
-<Note>
+<Callout kind="info">
 Ranking by recoverable conversions rather than by the worst rate is what makes results comparable **across** campaigns. A 2× shortfall on 1M impressions outranks a 5× shortfall on 1,000 — the second is a rounding error wearing an alarming percentage.
-</Note>
+</Callout>
 
 A campaign at or above the pooled rate on every step returns `constraint: null`. That isn't a gap in the data: there is nothing to fix, so scale it instead.
 
@@ -96,9 +96,9 @@ Rows are returned **ordered by opportunity**, which is deliberately not spend or
 
 ## When not to trust the answer
 
-<Warning>
+<Callout kind="alert">
 A low `tracking.match_rate` invalidates everything downstream of it. If ad clicks aren't resolving to sessions, the `clicks → sessions` step is measuring **UTM hygiene**, not landing-page quality — and every step after it is computed from a fraction of the real traffic.
-</Warning>
+</Callout>
 
 Sessions are matched to Meta rows two ways, and the response tells you which was used:
 
