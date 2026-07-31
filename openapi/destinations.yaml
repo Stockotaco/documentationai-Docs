@@ -135,7 +135,8 @@ paths:
         destination type. Requires an agency (`ak_`) key. A given
         `(destination_type, credential_name)` pair is upserted in place.
         `google_ads` credential values must be a JSON object containing
-        `developer_token`, `client_id`, `client_secret`, and `refresh_token`.
+        `client_id`, `client_secret`, and `refresh_token`, minted against the
+        `https://www.googleapis.com/auth/datamanager` OAuth scope.
         The response echoes metadata only — never the credential value.
       parameters:
         - $ref: "#/components/parameters/CredentialType"
@@ -840,7 +841,9 @@ components:
         customer_id:
           type: string
           pattern: "^\\d{10}$"
-          description: Google Ads customer id — 10 digits, no dashes.
+          description: >
+            Google Ads customer id — 10 digits, no dashes. Sent as the Data
+            Manager `operatingAccount`.
           example: "1234567890"
         event_mapping:
           type: object
@@ -854,7 +857,12 @@ components:
             properties:
               conversion_action:
                 type: string
-                description: Conversion action resource name.
+                description: >
+                  Conversion action **id** (digits only), sent as the Data
+                  Manager `productDestinationId`. Not a resource name — do not
+                  pass `customers/.../conversionActions/...`. The action must be
+                  of type `UPLOAD_CLICKS` or `WEBPAGE`.
+                example: "987654321"
               value_property:
                 type: string
                 description: Event property to read the conversion value from.
@@ -867,14 +875,39 @@ components:
                 example: USD
           example:
             purchase:
-              conversion_action: customers/1234567890/conversionActions/987
+              conversion_action: "987654321"
               value_property: revenue
               currency: USD
         enhanced_conversions_for_leads:
           type: boolean
+          description: >
+            Allow upload of events that have no `gclid`/`gbraid`/`wbraid`,
+            matching on hashed user identifiers instead. Hashed identifiers are
+            always attached when available, including alongside a click id;
+            this flag only governs click-id-less uploads.
+        event_source:
+          type: string
+          enum: [WEB, APP, IN_STORE, PHONE, MESSAGE, OTHER]
+          default: WEB
+          description: Data Manager `eventSource` for the conversion.
+        default_country_code:
+          type: string
+          description: >
+            Country calling code used to build E.164 phone numbers from
+            national-format numbers. Google requires E.164; without this a
+            10-digit number is dropped from the identifiers rather than hashed
+            into a guaranteed non-match.
+          example: "1"
         consent:
           type: object
-          description: Consent signals passed to Google Ads.
+          description: DMA consent signals passed to Google Ads.
+          properties:
+            ad_user_data:
+              type: string
+              enum: [GRANTED, DENIED]
+            ad_personalization:
+              type: string
+              enum: [GRANTED, DENIED]
     Destination:
       type: object
       properties:
@@ -984,8 +1017,10 @@ components:
           type: string
           description: >
             Secret value, max 8KB. For `google_ads` this must be a JSON object
-            string containing `developer_token`, `client_id`, `client_secret`,
-            and `refresh_token`.
+            string containing `client_id`, `client_secret`, and `refresh_token`
+            (plus an optional `login_customer_id` for manager-account access).
+            The refresh token must carry the
+            `https://www.googleapis.com/auth/datamanager` OAuth scope.
         credential_name:
           type: string
           default: default

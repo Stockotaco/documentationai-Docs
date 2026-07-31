@@ -26,7 +26,7 @@ Three destination types are supported. The `action_config` you send is validated
 |------|---------------|--------------|------------|
 | **Webhook** | `webhook` | POSTs the event to an http(s) URL you control | Inline in `action_config` (headers / body template) |
 | **Meta Conversions API** | `meta_capi` | Sends server-side conversions to a Meta pixel | Stored separately (`meta_capi`) |
-| **Google Ads** | `google_ads` | Uploads conversions to a Google Ads customer | Stored separately (`google_ads`) |
+| **Google Ads** | `google_ads` | Uploads conversions to a Google Ads customer via the Data Manager API | Stored separately (`google_ads`) |
 
 <Callout kind="info">
   `tiktok_events` is recognized by the schema but has no executor yet, so creating it returns `unsupported_destination_type`. Only `webhook`, `meta_capi`, and `google_ads` are live.
@@ -42,7 +42,17 @@ Requires a `pixel_id` and an `event_mapping` object that maps each source event 
 
 ### Google Ads
 
-Requires a 10-digit `customer_id` (no dashes) and an `event_mapping` object mapping each source event name to a conversion spec with a `conversion_action` (and optional `value_property`, `default_value`, `currency`). Optional `enhanced_conversions_for_leads` and `consent`. Credentials are stored separately as a `google_ads` credential — a JSON object containing `developer_token`, `client_id`, `client_secret`, and `refresh_token`.
+Conversions are delivered through Google's [Data Manager API](https://developers.google.com/data-manager/api) (`events:ingest`).
+
+Requires a 10-digit `customer_id` (no dashes — the Data Manager `operatingAccount`) and an `event_mapping` object mapping each source event name to a conversion spec with a `conversion_action` (the bare conversion action ID, used as the `productDestinationId`) plus optional `value_property`, `default_value`, and `currency`. Optional `enhanced_conversions_for_leads`, `event_source` (`WEB` default; also `APP`, `IN_STORE`, `PHONE`, `MESSAGE`, `OTHER`), `default_country_code`, and `consent` (`ad_user_data` / `ad_personalization`, each `GRANTED` or `DENIED`).
+
+Credentials are stored separately as a `google_ads` credential — a JSON object containing `client_id`, `client_secret`, `refresh_token`, and an optional `login_customer_id` for manager-account access. There is **no developer token**: the Data Manager API authorizes on the OAuth scope alone, so the refresh token must be minted against `https://www.googleapis.com/auth/datamanager` and the API must be enabled on the Cloud project behind the OAuth client.
+
+<Callout kind="warning">
+  A refresh token carrying the older `adwords` scope refreshes successfully and then fails at upload time with a permission error. If a Google Ads destination returns 403, check the scope before anything else.
+</Callout>
+
+Hashed user identifiers (email, E.164 phone, and name + country + postal address) are attached whenever available, including alongside a click ID — that is what lifts match rate. `enhanced_conversions_for_leads` governs only whether an event with **no** `gclid`/`gbraid`/`wbraid` may still be uploaded; otherwise such events are logged as `skipped`. Google requires E.164 phone numbers, so a 10-digit national number needs `default_country_code` to be usable — without it the phone identifier is dropped rather than hashed into a guaranteed non-match. Addresses send only when first name, last name, a 2-letter country code, and a postal code are all present. The event `uuid` is sent as Google's `transactionId` for deduplication.
 
 ## Trigger rules
 
@@ -93,7 +103,7 @@ Ad destinations (`meta_capi`, `google_ads`) read their secrets from a separate, 
 
 ## Testing
 
-`POST /{id}/test` sends a real test delivery through the ad-platform adapter using the stored credential. It is supported only for `meta_capi` and `google_ads`; webhooks fire on real events and return `400`.
+`POST /{id}/test` sends a test delivery through the ad-platform adapter using the stored credential. It is supported only for `meta_capi` and `google_ads`; webhooks fire on real events and return `400`. Google Ads tests use Data Manager's `validateOnly` flag, so they verify the credential, scope, destination and payload without recording a conversion in the customer's account. Meta tests are real sends and honor `test_event_code`.
 
 ## Response envelope
 
