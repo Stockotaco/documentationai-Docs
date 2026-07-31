@@ -1,0 +1,125 @@
+---
+title: Constraint Finder
+description: >-
+  One call that follows a paid campaign from impression to purchase and names
+  the step it is actually stuck on — the ad, the tracking, the landing page, or
+  the sale.
+---
+
+## Overview
+
+Every reporting tool tells you a campaign is underperforming. None of them tell you **why**. The Constraint Finder joins the three data sets you already have into one funnel and names the step that is holding each campaign back:
+
+| Data you already have | What it contributes |
+| --- | --- |
+| Airbyte-synced Meta Ads insights | impressions, outbound link clicks, spend |
+| Your Mythic pixel | sessions, landing pages, UTMs and click IDs |
+| Your conversion events | leads, purchases, revenue |
+
+The result, per campaign (or ad set, or ad):
+
+```text
+impressions → clicks → sessions → leads → conversions
+            ad       tracking   landing    sales
+```
+
+A shortfall at each step means something different, and something different gets fixed:
+
+- **ad** — the creative or targeting isn't earning the click.
+- **tracking** — the click never became a tracked visit. Redirect chains, consent banners, slow pages, stripped UTMs.
+- **landing** — the page isn't converting the visit.
+- **sales** — leads arrive but don't close. Not a marketing problem.
+
+## Base URL
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/constraints
+```
+
+## Authentication
+
+The same key system as the rest of `/client/v1`: an **agency key** (`ak_`, bind a location with `?location_id=` or the `X-Location-Id` header) or a **location secret key** (`sk_`, auto-scoped to its own location). Read-only — there is nothing to create.
+
+## Quickstart
+
+<Steps>
+  <Step title="Ask what the account is stuck on">
+    ```bash
+    curl "$BASE/client/v1/constraints?location_id=$LOC" -H "Authorization: Bearer $AK"
+    ```
+
+    The `summary.primary_constraint` is the headline: the step constraining the most conversions account-wide.
+  </Step>
+
+  <Step title="Split the page problem from the sales problem">
+    Without a `lead_event`, "sessions → conversions" is one opaque step. Supply your lead event and it splits in two:
+
+    ```bash
+    curl "$BASE/client/v1/constraints?location_id=$LOC&lead_event=lead&conversion_event=transaction_completed" \
+      -H "Authorization: Bearer $AK"
+    ```
+
+    Not sure what your events are called? `GET /client/v1/data/events/breakdown?dimension=event_name` lists them.
+  </Step>
+
+  <Step title="Check the tracking before you trust the funnel">
+    ```json
+    "tracking": {
+      "match_rate": 0.93,
+      "joined_by_id": 5400,
+      "joined_by_name": 180,
+      "unmatched_sessions": 420
+    }
+    ```
+
+    `match_rate` is the share of ad-click sessions whose UTMs resolved to a synced Meta row. **Read it first** — see [When not to trust the answer](#when-not-to-trust-the-answer).
+  </Step>
+
+  <Step title="Drill into the creative">
+    `group_by=ad` moves the analysis to individual ads, where creative lives. Expect a lower match rate: ad-grain matching relies on `utm_content`, which carries a usable ad identifier on far fewer accounts than `utm_id` does.
+  </Step>
+</Steps>
+
+## How the constraint is chosen
+
+Each step's rate is compared against the **pooled rate across every row in your own account** — not an industry benchmark. Your account sets its own bar, and the big spenders set most of it (rates are pooled, so a 12-impression campaign can't drag the benchmark as hard as a 2M-impression one).
+
+The constraint is then the step with the highest **`recoverable_conversions`**: the extra conversions that closing the gap to the pooled rate would produce, *after carrying that row's own downstream rates*. That last clause is what makes the answer actionable — doubling the click-through rate into a page that converts nobody is worth nothing, and this reports it as worth nothing.
+
+<Note>
+Ranking by recoverable conversions rather than by the worst rate is what makes results comparable **across** campaigns. A 2× shortfall on 1M impressions outranks a 5× shortfall on 1,000 — the second is a rounding error wearing an alarming percentage.
+</Note>
+
+A campaign at or above the pooled rate on every step returns `constraint: null`. That isn't a gap in the data: there is nothing to fix, so scale it instead.
+
+Rows are returned **ordered by opportunity**, which is deliberately not spend order.
+
+## When not to trust the answer
+
+<Warning>
+A low `tracking.match_rate` invalidates everything downstream of it. If ad clicks aren't resolving to sessions, the `clicks → sessions` step is measuring **UTM hygiene**, not landing-page quality — and every step after it is computed from a fraction of the real traffic.
+</Warning>
+
+Sessions are matched to Meta rows two ways, and the response tells you which was used:
+
+- **`joined_by_id`** — matched on the Meta ID via `utm_id` (campaign) or `utm_content` (ad set / ad). Exact, and survives renames. This is what Meta's `{{campaign.id}}` dynamic parameter gives you.
+- **`joined_by_name`** — matched on the campaign name. Works, but **breaks silently when a campaign is renamed mid-window**: the renamed campaign's sessions stop matching, and its funnel collapses for reasons that have nothing to do with performance.
+
+If `joined_by_name` dominates your response, adding `utm_id={{campaign.id}}` to your ad URLs is the single highest-value fix available — it makes every number here more reliable.
+
+## Attribution
+
+Two models, both computed from columns already on your events — so switching costs nothing:
+
+- **`session`** (default) — credits the campaign on the session that produced the event. This is what the ad platform itself would claim, which makes it the right default for judging a campaign.
+- **`first_touch`** — credits the campaign that first acquired the person, however long ago. Use it when the buying cycle is long enough that the closing session tells you nothing about what earned the customer.
+
+Positional, decay, and data-driven models are deliberately absent: they change how credit is **split between** campaigns, not which **step** constrains a campaign — which is the question this endpoint answers. For true incremental lift rather than attributed credit, use the [Incrementality API](/incrementality-api/overview).
+
+## Requirements
+
+- A **BigQuery event dataset** for the location (otherwise `424`).
+- A synced **Meta ads-insights** stream in that dataset. The platform default is `meta_ads_ads_insights_action_type`; pass `?table=` if your connection writes elsewhere (otherwise `424`).
+- Meta traffic tagged with UTMs. Untagged traffic isn't lost — it lands in `unmatched_sessions` and drags `match_rate` down, which is the honest signal.
+
+Each call is a two-table BigQuery scan, so the rate limit is **20 requests per minute per location**.

@@ -1,0 +1,293 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Constraint Finder
+  description: >
+    End-to-end paid-funnel analysis that names the step where a campaign is
+    actually constrained. Joins your Airbyte-synced Meta Ads insights
+    (impressions, link clicks, spend) to your pixel's on-site behaviour
+    (sessions, landing pages) and your conversion events, then reports — per
+    campaign, ad set, or ad — whether the bottleneck is the **ad**, the
+    **tracking**, the **landing page**, or the **sales** step. Read-only and
+    client-scoped: an agency key (`ak_`) must bind a location, a location
+    secret key (`sk_`) is scoped to its own location.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+  - AgencyKeyQuery: []
+  - SecretKeyQuery: []
+paths:
+  /client/v1/constraints:
+    get:
+      summary: Find the constraint in the paid funnel
+      operationId: findConstraints
+      description: >
+        Builds the full funnel per campaign (or ad set / ad) over the requested
+        window and returns, for each row, the step whose fix would unlock the
+        most conversions.
+
+        The funnel is `impressions → clicks → sessions → [leads] →
+        conversions`. Each step is compared against the **pooled rate across
+        every row in the account** (not a global benchmark), and the constraint
+        is the step with the highest `recoverable_conversions` — the extra
+        conversions that closing the gap to that pooled rate would produce,
+        after carrying the row's own downstream rates. A campaign already at or
+        above the pooled rate on every step returns `constraint: null`: nothing
+        to fix, scale it instead.
+
+        Supply `lead_event` to split the on-site step into **landing** (visit →
+        lead) and **sales** (lead → conversion). Without it those collapse into
+        a single `site` step, because sessions → conversions genuinely cannot
+        distinguish a page problem from a closing problem.
+
+        Always read `tracking.match_rate` before trusting the rest. It is the
+        share of ad-click sessions whose UTMs resolved to a synced Meta row; a
+        low value means the `clicks → sessions` step is measuring UTM hygiene
+        rather than landing-page quality.
+      parameters:
+        - name: location_id
+          in: query
+          description: Location to scope to. Required for `ak_` keys (or send the `X-Location-Id` header); ignored for `sk_`.
+          required: false
+          schema:
+            type: string
+        - name: from
+          in: query
+          description: Window start (`YYYY-MM-DD`). Defaults to 28 days before `to`.
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          description: Window end (`YYYY-MM-DD`), inclusive. Defaults to yesterday.
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: group_by
+          in: query
+          description: >
+            Grain of the analysis. `ad` is where creative lives, but it matches
+            through `utm_content`, which carries a usable ad identifier on far
+            fewer accounts than `utm_id` does — expect a lower `match_rate`.
+          required: false
+          schema:
+            type: string
+            enum: [campaign, adset, ad]
+            default: campaign
+        - name: attribution
+          in: query
+          description: >
+            `session` credits the campaign on the session that produced the
+            event (what the ad platform itself would claim). `first_touch`
+            credits the campaign that first acquired the person, however long
+            ago.
+          required: false
+          schema:
+            type: string
+            enum: [session, first_touch]
+            default: session
+        - name: conversion_event
+          in: query
+          description: >
+            Event name counted as the conversion. Discover this client's real
+            event names via `GET /client/v1/data/events/breakdown?dimension=event_name`.
+          required: false
+          schema:
+            type: string
+            default: transaction_completed
+        - name: lead_event
+          in: query
+          description: >
+            Optional mid-funnel event. Supplying it splits the on-site step into
+            `landing` and `sales`. Must differ from `conversion_event`.
+          required: false
+          schema:
+            type: string
+        - name: min_impressions
+          in: query
+          description: >
+            Rows below this many impressions are excluded from the analysis but
+            still counted in the pooled benchmarks — dropping them from the pool
+            would inflate the bar the surviving rows are judged against.
+          required: false
+          schema:
+            type: integer
+            default: 1000
+        - name: revenue_path
+          in: query
+          description: >
+            JSON path to the conversion's monetary value inside the event's
+            properties. `properties_json` *is* the properties object, so the
+            path is `$.value`, not `$.properties.value`.
+          required: false
+          schema:
+            type: string
+            default: $.value
+        - name: table
+          in: query
+          description: Meta insights table in the client's dataset, if it differs from the platform default.
+          required: false
+          schema:
+            type: string
+            default: meta_ads_ads_insights_action_type
+      responses:
+        "200":
+          description: Funnel and constraint per row, plus the benchmarks and tracking diagnostics they rest on.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      window:
+                        type: object
+                        properties:
+                          from: { type: string, format: date }
+                          to: { type: string, format: date }
+                      grain: { type: string, enum: [campaign, adset, ad] }
+                      attribution: { type: string, enum: [session, first_touch] }
+                      conversion_event: { type: string }
+                      lead_event: { type: string, nullable: true }
+                      steps:
+                        type: array
+                        description: The funnel steps in order, and the metric each divides.
+                        items:
+                          type: object
+                          properties:
+                            step: { type: string, enum: [ad, tracking, landing, sales, site] }
+                            from: { type: string }
+                            to: { type: string }
+                      benchmarks:
+                        type: object
+                        description: Pooled rate per step across every row — what each row is judged against.
+                        additionalProperties: { type: number, nullable: true }
+                      tracking:
+                        type: object
+                        description: The credibility of everything else in the response.
+                        properties:
+                          matched_sessions: { type: integer }
+                          unmatched_sessions:
+                            type: integer
+                            description: Sessions arriving on an ad click whose UTMs resolved to no synced Meta row.
+                          match_rate: { type: number, nullable: true }
+                          joined_by_id:
+                            type: integer
+                            description: Sessions matched on a Meta id (exact, survives renames).
+                          joined_by_name:
+                            type: integer
+                            description: Sessions matched on campaign name (breaks when a campaign is renamed mid-window).
+                          click_to_session_rate: { type: number, nullable: true }
+                      excluded_low_volume: { type: integer }
+                      min_impressions: { type: integer }
+                      rows:
+                        type: array
+                        description: Ordered by opportunity — largest `recoverable_conversions` first, which is not spend order.
+                        items:
+                          type: object
+                          properties:
+                            campaign_id: { type: string, nullable: true }
+                            campaign_name: { type: string, nullable: true }
+                            impressions: { type: integer }
+                            clicks:
+                              type: integer
+                              description: Outbound link clicks, not total clicks — likes and comments are not traffic.
+                            spend: { type: number }
+                            sessions: { type: integer }
+                            lead_sessions: { type: integer }
+                            converting_sessions: { type: integer }
+                            conversions: { type: integer }
+                            revenue: { type: number }
+                            top_landing_page: { type: string, nullable: true }
+                            cpa: { type: number, nullable: true }
+                            roas: { type: number, nullable: true }
+                            funnel:
+                              type: object
+                              description: Rate per step, keyed `<from>_to_<to>`. `null` where the denominator is zero.
+                              additionalProperties: { type: number, nullable: true }
+                            constraint:
+                              type: object
+                              nullable: true
+                              description: The binding step, or `null` when the row is at/above benchmark everywhere.
+                              properties:
+                                step: { type: string, enum: [ad, tracking, landing, sales, site] }
+                                diagnosis: { type: string }
+                                rate: { type: number }
+                                benchmark_rate: { type: number }
+                                rate_vs_benchmark:
+                                  type: number
+                                  nullable: true
+                                  description: Own rate ÷ benchmark. `0.4` means "at 40% of the account's normal rate".
+                                recoverable_conversions: { type: number }
+                      summary:
+                        type: object
+                        properties:
+                          primary_constraint:
+                            type: object
+                            nullable: true
+                            description: The step constraining the most conversions account-wide.
+                            properties:
+                              step: { type: string }
+                              diagnosis: { type: string }
+                              recoverable_conversions: { type: number }
+                              entities: { type: integer }
+                              spend: { type: number }
+                          by_step:
+                            type: array
+                            items: { type: object }
+        "400":
+          description: Invalid parameter, or the generated query failed the tenant-scope guard.
+        "401":
+          description: Missing or invalid key.
+        "422":
+          description: Result truncated — narrow the window or use a coarser `group_by`.
+        "424":
+          description: >
+            No Meta ads-insights table in this client's dataset, or the client
+            has no BigQuery event dataset yet.
+        "429":
+          description: Rate limited (20 requests per minute per location — each request is a BigQuery scan).
+  /client/v1/constraints/options:
+    get:
+      summary: Discover the available knobs
+      operationId: getConstraintOptions
+      description: The valid `group_by` and `attribution` values plus every default, so a consumer never has to guess an enum.
+      responses:
+        "200":
+          description: Enumerated options and defaults.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      group_by:
+                        type: array
+                        items: { type: string }
+                      attribution:
+                        type: array
+                        items: { type: string }
+                      defaults: { type: object }
+                      hint: { type: string }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Agency key (`ak_`) or location secret key (`sk_`).
+    AgencyKeyQuery:
+      type: apiKey
+      in: query
+      name: ak
+    SecretKeyQuery:
+      type: apiKey
+      in: query
+      name: sk

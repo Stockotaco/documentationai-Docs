@@ -144,6 +144,28 @@
             ]
           },
           {
+            "tab": "Constraint Finder",
+            "icon": "git-pull-request-arrow",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "constraints-api/overview",
+                    "icon": "file-text"
+                  }
+                ]
+              },
+              {
+                "group": "Constraints",
+                "icon": "search",
+                "openapi": "openapi/constraints.yaml"
+              }
+            ]
+          },
+          {
             "tab": "Incrementality",
             "icon": "trending-up",
             "groups": [
