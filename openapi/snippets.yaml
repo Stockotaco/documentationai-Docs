@@ -14,8 +14,8 @@ paths:
       summary: Replace snippets
       operationId: replaceSnippets
       description: >
-        Replace all custom code snippets for a client. Snippets are arbitrary
-        HTML or JavaScript injected via remote configuration. After updating,
+        Replace all custom code snippets for a client. Snippets are JavaScript
+        executed by the SDK via remote configuration. After updating,
         the API rebuilds the client's remote configuration in KV.
       parameters:
         - $ref: "#/components/parameters/ClientId"
@@ -106,7 +106,11 @@ components:
       properties:
         code:
           type: string
-          description: Raw HTML or JavaScript code to inject.
+          description: >
+            JavaScript executed in the browser via `new Function('mythic', code)` —
+            not raw HTML (a `<script>` tag throws a syntax error; create elements via
+            the DOM instead). Receives the SDK instance as `mythic`. Executes at most
+            once per page load, even if its trigger matches repeatedly.
         description:
           type: string
           nullable: true
@@ -118,7 +122,13 @@ components:
         trigger_rules:
           type: object
           nullable: true
-          description: Conditional rules controlling when the snippet loads.
+          description: >
+            Conditional rules controlling when the snippet executes. Shape:
+            `{"version": 1, "operator": "AND"|"OR", "rules": [...]}`. Rule types include
+            `url_pattern`, `query_param`, `cookie`, `device`, `time`, and `mythic_event`
+            (fire on an SDK event, optionally filtered by `property` + `operator` + `value`,
+            e.g. `{"type": "mythic_event", "eventName": "$autocapture",
+            "property": "$element_text", "operator": "contains", "value": "Buy Now"}`).
     Snippet:
       type: object
       properties:
@@ -128,8 +138,8 @@ components:
           example: 9xP3qLmN-58cc-4372-a567-0e02b2c3d479
         code:
           type: string
-          description: Raw HTML or JavaScript code to inject.
-          example: '<script src="https://widgets.mythic-analytics.com/checkout.js"></script>'
+          description: JavaScript executed by the SDK (see SnippetInput.code).
+          example: "var s=document.createElement('script');s.src='https://widgets.mythic-analytics.com/checkout.js';document.head.appendChild(s);"
         description:
           type: string
           nullable: true
