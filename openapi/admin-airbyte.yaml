@@ -132,6 +132,62 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /admin/airbyte/config/{agencyId}/notifications:
+    post:
+      tags: [Global]
+      summary: Register sync notifications
+      operationId: adminRegisterAirbyteNotifications
+      description: >
+        Point the agency's Airbyte workspace at Mythic's sync-notification
+        receiver, so completed syncs appear under `/sync-events`, `/stats`,
+        `/health` and each connection's `last_sync`. Provisioning already does
+        this; use it for workspaces provisioned before it did, or for adopted
+        workspaces. Idempotent.
+
+
+        Airbyte allows one webhook URL per event type — if the workspace already
+        posts elsewhere this returns `409 notifications_conflict` and changes
+        nothing unless `overwrite_notifications` is set.
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                overwrite_notifications:
+                  type: boolean
+                  default: false
+      responses:
+        "200":
+          description: Notifications registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      workspace_id:
+                        type: string
+                      notifications:
+                        type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "Workspace already posts notifications elsewhere (`code: notifications_conflict`)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /admin/airbyte/connections:
     get:
       tags: [Global]
@@ -579,6 +635,50 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/clients/{id}/airbyte/config/notifications:
+    post:
+      tags: [Client-scoped]
+      summary: Register sync notifications
+      operationId: v1RegisterAirbyteNotifications
+      description: >
+        Point the owning agency's Airbyte workspace at Mythic's sync-notification
+        receiver. Same behaviour as the agency-scoped
+        `POST /client/v1/airbyte/config/notifications`; idempotent.
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                overwrite_notifications:
+                  type: boolean
+                  default: false
+      responses:
+        "200":
+          description: Notifications registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "Workspace already posts notifications elsewhere (`code: notifications_conflict`)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/clients/{id}/airbyte/connections:
     get:
       tags: [Per-client]

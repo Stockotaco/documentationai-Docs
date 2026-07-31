@@ -130,6 +130,80 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/WriteForbidden"
+  /config/notifications:
+    post:
+      summary: Register sync notifications
+      operationId: registerAirbyteNotifications
+      description: >
+        Point your Airbyte workspace's sync notifications at Mythic's receiver,
+        so completed syncs appear under `/sync-events`, `/stats`, `/health` and
+        each connection's `last_sync`.
+
+
+        `POST /config/provision` already does this. Call this endpoint for a
+        workspace provisioned before notifications existed, for a workspace you
+        adopted, or any time you want to confirm the wiring — it is idempotent
+        and reports `changed: false` when nothing needed doing.
+
+
+        Airbyte allows exactly ONE webhook URL per event type. If the workspace
+        already posts sync notifications somewhere else, this returns `409
+        notifications_conflict` and changes nothing, rather than silently
+        replacing an endpoint you may depend on. Send
+        `overwrite_notifications: true` to take it over.
+
+
+        Only the `failure` and `success` events are registered. Email
+        preferences and the other four event types are left exactly as you set
+        them. Requires an agency key (`ak_`).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                overwrite_notifications:
+                  type: boolean
+                  default: false
+                  description: Replace an existing third-party webhook URL on the failure/success events.
+      responses:
+        "200":
+          description: Notifications registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      workspace_id:
+                        type: string
+                      notifications:
+                        $ref: "#/components/schemas/NotificationRegistration"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+        "404":
+          description: "This agency has no provisioned workspace (`code: not_provisioned`)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            The workspace already posts sync notifications to another URL
+            (`code: notifications_conflict`). Retry with
+            `overwrite_notifications: true` to replace it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /config/provision:
     post:
       summary: Provision workspace
@@ -771,7 +845,20 @@ paths:
       description: >
         Return the paginated, immutable sync-event log for the calling agency.
         Each event captures the outcome and record/byte counts of a completed
-        sync.
+        sync, as reported by Airbyte when the job finished.
+
+
+        Rows arrive from two places: sync notifications (live, complete) and
+        `POST /connections/{id}/backfill`, which imports history from Airbyte's
+        jobs API. Backfilled rows carry fewer fields — the jobs API reports one
+        combined row count with no emitted/committed split and no error
+        classification. Both are keyed on `(connection_id, job_id)`, so a
+        backfill after the fact never duplicates a notification, and a
+        re-delivered notification never double-counts.
+
+
+        This log only exists for workspaces whose Airbyte notifications point at
+        Mythic; see `POST /config/notifications`.
       parameters:
         - name: connection_id
           in: query
@@ -865,9 +952,20 @@ paths:
       summary: Get connection health
       operationId: getAirbyteHealth
       description: >
-        Return a health overview for the calling agency's connections, including
-        counts, connections in an error state, stale connections (no successful
-        sync in 48 hours), and per-connection failure rates.
+        Return a health overview for the calling agency's connections: counts,
+        connections in an error state, stale connections (no sync in 48 hours),
+        connections failing repeatedly, connections that succeeded while
+        committing nothing, and per-connection failure rates.
+
+
+        `needs_attention` is the single number worth putting on a dashboard —
+        the count of distinct connections in any of those lists. Everything else
+        here is reporting; that one is a work queue.
+
+
+        All of it derives from Airbyte's sync notifications, so a workspace
+        where notifications were never registered reports a perfectly healthy
+        zero. Check `notifications_registered_at` on `GET /config`.
       responses:
         "200":
           description: Health overview
@@ -1116,6 +1214,21 @@ components:
             managed by them — Mythic never modifies or deletes it. `false` when
             Mythic created it and updates it in place on reprovision.
           example: false
+        notifications_registered_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            When Mythic last pointed this workspace's Airbyte notifications at
+            its sync receiver. `null` means it never has, and this workspace
+            produces NO sync history — call `POST /config/notifications`.
+
+
+            Deliberately a timestamp of our action rather than a boolean
+            "notifications are on": the setting can be changed in the Airbyte UI
+            afterwards and we would not know. `POST /config/notifications` is
+            idempotent, so calling it is the cheap way to be certain.
+          example: "2026-07-31T22:10:04Z"
         has_airbyte_credentials:
           type: boolean
           description: >
@@ -1455,6 +1568,25 @@ components:
           type: string
           format: date-time
           nullable: true
+          description: >
+            When the most recent sync FINISHED, taken from Airbyte's own
+            `finishedAt` rather than the time we were notified. For a
+            35-minute sync those differ by more than half an hour.
+        last_sync:
+          allOf:
+            - $ref: "#/components/schemas/LastSync"
+          nullable: true
+          description: >
+            The most recent completed sync, or `null` if this connection has
+            never reported one. Null, not a zero-filled record — never having
+            synced is not the same as having synced nothing.
+        consecutive_failures:
+          type: integer
+          description: >
+            Failed syncs since the last success, newest-first. `0` means the
+            most recent sync succeeded. One red run is a flake; four in a row is
+            broken since Tuesday, and only this number tells them apart.
+          example: 0
         error_message:
           type: string
           nullable: true
@@ -1551,6 +1683,113 @@ components:
           description: >
             Records synced. `0` on an in-flight job or one that moved nothing.
           example: 132
+    LastSync:
+      type: object
+      description: The outcome of one completed sync, as reported by Airbyte.
+      properties:
+        job_id:
+          type: integer
+          nullable: true
+        success:
+          type: boolean
+          description: Airbyte's own verdict on the job.
+        landed:
+          type: boolean
+          description: >
+            `success` AND at least one record committed. READ THIS, not
+            `success`, when the question is "did the data arrive".
+
+
+            A sync can succeed and commit nothing — in one measured week that
+            was 7 of 221 real notifications. Every status surface calls that
+            green, and a connection can stay green for months while its data
+            goes stale. `landed: false` on a successful sync is the cheapest
+            signal that something is wrong upstream: a revoked ad-account
+            permission, an emptied date range, a paused campaign.
+          example: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        duration_seconds:
+          type: integer
+          nullable: true
+          description: >
+            Wall-clock `finished_at - started_at`, which includes queue and
+            scheduling time. It is not a throughput measure.
+        records_committed:
+          type: integer
+          nullable: true
+          description: >
+            Rows the destination actually has. This is the number to bill,
+            alert and chart on.
+        records_emitted:
+          type: integer
+          nullable: true
+          description: >
+            Rows the SOURCE produced. Emitted exceeding committed means rows did
+            not make it — a failed sync in the observed data emitted 1,485 and
+            committed 0.
+        records_filtered_out:
+          type: integer
+          nullable: true
+        bytes_committed:
+          type: integer
+          nullable: true
+        error_type:
+          type: string
+          nullable: true
+          description: >
+            Airbyte's failure classification. Observed values: `transient_error`,
+            `config_error`. Null on success. The full domain is not published, so
+            treat this as an open enum.
+          example: transient_error
+        error_origin:
+          type: string
+          nullable: true
+          description: "Which side failed. Observed values: `source`, `destination`. Null on success."
+          example: destination
+        error_message:
+          type: string
+          nullable: true
+          description: >
+            The upstream reason, verbatim. On a stream-level failure Airbyte
+            names the affected streams as PROSE inside this string — there is no
+            structured per-stream breakdown in a sync notification.
+        log_url:
+          type: string
+          nullable: true
+          description: Direct link to this connection's run in the Airbyte UI.
+    NotificationRegistration:
+      type: object
+      properties:
+        registered:
+          type: boolean
+          description: Whether the workspace now posts sync notifications to Mythic.
+        changed:
+          type: boolean
+          description: "`false` when it was already registered — the call was a no-op."
+        url:
+          type: string
+          description: The receiver Airbyte will post to.
+        events:
+          type: array
+          description: Airbyte notification events registered. Only sync success and failure.
+          items:
+            type: string
+          example: ["failure", "success"]
+        replaced:
+          type: string
+          nullable: true
+          description: A third-party webhook URL that was overwritten, when `overwrite_notifications` was set.
+        reason:
+          type: string
+          nullable: true
+          description: Why registration did not happen, when `registered` is `false`.
     SyncEvent:
       type: object
       properties:
@@ -1612,19 +1851,53 @@ components:
         duration_seconds:
           type: integer
           nullable: true
+        landed:
+          type: boolean
+          description: >
+            `success` AND at least one record committed. A sync can succeed and
+            commit nothing; see `LastSync.landed`.
         records_emitted:
           type: integer
+          nullable: true
+          description: >
+            Rows the source produced. `null` on rows imported by
+            `POST /connections/{id}/backfill`, because the Airbyte jobs API
+            reports one combined figure and does not split emitted from
+            committed — null rather than a copy of `records_committed`, which
+            would make a real gap look like zero.
           example: 15230
         records_committed:
           type: integer
+          nullable: true
+          description: Rows the destination actually has. The number to bill, alert and chart on.
           example: 15230
+        records_filtered_out:
+          type: integer
+          nullable: true
         bytes_emitted:
           type: integer
+          nullable: true
         bytes_committed:
           type: integer
+          nullable: true
+        bytes_filtered_out:
+          type: integer
+          nullable: true
+        log_url:
+          type: string
+          nullable: true
+          description: Direct link to this connection's runs in the Airbyte UI.
+        raw_payload:
+          type: object
+          nullable: true
+          description: >
+            The notification exactly as Airbyte sent it, or the job object for a
+            backfilled row. Kept so a question nobody anticipated can still be
+            answered; the promoted columns above are the supported surface.
         created_at:
           type: string
           format: date-time
+          description: When Mythic recorded the event. For when the sync finished, use `finished_at`.
     StatsBucket:
       type: object
       properties:
@@ -1699,6 +1972,64 @@ components:
                 type: string
                 format: date-time
                 nullable: true
+        failing_connections:
+          type: array
+          description: >
+            Connections whose most recent sync failed, worst streak first.
+            Ordering is the feature: it separates a flake from something broken
+            for days.
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              client_id:
+                type: string
+              platform:
+                type: string
+              consecutive_failures:
+                type: integer
+                example: 4
+              error_type:
+                type: string
+                nullable: true
+              error_message:
+                type: string
+                nullable: true
+              log_url:
+                type: string
+                nullable: true
+        no_data_connections:
+          type: array
+          description: >
+            Connections whose most recent sync SUCCEEDED and committed zero
+            records. Every other field here reports the status, and the status
+            says these are fine. They are the ones worth looking at: a green
+            connection delivering nothing is how data goes quietly stale.
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              client_id:
+                type: string
+              platform:
+                type: string
+              last_sync_at:
+                type: string
+                format: date-time
+                nullable: true
+              records_committed:
+                type: integer
+                example: 0
+        needs_attention:
+          type: integer
+          description: >
+            How many distinct connections appear in any of the lists above
+            (error, stale, failing, no-data). If you surface one number from
+            this endpoint, surface this one — it is the only one that is a work
+            queue rather than a report.
+          example: 2
         failure_rates:
           type: object
           description: Map of Airbyte connection ID to failure-rate percentage.

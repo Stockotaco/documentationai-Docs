@@ -153,8 +153,8 @@ Every platform above is `supportsOauth: true`. That means the provider **credent
 
 | Platform | `supportsOauth` | `manualFields` | `preConsentFields` |
 |----------|-----------------|----------------|--------------------|
-| `google_ads` | `true` | `customer_id` | — |
-| `meta_ads` | `true` | `account_id` | — |
+| `google_ads` | `true` | `customer_id` (accepts several) | — |
+| `meta_ads` | `true` | `account_id` (accepts several) | — |
 | `bing_ads` | `true` | `developer_token`, `tenant_id` | `tenant_id` |
 | `tiktok_ads` | `true` | — none | — |
 | `salesforce` | `true` | — none | `is_sandbox` (optional) |
@@ -163,6 +163,25 @@ Bing is the widest gap: fully OAuth-capable and still needs two inputs, because 
 
 <Callout kind="warning">
   **`preConsentFields` must be sent at initiation, not after.** The provider's login URL is built from them, so a `tenant_id` supplied later cannot retroactively change which tenant the user authenticated against. Send them in `source_config` on `POST /oauth/initiate` and Mythic forwards them to the provider.
+</Callout>
+
+### One connection, several ad accounts
+
+Google Ads and Meta both let a single source pull from more than one ad account, and their catalog entries flag it with `multiple: true`. Send several however you like — a comma-separated string, a whitespace-separated one, or an array:
+
+```json
+{ "platform": "meta_ads",   "source_config": { "account_id":  "act_111111111111111, act_222222222222222" } }
+{ "platform": "google_ads", "source_config": { "customer_id": ["123-456-7890", "098-765-4321"] } }
+```
+
+Both reach the connector in the shape it actually requires, which differs between them and is not something you should have to know: Meta's `account_ids` is an **array** of bare numeric ids, Google's `customer_id` is **one comma-separated string** with no spaces. Formatting is normalised on the way through — Meta's `act_` prefix is stripped, and dashes are removed from both, so `act_123-456-789` and `123-456-7890` are accepted as typed.
+
+A Google customer ID that is not exactly 10 digits after stripping is rejected with `400 invalid_customer_id`, naming the offending value, rather than surfacing later as a schema error from inside Airbyte.
+
+The connection's `account_id` records every account the source syncs, comma-separated — not just the first.
+
+<Callout kind="note">
+  This is per **source**, so all the accounts share one schedule, one stream selection, and one set of destination tables, with the account id as a column. Split them into separate connections when they need different cadences or belong to different clients.
 </Callout>
 
 Every key in `manualFields` is a real property of the connector's own published spec — they are derived from it, not from what each ad platform's UI calls things, and a drift check fails if the catalog and the connector ever disagree. Two consequences worth knowing: `bing_ads` filters accounts by `account_names` (a list of `{ name, operator }` predicates, optional) rather than by an account id, and `tiktok_ads` has no advertiser id in its OAuth flow at all.
@@ -265,6 +284,40 @@ Responses from the schedule endpoints include `runs_at_utc`, the concrete list a
   You send a cadence and an hour, never a cron expression. Internally these become Quartz cron (six fields, seconds first), which is what Airbyte's scheduler accepts — a five-field Unix expression is rejected outright.
 </Callout>
 
+## Sync results
+
+Every sync outcome Mythic reports comes from Airbyte's own workspace notifications, which it POSTs to Mythic when a job finishes. Provisioning registers that automatically; `POST /config/notifications` does it for a workspace provisioned earlier or one you adopted, and is idempotent.
+
+<Callout kind="warning">
+  **No notifications means no history, not a healthy history.** A workspace that was never registered reports zero syncs, a 100% success rate and an empty `/sync-events` — indistinguishable from one that simply has not run yet. `GET /config` returns `notifications_registered_at`; `null` means nothing is being recorded.
+</Callout>
+
+Where to read what:
+
+| You want | Read |
+|----------|------|
+| The state of one connection right now | `last_sync` and `consecutive_failures` on the connection |
+| A run history, newest first | `GET /sync-events` |
+| Volumes and success rate over time | `GET /stats` |
+| What needs a human today | `GET /health` → `needs_attention` |
+
+### `success` is not the same as data arriving
+
+A sync can succeed and commit zero records. In one measured week of real notifications that was 7 out of 221 — a revoked ad-account permission, an emptied date range, a paused campaign. Every status field calls those green, and a connection can stay green for months while its data quietly goes stale.
+
+So each sync also carries `landed`: `success` **and** at least one record committed. Read `landed` when the question is "did the data arrive", and `success` only when the question is "did the job run". `GET /health` lists the difference under `no_data_connections`.
+
+Two related distinctions in the same numbers:
+
+- **`records_committed` vs `records_emitted`.** Emitted is what the source produced; committed is what the destination has. Bill, alert and chart on committed. A real failure in the sample emitted 1,485 records and committed none.
+- **`consecutive_failures`.** One red run is a flake; four in a row is broken since Tuesday. A single event cannot tell those apart, so the streak is counted for you and `failing_connections` is ordered worst-first.
+
+### Backfilling history
+
+`POST /connections/{id}/backfill` imports past jobs from Airbyte's jobs API for a connection that ran before notifications were registered. Backfilled rows are thinner — that API reports one combined row count with no emitted/committed split and no error classification, so `records_emitted` is `null` rather than a copy of the committed figure.
+
+Both paths key on `(connection_id, job_id)`, so a backfill never duplicates a notification, re-running one is a no-op, and a re-delivered notification never double-counts. Jobs still running are skipped rather than recorded as failures; the response reports how many under `skipped_in_flight`.
+
 ## Error handling
 
 | Status | Meaning |
@@ -277,6 +330,8 @@ Responses from the schedule endpoints include `runs_at_utc`, the concrete list a
 | `409` | `dataset_in_use` — provisioning would create a second Airbyte destination against a dataset already holding Airbyte-managed tables |
 | `429` | Rate limited — `POST /oauth/initiate` (per agency) and the OAuth callback (per IP) allow 20 per 10 minutes |
 | `502` | `provision_failed` — Airbyte rejected the provisioning request; the upstream reason is in `error` |
+| `409` | `notifications_conflict` — the workspace already posts sync notifications to another URL; retry with `overwrite_notifications: true` |
+| `400` | `invalid_customer_id` — a Google Ads customer ID that is not 10 digits after stripping dashes and spaces |
 | `503` | Server-side encryption key not configured |
 | `500` | Internal server error |
 
