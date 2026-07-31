@@ -133,6 +133,31 @@ paths:
           schema:
             type: string
             default: meta_ads_ads_insights_action_type
+        - name: attribution_window_days
+          in: query
+          description: >
+            How long after a campaign touch a conversion may still be credited to
+            it. A conversion with no session of its own (all CRM/server-side
+            conversions) is credited to the person's nearest campaign touch inside
+            this window. Meta's own default is 7-day click — pass 7 for numbers
+            comparable to Ads Manager.
+          required: false
+          schema:
+            type: integer
+            default: 30
+            minimum: 1
+            maximum: 365
+        - name: resolve_identities
+          in: query
+          description: >
+            Resolve people through the central identity snapshots (merge tombstones
+            collapsed) instead of the raw `distinct_id`. Worth ~0.2pp of extra
+            credited conversions on a typical client, because `identify()` already
+            canonicalises at ingest; worth more the higher a client's merge rate.
+          required: false
+          schema:
+            type: boolean
+            default: false
         - name: benchmark_ad
           in: query
           description: >
@@ -256,6 +281,34 @@ paths:
                             type: integer
                             description: Sessions matched on campaign name (breaks when a campaign is renamed mid-window).
                           click_to_session_rate: { type: number, nullable: true }
+                      conversion_attribution:
+                        type: object
+                        description: >
+                          How every conversion in the window was credited. On a
+                          CRM-fed client `credited_via_person` is usually the
+                          majority — those conversions carry no session at all.
+                        properties:
+                          window_days: { type: integer }
+                          identity: { type: string, enum: [distinct_id, canonical_person] }
+                          total_conversions_in_window: { type: integer }
+                          credited_via_session:
+                            type: integer
+                            description: Credited to their own campaign-resolved session.
+                          credited_via_person:
+                            type: integer
+                            description: Credited to the person's nearest campaign touch in the window.
+                          uncredited:
+                            type: integer
+                            description: No campaign touch for that person inside the window — widen `from` to recover touches that predate it.
+                      diagnostic:
+                        type: object
+                        description: >
+                          Present ONLY when nothing could be credited. Without it the
+                          response would be `constraint: null` on every row, which is
+                          indistinguishable from a healthy account.
+                        properties:
+                          code: { type: string, enum: [no_conversion_events, no_conversions_attributed] }
+                          message: { type: string }
                       excluded_low_volume: { type: integer }
                       min_impressions: { type: integer }
                       rows:

@@ -178,9 +178,58 @@ Sessions are matched to Meta rows two ways, and the response tells you which was
 
 If `joined_by_name` dominates your response, adding `utm_id={{campaign.id}}` to your ad URLs is the single highest-value fix available — it makes every number here more reliable.
 
-## Attribution
+## How conversions get credited
 
-Two models, both computed from columns already on your events — so switching costs nothing:
+A conversion does not have to happen in a browser session to count. Measured across the platform, **every** CRM conversion event carries no `session_id` at all — `transaction_completed`, `order_completed`, `product_purchased` and `contact_created` are all server-side, arriving over Pub/Sub without ever touching a browser. Counting conversions only inside their own session would make this endpoint blind on every CRM-fed client.
+
+So each conversion is **credited to a session** instead:
+
+1. **Its own session**, when that session resolved to a campaign. The most precise case.
+2. **Otherwise the person's nearest campaign touch** within the attribution window — the identity graph is what makes this possible. Last touch by default; the first touch when `attribution=first_touch`.
+
+Because the credit lands on a session, every funnel rate above is computed the same way whether the conversion came from the browser or your CRM.
+
+```bash
+# 7-day window, matching Meta's own default click attribution
+curl "$BASE/client/v1/constraints?location_id=$LOC&attribution_window_days=7"
+```
+
+`attribution_window_days` defaults to **30** and accepts 1–365. Meta's own default is 7-day click, so pass `7` when you want numbers comparable to Ads Manager, and widen it for long sales cycles.
+
+Every response shows exactly how the crediting went:
+
+```json
+"conversion_attribution": {
+  "window_days": 30,
+  "identity": "distinct_id",
+  "total_conversions_in_window": 190,
+  "credited_via_session": 80,
+  "credited_via_person": 110,
+  "uncredited": 0
+}
+```
+
+<Callout kind="info">
+`credited_via_person` is usually the majority on a CRM-fed client — that is the identity graph doing the work. A high `uncredited` count means those people have no campaign touch inside the window: either they genuinely arrived another way, or their touch predates `from`. Widening `from` recovers the second case.
+</Callout>
+
+<Callout kind="alert">
+If **nothing** can be credited, the response carries a `diagnostic` instead of a silently empty analysis. That matters because zero conversions makes every pooled benchmark zero, which makes nothing "below benchmark", which would otherwise return `constraint: null` for every campaign — indistinguishable from a genuinely healthy account. The `diagnostic` names which case it is: the event does not exist, or it exists but nothing is creditable.
+</Callout>
+
+### Canonical identities
+
+By default people are keyed on `distinct_id`, which `identify()` already rewrites to the canonical id at ingest. Pass `resolve_identities=true` to resolve through the central identity snapshots instead, collapsing merge tombstones:
+
+```bash
+curl "$BASE/client/v1/constraints?location_id=$LOC&resolve_identities=true"
+```
+
+Measured worth about **0.2pp** of extra credited conversions on a typical client, precisely because the merge already happened upstream at ingest. The gain scales with a client's merge rate — under 1% for almost every location, but 10.8% for one, where it is worth turning on. `conversion_attribution.identity` reports which mode was used.
+
+## Campaign attribution
+
+Two models for deciding *which campaign* a touch belongs to, both computed from columns already on your events — so switching costs nothing:
 
 - **`session`** (default) — credits the campaign on the session that produced the event. This is what the ad platform itself would claim, which makes it the right default for judging a campaign.
 - **`first_touch`** — credits the campaign that first acquired the person, however long ago. Use it when the buying cycle is long enough that the closing session tells you nothing about what earned the customer.
