@@ -66,6 +66,69 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      summary: Update OAuth return origins
+      operationId: updateAirbyteConfig
+      description: >
+        Replace the set of origins the OAuth consent flow may redirect the browser
+        to. `POST /oauth/initiate` rejects any `return_url` whose origin is not in
+        this list, which is what stops the unauthenticated callback from being used
+        as an open redirector.
+
+
+        Origins only — `https://portal.example.com`, no path. A supplied URL is
+        normalised to its origin, duplicates are collapsed, and non-http(s) or
+        credential-bearing values are rejected. The list starts empty, meaning no
+        `return_url` is accepted at all until you set it (the callback then renders
+        its own terminal page). Requires an agency key (`ak_`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - oauth_return_origins
+              properties:
+                oauth_return_origins:
+                  type: array
+                  items:
+                    type: string
+                    example: https://portal.example.com
+      responses:
+        "200":
+          description: Stored origins
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      oauth_return_origins:
+                        type: array
+                        items:
+                          type: string
+        "400":
+          description: "Not an array, or an entry that is not a valid http(s) origin (`code: invalid_origins`)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+        "404":
+          description: No Airbyte config exists for this agency
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /config/provision:
     post:
       summary: Provision workspace
@@ -294,12 +357,29 @@ paths:
         stored by Mythic — Airbyte holds the tokens and refreshes them. Fields the
         consent flow supplies are flagged `oauth: true` in the platform catalog;
         pass the remaining non-secret fields (account identifiers, Bing's
-        `developer_token`) in `source_config` exactly as the connector expects
-        them, since they are needed to create the source on the callback.
+        `developer_token`) in `source_config`, since they are needed to create the
+        source on the callback. Account identifiers are normalised for you — Meta's
+        `act_` prefix is stripped and accepted as `account_id` or `account_ids`,
+        and dashes are stripped from a Google `customer_id`.
+
+
+        `meta_ads` and `google_ads` REQUIRE an account identifier here, before
+        consent (`missing_account_id` otherwise): absent, the connect fails after
+        the user has already authorised, as an opaque catalog-discovery error.
+
+
+        `return_url` must have an origin the agency registered via
+        `PATCH /config` — see `oauth_return_origins`. An unregistered origin is
+        rejected with `return_url_not_allowed` at initiation, so it is never
+        stored, and the callback can never be used to bounce a browser to an
+        arbitrary destination.
 
 
         The pending request is held for 15 minutes and the returned `state` is
-        single-use. Requires an agency key (`ak_`).
+        single-use. It is also your correlation handle: hold it against the
+        connection you are creating, since the connection id does not exist until
+        the callback completes. Rate limited to 20 initiations per 10 minutes per
+        agency. Requires an agency key (`ak_`).
       requestBody:
         required: true
         content:
@@ -321,8 +401,10 @@ paths:
                     $ref: "#/components/schemas/OauthInitiateResult"
         "400":
           description: >
-            Missing `client_id`/`platform`, platform has no OAuth flow, invalid
-            `return_url`, or workspace not active
+            Rejected before anything is stored. The `code` field carries the
+            reason: `missing_fields`, `unsupported_platform`, `no_oauth_support`,
+            `missing_account_id`, `invalid_return_url`, `return_url_not_allowed`,
+            or `not_provisioned`.
           content:
             application/json:
               schema:
@@ -331,6 +413,12 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           description: Write access requires an agency key, or the location is not linked to the agency
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: "More than 20 initiations in 10 minutes for this agency (`code: rate_limited`)"
           content:
             application/json:
               schema:
@@ -352,9 +440,22 @@ paths:
 
 
         On success, redirects (302) to the `return_url` given at initiation with
-        `?success=true&connection_id=…` appended; on failure, with
-        `?success=false&error=…`. When no `return_url` was supplied, responds with
-        JSON instead.
+        `mythic_oauth=success` and `mythic_connection_id=…` appended; on failure,
+        with `mythic_oauth=error` and `mythic_error_code=…`. Parameters are
+        namespaced so they cannot collide with your own query string, which is
+        preserved.
+
+
+        `mythic_error_code` is drawn from a closed set you can switch on:
+        `state_invalid` (expired, already used, or unreadable), `missing_secret_id`,
+        `missing_account_id`, `not_configured`, `not_provisioned`,
+        `connection_failed`. Exception messages are never placed in the URL — they
+        stay in server logs.
+
+
+        When no `return_url` was given, this renders a minimal terminal HTML page
+        rather than JSON, because the client here is always a browser. Rate limited
+        to 20 requests per 10 minutes per IP.
       security: []
       parameters:
         - name: state
@@ -371,21 +472,27 @@ paths:
             type: string
       responses:
         "302":
-          description: Redirect to `return_url` with the outcome in the query string
+          description: >
+            Redirect to `return_url` with `mythic_oauth` and either
+            `mythic_connection_id` or `mythic_error_code` appended.
         "200":
-          description: Connection created (no `return_url` was supplied)
+          description: >
+            Terminal HTML page confirming the connection (only when no
+            `return_url` was supplied).
           content:
-            application/json:
+            text/html:
               schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  data:
-                    $ref: "#/components/schemas/Connection"
+                type: string
         "400":
-          description: Missing `secret_id`, or state expired / already used
+          description: >
+            HTML page naming a closed-set reason code (`missing_secret_id`,
+            `state_invalid`), or a redirect when a `return_url` exists.
+          content:
+            text/html:
+              schema:
+                type: string
+        "429":
+          description: More than 20 callbacks in 10 minutes from this IP
           content:
             application/json:
               schema:
@@ -792,6 +899,14 @@ components:
           type: boolean
           description: Whether encrypted GCP credentials are stored. The credentials themselves are never returned.
           example: true
+        oauth_return_origins:
+          type: array
+          description: >
+            Origins the OAuth consent flow may redirect the browser to. Empty means
+            no `return_url` is accepted. Set with `PATCH /config`.
+          items:
+            type: string
+            example: https://portal.example.com
         created_at:
           type: string
           format: date-time
@@ -914,16 +1029,21 @@ components:
           type: string
           description: >
             Absolute http(s) URL to send the browser to once the connection is
-            created. `success`, `connection_id`, and on failure `error` are appended
-            as query parameters. Omit to receive JSON from the callback instead.
+            created. Its ORIGIN must be registered in `oauth_return_origins`
+            (`PATCH /config`) or the request is rejected with
+            `return_url_not_allowed`. `mythic_oauth` plus `mythic_connection_id` or
+            `mythic_error_code` are appended; your own query parameters are kept.
+            Omit it and the callback renders a terminal HTML page instead.
           example: https://portal.example.com/integrations/acme-retail
         source_config:
           type: object
           description: >
             Non-secret connector fields needed to create the source after consent —
-            everything in the platform's `requiredFields` NOT flagged `oauth: true`,
-            in the connector's own shape (e.g. `{ "account_ids": ["123456789"] }`
-            for Meta, `{ "customer_id": "1234567890" }` for Google Ads).
+            everything in the platform's `requiredFields` NOT flagged `oauth: true`.
+            Account identifiers are normalised, so `{ "account_id": "act_123" }` and
+            `{ "account_ids": ["123"] }` are equally acceptable for Meta, and a
+            dashed Google `customer_id` is fine. Required for `meta_ads` and
+            `google_ads`.
         display_name:
           type: string
           example: Acme — Meta Ads
@@ -1238,3 +1358,10 @@ components:
         error:
           type: string
           example: Missing authorization
+        code:
+          type: string
+          description: >
+            Stable machine-readable reason, present on the OAuth and rate-limit
+            paths. Switch on this rather than on `error`, which is prose and may
+            change.
+          example: return_url_not_allowed

@@ -27,7 +27,7 @@ https://mythic-analytics.gulp.workers.dev/client/v1/airbyte
 | **Platform** | A supported source (e.g. `google_ads`, `meta_ads`) with its required fields and default streams. |
 | **Connection** | A client-scoped pipeline from a platform source into your BigQuery destination. |
 | **Stream** | A table/entity within a platform (e.g. `campaigns`), synced incrementally or by full refresh. |
-| **Consent handoff** | For platforms with `supportsOauth: true`, `POST /oauth/initiate` returns a consent URL so the connection is authorised by the account owner instead of by a pasted token. |
+| **Consent handoff** | For platforms with `supportsOauth: true`, `POST /oauth/initiate` returns a consent URL so the connection is authorised by the account owner instead of by a pasted token. Requires a registered return origin. |
 | **Sync event** | An immutable record of one completed sync — outcome, record and byte counts, timing. |
 
 ## Typical workflow
@@ -96,20 +96,33 @@ The platform catalog is returned live by `GET /platforms`. At the time of writin
 Platforms whose catalog entry has `supportsOauth: true` can be connected without anyone handling a provider token. Fields the consent flow supplies are flagged `oauth: true` in `requiredFields` — never prompt for those.
 
 <Steps>
+  <Step title="Register where consent may land" titleType="h3">
+    Once per agency: `PATCH /config` with `oauth_return_origins`, the list of origins (`https://portal.example.com`, no path) your portal returns to. The list starts empty and a `return_url` outside it is rejected at initiation — that check is what keeps the unauthenticated callback from being usable as an open redirector.
+  </Step>
   <Step title="Start the handoff" titleType="h3">
-    `POST /oauth/initiate` with `client_id`, `platform`, a `return_url`, and any non-secret connector fields in `source_config` (account identifiers, and Bing's app-issued `developer_token` — everything not flagged `oauth: true`). You get back a `consent_url` and a single-use `state`, valid for 15 minutes.
+    `POST /oauth/initiate` with `client_id`, `platform`, a `return_url`, and the non-secret connector fields in `source_config` (account identifiers, and Bing's app-issued `developer_token` — everything not flagged `oauth: true`). `meta_ads` and `google_ads` require an account identifier here; it is validated before consent so a missing one cannot surface later as an opaque catalog-discovery failure. You get back a `consent_url` and a single-use `state`, valid for 15 minutes.
   </Step>
   <Step title="Send the browser to consent" titleType="h3">
     Redirect the user to `consent_url`. They authorise at the provider; the tokens are stored and refreshed by Airbyte, never by you and never by Mythic.
   </Step>
   <Step title="Land back on your app" titleType="h3">
-    The provider redirects to `/oauth/callback/{state}`, which creates the source and connection and then redirects to your `return_url` with `?success=true&connection_id=…`, or `?success=false&error=…` on failure. Sync and monitor it like any other connection.
+    The provider redirects to `/oauth/callback/{state}`, which creates the source and connection and then redirects to your `return_url` with `mythic_oauth=success` and `mythic_connection_id=…`, or `mythic_oauth=error` and `mythic_error_code=…`. Your own query parameters are preserved. Sync and monitor the connection like any other.
   </Step>
 </Steps>
+
+`mythic_error_code` comes from a closed set you can branch on — `state_invalid`, `missing_secret_id`, `missing_account_id`, `not_configured`, `not_provisioned`, `connection_failed`. Exception text never travels in the URL; it stays in server logs. Errors from `/oauth/initiate` carry the same idea as a `code` field in the JSON body (`return_url_not_allowed`, `missing_account_id`, and so on) — switch on `code`, not on the prose in `error`.
+
+The `state` token is also your correlation handle: the connection id does not exist until the callback finishes, so hold `state` against whatever you are provisioning in your own UI.
+
+<Callout kind="tip">
+  Account identifiers are normalised for you. Meta accepts `account_id` or `account_ids` and the `act_` prefix its own UI shows is stripped; a Google `customer_id` may keep its dashes. Both are mistakes that would otherwise pass silently at create time and fail on the first sync.
+</Callout>
 
 <Callout kind="info">
   `POST /connections` with raw credentials in `source_config` still works and stays supported — use it for service-account style credentials, or for a platform with no OAuth flow.
 </Callout>
+
+Both ends are rate limited: 20 initiations per 10 minutes per agency, and 20 callbacks per 10 minutes per IP.
 
 ## Stream sync modes
 
@@ -140,6 +153,7 @@ Connections sync on one of a fixed set of cadences. Cron-based cadences run on a
 | `401` | Authorization missing or invalid |
 | `403` | Write attempted with a read-only `sk_` key, or client not linked to the agency |
 | `404` | Config or connection not found (or not owned by the calling agency) |
+| `429` | Rate limited — `POST /oauth/initiate` (per agency) and the OAuth callback (per IP) allow 20 per 10 minutes |
 | `503` | Server-side encryption key not configured |
 | `500` | Internal server error |
 
