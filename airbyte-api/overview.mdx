@@ -108,6 +108,8 @@ The HMAC pair is a GCS **interoperability** credential created for a service acc
 
 ### Failures
 
+`GET /config` reports `loading_method` (`Standard` or `GCS Staging`), derived from the destination's real configuration — a reprovision that switches to standard inserts clears the staging bucket rather than leaving a stale one behind.
+
 A provision that fails leaves no config row behind if there was none before, so `GET /config` keeps returning `404 not_configured` — "never provisioned" and "provisioning failed" stay distinguishable. The failure response carries the reason itself (`code: provision_failed` with the upstream message, or a specific `400`/`409` code); you should never have to read it back off `GET /config`.
 
 <Callout kind="tip">
@@ -167,7 +169,9 @@ Platforms whose catalog entry has `supportsOauth: true` can be connected without
 
 `/oauth/initiate` validates your request **before** it checks whether the agency is provisioned, so `missing_account_id`, `return_url_not_allowed` and `unsupported_platform` come back with their own codes even on an agency that has never provisioned. `not_provisioned` therefore means the request itself was fine.
 
-`mythic_error_code` comes from a closed set you can branch on — `state_invalid`, `missing_secret_id`, `missing_account_id`, `not_configured`, `not_provisioned`, `connection_failed`. Exception text never travels in the URL; it stays in server logs. Errors from `/oauth/initiate` carry the same idea as a `code` field in the JSON body (`return_url_not_allowed`, `missing_account_id`, and so on) — switch on `code`, not on the prose in `error`.
+`mythic_error_code` comes from a closed set you can branch on — `state_invalid`, `missing_secret_id`, `missing_account_id`, `not_configured`, `not_provisioned`, `oauth_secret_expired`, `oauth_credentials_missing`, `account_not_accessible`, `connection_failed`. The three OAuth-specific ones tell a human what to do: `oauth_secret_expired` means start the connection again, `account_not_accessible` means consent worked but the account id sent at initiation is not one that user can reach, and `connection_failed` is the catch-all for everything else. Exception text never travels in the URL; it stays in server logs. Errors from `/oauth/initiate` carry the same idea as a `code` field in the JSON body (`return_url_not_allowed`, `missing_account_id`, and so on) — switch on `code`, not on the prose in `error`.
+
+A failed callback also writes a sync-event row with `error_origin: oauth_callback` and the underlying Airbyte message in `error_message`, readable at `GET /sync-events?client_id=…`. That is the only trail a failed consent leaves — no connection row is created — so surface it when a user comes back with `mythic_oauth=error`.
 
 The `state` token is also your correlation handle: the connection id does not exist until the callback finishes, so hold `state` against whatever you are provisioning in your own UI.
 

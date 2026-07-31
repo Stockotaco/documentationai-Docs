@@ -513,8 +513,20 @@ paths:
         `mythic_error_code` is drawn from a closed set you can switch on:
         `state_invalid` (expired, already used, or unreadable), `missing_secret_id`,
         `missing_account_id`, `not_configured`, `not_provisioned`,
-        `connection_failed`. Exception messages are never placed in the URL — they
-        stay in server logs.
+        `oauth_secret_expired` (the provider credential Airbyte minted was gone
+        by the time the source was created — start the connection again),
+        `oauth_credentials_missing`, `account_not_accessible` (consent succeeded
+        but the account named at initiation is not one that user can reach —
+        fix the account id, not the consent), `connection_failed` (anything
+        else). Exception messages are never placed in the URL — they stay in
+        server logs.
+
+
+        Because `connection_failed` is a catch-all, a failed callback also
+        writes a row to the sync-event log with `error_origin: oauth_callback`
+        and the underlying message in `error_message`. Read it at
+        `GET /sync-events?client_id=…` — it is the only trail a failed consent
+        leaves, since no connection is created.
 
 
         When no `return_url` was given, this renders a minimal terminal HTML page
@@ -975,6 +987,15 @@ components:
         error_message:
           type: string
           nullable: true
+        loading_method:
+          type: string
+          description: >
+            How the destination loads into BigQuery. Tracks the destination's
+            real configuration, including one adopted from your own Airbyte —
+            reprovisioning to standard inserts clears the staging bucket rather
+            than leaving a stale one behind.
+          enum: ["Standard", "GCS Staging"]
+          example: Standard
         has_credentials:
           type: boolean
           description: Whether encrypted GCP credentials are stored. The credentials themselves are never returned.
