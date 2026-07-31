@@ -41,6 +41,13 @@ paths:
         a single `site` step, because sessions → conversions genuinely cannot
         distinguish a page problem from a closing problem.
 
+        Conversions are credited to sessions — their own when it resolved to a
+        campaign, otherwise the person's nearest paid touch within
+        `attribution_window_days`. This is effectively last-PAID-touch: an
+        organic-session purchase by a person with a paid touch in-window is
+        credited to paid. Pass `attribution_window_days=0` for strict
+        own-session-only credit.
+
         Always read `tracking.match_rate` before trusting the rest. It is the
         share of ad-click sessions whose UTMs resolved to a synced Meta row; a
         low value means the `clicks → sessions` step is measuring UTM hygiene
@@ -80,10 +87,11 @@ paths:
         - name: attribution
           in: query
           description: >
-            `session` credits the campaign on the session that produced the
-            event (what the ad platform itself would claim). `first_touch`
-            credits the campaign that first acquired the person, however long
-            ago.
+            `session` uses the conversion's own session's campaign when it has
+            one, else the person's MOST RECENT paid touch in the window —
+            effectively last-paid-touch, closest to what the ad platform itself
+            would claim. `first_touch` uses the person's EARLIEST paid touch:
+            the campaign that first acquired them, however long ago.
           required: false
           schema:
             type: string
@@ -139,13 +147,16 @@ paths:
             How long after a campaign touch a conversion may still be credited to
             it. A conversion with no session of its own (all CRM/server-side
             conversions) is credited to the person's nearest campaign touch inside
-            this window. Meta's own default is 7-day click — pass 7 for numbers
-            comparable to Ads Manager.
+            this window; touches are looked up back to `from` minus the window, so
+            early-window conversions still find the visit that earned them.
+            Meta's own default is 7-day click — pass 7 for numbers comparable to
+            Ads Manager. Pass 0 for strict own-session credit only (disables
+            person crediting; the conservative reading).
           required: false
           schema:
             type: integer
             default: 30
-            minimum: 1
+            minimum: 0
             maximum: 365
         - name: resolve_identities
           in: query
@@ -154,6 +165,7 @@ paths:
             collapsed) instead of the raw `distinct_id`. Worth ~0.2pp of extra
             credited conversions on a typical client, because `identify()` already
             canonicalises at ingest; worth more the higher a client's merge rate.
+            Accepts `true` or `1`.
           required: false
           schema:
             type: boolean
@@ -169,6 +181,7 @@ paths:
             type: number
             format: double
             minimum: 0
+            exclusiveMinimum: true
             maximum: 1
         - name: benchmark_tracking
           in: query
@@ -178,6 +191,7 @@ paths:
             type: number
             format: double
             minimum: 0
+            exclusiveMinimum: true
             maximum: 1
         - name: benchmark_landing
           in: query
@@ -190,6 +204,7 @@ paths:
             type: number
             format: double
             minimum: 0
+            exclusiveMinimum: true
             maximum: 1
         - name: benchmark_sales
           in: query
@@ -201,6 +216,7 @@ paths:
             type: number
             format: double
             minimum: 0
+            exclusiveMinimum: true
             maximum: 1
         - name: benchmark_site
           in: query
@@ -213,6 +229,7 @@ paths:
             type: number
             format: double
             minimum: 0
+            exclusiveMinimum: true
             maximum: 1
       responses:
         "200":
@@ -290,16 +307,22 @@ paths:
                         properties:
                           window_days: { type: integer }
                           identity: { type: string, enum: [distinct_id, canonical_person] }
-                          total_conversions_in_window: { type: integer }
+                          total_conversions_in_window:
+                            type: integer
+                            nullable: true
+                            description: "`null` when the window had no ad rows or campaign traffic at all — unknown, not zero."
                           credited_via_session:
                             type: integer
+                            nullable: true
                             description: Credited to their own campaign-resolved session.
                           credited_via_person:
                             type: integer
-                            description: Credited to the person's nearest campaign touch in the window.
+                            nullable: true
+                            description: Credited to the person's nearest campaign touch in the window (touches searched back to `from` minus the window).
                           uncredited:
                             type: integer
-                            description: No campaign touch for that person inside the window — widen `from` to recover touches that predate it.
+                            nullable: true
+                            description: No campaign touch for that person within the attribution window — raise `attribution_window_days` if the sales cycle is longer.
                       diagnostic:
                         type: object
                         description: >
@@ -307,7 +330,7 @@ paths:
                           response would be `constraint: null` on every row, which is
                           indistinguishable from a healthy account.
                         properties:
-                          code: { type: string, enum: [no_conversion_events, no_conversions_attributed] }
+                          code: { type: string, enum: [no_campaign_data, no_conversion_events, no_conversions_attributed] }
                           message: { type: string }
                       excluded_low_volume: { type: integer }
                       min_impressions: { type: integer }
@@ -331,11 +354,18 @@ paths:
                             revenue: { type: number }
                             top_landing_page: { type: string, nullable: true }
                             cpa: { type: number, nullable: true }
-                            roas: { type: number, nullable: true }
+                            roas:
+                              type: number
+                              nullable: true
+                              description: revenue ÷ spend, no currency conversion — spend is in the ad account's currency, revenue in your events'.
                             funnel:
                               type: object
                               description: Rate per step, keyed `<from>_to_<to>`. `null` where the denominator is zero.
                               additionalProperties: { type: number, nullable: true }
+                            status:
+                              type: string
+                              enum: [constrained, healthy]
+                              description: Explicit, so a null constraint reads as "healthy — scale it", never as missing data.
                             constraint:
                               type: object
                               nullable: true

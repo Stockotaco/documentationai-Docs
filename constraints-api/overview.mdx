@@ -96,7 +96,7 @@ The constraint is then the step with the highest **`recoverable_conversions`**: 
 Ranking by recoverable conversions rather than by the worst rate is what makes results comparable **across** campaigns. A 2× shortfall on 1M impressions outranks a 5× shortfall on 1,000 — the second is a rounding error wearing an alarming percentage.
 </Callout>
 
-A campaign at or above the pooled rate on every step returns `constraint: null`. That isn't a gap in the data: there is nothing to fix, so scale it instead.
+A campaign at or above the pooled rate on every step returns `constraint: null` with `status: "healthy"` — the explicit status is there so a null constraint is never misread as missing data. Nothing to fix; scale it instead.
 
 Rows are returned **ordered by opportunity**, which is deliberately not spend order.
 
@@ -194,7 +194,13 @@ Because the credit lands on a session, every funnel rate above is computed the s
 curl "$BASE/client/v1/constraints?location_id=$LOC&attribution_window_days=7"
 ```
 
-`attribution_window_days` defaults to **30** and accepts 1–365. Meta's own default is 7-day click, so pass `7` when you want numbers comparable to Ads Manager, and widen it for long sales cycles.
+`attribution_window_days` defaults to **30** and accepts 0–365. Meta's own default is 7-day click, so pass `7` when you want numbers comparable to Ads Manager, and widen it for long sales cycles.
+
+Touches are looked up back to `from − attribution_window_days`, so a conversion early in the report still finds the visit that earned it — without you having to widen the report window. Funnel **denominators** stay strictly inside `[from, to]` (a pre-window touch session never counts as a session), so step rates remain coherent with this window's spend, while the credited conversions and revenue still land on the campaign that earned them.
+
+<Callout kind="alert">
+**Be clear about what this model is: last *paid* touch.** A purchase made in an organic session still gets credited to the buyer's paid touch within the window — every conversion that *can* be attributed to paid *is*. That is roughly the claim Meta makes for itself, which is what makes the comparison fair, but it is generous to paid media by construction. For strict own-session-only credit — the conservative reading, where an organic-session purchase stays with organic — pass `attribution_window_days=0`.
+</Callout>
 
 Every response shows exactly how the crediting went:
 
@@ -210,11 +216,11 @@ Every response shows exactly how the crediting went:
 ```
 
 <Callout kind="info">
-`credited_via_person` is usually the majority on a CRM-fed client — that is the identity graph doing the work. A high `uncredited` count means those people have no campaign touch inside the window: either they genuinely arrived another way, or their touch predates `from`. Widening `from` recovers the second case.
+`credited_via_person` is usually the majority on a CRM-fed client — that is the identity graph doing the work. A high `uncredited` count means those people have **no campaign touch within the window at all**: they genuinely arrived another way, or the sales cycle is longer than `attribution_window_days` — raise it if so.
 </Callout>
 
 <Callout kind="alert">
-If **nothing** can be credited, the response carries a `diagnostic` instead of a silently empty analysis. That matters because zero conversions makes every pooled benchmark zero, which makes nothing "below benchmark", which would otherwise return `constraint: null` for every campaign — indistinguishable from a genuinely healthy account. The `diagnostic` names which case it is: the event does not exist, or it exists but nothing is creditable.
+If **nothing** can be credited, the response carries a `diagnostic` instead of a silently empty analysis. That matters because zero conversions makes every pooled benchmark zero, which makes nothing "below benchmark", which would otherwise return `constraint: null` for every campaign — indistinguishable from a genuinely healthy account. The `diagnostic` names which case it is: no ad rows or campaign traffic in the window at all (`no_campaign_data`, e.g. a paused ad account), the conversion event does not exist (`no_conversion_events`), or it exists but nothing is creditable (`no_conversions_attributed`).
 </Callout>
 
 ### Canonical identities
@@ -231,8 +237,8 @@ Measured worth about **0.2pp** of extra credited conversions on a typical client
 
 Two models for deciding *which campaign* a touch belongs to, both computed from columns already on your events — so switching costs nothing:
 
-- **`session`** (default) — credits the campaign on the session that produced the event. This is what the ad platform itself would claim, which makes it the right default for judging a campaign.
-- **`first_touch`** — credits the campaign that first acquired the person, however long ago. Use it when the buying cycle is long enough that the closing session tells you nothing about what earned the customer.
+- **`session`** (default) — the conversion's own session's campaign when it has one; otherwise the person's **most recent** paid touch in the window. Effectively last-paid-touch (see the callout above), which is closest to what the ad platform itself would claim.
+- **`first_touch`** — the person's **earliest** paid touch instead: credits the campaign that first acquired the person. Use it when the buying cycle is long enough that the closing touch tells you nothing about what earned the customer.
 
 Positional, decay, and data-driven models are deliberately absent: they change how credit is **split between** campaigns, not which **step** constrains a campaign — which is the question this endpoint answers. For true incremental lift rather than attributed credit, use the [Incrementality API](/incrementality-api/overview).
 
@@ -241,5 +247,9 @@ Positional, decay, and data-driven models are deliberately absent: they change h
 - A **BigQuery event dataset** for the location (otherwise `424`).
 - A synced **Meta ads-insights** stream in that dataset. The platform default is `meta_ads_ads_insights_action_type`; pass `?table=` if your connection writes elsewhere (otherwise `424`).
 - Meta traffic tagged with UTMs. Untagged traffic isn't lost — it lands in `unmatched_sessions` and drags `match_rate` down, which is the honest signal.
+
+<Callout kind="info">
+**Currency**: `spend` is in the ad account's currency and `revenue` in whatever your conversion events carry — `roas` and `cpa` divide them without converting. For USD ad accounts with USD revenue this is a non-issue; for anything else, treat cross-currency ROAS as approximate.
+</Callout>
 
 Each call is a two-table BigQuery scan, so the rate limit is **20 requests per minute per location**.
