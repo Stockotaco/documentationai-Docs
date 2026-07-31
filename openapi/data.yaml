@@ -14,6 +14,130 @@ security:
   - AgencyKeyQuery: []
   - SecretKeyQuery: []
 paths:
+  /properties:
+    get:
+      summary: Property discovery
+      operationId: getPropertyCatalog
+      description: >
+        Every event-property and person-property key observed for the location,
+        with an inferred value type, a masked sample value, occurrence and
+        distinct-entity counts, and first/last-seen timestamps. Built for
+        destination field mapping (`property_mapping`, `custom_data_mapping`,
+        webhook `profile.` tokens, Google Ads `value_property`) so those fields
+        can be chosen from real data instead of typed blind.
+
+
+        Backed by a pre-aggregated catalog — one row per key rather than per
+        event — so cost does not scale with event volume. For `scope=event`,
+        nested objects are exploded one level deep and returned as dot-paths
+        (`form_data.email`); `scope=person` returns top-level keys only.
+
+
+        Sample values are masked at ingestion: emails, phone-shaped values and
+        known identity keys are stored as `[email]`, `[phone]` or `[redacted]`,
+        and objects/arrays are not sampled at all (`sample_value: null`).
+        Non-identifying values are returned verbatim.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - name: scope
+          in: query
+          description: Restrict to event properties or person properties. Omit for both.
+          schema:
+            type: string
+            enum: [event, person]
+        - name: event
+          in: query
+          description: Restrict `scope=event` rows to a single event name.
+          schema: { type: string }
+        - name: search
+          in: query
+          description: Case-insensitive substring match on the property key.
+          schema: { type: string }
+        - name: value_type
+          in: query
+          description: Filter by inferred value type. Use `number` to find value fields.
+          schema:
+            type: string
+            enum: [string, number, boolean, object, array, "null"]
+        - name: min_occurrences
+          in: query
+          description: Drop keys seen fewer than N times.
+          schema: { type: integer, minimum: 0 }
+        - name: seen_since
+          in: query
+          description: Only keys seen at or after this datetime — hides fields that no longer arrive.
+          schema: { type: string, format: date-time }
+        - name: order_by
+          in: query
+          description: Result ordering.
+          schema:
+            type: string
+            enum: [occurrences, key, last_seen, first_seen]
+            default: occurrences
+        - name: limit
+          in: query
+          schema: { type: integer, default: 500, minimum: 1, maximum: 1000 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0, minimum: 0 }
+      responses:
+        "200":
+          description: Observed property keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  rows: { type: integer }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        scope:
+                          type: string
+                          enum: [event, person]
+                        event:
+                          type: string
+                          nullable: true
+                          description: Event name for `scope=event`; null for person properties.
+                        key:
+                          type: string
+                          description: Property key. Dot-path for nested keys.
+                        value_type:
+                          type: string
+                          description: Inferred type of the most recent value.
+                        sample_value:
+                          type: string
+                          nullable: true
+                          description: >
+                            Masked example of the most recent value. Null for
+                            objects/arrays, which are never sampled.
+                        occurrences:
+                          type: integer
+                          description: Times the key has been seen.
+                        entities:
+                          type: integer
+                          description: >
+                            Distinct people (or visitors) carrying the key — the
+                            signal for whether a field is populated widely
+                            enough to map.
+                        first_seen: { type: string, format: date-time }
+                        last_seen: { type: string, format: date-time }
+        "400":
+          $ref: "#/components/responses/LocationRequired"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/NotConfigured"
   /events/summary:
     get:
       summary: Event summary
