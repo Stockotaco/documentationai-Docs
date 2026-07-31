@@ -36,6 +36,14 @@ Three destination types are supported. The `action_config` you send is validated
 
 Requires a fetchable `url`. Optional `method`, `headers`, `body_template`, `timeout_ms`, and `retry_count`. Because webhook credentials live inline in `action_config`, header values and `body_template` are redacted to `***` when read with a secret (viewer) key. HIPAA-enabled locations reject `http://` URLs at write time.
 
+Webhooks run through the same delivery pipeline as the ad destinations, so they get identical **profile enrichment (on by default)**, delivery logging, payload capture, retry classification, and auth-failure auto-disable. `body_template` supports `{{profile.x}}` tokens filled from the merged person profile; set `enrichment.enabled: false` to opt out, in which case those tokens are left verbatim instead of blanked.
+
+<Callout kind="info">
+  `enrichment.full_profile` used to be the opt-in switch for profile data and is now ignored — enrichment is the default. Actions that never set it now receive enrichment where they previously did not.
+</Callout>
+
+Unlike the ad destinations, webhooks are filtered by `trigger_rules` alone (there is no `event_mapping`). Note that every **client-side** rule type — `url_pattern`, `cookie`, `device`, `time`, `javascript_variable`, `custom_js`, `query_param` — always passes server-side, so a webhook whose only rule is one of those matches *every* event for the location. Pair it with a `mythic_event` rule unless that is what you want.
+
 ### Meta Conversions API
 
 Requires a `pixel_id` and an `event_mapping` object that maps each source event name to a Meta event name (for example `{"purchase": "Purchase"}`). Optional `test_event_code`, `action_source`, `credential_name`, and `enrichment`. The Meta access token is stored separately as a `meta_capi` credential. When IP/geo enrichment is enabled for your location, the server-side client IP and coarse geo (city, region, postal, country) are captured at ingest and forwarded automatically as `client_ip_address` plus hashed `ct`/`st`/`zp`/`country` in `user_data` — no client-side changes needed. It is off by default (enable it for your location to opt in) and always suppressed for HIPAA-enabled locations.
