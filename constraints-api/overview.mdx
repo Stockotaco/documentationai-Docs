@@ -51,6 +51,14 @@ The same key system as the rest of `/client/v1`: an **agency key** (`ak_`, bind 
     The `summary.primary_constraint` is the headline: the step constraining the most conversions account-wide.
   </Step>
 
+  <Step title="Find out which events you can use">
+    ```bash
+    curl "$BASE/client/v1/constraints/events?location_id=$LOC" -H "Authorization: Bearer $AK"
+    ```
+
+    Returns every non-system event with its volume, **session coverage**, and which JSON paths carry a monetary value — plus a `suggested` pairing you can pass straight through. See [Choosing your events](#choosing-your-events).
+  </Step>
+
   <Step title="Split the page problem from the sales problem">
     Without a `lead_event`, "sessions → conversions" is one opaque step. Supply your lead event and it splits in two:
 
@@ -58,8 +66,6 @@ The same key system as the rest of `/client/v1`: an **agency key** (`ak_`, bind 
     curl "$BASE/client/v1/constraints?location_id=$LOC&lead_event=lead&conversion_event=transaction_completed" \
       -H "Authorization: Bearer $AK"
     ```
-
-    Not sure what your events are called? `GET /client/v1/data/events/breakdown?dimension=event_name` lists them.
   </Step>
 
   <Step title="Check the tracking before you trust the funnel">
@@ -93,6 +99,71 @@ Ranking by recoverable conversions rather than by the worst rate is what makes r
 A campaign at or above the pooled rate on every step returns `constraint: null`. That isn't a gap in the data: there is nothing to fix, so scale it instead.
 
 Rows are returned **ordered by opportunity**, which is deliberately not spend order.
+
+## Setting your own benchmarks
+
+The pooled rate answers "which campaign is worst *relative to this account*". It can't tell you the whole account is underperforming — if every campaign converts badly, the pooled rate is badly too, and nothing looks constrained.
+
+So any step's benchmark can be replaced with a target of your own. Pass `benchmark_<step>` as a **rate between 0 and 1**:
+
+```bash
+# judge CTR against a 2% target and lead rate against 10%,
+# leave tracking and sales on the account's own pooled rates
+curl "$BASE/client/v1/constraints?location_id=$LOC&lead_event=lead\
+&benchmark_ad=0.02&benchmark_landing=0.10" -H "Authorization: Bearer $AK"
+```
+
+Valid step names are `ad`, `tracking`, `landing`, `sales`, and `site` — matching the funnel shape you asked for. A benchmark for a step your funnel doesn't have is a `400` rather than a silent no-op, since a target that quietly did nothing is worse than an error.
+
+The response reports where every benchmark came from, so a verdict is always traceable:
+
+```json
+"benchmarks":        { "ad": 0.02, "tracking": 0.9, "landing": 0.10, "sales": 0.2 },
+"benchmark_sources": { "ad": "override", "tracking": "pooled", "landing": "override", "sales": "pooled" },
+"pooled_rates":      { "ad": 0.004, "tracking": 0.9, "landing": 0.03, "sales": 0.2 }
+```
+
+<Callout kind="info">
+`pooled_rates` is always what the account actually does, even where you overrode it. Keep both in view: if your target sits far above the pooled rate, every campaign will report the same constraint — which tells you the target is aspirational, not that every campaign has the same problem.
+</Callout>
+
+<Callout kind="alert">
+Benchmarks are rates, not percentages. A 2% CTR target is `0.02`. Anything above `1` is rejected rather than interpreted, because `2` is ambiguous — read as 200% instead of 2% it would make every campaign in the account look ad-constrained, and you'd have no way to tell from the output.
+</Callout>
+
+## Choosing your events
+
+`GET /client/v1/constraints/events` inventories every non-system event in the window and tells you what each can be used for:
+
+```json
+{
+  "suggested": {
+    "conversion_event": "transaction_completed",
+    "revenue_path": "$.value",
+    "lead_event": "lead"
+  },
+  "events": [
+    { "event_name": "lead", "total_events": 5000, "session_coverage": 0.98,
+      "revenue_paths": [], "usable": true, "suggested_role": "lead" },
+    { "event_name": "transaction_completed", "total_events": 800, "session_coverage": 0.97,
+      "revenue_paths": ["$.value"], "usable": true, "suggested_role": "conversion" },
+    { "event_name": "ghl_rebill", "total_events": 3000, "session_coverage": 0,
+      "usable": false, "warning": "No event of this type carries a session…" }
+  ]
+}
+```
+
+Three fields do the work:
+
+- **`session_coverage`** — the share of these events that carry a `session_id`. This funnel is session-grained, so coverage is a ceiling on what it can see.
+- **`revenue_paths`** — which JSON paths actually hold a number, so you know what to pass as `revenue_path`. An event with none can still be a `lead_event`; it just can't carry revenue.
+- **`usable`** — `false` means zero session coverage, so the event can never appear in this funnel whatever its volume.
+
+<Callout kind="alert">
+**Server-side events are the trap this endpoint exists to catch.** CRM and webhook conversions (GoHighLevel over Pub/Sub, for instance) never touch the browser, so they carry no session. Pick one as your `conversion_event` and every campaign reports zero conversions — and the constraint logic then blames your landing pages for it. That is a confidently wrong answer, which is worse than an error, so check `usable` before committing to an event.
+</Callout>
+
+`/data/events/breakdown?dimension=event_name` and `/data/properties` remain the general-purpose event and property catalogues. This endpoint exists because neither reports session coverage, which is the one thing this funnel depends on.
 
 ## When not to trust the answer
 

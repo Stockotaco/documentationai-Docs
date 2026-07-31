@@ -133,6 +133,62 @@ paths:
           schema:
             type: string
             default: meta_ads_ads_insights_action_type
+        - name: benchmark_ad
+          in: query
+          description: >
+            Target rate for the `impressions -> clicks` step, replacing the
+            account's pooled rate. A rate between 0 and 1 — a 2% CTR target is
+            `0.02`. Values above 1 are rejected, not interpreted as percentages.
+          required: false
+          schema:
+            type: number
+            format: double
+            minimum: 0
+            maximum: 1
+        - name: benchmark_tracking
+          in: query
+          description: Target rate for the `clicks -> sessions` step. Rate between 0 and 1.
+          required: false
+          schema:
+            type: number
+            format: double
+            minimum: 0
+            maximum: 1
+        - name: benchmark_landing
+          in: query
+          description: >
+            Target rate for the `sessions -> leads` step. Rate between 0 and 1.
+            Requires `lead_event`; without it this step does not exist and the
+            request is rejected.
+          required: false
+          schema:
+            type: number
+            format: double
+            minimum: 0
+            maximum: 1
+        - name: benchmark_sales
+          in: query
+          description: >
+            Target rate for the `leads -> conversions` step. Rate between 0 and 1.
+            Requires `lead_event`.
+          required: false
+          schema:
+            type: number
+            format: double
+            minimum: 0
+            maximum: 1
+        - name: benchmark_site
+          in: query
+          description: >
+            Target rate for the combined `sessions -> conversions` step. Rate
+            between 0 and 1. Only valid WITHOUT `lead_event`, which splits this
+            step into `landing` and `sales`.
+          required: false
+          schema:
+            type: number
+            format: double
+            minimum: 0
+            maximum: 1
       responses:
         "200":
           description: Funnel and constraint per row, plus the benchmarks and tracking diagnostics they rest on.
@@ -165,7 +221,24 @@ paths:
                             to: { type: string }
                       benchmarks:
                         type: object
-                        description: Pooled rate per step across every row — what each row is judged against.
+                        description: >
+                          The rate per step each row was actually judged against —
+                          an agency override where supplied, otherwise the account's
+                          own pooled rate.
+                        additionalProperties: { type: number, nullable: true }
+                      benchmark_sources:
+                        type: object
+                        description: >
+                          Per step, `override` or `pooled`. Lets a caller comparing two
+                          runs tell whether a verdict moved because performance changed
+                          or because the target did.
+                        additionalProperties: { type: string, enum: [override, pooled] }
+                      pooled_rates:
+                        type: object
+                        description: >
+                          What the account actually does, per step — reported even where
+                          an override replaced it. A target far above the pooled rate makes
+                          every campaign report the same constraint.
                         additionalProperties: { type: number, nullable: true }
                       tracking:
                         type: object
@@ -252,6 +325,109 @@ paths:
             has no BigQuery event dataset yet.
         "429":
           description: Rate limited (20 requests per minute per location — each request is a BigQuery scan).
+  /client/v1/constraints/events:
+    get:
+      summary: Which events can serve as the lead / conversion step
+      operationId: listConstraintEvents
+      description: >
+        Inventories every non-system event in the window with its volume, its
+        **session coverage**, and which JSON paths carry a monetary value — then
+        suggests a `conversion_event` / `lead_event` / `revenue_path` you can pass
+        straight to the main endpoint.
+
+        Session coverage is why this exists. The funnel is session-grained, so an
+        event's coverage is a ceiling on what the analysis can see. Server-side
+        conversions (CRM/webhook over Pub/Sub) never touch the browser and carry
+        no `session_id`: choosing one would yield a funnel with zero conversions
+        that the constraint logic then attributes to the landing page. Neither
+        `/client/v1/data/events/breakdown` nor `/client/v1/data/properties`
+        reports coverage, which is the gap this fills.
+
+        Reads only the events view — it does not require a synced Meta table.
+      parameters:
+        - name: location_id
+          in: query
+          description: Location to scope to. Required for `ak_` keys (or send the `X-Location-Id` header).
+          required: false
+          schema:
+            type: string
+        - name: from
+          in: query
+          description: Window start (`YYYY-MM-DD`). Defaults to 28 days before `to`.
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          description: Window end (`YYYY-MM-DD`), inclusive. Defaults to yesterday.
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Per-event verdicts and a suggested pairing.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      window:
+                        type: object
+                        properties:
+                          from: { type: string, format: date }
+                          to: { type: string, format: date }
+                      suggested:
+                        type: object
+                        nullable: true
+                        description: Highest-volume usable pairing, or `null` when no event is usable.
+                        properties:
+                          conversion_event: { type: string }
+                          revenue_path: { type: string, nullable: true }
+                          lead_event:
+                            type: string
+                            nullable: true
+                            description: A usable event strictly more common than the conversion event, or `null`.
+                          note:
+                            type: string
+                            description: Present only when there is no obvious lead step.
+                      events:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            event_name: { type: string }
+                            total_events: { type: integer }
+                            sessions:
+                              type: integer
+                              description: Distinct sessions carrying at least one of these events.
+                            session_coverage:
+                              type: number
+                              nullable: true
+                              description: Share of these events carrying a session_id — a ceiling on what the funnel can see.
+                            revenue_paths:
+                              type: array
+                              description: JSON paths that actually hold a castable number for this event.
+                              items: { type: string }
+                            suggested_revenue_path: { type: string, nullable: true }
+                            usable:
+                              type: boolean
+                              description: "`false` means zero session coverage — unusable here whatever the volume."
+                            suggested_role: { type: string, enum: [conversion, lead] }
+                            warning:
+                              type: string
+                              description: Present when coverage is zero or below 50%.
+        "401":
+          description: Missing or invalid key.
+        "424":
+          description: This client has no BigQuery event dataset yet.
+        "429":
+          description: Rate limited (20 requests per minute per location).
   /client/v1/constraints/options:
     get:
       summary: Discover the available knobs
@@ -275,8 +451,16 @@ paths:
                       attribution:
                         type: array
                         items: { type: string }
+                      benchmark_params:
+                        type: array
+                        description: Every accepted `benchmark_<step>` parameter name.
+                        items: { type: string }
+                      revenue_paths_probed:
+                        type: array
+                        description: JSON paths the events probe checks for a monetary value.
+                        items: { type: string }
                       defaults: { type: object }
-                      hint: { type: string }
+                      hints: { type: object }
 components:
   securitySchemes:
     BearerAuth:
