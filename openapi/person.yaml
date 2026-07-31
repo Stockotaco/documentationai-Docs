@@ -92,7 +92,15 @@ paths:
       description: >
         Fetch a single resolved person profile. `personId` may be either the
         canonical person id or a raw identity value (anonymous id, device id,
-        email, or user id) — raw values are resolved to their canonical person.
+        email, user id, phone, or a Mythic Link Click ID `iiid`) — raw values are
+        resolved to their canonical person.
+
+
+        Passing an `iiid` answers "who did this link click become?". The click's
+        edge-captured UTMs and click IDs are also restored onto the person, so a
+        click ID the browser stripped still reaches your ad destinations. Note an
+        `iiid` is first-claim-wins and never triggers a merge — see the Identity
+        guide.
 
 
         If the id refers to a person that was merged away, the response
