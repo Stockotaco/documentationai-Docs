@@ -124,6 +124,19 @@ paths:
           schema:
             type: integer
             default: 1000
+        - name: campaign
+          in: query
+          description: >
+            Drill into one campaign, matched by campaign id **or** name
+            (trimmed, case-insensitive). With `group_by=adset` or `ad` it scopes
+            the rows to that campaign's children. Benchmarks stay the
+            account-wide pooled rates, so the campaign is still judged against
+            the whole account — that comparison is the point of the drilldown.
+            If nothing matches, the response carries a `campaign_not_found`
+            diagnostic instead of a silent empty list.
+          required: false
+          schema:
+            type: string
         - name: revenue_path
           in: query
           description: >
@@ -249,6 +262,9 @@ paths:
                           from: { type: string, format: date }
                           to: { type: string, format: date }
                       grain: { type: string, enum: [campaign, adset, ad] }
+                      campaign:
+                        type: string
+                        description: Echo of the `campaign` drilldown filter. Absent when no filter was passed.
                       attribution: { type: string, enum: [session, first_touch] }
                       conversion_event: { type: string }
                       lead_event: { type: string, nullable: true }
@@ -326,11 +342,12 @@ paths:
                       diagnostic:
                         type: object
                         description: >
-                          Present ONLY when nothing could be credited. Without it the
+                          Present ONLY when nothing could be credited (or the
+                          `campaign` filter matched nothing). Without it the
                           response would be `constraint: null` on every row, which is
                           indistinguishable from a healthy account.
                         properties:
-                          code: { type: string, enum: [no_campaign_data, no_conversion_events, no_conversions_attributed] }
+                          code: { type: string, enum: [no_campaign_data, no_conversion_events, no_conversions_attributed, campaign_not_found] }
                           message: { type: string }
                       excluded_low_volume: { type: integer }
                       min_impressions: { type: integer }
@@ -339,6 +356,11 @@ paths:
                         description: Ordered by opportunity — largest `recoverable_conversions` first, which is not spend order.
                         items:
                           type: object
+                          description: >
+                            Keyed by grain — `campaign_id`/`campaign_name` at the default
+                            grain, `adset_id`/`adset_name` or `ad_id`/`ad_name` otherwise
+                            (those rows also carry the parent `campaign_id` and
+                            `campaign_name`, which is what the `campaign` filter matches).
                           properties:
                             campaign_id: { type: string, nullable: true }
                             campaign_name: { type: string, nullable: true }
