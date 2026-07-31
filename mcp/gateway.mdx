@@ -52,7 +52,7 @@ See [Authentication](/mcp/authentication) for scope rules.
 </ParamField>
 
 <ParamField body="method" param-type="string" required="true" deprecated="false">
-  One of `initialize`, `notifications/initialized`, `tools/list`, `tools/call`.
+  One of `server/discover`, `initialize`, `notifications/initialized`, `tools/list`, `tools/call`.
 </ParamField>
 
 <ParamField body="params" param-type="object" required="false" deprecated="false">
@@ -86,21 +86,53 @@ See [Authentication](/mcp/authentication) for scope rules.
 }
 ```
 
+## Protocol versions
+
+The gateway supports `2024-11-05`, `2025-03-26`, `2025-06-18`, and `2025-11-25`. It answers `initialize` with the version you requested when it is one of those, and with `2025-11-25` otherwise.
+
+If you send the `MCP-Protocol-Version` header on post-handshake requests (required of clients from `2025-06-18` onward), it must name one of the supported versions — anything else is rejected with `400` and error code `-32600`. Omitting the header is accepted.
+
+The `2026-07-28` revision (stateless requests, `_meta` version negotiation, MRTR) is not yet served; clients that speak it should fall back to `2025-11-25`, which `server/discover` advertises.
+
 ## Methods
 
-### initialize
+### server/discover
 
-Returns protocol and server info. No authentication side effects beyond the standard key check.
+Returns supported protocol versions, capabilities, and server identity in a single request. No handshake required — you may call it before anything else.
 
 ```json
-{ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {} }
+{ "jsonrpc": "2.0", "id": 1, "method": "server/discover", "params": {} }
 ```
 
 Result:
 
 ```json
 {
-  "protocolVersion": "2025-03-26",
+  "resultType": "complete",
+  "supportedVersions": ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"],
+  "capabilities": { "tools": {} },
+  "instructions": "Mythic Analytics gateway: per-client analytics and upstream MCP tools, scoped by the mcp_ API key.",
+  "ttlMs": 3600000,
+  "cacheScope": "private",
+  "_meta": {
+    "io.modelcontextprotocol/serverInfo": { "name": "mythic-analytics-gateway", "version": "1.0.0" }
+  }
+}
+```
+
+### initialize
+
+Returns protocol and server info. No authentication side effects beyond the standard key check.
+
+```json
+{ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": { "protocolVersion": "2025-11-25" } }
+```
+
+Result:
+
+```json
+{
+  "protocolVersion": "2025-11-25",
   "capabilities": { "tools": {} },
   "serverInfo": { "name": "mythic-analytics-gateway", "version": "1.0.0" }
 }
@@ -112,7 +144,7 @@ Client lifecycle notification. The gateway accepts it and returns an empty resul
 
 ### tools/list
 
-Returns every tool the key can use — built-in tools allowed by scope, plus upstream tools allowed by scope, agency access, and location access. Each entry has `name`, `description`, `inputSchema`, and `annotations`.
+Returns every tool the key can use — built-in tools allowed by scope, plus upstream tools allowed by scope, agency access, and location access. Each entry has `name`, `description`, `inputSchema`, and `annotations`. Tools come back sorted by name, so the list is stable across calls and safe to cache. The result also carries `ttlMs` (300000) and `cacheScope` (`"private"`) as caching hints.
 
 ```json
 { "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {} }
