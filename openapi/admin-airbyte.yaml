@@ -1002,7 +1002,18 @@ components:
           example: campaigns
         syncMode:
           type: string
-          enum: ["incremental", "full_refresh"]
+          description: >
+            The mode sent to Airbyte. Every incremental stream syncs as
+            `incremental_deduped_history` (upsert on the stream's primary key), so a
+            resync re-keys daily insights rows instead of appending duplicates.
+            `incremental` and `full_refresh` are accepted as legacy aliases of
+            `incremental_deduped_history` and `full_refresh_overwrite`.
+          enum:
+            - incremental_deduped_history
+            - full_refresh_overwrite
+            - incremental
+            - full_refresh
+          example: incremental_deduped_history
         cursorField:
           type: string
           nullable: true

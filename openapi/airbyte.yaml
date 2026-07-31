@@ -278,6 +278,118 @@ paths:
           $ref: "#/components/responses/WriteForbidden"
         "404":
           $ref: "#/components/responses/ConnectionNotFound"
+  /oauth/initiate:
+    post:
+      summary: Start an OAuth connection
+      operationId: initiateAirbyteOauth
+      description: >
+        Begin a provider OAuth handshake for a platform whose catalog entry has
+        `supportsOauth: true`. Returns a `consent_url` to redirect the browser to;
+        after the user consents the provider redirects back to
+        `/oauth/callback/{state}`, which creates the source and connection and
+        then bounces to `return_url`.
+
+
+        No long-lived access or refresh token is ever handled by the caller or
+        stored by Mythic — Airbyte holds the tokens and refreshes them. Fields the
+        consent flow supplies are flagged `oauth: true` in the platform catalog;
+        pass the remaining non-secret fields (account identifiers, Bing's
+        `developer_token`) in `source_config` exactly as the connector expects
+        them, since they are needed to create the source on the callback.
+
+
+        The pending request is held for 15 minutes and the returned `state` is
+        single-use. Requires an agency key (`ak_`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OauthInitiateRequest"
+      responses:
+        "200":
+          description: Consent URL issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/OauthInitiateResult"
+        "400":
+          description: >
+            Missing `client_id`/`platform`, platform has no OAuth flow, invalid
+            `return_url`, or workspace not active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Write access requires an agency key, or the location is not linked to the agency
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /oauth/callback/{state}:
+    get:
+      summary: OAuth callback (provider redirect)
+      operationId: airbyteOauthCallback
+      description: >
+        Landing endpoint for the provider redirect — not called directly by
+        integrators. Exchanges Airbyte's `secret_id` for a source and creates the
+        connection.
+
+
+        Unauthenticated by design: the redirect arrives from a browser and carries
+        no API key, so the single-use `state` token in the path is the credential.
+        Airbyte replaces the query string on this redirect, which is why `state`
+        is a path segment.
+
+
+        On success, redirects (302) to the `return_url` given at initiation with
+        `?success=true&connection_id=…` appended; on failure, with
+        `?success=false&error=…`. When no `return_url` was supplied, responds with
+        JSON instead.
+      security: []
+      parameters:
+        - name: state
+          in: path
+          required: true
+          description: Single-use state token returned by `POST /oauth/initiate`.
+          schema:
+            type: string
+        - name: secret_id
+          in: query
+          required: true
+          description: Credential handle appended by Airbyte after consent.
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to `return_url` with the outcome in the query string
+        "200":
+          description: Connection created (no `return_url` was supplied)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/Connection"
+        "400":
+          description: Missing `secret_id`, or state expired / already used
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /connections/{id}/sync:
     post:
       summary: Trigger sync
@@ -567,6 +679,13 @@ components:
         label:
           type: string
           example: Google Ads
+        supportsOauth:
+          type: boolean
+          description: >
+            Whether this platform can be connected through the OAuth handoff
+            (`POST /oauth/initiate`) instead of pasting long-lived credentials
+            into `source_config`.
+          example: true
         requiredFields:
           type: array
           description: Configuration fields the source requires.
@@ -586,6 +705,15 @@ components:
                 type: string
                 description: Rendering hint, e.g. `json` or `secret`. Absent for plain text.
                 example: secret
+              oauth:
+                type: boolean
+                description: >
+                  This field is supplied by the OAuth consent flow. Omit it from
+                  `source_config` when connecting via `POST /oauth/initiate`, and
+                  do not prompt a user for it. Fields WITHOUT this flag are still
+                  required in either flow (account identifiers, and Bing's
+                  app-issued `developer_token`).
+                example: true
         defaultStreams:
           type: array
           description: Streams selected by default when a connection is created.
@@ -599,8 +727,19 @@ components:
           example: campaigns
         syncMode:
           type: string
-          enum: ["incremental", "full_refresh"]
-          example: incremental
+          description: >
+            The mode sent to Airbyte. `incremental_deduped_history` upserts on the
+            stream's primary key, so a resync of a daily insights table re-keys its
+            rows instead of appending duplicates — every incremental stream uses it.
+            `incremental` and `full_refresh` are accepted as legacy aliases of
+            `incremental_deduped_history` and `full_refresh_overwrite`; append-only
+            incremental is not offered.
+          enum:
+            - incremental_deduped_history
+            - full_refresh_overwrite
+            - incremental
+            - full_refresh
+          example: incremental_deduped_history
         cursorField:
           type: string
           nullable: true
@@ -738,7 +877,16 @@ components:
           type: object
           description: >
             Platform-specific source configuration, matching the platform's
-            `requiredFields`.
+            `requiredFields`. When `secret_id` is supplied, omit the fields flagged
+            `oauth: true` — Airbyte injects those credentials.
+        secret_id:
+          type: string
+          description: >
+            Credential handle from a completed OAuth handshake, in place of raw
+            credentials in `source_config`. Normally you never set this by hand:
+            `/oauth/callback/{state}` creates the connection for you. It exists for
+            callers that want to run the consent step themselves and create the
+            connection later.
         sync_frequency:
           $ref: "#/components/schemas/SyncFrequency"
         streams:
@@ -748,6 +896,67 @@ components:
             omitted.
           items:
             $ref: "#/components/schemas/Stream"
+    OauthInitiateRequest:
+      type: object
+      required:
+        - client_id
+        - platform
+      properties:
+        client_id:
+          type: string
+          description: Client (location) identifier. Must belong to the calling agency.
+          example: acme-retail
+        platform:
+          type: string
+          description: "Platform key whose catalog entry has `supportsOauth: true`."
+          example: meta_ads
+        return_url:
+          type: string
+          description: >
+            Absolute http(s) URL to send the browser to once the connection is
+            created. `success`, `connection_id`, and on failure `error` are appended
+            as query parameters. Omit to receive JSON from the callback instead.
+          example: https://portal.example.com/integrations/acme-retail
+        source_config:
+          type: object
+          description: >
+            Non-secret connector fields needed to create the source after consent —
+            everything in the platform's `requiredFields` NOT flagged `oauth: true`,
+            in the connector's own shape (e.g. `{ "account_ids": ["123456789"] }`
+            for Meta, `{ "customer_id": "1234567890" }` for Google Ads).
+        display_name:
+          type: string
+          example: Acme — Meta Ads
+        account_id:
+          type: string
+          example: act_123456789
+        sync_frequency:
+          $ref: "#/components/schemas/SyncFrequency"
+        streams:
+          type: array
+          description: Stream selection. Defaults to the platform's `defaultStreams`.
+          items:
+            $ref: "#/components/schemas/Stream"
+        oauth_input_configuration:
+          type: object
+          description: >
+            Optional provider-specific OAuth inputs passed through to Airbyte
+            (`oAuthInputConfiguration`), for connectors that need one to build the
+            consent URL.
+    OauthInitiateResult:
+      type: object
+      properties:
+        consent_url:
+          type: string
+          description: Redirect the browser here to obtain user consent.
+          example: https://www.facebook.com/v18.0/dialog/oauth?client_id=…
+        state:
+          type: string
+          description: Single-use token identifying this pending connection.
+        expires_in:
+          type: integer
+          description: Seconds the pending request stays valid.
+          example: 900
     UpdateConnectionRequest:
       type: object
       properties:

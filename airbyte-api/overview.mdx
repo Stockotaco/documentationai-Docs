@@ -27,6 +27,7 @@ https://mythic-analytics.gulp.workers.dev/client/v1/airbyte
 | **Platform** | A supported source (e.g. `google_ads`, `meta_ads`) with its required fields and default streams. |
 | **Connection** | A client-scoped pipeline from a platform source into your BigQuery destination. |
 | **Stream** | A table/entity within a platform (e.g. `campaigns`), synced incrementally or by full refresh. |
+| **Consent handoff** | For platforms with `supportsOauth: true`, `POST /oauth/initiate` returns a consent URL so the connection is authorised by the account owner instead of by a pasted token. |
 | **Sync event** | An immutable record of one completed sync — outcome, record and byte counts, timing. |
 
 ## Typical workflow
@@ -39,7 +40,7 @@ https://mythic-analytics.gulp.workers.dev/client/v1/airbyte
     Call `GET /platforms` to see supported sources and the fields each one requires.
   </Step>
   <Step title="Create a connection" titleType="h3">
-    Call `POST /connections` with a `client_id`, `platform`, and the platform's `source_config`. The client must belong to your agency.
+    Either hand the user off to the provider's consent screen with `POST /oauth/initiate` (preferred — see below), or call `POST /connections` directly with a `client_id`, `platform`, and the platform's `source_config`. The client must belong to your agency.
   </Step>
   <Step title="Sync and monitor" titleType="h3">
     Trigger a sync with `POST /connections/{id}/sync`, adjust cadence with `PATCH /connections/{id}/schedule`, and review outcomes via `/sync-events`, `/stats`, and `/health`.
@@ -88,6 +89,36 @@ The platform catalog is returned live by `GET /platforms`. At the time of writin
 
 <Callout kind="tip">
   Always read `requiredFields` and `defaultStreams` from `GET /platforms` rather than hard-coding them — the catalog is the source of truth for what each connection needs.
+</Callout>
+
+## Connecting with OAuth
+
+Platforms whose catalog entry has `supportsOauth: true` can be connected without anyone handling a provider token. Fields the consent flow supplies are flagged `oauth: true` in `requiredFields` — never prompt for those.
+
+<Steps>
+  <Step title="Start the handoff" titleType="h3">
+    `POST /oauth/initiate` with `client_id`, `platform`, a `return_url`, and any non-secret connector fields in `source_config` (account identifiers, and Bing's app-issued `developer_token` — everything not flagged `oauth: true`). You get back a `consent_url` and a single-use `state`, valid for 15 minutes.
+  </Step>
+  <Step title="Send the browser to consent" titleType="h3">
+    Redirect the user to `consent_url`. They authorise at the provider; the tokens are stored and refreshed by Airbyte, never by you and never by Mythic.
+  </Step>
+  <Step title="Land back on your app" titleType="h3">
+    The provider redirects to `/oauth/callback/{state}`, which creates the source and connection and then redirects to your `return_url` with `?success=true&connection_id=…`, or `?success=false&error=…` on failure. Sync and monitor it like any other connection.
+  </Step>
+</Steps>
+
+<Callout kind="info">
+  `POST /connections` with raw credentials in `source_config` still works and stays supported — use it for service-account style credentials, or for a platform with no OAuth flow.
+</Callout>
+
+## Stream sync modes
+
+Every incremental stream is sent to Airbyte as `incremental_deduped_history`, which upserts on the stream's primary key. That matters for daily insights tables keyed on composites like `(date_start, account_id, ad_id, region)`: a resync re-keys those rows rather than appending them, so spend is not double counted. Append-only incremental is not offered.
+
+`incremental` and `full_refresh` are accepted as aliases of `incremental_deduped_history` and `full_refresh_overwrite` when you send a `streams` array, and older stored selections may still read back in the short form.
+
+<Callout kind="tip">
+  `defaultStreams` is read once, when a connection is created — adding a stream to the catalog does not reach connections that already exist. Send an explicit `streams` array to `PUT /connections/{id}` to add one to a live connection, remembering that enabling a stream triggers a backfill from the source's start date.
 </Callout>
 
 ## Sync frequency
