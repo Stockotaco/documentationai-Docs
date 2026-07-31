@@ -107,10 +107,12 @@ components:
         code:
           type: string
           description: >
-            JavaScript executed in the browser via `new Function('mythic', code)` —
+            JavaScript executed in the browser via `new Function('mythic', 'event', code)` —
             not raw HTML (a `<script>` tag throws a syntax error; create elements via
-            the DOM instead). Receives the SDK instance as `mythic`. Executes at most
-            once per page load, even if its trigger matches repeatedly.
+            the DOM instead). Receives the SDK instance as `mythic`; event-triggered
+            snippets also receive the triggering event as `event` (`{name, properties}`,
+            `undefined` for page-load snippets). Executes at most once per page load,
+            even if its trigger matches repeatedly.
         description:
           type: string
           nullable: true
