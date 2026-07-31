@@ -27,6 +27,18 @@ paths:
         can be chosen from real data instead of typed blind.
 
 
+        **When to use it.** Call this before creating a destination: mappings
+        match on exact key names, and a key that does not exist fails quietly —
+        the delivery succeeds with the field absent rather than raising a
+        validation error. Filter `value_type=number` when picking a conversion
+        value, since a value that is really the string `"$19.99"` instead of
+        `19.99` is the common cause of a conversion recorded as zero. Use
+        `entities` to tell a broken mapping from a field few visitors fill in,
+        and `order_by=first_seen` / `seen_since` to spot keys that recently
+        started or stopped arriving after a site or form change. It is also the
+        discovery surface to build a field picker on.
+
+
         Backed by a pre-aggregated catalog — one row per key rather than per
         event — so cost does not scale with event volume. For `scope=event`,
         nested objects are exploded one level deep and returned as dot-paths

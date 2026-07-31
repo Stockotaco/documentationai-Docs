@@ -32,6 +32,19 @@ Three destination types are supported. The `action_config` you send is validated
   `tiktok_events` is recognized by the schema but has no executor yet, so creating it returns `unsupported_destination_type`. Only `webhook`, `meta_capi`, and `google_ads` are live.
 </Callout>
 
+**Which one you want.** Use `meta_capi` or `google_ads` when the goal is ad
+optimization or attribution inside that platform — they hash and send identifiers
+in the shape each API expects, deduplicate against the browser pixel, and let you
+report an offline conversion the tag never saw. Use `webhook` when the receiver is
+something you control: your own CRM, warehouse, queue, Zapier/Make, or an
+internal service. It is the escape hatch for any system Mythic has no adapter for,
+and because it now runs through the same pipeline as the ad destinations, you get
+the merged person profile, delivery logs, retries, and auto-disable there too —
+so reaching for a webhook is no longer a downgrade in observability.
+
+Destinations are independent: a single event can fan out to a webhook and both ad
+platforms at once, each with its own trigger rules and mappings.
+
 ### Webhook
 
 Requires a fetchable `url`. Optional `method`, `headers`, `body_template`, `timeout_ms`, and `retry_count`. Because webhook credentials live inline in `action_config`, header values and `body_template` are redacted to `***` when read with a secret (viewer) key. HIPAA-enabled locations reject `http://` URLs at write time.
@@ -46,7 +59,9 @@ Unlike the ad destinations, webhooks are filtered by `trigger_rules` alone (ther
 
 ### Meta Conversions API
 
-Requires a `pixel_id` and an `event_mapping` object that maps each source event name to a Meta event name (for example `{"purchase": "Purchase"}`). Optional `test_event_code`, `action_source`, `credential_name`, and `enrichment`. The Meta access token is stored separately as a `meta_capi` credential. When IP/geo enrichment is enabled for your location, the server-side client IP and coarse geo (city, region, postal, country) are captured at ingest and forwarded automatically as `client_ip_address` plus hashed `ct`/`st`/`zp`/`country` in `user_data` — no client-side changes needed. It is off by default (enable it for your location to opt in) and always suppressed for HIPAA-enabled locations.
+Requires a `pixel_id` and an `event_mapping` object that maps each source event name to a Meta event name (for example `{"purchase": "Purchase"}`). Optional `test_event_code`, `action_source`, `credential_name`, `default_country_code`, `fbc_subdomain_index`, and `enrichment`.
+
+`user_data` is assembled for match quality rather than minimalism. `em` and `ph` carry **every** email and phone the identity resolver has stitched to the person, not just the one on the event — Meta matches against each value in the array, so a contact known by a work address in your CRM and a personal one from the pixel matches on either. Phone numbers are hashed as digits with no `+`, and both the national and country-coded forms are sent unless `default_country_code` resolves the ambiguity. If no `fbc` was ever observed but a raw `fbclid` is known, an `fbc` is constructed from it using Meta's documented server-side format. The Meta access token is stored separately as a `meta_capi` credential. When IP/geo enrichment is enabled for your location, the server-side client IP and coarse geo (city, region, postal, country) are captured at ingest and forwarded automatically as `client_ip_address` plus hashed `ct`/`st`/`zp`/`country` in `user_data` — no client-side changes needed. It is off by default (enable it for your location to opt in) and always suppressed for HIPAA-enabled locations.
 
 ### Google Ads
 
