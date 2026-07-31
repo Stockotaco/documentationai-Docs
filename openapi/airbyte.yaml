@@ -297,8 +297,7 @@ paths:
         read live from Airbyte.
 
 
-        The job array is **double-wrapped** — jobs are at `data.data`, and each
-        job is Airbyte's own record passed through unchanged (see the `Job`
+        Each job is Airbyte's own record passed through unchanged (see the `Job`
         schema for exact field names). Airbyte's `next`/`previous` paging fields
         are not forwarded.
       parameters:
@@ -321,14 +320,10 @@ paths:
                 type: object
                 properties:
                   data:
-                    type: object
-                    description: Airbyte jobs payload.
-                    properties:
-                      data:
-                        type: array
-                        description: Jobs, newest first.
-                        items:
-                          $ref: "#/components/schemas/Job"
+                    type: array
+                    description: Jobs, newest first.
+                    items:
+                      $ref: "#/components/schemas/Job"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":

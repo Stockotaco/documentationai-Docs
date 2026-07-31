@@ -301,17 +301,12 @@ paths:
             application/json:
               schema:
                 type: object
-                description: >
-                  The job array is double-wrapped — jobs are at `data.data`.
                 properties:
                   data:
-                    type: object
-                    properties:
-                      data:
-                        type: array
-                        description: Jobs, newest first.
-                        items:
-                          $ref: "#/components/schemas/Job"
+                    type: array
+                    description: Jobs, newest first.
+                    items:
+                      $ref: "#/components/schemas/Job"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -722,17 +717,12 @@ paths:
             application/json:
               schema:
                 type: object
-                description: >
-                  The job array is double-wrapped — jobs are at `data.data`.
                 properties:
                   data:
-                    type: object
-                    properties:
-                      data:
-                        type: array
-                        description: Jobs, newest first.
-                        items:
-                          $ref: "#/components/schemas/Job"
+                    type: array
+                    description: Jobs, newest first.
+                    items:
+                      $ref: "#/components/schemas/Job"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
