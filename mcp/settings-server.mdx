@@ -23,8 +23,16 @@ subsequent tool operates on that client for the session.
 https://mythic-mcp-server-production.up.railway.app/mcp
 ```
 
-`POST /mcp` speaks JSON-RPC 2.0 (Streamable HTTP). Each connection is issued an
-`Mcp-Session-Id`; the selected client is pinned to that session.
+`POST /mcp` speaks JSON-RPC 2.0 (Streamable HTTP) and serves two protocol eras
+on the same endpoint:
+
+| Your client speaks | What you get |
+|---|---|
+| The `initialize` handshake (`2025-11-25` and earlier) | A session: the response carries an `Mcp-Session-Id`, and `select_client` pins the active client to it. |
+| `2026-07-28` (per-request `_meta`) | Stateless serving. There is no session to pin, so agency keys pass the client id as an argument on every call (see [Stateless clients](#stateless-clients)). |
+
+Requests are routed by what they carry, not by a setting — you do not have to
+opt in to either era.
 
 ## Connect
 
@@ -73,6 +81,21 @@ Mint keys of either type in the agency Builder or the platform admin UI.
   Calling a client-scoped tool on an agency-wide key before `select_client`
   returns an error telling you to select a client first.
 </Callout>
+
+### Stateless clients
+
+On a `2026-07-28` connection there is no session, so `select_client` has nothing
+to pin to and returns an error saying so. Use `list_clients` to discover ids and
+pass the one you want on each call — every client-scoped tool takes it as
+`location_id` (or `tenant_key` for tag/snippet/transformer tools):
+
+```jsonc
+{ "method": "tools/call", "params": { "name": "create_insight",
+  "arguments": { "location_id": "loc_abc", "name": "Top Pages", "insight_type": "table" } } }
+```
+
+The argument works on handshake connections too, where it overrides the pinned
+client for that one call — so passing it always is the portable choice.
 
 ## Tool families & scopes
 
