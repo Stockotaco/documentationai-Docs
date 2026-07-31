@@ -1065,11 +1065,38 @@ components:
           format: date-time
     ProvisionRequest:
       type: object
+      description: >
+        Same body as the agency-facing `POST /client/v1/airbyte/config/provision`.
+        CREATE mode needs the BigQuery fields; ADOPT mode
+        (`airbyte_workspace_id` + `airbyte_destination_id`, optionally with the
+        agency's own `airbyte_client_id`/`airbyte_client_secret`) does not, and
+        points Mythic at an Airbyte setup the agency already runs rather than
+        creating a parallel one against the same dataset.
       required:
         - bigquery_project_id
         - bigquery_dataset
         - gcp_credentials_json
       properties:
+        airbyte_workspace_id:
+          type: string
+          description: ADOPT — existing workspace to create sources in. Required with `airbyte_destination_id`.
+        airbyte_destination_id:
+          type: string
+          description: >
+            ADOPT — existing BigQuery destination to write through. Verified at
+            provision time. When supplied, the BigQuery fields are not required.
+        airbyte_client_id:
+          type: string
+          description: ADOPT — the agency's own Airbyte application client id, when the setup is in their org. Send with the secret.
+        airbyte_client_secret:
+          type: string
+          description: Paired with `airbyte_client_id`. Encrypted at rest, never returned.
+        confirm_shared_dataset:
+          type: boolean
+          description: >
+            CREATE mode only. Proceed even though the target dataset already
+            holds Airbyte-managed tables (otherwise `409 dataset_in_use`).
+          default: false
         bigquery_project_id:
           type: string
           example: acme-analytics
@@ -1084,10 +1111,17 @@ components:
           default: US
         staging_bucket_name:
           type: string
+          description: >
+            GCS staging is optional and all-or-nothing — send this with
+            `hmac_key_access_id` and `hmac_key_secret`, or omit all staging
+            fields for standard inserts. Partial sets are rejected with
+            `400 staging_incomplete`.
         staging_bucket_path:
           type: string
+          default: staging
         hmac_key_access_id:
           type: string
+          description: GCS HMAC (interoperability) key access id — not the service-account key.
         hmac_key_secret:
           type: string
         keep_files_in_gcs_bucket:

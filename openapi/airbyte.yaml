@@ -81,6 +81,13 @@ paths:
         credential-bearing values are rejected. The list starts empty, meaning no
         `return_url` is accepted at all until you set it (the callback then renders
         its own terminal page). Requires an agency key (`ak_`).
+
+
+        Works on an agency that has never provisioned: the config row is created
+        if it does not exist. That row unlocks nothing on its own —
+        `POST /oauth/initiate` still requires an active provisioned workspace —
+        it just means you can register return origins before provisioning
+        rather than after.
       requestBody:
         required: true
         content:
@@ -123,20 +130,41 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/WriteForbidden"
-        "404":
-          description: No Airbyte config exists for this agency
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
   /config/provision:
     post:
       summary: Provision workspace
       operationId: provisionAirbyteWorkspace
       description: >
-        Create (or refresh) the agency's Airbyte workspace and a BigQuery
-        destination using GCS staging. Idempotent for the workspace — an
-        existing workspace is reused. Requires an agency key (`ak_`).
+        Point the agency at an Airbyte workspace and a BigQuery destination,
+        either by CREATING them or by ADOPTING ones it already runs. Idempotent
+        for the workspace — an existing or supplied workspace is reused.
+        Requires an agency key (`ak_`).
+
+
+        **Adopt what you already run.** If the agency already syncs these
+        platforms with its own Airbyte, pass `airbyte_workspace_id` +
+        `airbyte_destination_id` (plus `airbyte_client_id`/
+        `airbyte_client_secret` when that setup is in the agency's own Airbyte
+        org). Provisioning a second, independent workspace against the same
+        BigQuery dataset produces duplicate rows, two sets of incremental
+        cursor state that each believe they own the stream, and two Airbyte
+        bills — and nothing errors. In CREATE mode the target dataset is
+        checked for existing Airbyte-managed tables and the request is refused
+        with `409 dataset_in_use` unless `confirm_shared_dataset: true`.
+
+
+        **Staging is optional, but all-or-nothing.** Supply
+        `staging_bucket_name` + `hmac_key_access_id` + `hmac_key_secret`
+        together for GCS staging, or none of them for standard inserts. A
+        partial set is rejected with `400 staging_incomplete`.
+
+
+        Nothing is persisted by a failed provision that had no prior config:
+        the row is rolled back, so `GET /config` keeps returning `404
+        not_configured` rather than a permanently empty `status: error` config
+        you cannot tell apart from a never-provisioned agency. Failures carry
+        the underlying reason in the response — you should never have to read
+        it back off `GET /config`.
       requestBody:
         required: true
         content:
@@ -157,7 +185,15 @@ paths:
                   data:
                     $ref: "#/components/schemas/ProvisionResult"
         "400":
-          description: Missing required fields
+          description: >
+            `missing_fields` (BigQuery fields absent in CREATE mode, or an
+            Airbyte client id/secret sent without its pair),
+            `missing_workspace_id` (`airbyte_destination_id` without
+            `airbyte_workspace_id`), `staging_incomplete` (partial GCS staging
+            configuration — the message names the missing fields),
+            `destination_not_found` or `destination_workspace_mismatch` (the
+            adopted destination is not visible to these credentials, or lives
+            in another workspace).
           content:
             application/json:
               schema:
@@ -166,6 +202,24 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/WriteForbidden"
+        "409":
+          description: >
+            `dataset_in_use` — the target dataset already holds Airbyte-managed
+            tables, so a second destination writing there would duplicate rows
+            and split cursor state. Adopt the existing destination, choose
+            another dataset, or resend with `confirm_shared_dataset: true`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: >
+            `provision_failed` — Airbyte rejected the request. The upstream
+            reason is included in `error`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Agency not found
           content:
@@ -347,7 +401,9 @@ paths:
       operationId: initiateAirbyteOauth
       description: >
         Begin a provider OAuth handshake for a platform whose catalog entry has
-        `supportsOauth: true`. Returns a `consent_url` to redirect the browser to;
+        `supportsOauth: true` — which means the provider CREDENTIAL comes from
+        consent, not that there is nothing to fill in; see `manualFields` for
+        what you must still pass. Returns a `consent_url` to redirect the browser to;
         after the user consents the provider redirects back to
         `/oauth/callback/{state}`, which creates the source and connection and
         then bounces to `return_url`.
@@ -373,6 +429,14 @@ paths:
         rejected with `return_url_not_allowed` at initiation, so it is never
         stored, and the callback can never be used to bounce a browser to an
         arbitrary destination.
+
+
+        **The request is validated before the provisioning gate.** A malformed
+        request gets its own code — `missing_account_id`,
+        `return_url_not_allowed`, `unsupported_platform` — whether or not the
+        agency has provisioned yet, so you can wire up and verify the consent
+        call against an unprovisioned agency and still get an actionable
+        reason. `not_provisioned` means the request itself was fine.
 
 
         The pending request is held for 15 minutes and the returned `state` is
@@ -789,10 +853,26 @@ components:
         supportsOauth:
           type: boolean
           description: >
-            Whether this platform can be connected through the OAuth handoff
-            (`POST /oauth/initiate`) instead of pasting long-lived credentials
-            into `source_config`.
+            NO LONG-LIVED TOKEN — not "no inputs". `true` means the provider
+            CREDENTIAL is obtained through the OAuth handoff
+            (`POST /oauth/initiate`) and held by Airbyte, so you never paste or
+            store an access/refresh token. It says nothing about the
+            non-credential fields the connector still needs: account
+            identifiers and app-issued tokens are supplied in `source_config`
+            in BOTH flows. See `manualFields` for exactly which ones. Every
+            platform in this catalog is `supportsOauth: true`, and they range
+            from `bing_ads` (three manual fields) to `salesforce` (none).
           example: true
+        manualFields:
+          type: array
+          description: >
+            Keys the caller must STILL supply in `source_config` after
+            consenting — i.e. `requiredFields` without the `oauth` flag. Empty
+            means the consent flow supplies everything. Use this rather than
+            inferring inputs from `supportsOauth`.
+          items:
+            type: string
+          example: ["account_id", "customer_id", "developer_token"]
         requiredFields:
           type: array
           description: Configuration fields the source requires.
@@ -899,6 +979,15 @@ components:
           type: boolean
           description: Whether encrypted GCP credentials are stored. The credentials themselves are never returned.
           example: true
+        has_airbyte_credentials:
+          type: boolean
+          description: >
+            `true` when this agency brought its OWN Airbyte application
+            credentials at provision time, so every Airbyte call for it —
+            token, source, connection, sync, OAuth consent — runs inside the
+            agency's own Airbyte org. `false` means Mythic's org. The secret
+            itself is never returned.
+          example: false
         oauth_return_origins:
           type: array
           description: >
@@ -915,11 +1004,61 @@ components:
           format: date-time
     ProvisionRequest:
       type: object
+      description: >
+        Two modes. CREATE (the default): supply the BigQuery fields and Mythic
+        creates a workspace and a BigQuery destination for you. ADOPT: supply
+        `airbyte_workspace_id` + `airbyte_destination_id` (and
+        `airbyte_client_id`/`airbyte_client_secret` if that setup lives in your
+        own Airbyte org) and Mythic uses what you already run instead of
+        building a parallel copy of it. The BigQuery fields are required only
+        in CREATE mode — an adopted destination already carries its own target
+        and credentials.
       required:
         - bigquery_project_id
         - bigquery_dataset
         - gcp_credentials_json
       properties:
+        airbyte_workspace_id:
+          type: string
+          description: >
+            ADOPT: an existing Airbyte workspace to create this agency's sources
+            in, instead of creating a new one. Required alongside
+            `airbyte_destination_id` — a destination can only be used by sources
+            in its own workspace.
+          example: 4fed5b02-4acd-4111-95bc-f7d15153b362
+        airbyte_destination_id:
+          type: string
+          description: >
+            ADOPT: an existing BigQuery destination every connection writes
+            through. This is what prevents two Airbyte workspaces syncing the
+            same streams into the same dataset — duplicate rows, split
+            incremental cursor state, and double Airbyte cost, none of which
+            raises an error anywhere. Verified at provision time: a wrong id, or
+            one in a different workspace, is rejected here rather than on the
+            first connection. When supplied, `bigquery_project_id`,
+            `bigquery_dataset` and `gcp_credentials_json` are not required.
+          example: 613f34e2-bcc0-4bc5-ab3f-eeeff4647401
+        airbyte_client_id:
+          type: string
+          description: >
+            ADOPT: your own Airbyte application client id. Required when the
+            workspace/destination you are adopting lives in YOUR Airbyte org
+            rather than Mythic's — Mythic's credentials cannot see it. Must be
+            sent with `airbyte_client_secret`. Stored and used for every
+            subsequent Airbyte call for this agency.
+        airbyte_client_secret:
+          type: string
+          description: >
+            Paired with `airbyte_client_id`. Encrypted at rest; never returned.
+        confirm_shared_dataset:
+          type: boolean
+          description: >
+            CREATE mode only. Before creating a destination, Mythic lists the
+            target dataset and refuses with `409 dataset_in_use` if it already
+            holds Airbyte-managed tables (`_airbyte*`, or tables named like
+            streams we would write) — that collision is otherwise completely
+            silent. Set `true` to proceed anyway.
+          default: false
         bigquery_project_id:
           type: string
           description: Destination BigQuery project ID.
@@ -940,20 +1079,30 @@ components:
           example: US
         staging_bucket_name:
           type: string
-          description: GCS bucket used for staging loads.
+          description: >
+            GCS bucket for staged loads. ALL-OR-NOTHING: supply this together
+            with `hmac_key_access_id` and `hmac_key_secret` to use GCS staging,
+            or omit every staging_*/hmac_* field to use standard inserts, which
+            need no bucket and no HMAC key. A partial set is rejected with
+            `400 staging_incomplete` naming what is missing.
           example: acme-airbyte-staging
         staging_bucket_path:
           type: string
-          description: Optional path prefix within the staging bucket.
+          description: Path prefix within the staging bucket. Defaults to `staging`.
+          default: staging
         hmac_key_access_id:
           type: string
-          description: HMAC key access ID for GCS staging. Provide together with the secret.
+          description: >
+            GCS HMAC key access ID. This is an interoperability credential
+            created FOR a service account (`gcloud storage hmac create
+            SA_EMAIL`) — not the service-account key itself. Required for GCS
+            staging, together with the secret.
         hmac_key_secret:
           type: string
-          description: HMAC key secret for GCS staging. Provide together with the access ID.
+          description: HMAC key secret. Required for GCS staging, together with the access ID.
         keep_files_in_gcs_bucket:
           type: string
-          description: Airbyte staging-file retention option.
+          description: Airbyte staging-file retention option. GCS staging only.
     ProvisionResult:
       type: object
       properties:
@@ -964,6 +1113,21 @@ components:
         status:
           type: string
           example: active
+        loading_method:
+          type: string
+          description: The destination's load path — `Standard` or `GCS Staging`.
+          enum: ["Standard", "GCS Staging"]
+          example: Standard
+        adopted:
+          type: object
+          description: Which parts of this config came from an existing setup rather than being created.
+          properties:
+            workspace:
+              type: boolean
+            destination:
+              type: boolean
+            airbyte_org:
+              type: boolean
     CreateConnectionRequest:
       type: object
       required:

@@ -9,7 +9,11 @@ description: >-
 
 The Airbyte Sync API lets an agency stand up managed data pipelines for its clients without touching the Airbyte UI. You provision a single BigQuery destination for the agency, then create one connection per client and ad platform. Mythic manages the underlying Airbyte workspace, sources, and connections on your behalf and records every sync outcome.
 
-Behind the scenes each connection wires an Airbyte source (Google Ads, Meta Ads, and others) to your agency's BigQuery destination using GCS staging. Sync results stream back into an immutable event log that powers the statistics and health endpoints.
+Behind the scenes each connection wires an Airbyte source (Google Ads, Meta Ads, and others) to your agency's BigQuery destination. Sync results stream back into an immutable event log that powers the statistics and health endpoints.
+
+<Callout kind="warning">
+  **Already running Airbyte yourself? Adopt it, do not duplicate it.** `POST /config/provision` can take an existing `airbyte_workspace_id` and `airbyte_destination_id` — plus your own `airbyte_client_id`/`airbyte_client_secret` when that setup lives in your Airbyte org rather than Mythic's. Provisioning a second workspace against a dataset you already sync into gives you duplicate rows, two sets of incremental cursor state, and two Airbyte bills, with no error anywhere to tell you. See [Provisioning](#provisioning).
+</Callout>
 
 ## Base URL
 
@@ -23,18 +27,19 @@ https://mythic-analytics.gulp.workers.dev/client/v1/airbyte
 
 | Concept | Description |
 |---------|-------------|
-| **Config** | Your agency's Airbyte setup — workspace, BigQuery destination, and staging bucket. One per agency. |
+| **Config** | Your agency's Airbyte setup — workspace, BigQuery destination, and optional staging bucket. One per agency. Created by Mythic, or adopted from Airbyte you already run. |
 | **Platform** | A supported source (e.g. `google_ads`, `meta_ads`) with its required fields and default streams. |
 | **Connection** | A client-scoped pipeline from a platform source into your BigQuery destination. |
 | **Stream** | A table/entity within a platform (e.g. `campaigns`), synced incrementally or by full refresh. |
 | **Consent handoff** | For platforms with `supportsOauth: true`, `POST /oauth/initiate` returns a consent URL so the connection is authorised by the account owner instead of by a pasted token. Requires a registered return origin. |
+| **`supportsOauth`** | "The provider credential comes from consent", **not** "there is nothing to fill in". Read `manualFields` for the inputs you must still supply. |
 | **Sync event** | An immutable record of one completed sync — outcome, record and byte counts, timing. |
 
 ## Typical workflow
 
 <Steps>
-  <Step title="Provision the destination" titleType="h3">
-    Call `POST /config/provision` once with your BigQuery project, dataset, and GCP service-account credentials. This creates the agency workspace and destination.
+  <Step title="Provision or adopt the destination" titleType="h3">
+    Call `POST /config/provision` once — with your BigQuery project, dataset, and GCP service-account credentials to have Mythic create the workspace and destination, or with `airbyte_workspace_id` + `airbyte_destination_id` to adopt an Airbyte setup you already run. See [Provisioning](#provisioning).
   </Step>
   <Step title="Discover platforms" titleType="h3">
     Call `GET /platforms` to see supported sources and the fields each one requires.
@@ -75,6 +80,40 @@ Example error response:
 }
 ```
 
+## Provisioning
+
+`POST /config/provision` runs in one of two modes.
+
+**Create.** Send `bigquery_project_id`, `bigquery_dataset` and `gcp_credentials_json`; Mythic creates an Airbyte workspace and a BigQuery destination for you.
+
+**Adopt.** Send the ids of an Airbyte setup you already run, and Mythic uses it instead of building a parallel one:
+
+| Field | When you need it |
+|-------|------------------|
+| `airbyte_workspace_id` | Always, when adopting. Sources are created here. |
+| `airbyte_destination_id` | The existing BigQuery destination every connection writes through. Requires `airbyte_workspace_id`. |
+| `airbyte_client_id` / `airbyte_client_secret` | When that workspace lives in **your** Airbyte org. Mythic's own application credentials cannot see it, so every subsequent Airbyte call for your agency is made with yours. Encrypted at rest, never returned — `GET /config` reports `has_airbyte_credentials` only. |
+
+When you adopt a destination, the BigQuery fields are not required: the destination already carries its own target and credentials. The id is verified at provision time, so a wrong id, or one belonging to another workspace, fails here rather than on your first connection.
+
+<Callout kind="warning">
+  In **create** mode Mythic lists the target dataset first and refuses with `409 dataset_in_use` if it already holds Airbyte-managed tables. Two Airbyte workspaces writing the same streams into one dataset duplicate rows and split incremental cursor state, and neither side reports an error — you find out from the numbers or the invoice. Adopt the existing destination, pick another dataset, or resend with `confirm_shared_dataset: true` if the sharing is intended.
+</Callout>
+
+### Staging is optional, and all-or-nothing
+
+Standard inserts are the default: send no staging fields and the destination loads directly. To use GCS staging instead, send **all three** of `staging_bucket_name`, `hmac_key_access_id` and `hmac_key_secret` (`staging_bucket_path` defaults to `staging`). A partial set is rejected with `400 staging_incomplete` naming what is missing.
+
+The HMAC pair is a GCS **interoperability** credential created for a service account — `gcloud storage hmac create SA_EMAIL` — not the service-account JSON key. It does not have to belong to the same service account as `gcp_credentials_json`, but whichever account owns it needs write access to the staging bucket, so using the same one is simplest.
+
+### Failures
+
+A provision that fails leaves no config row behind if there was none before, so `GET /config` keeps returning `404 not_configured` — "never provisioned" and "provisioning failed" stay distinguishable. The failure response carries the reason itself (`code: provision_failed` with the upstream message, or a specific `400`/`409` code); you should never have to read it back off `GET /config`.
+
+<Callout kind="tip">
+  `PATCH /config` does not require a provisioned agency — it creates the config row if there is none. You can register `oauth_return_origins` before provisioning. That row unlocks nothing on its own: `POST /oauth/initiate` still requires an active workspace.
+</Callout>
+
 ## Supported platforms
 
 The platform catalog is returned live by `GET /platforms`. At the time of writing it includes:
@@ -91,13 +130,29 @@ The platform catalog is returned live by `GET /platforms`. At the time of writin
   Always read `requiredFields` and `defaultStreams` from `GET /platforms` rather than hard-coding them — the catalog is the source of truth for what each connection needs.
 </Callout>
 
+### `supportsOauth` means no long-lived token, not no inputs
+
+Every platform above is `supportsOauth: true`. That means the provider **credential** is obtained through consent and held by Airbyte — you never paste, store, or refresh an access or refresh token. It says nothing about the other fields a connector needs. Those you still send in `source_config`, in either flow.
+
+`manualFields` on each catalog entry lists exactly what is left for you to supply — `requiredFields` minus everything flagged `oauth: true`:
+
+| Platform | `supportsOauth` | `manualFields` |
+|----------|-----------------|----------------|
+| `google_ads` | `true` | `customer_id` |
+| `meta_ads` | `true` | `account_id` |
+| `bing_ads` | `true` | `account_id`, `customer_id`, `developer_token` |
+| `tiktok_ads` | `true` | `advertiser_id` |
+| `salesforce` | `true` | — none |
+
+Bing is the widest gap: fully OAuth-capable and still needs three inputs, because Microsoft's `developer_token` is issued to the application, not granted by a user's consent. Salesforce is the other end — consent supplies everything.
+
 ## Connecting with OAuth
 
-Platforms whose catalog entry has `supportsOauth: true` can be connected without anyone handling a provider token. Fields the consent flow supplies are flagged `oauth: true` in `requiredFields` — never prompt for those.
+Platforms whose catalog entry has `supportsOauth: true` can be connected without anyone handling a provider token. Fields the consent flow supplies are flagged `oauth: true` in `requiredFields` — never prompt for those. Everything in `manualFields` you must still collect and send in `source_config`.
 
 <Steps>
   <Step title="Register where consent may land" titleType="h3">
-    Once per agency: `PATCH /config` with `oauth_return_origins`, the list of origins (`https://portal.example.com`, no path) your portal returns to. The list starts empty and a `return_url` outside it is rejected at initiation — that check is what keeps the unauthenticated callback from being usable as an open redirector.
+    Once per agency: `PATCH /config` with `oauth_return_origins`, the list of origins (`https://portal.example.com`, no path) your portal returns to. The list starts empty and a `return_url` outside it is rejected at initiation — that check is what keeps the unauthenticated callback from being usable as an open redirector. This works before provisioning; the config row is created if it does not exist.
   </Step>
   <Step title="Start the handoff" titleType="h3">
     `POST /oauth/initiate` with `client_id`, `platform`, a `return_url`, and the non-secret connector fields in `source_config` (account identifiers, and Bing's app-issued `developer_token` — everything not flagged `oauth: true`). `meta_ads` and `google_ads` require an account identifier here; it is validated before consent so a missing one cannot surface later as an opaque catalog-discovery failure. You get back a `consent_url` and a single-use `state`, valid for 15 minutes.
@@ -109,6 +164,8 @@ Platforms whose catalog entry has `supportsOauth: true` can be connected without
     The provider redirects to `/oauth/callback/{state}`, which creates the source and connection and then redirects to your `return_url` with `mythic_oauth=success` and `mythic_connection_id=…`, or `mythic_oauth=error` and `mythic_error_code=…`. Your own query parameters are preserved. Sync and monitor the connection like any other.
   </Step>
 </Steps>
+
+`/oauth/initiate` validates your request **before** it checks whether the agency is provisioned, so `missing_account_id`, `return_url_not_allowed` and `unsupported_platform` come back with their own codes even on an agency that has never provisioned. `not_provisioned` therefore means the request itself was fine.
 
 `mythic_error_code` comes from a closed set you can branch on — `state_invalid`, `missing_secret_id`, `missing_account_id`, `not_configured`, `not_provisioned`, `connection_failed`. Exception text never travels in the URL; it stays in server logs. Errors from `/oauth/initiate` carry the same idea as a `code` field in the JSON body (`return_url_not_allowed`, `missing_account_id`, and so on) — switch on `code`, not on the prose in `error`.
 
@@ -149,11 +206,13 @@ Connections sync on one of a fixed set of cadences. Cron-based cadences run on a
 
 | Status | Meaning |
 |--------|---------|
-| `400` | Missing required fields, unsupported platform, or workspace not provisioned |
+| `400` | Missing required fields, unsupported platform, incomplete GCS staging config, or workspace not provisioned |
 | `401` | Authorization missing or invalid |
 | `403` | Write attempted with a read-only `sk_` key, or client not linked to the agency |
 | `404` | Config or connection not found (or not owned by the calling agency) |
+| `409` | `dataset_in_use` — provisioning would create a second Airbyte destination against a dataset already holding Airbyte-managed tables |
 | `429` | Rate limited — `POST /oauth/initiate` (per agency) and the OAuth callback (per IP) allow 20 per 10 minutes |
+| `502` | `provision_failed` — Airbyte rejected the provisioning request; the upstream reason is in `error` |
 | `503` | Server-side encryption key not configured |
 | `500` | Internal server error |
 
