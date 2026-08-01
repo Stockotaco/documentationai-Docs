@@ -248,9 +248,13 @@ components:
           description: >-
             `false` to disable, `true` for SDK defaults, an object to choose
             element types, or `null` to clear the override.
+          # `nullable: true`, not a `type: "null"` branch — that is OpenAPI 3.1
+          # syntax and this document is 3.0.0, where the only allowed `type`
+          # values are the six JSON types. The 3.1 form fails schema validation
+          # outright, which is what took the whole Settings spec down.
+          nullable: true
           oneOf:
             - type: boolean
-            - type: "null"
             - type: object
               properties:
                 elements:

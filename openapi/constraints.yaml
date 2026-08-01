@@ -803,8 +803,17 @@ paths:
                             properties:
                               scope: { type: string }
                               campaign: { type: string, nullable: true }
-                              step: { type: string, description: The step cleared, or `all`. }
-                              removed: { type: integer, description: How many stored targets were removed. }
+                              # Block style, not flow: an unquoted comma inside a
+                              # `{ ... }` mapping starts a NEW key, so
+                              # "description: The step cleared, or `all`." parsed
+                              # as a description plus a junk key and failed
+                              # validation for the whole spec.
+                              step:
+                                type: string
+                                description: "The step cleared, or `all`."
+                              removed:
+                                type: integer
+                                description: How many stored targets were removed.
         "403":
           description: Writes require an agency key (`ak_`).
 components:
