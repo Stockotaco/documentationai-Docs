@@ -1113,7 +1113,21 @@ components:
                         coverage did. Render as not-assessable, not as a failure.
                     viable_markets:
                       type: integer
-                      description: Regions carrying ≥2% of regional revenue.
+                      description: >
+                        Regions clearing BOTH floors: ≥2% of regional revenue, and
+                        active on at least `min_active_days` of the window. The
+                        activity floor matters — a region that takes all its volume
+                        in one burst clears the revenue share but is not a market,
+                        and correlating two such bursts produces a near-perfect
+                        match against nothing. These are the same floors
+                        `GET /markets` applies, so the two endpoints agree.
+                    min_revenue_share:
+                      type: number
+                      example: 0.02
+                    min_active_days:
+                      type: integer
+                      description: max(7, 25% of the window's days).
+                      example: 23
                 matchability:
                   type: object
                   properties:
@@ -1279,12 +1293,19 @@ components:
               example: holdout
             launchable:
               type: boolean
-              description: False when any control region is unresolved — the targeting change would exclude nothing and the experiment would be invalid.
+              description: >
+                False when the plan must not be applied. Two causes: a control
+                region that does not resolve to a Meta targeting key (the change
+                would exclude nothing), or a stored `design.ok: false` — the
+                experiment cannot produce a verdict as configured, and running it
+                will not change that. The steps below ask an agency to edit every
+                active ad set for the whole window, so a green light here is
+                expensive to get wrong.
             launch_blockers:
               type: array
               items:
                 type: string
-              description: Present when launchable=false — what must be resolved first.
+              description: Present when launchable=false — what must be resolved first, one entry per cause.
             summary:
               type: string
             apply_on:

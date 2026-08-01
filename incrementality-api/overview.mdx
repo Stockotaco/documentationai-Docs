@@ -47,9 +47,13 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
 
     With `auto=true` the API inventories the client's top conversion-ish events, detects which carry revenue (and at which JSON path), runs all five checks per event, and returns the best candidate plus every event's verdict with a `suggested_measure`/`suggested_json_path` you can paste straight into an experiment definition.
 
-    Five checks: **geo coverage** (share of revenue that carries a region — requires IP/geo enrichment), **history** (≥28 days of data), **market count** (≥6 regions with meaningful revenue), **matchability** (the largest markets have at least one other market that moves with them — big but uncorrelated regions are not test cells), and **detectability** — the daily budget the client's revenue noise floor implies for a conclusive 30-day test (`daily_budget_for_30d_test`). If that number dwarfs the client's realistic spend, a geo test can never conclude for them — better to know before running one.
+    Five checks: **geo coverage** (share of revenue that carries a region — requires IP/geo enrichment), **history** (≥28 days of data), **market count** (≥6 regions clearing both floors: `min_revenue_share` 2% of regional revenue *and* `min_active_days`, max(7, a quarter of the window) — the same floors `GET /markets` applies, so the two endpoints cannot disagree), **matchability** (the largest markets have at least one other market that moves with them — big but uncorrelated regions are not test cells), and **detectability** — the daily budget the client's revenue noise floor implies for a conclusive 30-day test (`daily_budget_for_30d_test`). If that number dwarfs the client's realistic spend, a geo test can never conclude for them — better to know before running one.
 
     The default revenue source is the `purchase` event at `$.value` — clients whose conversions are named differently must pass `event_name` (and `json_path` for where the value lives, e.g. `$.meta_amount`). A path that extracts nothing does not error; it returns zeros, and because `geo_coverage` is revenue-weighted it also drives coverage to 0. The check now separates that case (`root_cause.check: "revenue_value"`) from a genuine geo gap.
+
+    <Callout kind="warning">
+      **The activity floor is not a formality.** A region that takes all its volume in a single day clears a revenue-share floor easily, and two such regions correlate near-perfectly with each other because they spike on the same day in a field of zeros. On one live account, bot traffic from two foreign regions (45 events on one day, 42 across two) carried the entire matchability check at 0.9542 and produced `eligible: true` with zero failing checks — for a client whose real markets number two, correlate at 0.27, and whose only possible pairing was then rejected at design time. Both floors apply, and `market_count` reports both so you can see which one a client missed.
+    </Callout>
 
     When exactly one check fails, `root_cause` names it and carries a remedy — including the most useful verdict this endpoint produces, a **detectability-only** failure: everything else passes and the answer is a number. Required budget scales with `1/sqrt(days)`, so roughly 4x the days lets you halve the daily budget.
   </Step>
@@ -90,7 +94,7 @@ Same key system as the rest of the `/client/v1` surface: an **agency key** (`ak_
 
     The plan is the complete ad-side recipe: control regions resolved to Meta targeting region keys, the exact `excluded_geo_locations` change, apply/revert dates, a step-by-step checklist, and paste-ready Marketing API calls (read-targeting-first, merge, apply — plus a key-verification call). Mythic never touches the ad account; the plan removes every thinking step from doing it yourself in Ads Manager (Ad set → Locations → Exclude).
 
-    Check `launchable` before acting: if any control region can't be resolved to a targeting key (e.g. non-US regions), the plan returns `launchable: false` with `launch_blockers` — launching anyway would exclude nothing and invalidate the test.
+    Check `launchable` before acting. It is `false` for two reasons, each listed in `launch_blockers`: a control region that can't be resolved to a targeting key (e.g. non-US regions — launching would exclude nothing and invalidate the test), or a stored `design.ok: false`. The second is the expensive one: the checklist asks you to edit every active ad set and hold it for the whole window, so an experiment whose control markets already failed the design fit would spend real budget on a verdict the API has already said it cannot produce. Re-pick controls from `GET /markets` and re-create instead.
   </Step>
   <Step title="Track progress">
     Every experiment read carries a derived `progress` object — poll it while the test runs:
@@ -192,7 +196,13 @@ The `definition` object on an experiment carries the full test spec:
 <Callout kind="info">
   **Count mode has its own coefficient.** For high-ticket, low-volume advertisers, revenue-mode variance can be unfittable — where individual sales are several times the daily mean of a region, no synthetic control tracks the series. Counting conversions removes that variance (one live account: `sigma_daily` 3.28 in count mode vs 2,685 in revenue mode, so 7 days to conclude instead of 56–179).
 
-  In count mode the response carries **`conversion_coefficient`** — incremental conversions per Meta-reported conversion — with `se_conversion_coefficient` and `platform_conversions`. Same estimand on both sides. The revenue-denominated `coefficient` is always `null` there by construction, and `/coefficients` reports count series with `kind: "conversion"` so the two are never averaged together.
+  In count mode the response carries **`conversion_coefficient`** — incremental conversions per Meta-reported conversion — with `se_conversion_coefficient` and `platform_conversions`. Same estimand on both sides. The revenue-denominated `coefficient` is always `null` there by construction, and `/coefficients` reports count series with `kind: "conversion"` so the two are never averaged together. Like `coefficient`, it is withheld (`null`) whenever `inference_valid` is `false` — a coefficient is only as good as the counterfactual behind it.
+
+  **Meta must actually report the action you're counting.** The denominator comes from Meta's `actions`, and the default reads `omni_purchase` with `purchase` as fallback. A lead-gen account reports neither — it carries `lead`, `complete_registration`, `onsite_web_lead` — so the coefficient comes back null until you set `spend.purchase_action_type` to a type the account reports. `conversion_coefficient_unavailable_reason` names which of the three causes applies: nothing reported at all, the geo_stream Type 1 restriction, or too little spend behind the reported conversions.
+</Callout>
+
+<Callout kind="info">
+  **Coverage is measured in spend, not rows.** Both coefficient denominators are withheld when under 5% of the window's spend sits on rows carrying the value or count — one stray valued row out of tens of thousands yields a real number that is pure noise. The reported shares are `platform_value_spend_share` and `platform_conversion_spend_share`, alongside the raw `platform_spend_rows` / `platform_value_rows` / `platform_conversion_rows`. Spend-weighting matters because ad-day rows with zero spend are common: on one live account 1,481 of 3,212 rows spent nothing, so a denominator covering 29.7% of spend presented as 3.0% of rows and was withheld as "no conversions reported".
 </Callout>
 
 ### Revenue source (`revenue`)
