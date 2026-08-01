@@ -73,6 +73,19 @@ paths:
           schema:
             type: string
             format: date
+        - name: days
+          in: query
+          description: >
+            Window length in days, inclusive of both ends — the same shorthand
+            `/client/v1/data` takes. `days=90` ending yesterday is the usual
+            call. Ignored when `from` is given explicitly. Out-of-range values
+            are rejected, not clamped.
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+            default: 28
         - name: group_by
           in: query
           description: >
@@ -362,8 +375,28 @@ paths:
                             description: Sessions matched on a Meta id (exact, survives renames).
                           joined_by_name:
                             type: integer
-                            description: Sessions matched on campaign name (breaks when a campaign is renamed mid-window).
+                            description: >
+                              Sessions matched on campaign name (breaks when a campaign
+                              is renamed mid-window). Names arrive percent-encoded from
+                              the URL and are compared with escapes and punctuation
+                              removed, so `GPM+%7C+Brand` matches `GPM | Brand`.
                           click_to_session_rate: { type: number, nullable: true }
+                          unexpanded_macro:
+                            type: object
+                            description: >
+                              Present only when some sessions carry an ad-platform
+                              macro that was never substituted — `{{campaign.name}}`
+                              passed through verbatim, or a misspelling like
+                              `{campaignname}` that Meta does not recognise. These
+                              clicks can never be attributed, and no matching can
+                              repair them: the fix is in the ad's URL tags. Absent
+                              when there is nothing to report.
+                            properties:
+                              sessions: { type: integer }
+                              sample:
+                                type: string
+                                description: One of the literals found, so the tag can be located.
+                              message: { type: string }
                       conversion_attribution:
                         type: object
                         description: >
@@ -497,7 +530,12 @@ paths:
                             type: array
                             items: { type: object }
         "400":
-          description: Invalid parameter, or the generated query failed the tenant-scope guard.
+          description: >
+            Invalid parameter, or the generated query failed the tenant-scope
+            guard. Also `ads_table_unsupported`: the `?table=` you named exists
+            but is not shaped like Meta ads-insights. Google Ads tables sit in
+            the same dataset and look like the obvious equivalent, but this
+            funnel reads Meta only.
         "401":
           description: Missing or invalid key.
         "422":
@@ -548,6 +586,19 @@ paths:
           schema:
             type: string
             format: date
+        - name: days
+          in: query
+          description: >
+            Window length in days, inclusive of both ends — the same shorthand
+            `/client/v1/data` takes. `days=90` ending yesterday is the usual
+            call. Ignored when `from` is given explicitly. Out-of-range values
+            are rejected, not clamped.
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+            default: 28
       responses:
         "200":
           description: Per-event verdicts and a suggested pairing.
@@ -568,14 +619,22 @@ paths:
                       suggested:
                         type: object
                         nullable: true
-                        description: Highest-volume usable pairing, or `null` when no event is usable.
+                        description: >
+                          A usable pairing, or `null` when no event is usable. Prefers
+                          the conversion event the analysis itself defaults to, so the
+                          two endpoints never recommend different funnels. The lead
+                          event is always session-bearing: the landing step is measured
+                          per session, so a session-less event would report zero there
+                          and blame the page.
                         properties:
                           conversion_event: { type: string }
                           revenue_path: { type: string, nullable: true }
                           lead_event:
                             type: string
                             nullable: true
-                            description: A usable event strictly more common than the conversion event, or `null`.
+                            description: >
+                              A session-bearing event strictly more common than the
+                              conversion event, or `null`.
                           note:
                             type: string
                             description: Present only when there is no obvious lead step.
@@ -592,7 +651,21 @@ paths:
                             session_coverage:
                               type: number
                               nullable: true
-                              description: Share of these events carrying a session_id — a ceiling on what the funnel can see.
+                              description: >
+                                Share of these events carrying a session_id. Zero is
+                                normal and not disqualifying — see `usable`.
+                            person_coverage:
+                              type: number
+                              nullable: true
+                              description: >
+                                Share carrying a person. A session-less event is still
+                                creditable through the person's nearest paid touch, so
+                                this is what decides usability on a CRM-fed client.
+                            credited_via:
+                              type: string
+                              nullable: true
+                              enum: [session, person]
+                              description: How this event would reach a campaign, or `null` if it cannot.
                             revenue_paths:
                               type: array
                               description: JSON paths that actually hold a castable number for this event.
@@ -600,11 +673,21 @@ paths:
                             suggested_revenue_path: { type: string, nullable: true }
                             usable:
                               type: boolean
-                              description: "`false` means zero session coverage — unusable here whatever the volume."
+                              description: >
+                                Whether this event can be credited to a campaign at all.
+                                `true` for a session-less CRM event that carries a
+                                person — those are credited to that person's nearest
+                                paid touch within `attribution_window_days`, and on a
+                                CRM-fed client they are the only revenue events there
+                                are. `false` only when neither a session nor a person
+                                is present.
                             suggested_role: { type: string, enum: [conversion, lead] }
                             warning:
                               type: string
-                              description: Present when coverage is zero or below 50%.
+                              description: >
+                                Present when credit will come via person rather than
+                                session, when session coverage is below 50%, or when
+                                the event cannot be credited at all.
         "401":
           description: Missing or invalid key.
         "424":

@@ -46,9 +46,12 @@ The same key system as the rest of `/client/v1`: an **agency key** (`ak_`, bind 
   <Step title="Ask what the account is stuck on">
     ```bash
     curl "$BASE/client/v1/constraints?location_id=$LOC" -H "Authorization: Bearer $AK"
+
+    # or over a longer window — days is inclusive of both ends, 1-365
+    curl "$BASE/client/v1/constraints?location_id=$LOC&days=90" -H "Authorization: Bearer $AK"
     ```
 
-    The `summary.primary_constraint` is the headline: the step constraining the most conversions account-wide.
+    The `summary.primary_constraint` is the headline: the step constraining the most conversions account-wide. The window defaults to the last 28 days; set it with `days`, or with `from`/`to` when you need exact boundaries. `/client/v1/constraints/events` takes the same `days`, so keep the two in step when you compare them.
   </Step>
 
   <Step title="Find out which events you can use">
@@ -222,24 +225,33 @@ If the stored targets can't be read, the analysis still runs against pooled rate
   },
   "events": [
     { "event_name": "lead", "total_events": 5000, "session_coverage": 0.98,
+      "person_coverage": 1, "credited_via": "session",
       "revenue_paths": [], "usable": true, "suggested_role": "lead" },
-    { "event_name": "transaction_completed", "total_events": 800, "session_coverage": 0.97,
-      "revenue_paths": ["$.value"], "usable": true, "suggested_role": "conversion" },
+    { "event_name": "transaction_completed", "total_events": 800, "session_coverage": 0,
+      "person_coverage": 1, "credited_via": "person",
+      "revenue_paths": ["$.meta_amount"], "usable": true, "suggested_role": "conversion",
+      "warning": "No event of this type carries a session (typical of CRM/webhook events)…" },
     { "event_name": "ghl_rebill", "total_events": 3000, "session_coverage": 0,
-      "usable": false, "warning": "No event of this type carries a session…" }
+      "person_coverage": 0, "credited_via": null,
+      "usable": false, "warning": "These events carry neither a session nor a person…" }
   ]
 }
 ```
 
-Three fields do the work:
+Four fields do the work:
 
-- **`session_coverage`** — the share of these events that carry a `session_id`. This funnel is session-grained, so coverage is a ceiling on what it can see.
+- **`session_coverage`** — the share of these events that carry a `session_id`. Zero is normal for anything server-side and is **not** disqualifying on its own.
+- **`person_coverage`** — the share that carry a person. This is what decides usability on a CRM-fed client: a session-less conversion is credited to that person's nearest paid touch (see [How conversions get credited](#how-conversions-get-credited)).
 - **`revenue_paths`** — which JSON paths actually hold a number, so you know what to pass as `revenue_path`. An event with none can still be a `lead_event`; it just can't carry revenue.
-- **`usable`** — `false` means zero session coverage, so the event can never appear in this funnel whatever its volume.
+- **`usable`** — whether the event can be credited to a campaign **at all**. `false` only when neither a session nor a person is present. `credited_via` tells you which route it will take.
 
 <Callout kind="alert">
-**Server-side events are the trap this endpoint exists to catch.** CRM and webhook conversions (GoHighLevel over Pub/Sub, for instance) never touch the browser, so they carry no session. Pick one as your `conversion_event` and every campaign reports zero conversions — and the constraint logic then blames your landing pages for it. That is a confidently wrong answer, which is worse than an error, so check `usable` before committing to an event.
+**A session-less conversion is not an unusable one.** CRM and webhook conversions (GoHighLevel over Pub/Sub, for instance) never touch the browser, so they carry no session — and on a CRM-fed client they are the *only* revenue events there are. They are credited through the person instead, so they remain usable. What that costs you is visible in the response: `conversion_attribution.uncredited` counts the conversions whose people never visited from an ad inside `attribution_window_days`, and on a real account that can be the majority. Read it before quoting a conversion count.
 </Callout>
+
+The genuinely unusable case is an event carrying **neither** a session nor a person: nothing can attach it to a campaign, and its `warning` says so.
+
+A `lead_event` is held to a stricter standard than a conversion. The landing step is measured per session (`sessions → lead_sessions`), so a session-less event would report a landing rate of zero and blame your page for it. The suggestion never proposes one, even when it is the highest-volume event on the account.
 
 `/data/events/breakdown?dimension=event_name` and `/data/properties` remain the general-purpose event and property catalogues. This endpoint exists because neither reports session coverage, which is the one thing this funnel depends on.
 
@@ -252,9 +264,28 @@ A low `tracking.match_rate` invalidates everything downstream of it. If ad click
 Sessions are matched to Meta rows two ways, and the response tells you which was used:
 
 - **`joined_by_id`** — matched on the Meta ID via `utm_id` (campaign) or `utm_content` (ad set / ad). Exact, and survives renames. This is what Meta's `{{campaign.id}}` dynamic parameter gives you.
-- **`joined_by_name`** — matched on the campaign name. Works, but **breaks silently when a campaign is renamed mid-window**: the renamed campaign's sessions stop matching, and its funnel collapses for reasons that have nothing to do with performance.
+- **`joined_by_name`** — matched on the campaign name, which is what Meta's `{{campaign.name}}` gives you. Works, but **breaks silently when a campaign is renamed mid-window**: the renamed campaign's sessions stop matching, and its funnel collapses for reasons that have nothing to do with performance. Names arrive percent-encoded from the URL (`GPM+%7C+Brand`), so both sides are compared with escapes and punctuation removed — you do not need to decode anything yourself.
 
 If `joined_by_name` dominates your response, adding `utm_id={{campaign.id}}` to your ad URLs is the single highest-value fix available — it makes every number here more reliable.
+
+### Unexpanded macros
+
+The one tracking fault no matching can repair is a macro that was never substituted, sitting in the UTM as a literal:
+
+```json
+"tracking": {
+  "match_rate": 0.91,
+  "unexpanded_macro": {
+    "sessions": 189,
+    "sample": "{campaignname}",
+    "message": "189 session(s) carry an unexpanded ad-platform macro in the campaign UTM…"
+  }
+}
+```
+
+`{campaignname}` is not a macro Meta recognises, so it is passed through verbatim — the correct forms are `{{campaign.name}}` and `{{campaign.id}}`. `{{campaign.name}}` reaching the pixel unexpanded means the tag is set somewhere that does not support substitution. Either way those clicks carry no campaign and can never be attributed; the fix is in the ad's URL tags, not in a query parameter here.
+
+`unexpanded_macro` is absent when there is nothing to report, so its presence alone is the signal. Sessions counted here are also excluded from the join outright — a literal like `{campaignname}` would otherwise be capable of matching a campaign genuinely named "Campaign Name".
 
 ## How conversions get credited
 
