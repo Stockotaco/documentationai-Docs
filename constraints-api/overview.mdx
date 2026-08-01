@@ -103,6 +103,66 @@ A campaign at or above the pooled rate on every step returns `constraint: null` 
 
 Rows are returned **ordered by opportunity**, which is deliberately not spend order.
 
+## Who converted, and why stitching is on by default
+
+A CRM or server-side conversion **never carries a session of its own** — it arrives over Pub/Sub with a contact id, long after the browsing happened. Credit can therefore only reach a campaign through the *person*, and the conversion's `distinct_id` shares nothing with the browsing device's id until identity resolution maps both onto one person.
+
+That is why identity stitching is on by default. Measured on one client over 30 days (273 conversions):
+
+| | Raw `distinct_id` | Stitched |
+| --- | --- | --- |
+| Conversions with their own session | 0 | 0 |
+| Reaching any pixel session | 23% | **91%** |
+| **Creditable to a paid campaign touch** | **10%** | **81%** |
+
+Because the funnel resolves people, every row tells you *who*, not just how many:
+
+```json
+{
+  "campaign_name": "WOS Webinar — Interests",
+  "conversions": 12,
+  "converting_persons": 9,
+  "person_ids": ["01hq2…", "01hq7…", "01hqa…"]
+}
+```
+
+Those are canonical person ids (merge tombstones already collapsed), so they go straight into `GET /client/v1/data/persons/{id}` — a constraint verdict drills through to the actual profiles and their full touch history. `converting_persons` is the true distinct count; `person_ids` is a capped sample.
+
+Check `conversion_attribution.identity_resolution` before trusting a low attribution number:
+
+```json
+"identity_resolution": {
+  "enabled": true,
+  "conversions_resolved_to_person": 265,
+  "conversions_resolved_rate": 0.97,
+  "distinct_converting_persons": 241
+}
+```
+
+A low `conversions_resolved_rate` is the ceiling on everything else — it usually means the identity snapshot export has stalled, not that your campaigns stopped working.
+
+<Callout kind="info">
+`resolve_identities=false` reverts to raw `distinct_id` matching. It exists to reproduce a pre-2026-07-31 figure; on a CRM-fed client it will cut credited conversions by roughly 8×.
+</Callout>
+
+## When a grain can't be measured
+
+Ad-level attribution needs a per-ad key in the visit. The endpoint reads three, in order: the grain's UTM id, **the grain's id in the landing URL's query string** (`ad_id=`, `adset_id=`, `campaign_id=` — where Meta's `{{ad.id}}` macro usually lands), then the name.
+
+If none of those arrive, the sessions still happened — we just can't attribute them to an ad. That is **unknown, not zero**, and the response says so rather than inventing a verdict:
+
+```json
+"status": "unmeasurable",
+"measurable": { "ad": true, "tracking": false, "landing": false, "sales": false },
+"constraint": null
+```
+
+When *every* row with clicks is blind, the response carries a `grain_unresolvable` diagnostic naming the missing key, and `tracking.grain_resolvable` is `false`. Use `group_by=campaign`, which resolves from `utm_id` on almost every account, and `/client/v1/constraints/audit` to see which tags are missing.
+
+<Callout kind="alert">
+A step marked `measurable: false` is never reported as the constraint. This matters because the failure it replaces was actively misleading: at ad grain the funnel used to return `step: "tracking", rate: 0` — telling you your click tracking was broken when the clicks had arrived perfectly well and only the *ad-level* key was absent. Render unmeasurable steps as "can't measure", never as 0%.
+</Callout>
+
 ## Drilling into one campaign
 
 Every row already carries its own `constraint` and `status`, so the default response *is* the constraint-per-campaign list. To isolate a single campaign, pass `campaign=` with its id **or** name (case-insensitive):

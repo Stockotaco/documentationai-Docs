@@ -187,15 +187,25 @@ paths:
         - name: resolve_identities
           in: query
           description: >
-            Resolve people through the central identity snapshots (merge tombstones
-            collapsed) instead of the raw `distinct_id`. Worth ~0.2pp of extra
-            credited conversions on a typical client, because `identify()` already
-            canonicalises at ingest; worth more the higher a client's merge rate.
-            Accepts `true` or `1`.
+            Identity stitching — resolve people through the central identity
+            snapshots (merge tombstones collapsed) rather than the raw
+            `distinct_id`. **On by default**, and you almost never want it off.
+
+            A CRM/server-side conversion arrives with no session of its own, so
+            credit can only reach a campaign through the person; the conversion's
+            `distinct_id` is a CRM contact id that shares nothing with the
+            browsing device's id until the snapshot maps both onto one person.
+            Measured on one client over 30 days (273 conversions): the raw
+            `distinct_id` could credit 10% of conversions to a paid touch,
+            canonical persons credited 81%.
+
+            Pass `false` (or `0`) to opt out — useful only to reproduce a figure
+            from before this was the default. `conversion_attribution.identity_resolution`
+            reports how much of the resolution actually worked.
           required: false
           schema:
             type: boolean
-            default: false
+            default: true
         - name: benchmark_ad
           in: query
           description: >
@@ -373,6 +383,20 @@ paths:
                           joined_by_id:
                             type: integer
                             description: Sessions matched on a Meta id (exact, survives renames).
+                          joined_by_url_param:
+                            type: integer
+                            description: >
+                              Sessions matched because the grain's id was in the landing URL's
+                              query string (`ad_id=`, `adset_id=`, `campaign_id=`) rather than
+                              a UTM. On accounts whose tag template points `utm_content` at
+                              the ad SET name, this is the difference between an ad-grain
+                              funnel and an empty one.
+                          grain_resolvable:
+                            type: boolean
+                            description: >
+                              False when no row with clicks resolved any session at this
+                              grain — the session-dependent steps are unknown here, not zero.
+                              Pairs with the `grain_unresolvable` diagnostic.
                           joined_by_name:
                             type: integer
                             description: >
@@ -422,6 +446,31 @@ paths:
                             type: integer
                             nullable: true
                             description: No campaign touch for that person within the attribution window — raise `attribution_window_days` if the sales cycle is longer.
+                          credited_coverage:
+                            type: number
+                            nullable: true
+                            description: >
+                              `(credited_via_session + credited_via_person) / total`. The
+                              share of the truth the landing/sales/site steps can see. Below
+                              0.5 the response carries a `low_conversion_coverage` warning
+                              and those steps' verdicts are marked `confidence: low`.
+                          identity_resolution:
+                            type: object
+                            nullable: true
+                            description: >
+                              How well identity stitching worked — the ceiling on everything
+                              else here. A conversion that never resolved to a canonical
+                              person could not be credited at all, so a low
+                              `conversions_resolved_rate` is the first thing to check when
+                              attribution looks worse than expected (it usually means the
+                              identity snapshot export has stalled).
+                            properties:
+                              enabled: { type: boolean }
+                              conversions_resolved_to_person: { type: integer }
+                              conversions_resolved_rate: { type: number, nullable: true }
+                              distinct_converting_persons:
+                                type: integer
+                                description: Distinct canonical people behind this window's conversions.
                       diagnostic:
                         type: object
                         description: >
@@ -430,7 +479,19 @@ paths:
                           response would be `constraint: null` on every row, which is
                           indistinguishable from a healthy account.
                         properties:
-                          code: { type: string, enum: [no_campaign_data, no_conversion_events, no_conversions_attributed, campaign_not_found] }
+                          code: { type: string, enum: [no_campaign_data, no_conversion_events, no_conversions_attributed, campaign_not_found, grain_unresolvable] }
+                          message: { type: string }
+                      warning:
+                        type: object
+                        description: >
+                          Present when the data is usable but partial —
+                          `low_conversion_coverage` means under half of this window's
+                          conversions could be credited to any campaign touch, so the
+                          conversion-denominated steps see only that share. Row order is
+                          deliberately NOT changed by this: a ranking that shifted silently
+                          with coverage could not be compared across runs.
+                        properties:
+                          code: { type: string, enum: [low_conversion_coverage] }
                           message: { type: string }
                       excluded_low_volume: { type: integer }
                       min_impressions: { type: integer }
@@ -485,10 +546,35 @@ paths:
                               additionalProperties:
                                 type: string
                                 enum: [override, stored_campaign, stored_default, pooled]
+                            converting_persons:
+                              type: integer
+                              description: Distinct canonical people who converted through this row.
+                            person_ids:
+                              type: array
+                              description: >
+                                A capped sample (10) of those people's canonical ids. They
+                                address `GET /client/v1/data/persons/{id}` directly, so a
+                                constraint verdict drills straight through to the profiles
+                                behind it. `converting_persons` carries the true count.
+                              items: { type: string }
+                            measurable:
+                              type: object
+                              description: >
+                                Per step, whether this row could be judged on it at all.
+                                `false` means **unknown, not zero** — render it as "can't
+                                measure", never as a failure. Every step after `ad` divides a
+                                session count, so a row whose grain resolved no sessions is
+                                unmeasurable on all of them. A step marked `false` is never
+                                reported as the constraint.
+                              additionalProperties: { type: boolean }
                             status:
                               type: string
-                              enum: [constrained, healthy]
-                              description: Explicit, so a null constraint reads as "healthy — scale it", never as missing data.
+                              enum: [constrained, healthy, unmeasurable]
+                              description: >
+                                Explicit, so a null constraint reads as "healthy — scale it",
+                                never as missing data. `unmeasurable` is the third case: this
+                                row got clicks but the grain resolved no sessions, so nothing
+                                downstream could be judged.
                             constraint:
                               type: object
                               nullable: true
@@ -508,6 +594,14 @@ paths:
                                 benchmark_note:
                                   type: string
                                   description: The note stored with that target, if any (e.g. "Q3 client contract"). Present only for stored benchmarks that carry one.
+                                confidence:
+                                  type: string
+                                  enum: [low]
+                                  description: >
+                                    Present when this step's numerator is credited conversions
+                                    and under half of them could be credited at all. The
+                                    verdict is directionally real but built on partial data.
+                                confidence_reason: { type: string }
                                 rate_vs_benchmark:
                                   type: number
                                   nullable: true
