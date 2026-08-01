@@ -546,6 +546,188 @@ paths:
             has no BigQuery event dataset yet.
         "429":
           description: Rate limited (20 requests per minute per location — each request is a BigQuery scan).
+  /client/v1/constraints/audit:
+    get:
+      summary: Which campaigns are measurable, and where the untracked clicks went
+      operationId: getConstraintAudit
+      description: >
+        Tracking hygiene, per campaign. `GET /client/v1/constraints` reports one
+        `match_rate` for the account — enough to know a problem exists, not
+        enough to fix it. This takes that number apart: a verdict per campaign,
+        plus the ad clicks that reached no campaign at all, bucketed by cause.
+
+
+        Causes call for different repairs, which is why they are separated
+        rather than summed: `no_utm` (the ad has no URL tags), `unexpanded_macro`
+        (the tag holds a literal the platform never substituted), and
+        `unknown_campaign` (the UTM names something outside the synced rows —
+        a deleted campaign, a hand-written UTM, or a different ad account).
+
+
+        Uses the same window, grain and join as the analysis, so the two agree
+        by construction. No conversion, lead or benchmark inputs — nothing here
+        depends on them. Unlike the analysis, there is **no volume floor**: a
+        small campaign with broken tags is precisely what this should surface.
+
+
+        Meta only for now.
+      tags: [Constraints]
+      security:
+        - AgencyKey: []
+        - LocationKey: []
+      parameters:
+        - name: location_id
+          in: query
+          description: Location to scope to. Required for `ak_` keys (or send the `X-Location-Id` header); ignored for `sk_`.
+          required: false
+          schema:
+            type: string
+        - name: from
+          in: query
+          description: Window start (`YYYY-MM-DD`). Defaults to 28 days before `to`.
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          description: Window end (`YYYY-MM-DD`), inclusive. Defaults to yesterday.
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: days
+          in: query
+          description: Window length in days, inclusive of both ends. Ignored when `from` is given.
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+            default: 28
+        - name: group_by
+          in: query
+          description: Grain to audit. `adset`/`ad` key off `utm_content` and are expected to look far worse than `campaign`.
+          required: false
+          schema:
+            type: string
+            enum: [campaign, adset, ad]
+            default: campaign
+        - name: attribution
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [session, first_touch]
+            default: session
+        - name: table
+          in: query
+          description: Override the Meta ads-insights table name.
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Per-campaign verdicts and the untracked-click breakdown.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      window:
+                        type: object
+                        properties:
+                          from: { type: string, format: date }
+                          to: { type: string, format: date }
+                      grain: { type: string }
+                      attribution: { type: string }
+                      totals:
+                        type: object
+                        properties:
+                          campaigns: { type: integer }
+                          spend: { type: number }
+                          flagged:
+                            type: integer
+                            description: Campaigns with a tracking fault. Excludes `no_clicks`, which is not one.
+                          flagged_spend:
+                            type: number
+                            description: >
+                              Spend whose effect cannot be measured. This is the number
+                              that justifies the fix.
+                          matched_sessions: { type: integer }
+                          untracked_sessions: { type: integer }
+                          match_rate:
+                            type: number
+                            nullable: true
+                            description: Same definition as `tracking.match_rate` on the analysis endpoint.
+                      campaigns:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            campaign_id: { type: string }
+                            campaign_name: { type: string }
+                            impressions: { type: integer }
+                            clicks: { type: integer }
+                            spend: { type: number }
+                            sessions: { type: integer }
+                            sessions_by_id: { type: integer }
+                            sessions_by_name: { type: integer }
+                            click_to_session_rate: { type: number, nullable: true }
+                            verdict:
+                              type: string
+                              enum: [ok, no_clicks, no_sessions, low_tracking, name_only]
+                              description: >
+                                `no_sessions` — clicks produced no tracked visit at all.
+                                `low_tracking` — under 10% of clicks arrived.
+                                `name_only` — matched entirely on campaign name, so it
+                                breaks the next time the campaign is renamed.
+                                `no_clicks` — no delivery, so nothing to track yet; not
+                                a fault and not counted in `flagged`.
+                            issue: { type: string, nullable: true }
+                            fix:
+                              type: string
+                              nullable: true
+                              description: >
+                                What to change. For `no_sessions` this deliberately names
+                                two possibilities: an on-platform objective (lead form,
+                                engagement, messaging) never sends a visit, so zero
+                                sessions is the correct reading for it. Telling the two
+                                apart needs the campaign objective, which the
+                                ads-insights table does not carry.
+                      untracked_sessions:
+                        type: object
+                        description: Ad clicks that reached no campaign. An empty list is a real, good answer.
+                        properties:
+                          total: { type: integer }
+                          by_cause:
+                            type: array
+                            description: Largest bucket first.
+                            items:
+                              type: object
+                              properties:
+                                cause:
+                                  type: string
+                                  enum: [no_utm, unexpanded_macro, unknown_campaign]
+                                sessions: { type: integer }
+                                sample:
+                                  type: string
+                                  nullable: true
+                                  description: A representative value, so the offending tag can be located.
+                                top_landing_page: { type: string, nullable: true }
+                                fix: { type: string, nullable: true }
+        "400":
+          description: Invalid parameter, or `ads_table_unsupported` — the `?table=` named is not a Meta ads-insights table.
+        "401":
+          description: Missing or invalid key.
+        "424":
+          description: No Meta ads-insights table in this client's dataset.
+        "429":
+          description: Rate limited (20 requests per minute per location — each request is a BigQuery scan).
   /client/v1/constraints/events:
     get:
       summary: Which events can serve as the lead / conversion step

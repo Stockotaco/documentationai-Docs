@@ -287,6 +287,58 @@ The one tracking fault no matching can repair is a macro that was never substitu
 
 `unexpanded_macro` is absent when there is nothing to report, so its presence alone is the signal. Sessions counted here are also excluded from the join outright — a literal like `{campaignname}` would otherwise be capable of matching a campaign genuinely named "Campaign Name".
 
+## Auditing your tracking
+
+`match_rate` tells you a problem exists. `GET /client/v1/constraints/audit` tells you which campaigns to go fix, and why:
+
+```bash
+curl "$BASE/client/v1/constraints/audit?location_id=$LOC&days=90" -H "Authorization: Bearer $AK"
+```
+
+```json
+{
+  "totals": {
+    "campaigns": 20, "spend": 47506,
+    "flagged": 10, "flagged_spend": 16165,
+    "matched_sessions": 7285, "untracked_sessions": 645, "match_rate": 0.919
+  },
+  "campaigns": [
+    { "campaign_name": "HBOT – Custom Conversion", "spend": 8884, "clicks": 3341, "sessions": 0,
+      "verdict": "no_sessions", "issue": "3341 link clicks produced no tracked session at all.", "fix": "…" },
+    { "campaign_name": "Metabolic Edge – lp_roas_form", "spend": 3307, "clicks": 969, "sessions": 2,
+      "verdict": "low_tracking", "issue": "Only 2 of 969 link clicks became a tracked session (0%).", "fix": "…" }
+  ],
+  "untracked_sessions": {
+    "total": 645,
+    "by_cause": [
+      { "cause": "no_utm", "sessions": 617, "top_landing_page": "/", "fix": "…" },
+      { "cause": "unknown_campaign", "sessions": 24, "sample": "…lpv2260520copy", "fix": "…" },
+      { "cause": "unexpanded_macro", "sessions": 4, "sample": "{campaignname}", "fix": "…" }
+    ]
+  }
+}
+```
+
+**`flagged_spend` is the number to lead with.** It is the spend whose effect cannot be measured — in the example above, a third of the account.
+
+Verdicts, worst first:
+
+| verdict | meaning |
+| --- | --- |
+| `no_sessions` | Clicks produced no tracked visit at all. |
+| `low_tracking` | Under 10% of link clicks arrived as a session. |
+| `name_only` | Every session matched on campaign **name**. Works today, breaks the next time the campaign is renamed. |
+| `no_clicks` | No delivery yet — nothing to track. **Not** a fault, and not counted in `flagged`. |
+| `ok` | Matching on ID, sessions arriving. |
+
+<Callout kind="info">
+**`no_sessions` is not automatically a tagging bug.** An on-platform objective — lead form, engagement, messaging — never sends anyone to your site, so zero sessions is the *correct* reading for it. The `fix` text names both possibilities rather than blaming your pixel, because telling them apart needs the campaign objective, which the ads-insights table does not carry. Check the objective before you go hunting for a missing pixel.
+</Callout>
+
+The `untracked_sessions` buckets are separated rather than summed because each calls for a different repair: `no_utm` means the ad has no URL tags at all, `unexpanded_macro` means the tag holds a literal the platform never substituted, and `unknown_campaign` means the UTM names something outside the synced rows — a deleted campaign, a hand-written UTM, or a different ad account than the one connected.
+
+There is deliberately **no volume floor** here, unlike the analysis: a small campaign with broken tags is exactly what a hygiene report should surface.
+
 ## How conversions get credited
 
 A conversion does not have to happen in a browser session to count. Measured across the platform, **every** CRM conversion event carries no `session_id` at all — `transaction_completed`, `order_completed`, `product_purchased` and `contact_created` are all server-side, arriving over Pub/Sub without ever touching a browser. Counting conversions only inside their own session would make this endpoint blind on every CRM-fed client.
