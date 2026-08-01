@@ -330,8 +330,8 @@ A **pipeline** fixes that. Its connections go to `manual`, Mythic triggers them,
   </Step>
   <Step title="Create it" titleType="h3">
 ```bash
-curl -X POST https://mythic-analytics.gulp.workers.dev/client/v1/airbyte/pipelines/acme-retail \
-  -X PUT -H "Authorization: Bearer ak_..." -H "Content-Type: application/json" \
+curl -X PUT https://mythic-analytics.gulp.workers.dev/client/v1/airbyte/pipelines/acme-retail \
+  -H "Authorization: Bearer ak_..." -H "Content-Type: application/json" \
   -d '{"enabled": true, "connection_ids": ["...","..."], "run_hour_utc": 8,
        "webhook_url": "https://you.example.com/hooks/mythic",
        "webhook_secret": "a-secret-you-generate"}'
@@ -370,11 +370,13 @@ The body is `{type: "airbyte.pipeline.completed", delivered_at, data}` where `da
 - **`connections[].reason`.** `skipped` alone collapses "disabled on purpose", "inactive", and "first-time backfill" into one word, and only some of those mean data you expected is missing.
 - **`connections[].last_success_at`.** "All done" next to a source that last succeeded nine days ago is a very different message, and you cannot work that out from a run that skipped it today.
 
-Delivery is **at-least-once**: retry it, dedupe on `run_id`, and don't fail closed on a duplicate. A delivery failure marks the run but never un-finishes it — the syncs really did complete, and a run that flipped back to held because your endpoint was briefly down would be a lie about the data. `POST .../redeliver` re-sends on demand.
+Delivery is **at-least-once**: dedupe on `run_id` and don't fail closed on a duplicate. A delivery that fails is retried automatically on later ticks, up to five attempts, after which it needs `POST .../redeliver`. Your endpoint has **10 seconds** to respond — accept and process asynchronously rather than doing work inline, or you will be timed out and retried. A delivery failure marks the run but never un-finishes it — the syncs really did complete, and a run that flipped back to held because your endpoint was briefly down would be a lie about the data. `POST .../redeliver` re-sends on demand.
 
 ### Timing and guarantees
 
 Runs are advanced by a five-minute tick, so completion is detected within about five minutes of the last sync finishing — not instantly. Nothing anywhere is blocked waiting on a sync, which is what lets a first historical backfill run for days without holding a connection open.
+
+If the worker is unavailable across your `run_hour_utc`, the run is started as soon as it is back — in the early hours of the next UTC day if the hour itself was missed — and stamped with the date it was *for*, so a day is never silently lost.
 
 Exactly **one run per client per day**, enforced in the database. A run already in flight rejects a manual start with `409 run_in_flight`, since a second run would stack a duplicate sync on every connection the first one owns. A run that somehow wedges — nothing in flight, no progress for 36 hours — fails itself loudly rather than leaving the client unable to ever refresh again.
 
@@ -395,6 +397,7 @@ Exactly **one run per client per day**, enforced in the database. A run already 
 | `409` | `run_exists_today` — runs are one per client per day; retry the existing run's failed steps instead |
 | `400` | `unknown_connections` — a `connection_ids` entry does not belong to this client |
 | `400` | `empty_scope` / `not_held` — the pipeline has no connections, or the run being forced is not held |
+| `409` | `run_changed` — the scheduled tick advanced this run while your request was in flight; re-read it and retry |
 | `400` | `invalid_customer_id` — a Google Ads customer ID that is not 10 digits after stripping dashes and spaces |
 | `503` | Server-side encryption key not configured |
 | `500` | Internal server error |

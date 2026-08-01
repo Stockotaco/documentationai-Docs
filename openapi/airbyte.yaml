@@ -2073,14 +2073,20 @@ components:
           nullable: true
           description: >
             The most recent completed sync, or `null` if this connection has
-            never reported one. Null, not a zero-filled record — never having
-            synced is not the same as having synced nothing.
+            genuinely never reported one. Null, not a zero-filled record —
+            never having synced is not the same as having synced nothing.
         consecutive_failures:
           type: integer
+          nullable: true
           description: >
             Failed syncs since the last success, newest-first. `0` means the
             most recent sync succeeded. One red run is a flake; four in a row is
             broken since Tuesday, and only this number tells them apart.
+
+
+            `null` means it could not be counted — the connection's history sits
+            beyond the window this is computed over. `null` rather than `0`,
+            because `0` would assert that the last sync passed.
           example: 0
         error_message:
           type: string
