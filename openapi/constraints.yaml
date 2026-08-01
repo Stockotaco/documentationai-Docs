@@ -546,6 +546,85 @@ paths:
                               additionalProperties:
                                 type: string
                                 enum: [override, stored_campaign, stored_default, pooled]
+                            creative:
+                              type: object
+                              description: >
+                                What the ad actually SAYS and where it POINTS — always
+                                present, and never a bare `null`. When the copy cannot be
+                                read the object carries `unavailable` plus a `reason_code`
+                                instead, because a consumer must be able to tell "this ad
+                                says X" from "we could not read this ad, and here is why".
+
+                                At `group_by=ad` the creative is exact. At coarser grains it
+                                is the **most-delivered** ad's creative and
+                                `is_representative` is `true`.
+                              properties:
+                                is_representative:
+                                  type: boolean
+                                  description: True at adset/campaign grain — this is the most-delivered ad's creative standing in for a row with many ads.
+                                headline: { type: string, nullable: true }
+                                body: { type: string, nullable: true }
+                                description: { type: string, nullable: true }
+                                call_to_action:
+                                  type: string
+                                  nullable: true
+                                  description: Meta's CTA enum, e.g. `LEARN_MORE`, `SIGN_UP`.
+                                destination_url:
+                                  type: string
+                                  nullable: true
+                                  description: >
+                                    The bare link as Meta stores it. **It does not carry the
+                                    UTMs** — Meta keeps those in `url_tags` and appends them at
+                                    click time, so this alone looks untagged even on a
+                                    correctly tagged ad.
+                                effective_destination_url:
+                                  type: string
+                                  nullable: true
+                                  description: >
+                                    `destination_url` + `url_tags`, i.e. what the visitor's
+                                    browser actually requests (macros still unexpanded). The
+                                    field to compare against a landing page.
+                                display_url: { type: string, nullable: true }
+                                url_tags:
+                                  type: string
+                                  nullable: true
+                                  description: >
+                                    The ad's tracking-parameter template, verbatim, with macros
+                                    unexpanded — e.g.
+                                    `utm_content={{adset.name}}&ad_id={{ad.id}}`. The only field
+                                    that says whether an ad is tagged at all, independently of
+                                    whether any session ever arrived from it. Read it when a
+                                    grain is unmeasurable: it shows exactly which key is missing.
+                                image_url: { type: string, nullable: true }
+                                video_id: { type: string, nullable: true }
+                                format:
+                                  type: string
+                                  enum: [image, video, carousel, unknown]
+                                  description: Derived from the assets present, not from Meta's internal `object_type` (which is `SHARE` for anything link-based, carousels included).
+                                asset_count: { type: integer }
+                                assets:
+                                  type: array
+                                  description: Carousel cards, in order. Present only for carousels.
+                                  items:
+                                    type: object
+                                    properties:
+                                      headline: { type: string, nullable: true }
+                                      body: { type: string, nullable: true }
+                                      image_url: { type: string, nullable: true }
+                                      link: { type: string, nullable: true }
+                                unavailable:
+                                  type: string
+                                  description: Human-readable reason the copy could not be read. Present instead of the content fields.
+                                reason_code:
+                                  type: string
+                                  enum: [creative_not_synced, no_creative_on_ad, creative_empty]
+                                  description: >
+                                    `creative_not_synced` — the Meta Ad Creatives streams are not
+                                    synced for this ad account (a fixable Airbyte setting, and by
+                                    far the most common cause; it is per ad ACCOUNT, not per ad).
+                                    `no_creative_on_ad` — the ad carries no creative reference
+                                    (deleted or draft). `creative_empty` — a creative row exists
+                                    but holds no readable copy, destination or asset.
                             converting_persons:
                               type: integer
                               description: Distinct canonical people who converted through this row.

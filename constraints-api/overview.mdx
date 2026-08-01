@@ -103,6 +103,46 @@ A campaign at or above the pooled rate on every step returns `constraint: null` 
 
 Rows are returned **ordered by opportunity**, which is deliberately not spend order.
 
+## What the ad actually says
+
+An `ad_name` is a naming convention, not content — "Lead C - SE-2 - Markus Video Adscripts 1.16.26 - Copy" tells you nothing about the promise the visitor saw. Every row carries the real creative, so the comparison that follows a `landing` constraint (ad copy vs page copy) happens in one response:
+
+```json
+"creative": {
+  "is_representative": false,
+  "headline": "I Ran the Numbers 47 Times. The Answer Made Me Sick",
+  "body": "I ran the math 47 different ways.\n\nMax out the 401(k). Index funds…",
+  "call_to_action": "LEARN_MORE",
+  "destination_url": "https://go2.example.com/rockwealth-os-webinar-registration",
+  "effective_destination_url": "https://go2.example.com/rockwealth-os-webinar-registration?utm_source=facebook&utm_content={{adset.name}}&ad_id={{ad.id}}",
+  "url_tags": "utm_source=facebook&utm_content={{adset.name}}&ad_id={{ad.id}}",
+  "image_url": "https://scontent.xx.fbcdn.net/…",
+  "format": "image",
+  "asset_count": 1
+}
+```
+
+At `group_by=ad` the creative is exact. At coarser grains it's the **most-delivered** ad's creative with `is_representative: true` — a stand-in, never presented as the whole row.
+
+<Callout kind="info">
+`destination_url` deliberately has no UTMs on it. Meta stores the link and its tracking parameters separately and appends `url_tags` at click time, so the bare link looks untagged even on a correctly tagged ad. Compare **`effective_destination_url`** against your landing page; read **`url_tags`** to see whether an ad is tagged at all — it's the one field that answers that without needing a single session to have arrived.
+</Callout>
+
+Carousels return their cards in order under `assets`, with `format: "carousel"` and `asset_count` set.
+
+### When there's no creative, you get a reason
+
+The object is always present. When the copy can't be read it carries `unavailable` and a `reason_code` rather than going blank:
+
+```json
+"creative": {
+  "unavailable": "The Meta ad_creatives streams are not synced for this ad account…",
+  "reason_code": "creative_not_synced"
+}
+```
+
+`creative_not_synced` is by far the most common, and it's **per ad account, not per ad** — measured on one client, two of four Meta ad accounts synced creatives (100% of their ads resolved) and two synced none (0%), which is why coverage sat at ~76% of impressions rather than 100%. It's a fixable Airbyte stream setting, so if you see it, ask for those streams to be enabled rather than working around it.
+
 ## Who converted, and why stitching is on by default
 
 A CRM or server-side conversion **never carries a session of its own** — it arrives over Pub/Sub with a contact id, long after the browsing happened. Credit can therefore only reach a campaign through the *person*, and the conversion's `distinct_id` shares nothing with the browsing device's id until identity resolution maps both onto one person.
