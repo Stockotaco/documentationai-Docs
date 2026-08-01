@@ -203,6 +203,8 @@ The `definition` object on an experiment carries the full test spec:
 
 <Callout kind="info">
   **Coverage is measured in spend, not rows.** Both coefficient denominators are withheld when under 5% of the window's spend sits on rows carrying the value or count — one stray valued row out of tens of thousands yields a real number that is pure noise. The reported shares are `platform_value_spend_share` and `platform_conversion_spend_share`, alongside the raw `platform_spend_rows` / `platform_value_rows` / `platform_conversion_rows`. Spend-weighting matters because ad-day rows with zero spend are common: on one live account 1,481 of 3,212 rows spent nothing, so a denominator covering 29.7% of spend presented as 3.0% of rows and was withheld as "no conversions reported".
+
+  A pass inside twice the floor adds **`low_platform_coverage`** to `warnings`, naming which denominator (`value`, `conversion`, or both). Treat it as a real caveat: the same account measured over a different window can drop under 5% and lose the coefficient entirely, with nothing but the share to explain why. One live account clears at 5.80% over 28 days and 5.04% over 90.
 </Callout>
 
 ### Revenue source (`revenue`)
