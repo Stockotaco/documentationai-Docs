@@ -443,6 +443,87 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+  /admin/airbyte/pipelines:
+    get:
+      tags: [Global]
+      summary: Pipeline overview
+      operationId: adminListAirbytePipelines
+      description: >
+        Every orchestration pipeline and every open run, across agencies, plus
+        `last_tick_at`.
+
+
+        The orchestrator's only clock is a cron, and a cron produces no HTTP
+        request to inspect — scheduled invocations do not appear in
+        `wrangler tail`. `last_tick_at` is therefore the only signal that the
+        ticker is running at all; if it stops advancing, no run will ever
+        progress and nothing else will say so.
+      responses:
+        "200":
+          description: Pipelines, open runs, and ticker liveness
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      last_tick_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+                        description: When a tick last claimed the lock. Should be within ~5 minutes.
+                      pipelines:
+                        type: array
+                        items: { type: object }
+                      open_runs:
+                        type: array
+                        items: { type: object }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /admin/airbyte/pipelines/tick:
+    post:
+      tags: [Global]
+      summary: Run a pipeline tick now
+      operationId: adminTickAirbytePipelines
+      description: >
+        Advance every open run, retry undelivered completions, and start any run
+        that is due — immediately, rather than waiting for the next scheduled
+        tick.
+
+
+        Takes the same lock as the cron, so it returns
+        `{skipped: "another tick holds the lock"}` if a scheduled tick is
+        mid-flight. Bounded by a three-minute deadline; anything not reached is
+        reported as `deferred` and picked up next tick rather than dropped.
+      responses:
+        "200":
+          description: What the tick did
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      advanced: { type: integer }
+                      started: { type: integer }
+                      completed: { type: integer }
+                      held: { type: integer }
+                      redelivered: { type: integer }
+                      deferred:
+                        type: integer
+                        description: Items the tick ran out of time for. Never silently dropped.
+                      errors: { type: array, items: { type: object } }
+                      skipped:
+                        type: string
+                        description: Present instead of the counters when another tick holds the lock.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /admin/airbyte/sync-events:
     get:
       tags: [Global]
@@ -925,6 +1006,54 @@ paths:
                   inserted:
                     type: integer
                     example: 7
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/clients/{id}/airbyte/connections/{connId}/reconcile-streams:
+    post:
+      tags: [Client-scoped]
+      summary: Reconcile streams against the connector
+      operationId: v1ReconcileAirbyteStreams
+      description: >
+        Compare the connection's stored stream selection with the streams the
+        source actually offers, and add any platform defaults it is missing.
+
+
+        `defaultStreams` is read once, at creation, so a stream added to the
+        catalog later never reaches a connection that already exists. This is
+        how that gap is closed without deleting and re-consenting.
+
+
+        Defaults to a DRY RUN — pass `dry_run: false` to apply. Names are
+        reconciled against the live catalog from `GET /v1/streams`, so a stream
+        the connector has renamed is dropped rather than sent and rejected.
+      parameters:
+        - $ref: "#/components/parameters/ClientId"
+        - name: connId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dry_run:
+                  type: boolean
+                  default: true
+      responses:
+        "200":
+          description: What is missing, and what was applied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { type: object }
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":

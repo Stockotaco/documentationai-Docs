@@ -1880,6 +1880,26 @@ components:
               type: boolean
             airbyte_org:
               type: boolean
+        notifications:
+          allOf:
+            - $ref: "#/components/schemas/NotificationRegistration"
+          description: >
+            Whether the workspace's Airbyte notifications were pointed at
+            Mythic's sync receiver, which is what makes any sync history exist
+            at all.
+
+
+            REPORTED, NEVER ASSUMED: registration failing does not fail
+            provisioning — a workspace that syncs but reports nothing is
+            degraded, not broken — so `registered: false` here is the only
+            warning you will get, and the consequence (empty `/sync-events`,
+            a permanently healthy-looking `/health`) is silent. Check it, and
+            call `POST /config/notifications` if it did not take.
+
+
+            `reason: "conflict"` means the workspace already posts sync
+            notifications elsewhere and Mythic left it alone; reprovision with
+            `overwrite_notifications: true` to take it over.
     CreateConnectionRequest:
       type: object
       required:
