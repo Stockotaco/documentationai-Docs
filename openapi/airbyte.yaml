@@ -1333,9 +1333,17 @@ paths:
       operationId: getAirbyteHealth
       description: >
         Return a health overview for the calling agency's connections: counts,
-        connections in an error state, stale connections (no sync in 48 hours),
-        connections failing repeatedly, connections that succeeded while
-        committing nothing, and per-connection failure rates.
+        connections in an error state, stale connections, connections failing
+        repeatedly, connections that succeeded while committing nothing, and
+        per-connection failure rates.
+
+
+        Staleness is measured against each connection's OWN cadence, not one
+        flat rule: 48 hours for an ordinary connection, and a week plus 48 hours
+        for one carrying a `sync_dow`. A weekly connection is more than 48 hours
+        old on five days out of seven by design, and a health list that is
+        permanently red for a healthy connection just teaches you to skip it —
+        the genuinely broken connection is in the same list.
 
 
         `needs_attention` is the single number worth putting on a dashboard —
