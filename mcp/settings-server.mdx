@@ -113,10 +113,47 @@ and `select_client` need no scope — agency-wide keys get them automatically.
 | `snippets` | `list_snippets`, `get_snippet`, `create_snippet`, `update_snippet`, `delete_snippet` |
 | `transformers` | `list_transformers`, `get_transformer`, `create_transformer`, `update_transformer`, `delete_transformer` |
 | `replays` | `get_session_timeline` (read-only) |
+| `data` | `list_events`, `list_event_properties` (read-only discovery) |
+| `contracts` | `list_event_contracts`, `suggest_event_contract`, `check_event_contracts`, `set_event_contract`, `delete_event_contract` |
 
 Destination writes are validated per type (`webhook`, `meta_capi`, `google_ads`);
 runtime secrets are never exposed. Tag/snippet/transformer writes sync to the
 edge automatically.
+
+### Discovering events and enforcing their shape
+
+An agent must never guess a client's event names — they are client-specific.
+The discovery pair answers that: `list_events` returns every event the client
+actually sends with volumes, and `list_event_properties` returns the property
+catalog for one of them (keys, inferred types, masked samples, first/last seen).
+
+[Event contracts](/contracts-api/overview) turn that into something enforceable.
+The intended order:
+
+<Steps>
+  <Step title="Discover">
+    `list_events` → pick an event → `suggest_event_contract` infers a contract
+    for it from live traffic. The result is `set_event_contract`-ready.
+  </Step>
+  <Step title="Store">
+    `set_event_contract` replaces that event's property set. A bare type string
+    means required; `{ type, required: false }` is optional.
+  </Step>
+  <Step title="Check">
+    `check_event_contracts` reports violations worst-first — `missing_required`,
+    `null_value`, `type_mismatch`, kept separate because they have three
+    different fixes. Undeclared keys are reported but are never violations, and
+    an event with no traffic reads `no_data` rather than "all fields missing".
+  </Step>
+</Steps>
+
+`check_event_contracts` and `suggest_event_contract` read raw events to get their
+denominator, so they default to a **1-day** window and accept `sample` (keep
+1/N) for wider ones. When a window holds too much to scan, the error names the
+fix — narrow the window, pass `event`, or add `sample`.
+
+Storing a contract only enables reporting. Nothing is ever rejected,
+quarantined, or dropped at ingestion because of one.
 
 ### Summarizing a session with `get_session_timeline`
 
