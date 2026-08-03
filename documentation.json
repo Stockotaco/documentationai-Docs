@@ -166,6 +166,28 @@
             ]
           },
           {
+            "tab": "Event Contracts",
+            "icon": "file-check",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "contracts-api/overview",
+                    "icon": "file-text"
+                  }
+                ]
+              },
+              {
+                "group": "Contracts",
+                "icon": "check-check",
+                "openapi": "openapi/contracts.yaml"
+              }
+            ]
+          },
+          {
             "tab": "Incrementality",
             "icon": "trending-up",
             "groups": [

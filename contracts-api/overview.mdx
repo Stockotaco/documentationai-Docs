@@ -1,0 +1,145 @@
+---
+title: Event Contracts
+description: >-
+  Declare what an event is supposed to carry, then get a report of what your live
+  traffic actually does about it — the fields that went missing, arrived null, or
+  arrived as the wrong type.
+---
+
+## Overview
+
+The [Data API's property catalog](/data-api/overview) answers **"what fields does my data have?"** — every key ever observed, with types and samples. It is discovery, and it cannot tell you the thing that actually breaks reporting:
+
+> A redesign shipped on Tuesday and 40% of `order_completed` events stopped carrying `value`.
+
+The key is still very much "seen". Revenue reporting is quietly wrong.
+
+An **event contract** is the declared side of that: for one event name, the properties it is supposed to carry, their types, and which are required. `GET /violations` diffs the declaration against real traffic and tells you the share of events that break it.
+
+Contracts are **read-only enforcement**. Nothing here rejects, quarantines, or drops an event — a typo in a contract must never become data loss. It is a report.
+
+| Symptom | What the report calls it | What it usually means |
+| --- | --- | --- |
+| Key not present on the event | `missing_required` | Field never wired, or lost in a redesign |
+| Key present, value `null` | `null_value` | Integration is sending an empty field |
+| Key present, wrong JSON type | `type_mismatch` | `"24.99"` sent as a string, `value` as text |
+| Event has no traffic at all | `status: "no_data"` | Tagging outage — not a payload problem |
+
+Those four are kept deliberately separate. Absent, `null`, and wrong-type look like one problem in a report that lumps them, and have three different fixes.
+
+## Base URL
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/contracts
+```
+
+## Authentication
+
+The same key system as the rest of `/client/v1`: an **agency key** (`ak_`, bind a location with `?location_id=` or the `X-Location-Id` header) or a **location secret key** (`sk_`, auto-scoped to its own location). Reads accept either. **Writes require an agency key** — same rule as Settings, Destinations, and constraint benchmarks.
+
+## Quickstart
+
+<Steps>
+  <Step title="Scaffold a contract from live traffic">
+    ```bash
+    curl "$BASE/client/v1/contracts/suggest?location_id=$LOC&event=order_completed" \
+      -H "Authorization: Bearer $AK"
+    ```
+
+    Returns a ready-to-store contract inferred from the window: the dominant JSON type per key, `required: true` for keys on ≥99% of events. Internal `$`-prefixed properties (`$current_url`, `$device_type`, autocapture internals) are excluded — those are Mythic's contract to keep, not yours to declare. Keys that are always null or appear on under 1% of events land in `skipped` with a reason, so a dead field doesn't look like a missing one.
+
+    Hand-transcribing 30 property names is how schema features go unused. Start here, then edit.
+  </Step>
+
+  <Step title="Store it">
+    ```bash
+    curl -X PUT "$BASE/client/v1/contracts?location_id=$LOC" \
+      -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
+      -d '{
+        "event": "order_completed",
+        "properties": {
+          "value": "number",
+          "currency": "string",
+          "coupon_code": { "type": "string", "required": false }
+        },
+        "note": "Checkout v3 — value is gross, pre-refund"
+      }'
+    ```
+
+    A bare type string (`"number"`) means **required**. Optional fields need the long form with `"required": false`. Required is the useful default: a contract whose every field is optional cannot fail, and is indistinguishable from having no contract.
+
+    `PUT` **replaces** that event's property set. A key you leave out stops being checked.
+  </Step>
+
+  <Step title="Read the violations">
+    ```bash
+    curl "$BASE/client/v1/contracts/violations?location_id=$LOC" -H "Authorization: Bearer $AK"
+    ```
+
+    Every stored contract, checked against the window, worst first. Pass `?event=` for one of them — which is also much cheaper, see [Windows and cost](#windows-and-cost).
+  </Step>
+</Steps>
+
+## Reading a violation
+
+```json
+{
+  "event": "order_completed",
+  "status": "violations",
+  "total_events": 1000,
+  "properties": [
+    {
+      "key": "value",
+      "expected_type": "number",
+      "required": true,
+      "present": 700,
+      "absent": 200,
+      "null_values": 100,
+      "type_mismatches": 150,
+      "coverage": 0.7,
+      "observed_types": { "string": 150, "null": 100 }
+    }
+  ],
+  "violations": [
+    { "key": "value", "kind": "missing_required", "count": 200, "rate": 0.2,
+      "detail": "`value` is absent on 200 of 1000 events" },
+    { "key": "value", "kind": "type_mismatch", "count": 150, "rate": 0.15,
+      "detail": "`value` expected number, got string on 150 of 1000 events" }
+  ],
+  "undeclared": [
+    { "key": "shipping_tier", "observed_type": "string", "occurrences": 300, "coverage": 0.3 }
+  ]
+}
+```
+
+- `present` counts events carrying the key with **any** non-null type — including the wrong one. `coverage` is that over `total_events`.
+- `absent` is `total_events` minus everything seen. It is computed from a real event count, which is what makes the report possible at all.
+- **`undeclared` keys are never violations.** A growing integration always has some, and a report that complained about them would get muted in a week. Treat the list as the scaffold for your next contract version.
+
+### `no_data` is not "everything is missing"
+
+A contract whose event had no traffic in the window returns `status: "no_data"` with an empty `violations` array, and is counted separately in `summary.events_no_data`. An event that stopped firing entirely is usually the *bigger* problem, and it must not be reported as "100% of fields missing" — that would blame the payload for a tagging outage.
+
+## Windows and cost
+
+Computing "how often is this field missing" needs an event count, which means reading the raw events. The window therefore has a real cost, and it is bounded:
+
+- **Default window is the last 1 day.** Set `date_from` / `date_to` (ISO 8601) for anything else.
+- **Pass `?event=`** whenever you care about one contract. It is the cheapest thing you can do.
+- **Wide windows on high-volume events need `?sample=N`**, which keeps a deterministic 1/N of events. `?sample=10` over 7 days comfortably handles an event with 300k occurrences.
+
+Sampling is uniform over a hash of the event id, so **rates and coverage are unbiased** — a 20% missing rate measures the same on a 1/10 sample. Counts (`absent`, `count`, `total_events`) become counts **of the sample** and are deliberately *not* scaled back up: a scaled count reads as a measurement when it is an estimate. The response echoes the factor under `window.sample`.
+
+If the window still holds too much to scan, the API returns `400 window_too_large` naming the three fixes above, rather than a timeout dressed up as a server error.
+
+<Warning>
+  A `truncated: true` flag on the response means the underlying property statistics hit their row limit. Narrow the window or pass `?event=` before trusting `absent` counts — a truncated read under-counts keys and can manufacture "missing" fields that are really a row limit.
+</Warning>
+
+## Contract types
+
+`string`, `number`, `boolean`, `object`, `array`.
+
+`null` is not a declarable type — it is an observed state, reported as `null_values`. Types are the JSON types actually on the wire, so a numeric field sent as `"24.99"` is a `type_mismatch`, which is the point.
+
+Contracts are intentionally *not* full JSON Schema: a property is `{ type, required }`, which is what can be checked as counts across every event in a window. `oneOf`, `pattern`, and `minimum` are not supported.

@@ -1,0 +1,458 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Event Contracts
+  description: >
+    Declared per-event property schemas, and the report of what live traffic does
+    about them. A contract names the properties an event is supposed to carry,
+    their JSON types, and which are required; `GET /violations` diffs that
+    declaration against real events and reports the share that are absent, null,
+    or the wrong type.
+
+
+    Read-only enforcement: nothing on this surface rejects, quarantines, or drops
+    an event. Reads accept an agency key (`ak_`, bind a location with
+    `location_id` or the `X-Location-Id` header) or a location secret key
+    (`sk_`); writes require an agency key.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+  - AgencyKeyQuery: []
+  - SecretKeyQuery: []
+paths:
+  /client/v1/contracts:
+    get:
+      summary: List stored contracts
+      operationId: listEventContracts
+      description: Every event contract stored for this location, ordered by event name.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Stored contracts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/StoredContract" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    put:
+      summary: Create or replace one event's contract
+      operationId: putEventContract
+      description: >
+        Upserts the contract for one event name. **Replaces** the property set:
+        a key omitted from `properties` stops being checked. Merge is not offered
+        because it has no way to express "stop requiring this field".
+
+
+        A bare type string is shorthand for `{ "type": <t>, "required": true }`.
+        Required is the default because a contract whose every property is
+        optional cannot fail, and is indistinguishable from no contract at all.
+
+
+        Agency key (`ak_`) required.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event, properties]
+              properties:
+                event:
+                  type: string
+                  maxLength: 200
+                  description: Event name the contract applies to.
+                  example: order_completed
+                properties:
+                  type: object
+                  minProperties: 1
+                  maxProperties: 200
+                  description: >
+                    Map of property key to type. Value is either a type string
+                    (required) or `{ type, required }`. Keys cannot be empty.
+                  additionalProperties:
+                    oneOf:
+                      - type: string
+                        enum: [string, number, boolean, object, array]
+                      - $ref: "#/components/schemas/PropertySpec"
+                  example:
+                    value: number
+                    currency: string
+                    coupon_code: { type: string, required: false }
+                note:
+                  type: string
+                  maxLength: 500
+                  nullable: true
+                  description: Free text — where the contract came from. Echoed back on read.
+                  example: Checkout v3 — value is gross, pre-refund
+      responses:
+        "200":
+          description: Contract stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/StoredContract" }
+        "400":
+          description: >
+            `invalid_json`, or `invalid_contract` with the specific problem —
+            unknown type, empty property key, empty property set, non-boolean
+            `required`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+  /client/v1/contracts/{event}:
+    delete:
+      summary: Delete an event's contract
+      operationId: deleteEventContract
+      description: Removes the contract. The event keeps flowing — only the check goes away. Agency key (`ak_`) required.
+      parameters:
+        - name: event
+          in: path
+          required: true
+          description: Event name whose contract should be deleted.
+          schema: { type: string }
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Deleted (idempotent — deleting an absent contract also succeeds)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      event: { type: string, example: order_completed }
+                      deleted: { type: boolean, example: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+  /client/v1/contracts/violations:
+    get:
+      summary: Check stored contracts against live traffic
+      operationId: getContractViolations
+      description: >
+        Diffs every stored contract (or one, with `event`) against the events in
+        the window and returns the violations, worst first.
+
+
+        Three violation kinds, kept separate because they have three different
+        fixes: `missing_required` (key absent), `null_value` (key present but
+        null), `type_mismatch` (key present with a type other than the declared
+        one). Keys observed but not declared are reported under `undeclared` and
+        are never violations — a growing integration always has some.
+
+
+        A contract whose event had no traffic returns `status: "no_data"` with no
+        violations and is counted in `summary.events_no_data`. An event that
+        stopped firing must not read as "every field is missing".
+
+
+        Cost note: this reads raw events to get the denominator. The window
+        defaults to **1 day**; pass `event` to narrow it, and `sample` for wide
+        windows on high-volume events.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: event
+          in: query
+          required: false
+          description: Check only this event's contract. Substantially cheaper than checking all.
+          schema: { type: string }
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+        - $ref: "#/components/parameters/Sample"
+      responses:
+        "200":
+          description: >
+            The report. `truncated: true` means the underlying property
+            statistics hit their row limit — narrow the window or pass `event`
+            before trusting `absent` counts.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      window: { $ref: "#/components/schemas/Window" }
+                      summary:
+                        type: object
+                        properties:
+                          contracts: { type: integer, example: 3 }
+                          events_ok: { type: integer, example: 1 }
+                          events_with_violations: { type: integer, example: 1 }
+                          events_no_data:
+                            type: integer
+                            example: 1
+                            description: Contracted events with no traffic in the window — usually the bigger problem.
+                          total_violations: { type: integer, example: 2 }
+                      events:
+                        type: array
+                        items: { $ref: "#/components/schemas/EventReport" }
+                      truncated: { type: boolean }
+                      warning: { type: string }
+                      hint:
+                        type: string
+                        description: Present when no contracts are stored — points at `/suggest`.
+        "400":
+          description: >
+            `invalid_window` (unparseable `date_from`/`date_to`, or `sample` out
+            of range), or `window_too_large` when the window holds more events
+            than can be scanned — narrow it, pass `event`, or add `sample`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/contracts/suggest:
+    get:
+      summary: Scaffold a contract from live traffic
+      operationId: suggestEventContract
+      description: >
+        Infers a contract for one event from the window. The response body is
+        `PUT`-able to `/client/v1/contracts` as-is.
+
+
+        Rules: type is the dominant observed JSON type; `required` is true when
+        the key is present on at least 99% of events in the window; internal
+        `$`-prefixed properties are excluded unless `include_internal=1`; keys
+        that are always null or under 1% coverage are returned in `skipped` with
+        a reason, so a dead field does not look like a missing one.
+
+
+        Review `required` before storing — inference from one window is a
+        starting point, not a decision.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: event
+          in: query
+          required: true
+          description: Event to infer a contract for.
+          schema: { type: string }
+          example: order_completed
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+        - $ref: "#/components/parameters/Sample"
+        - name: include_internal
+          in: query
+          required: false
+          description: Set to `1` to include Mythic's own `$`-prefixed properties.
+          schema: { type: string, enum: ["0", "1"] }
+      responses:
+        "200":
+          description: A suggested contract
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      event: { type: string, example: order_completed }
+                      properties:
+                        type: object
+                        additionalProperties: { $ref: "#/components/schemas/PropertySpec" }
+                      based_on:
+                        type: object
+                        properties:
+                          total_events: { type: integer, example: 1000 }
+                          window: { $ref: "#/components/schemas/Window" }
+                      skipped:
+                        type: array
+                        description: Keys left out, and why.
+                        items:
+                          type: object
+                          properties:
+                            key: { type: string, example: legacy_flag }
+                            coverage: { type: number, nullable: true, example: 0.04 }
+                            reason:
+                              type: string
+                              enum: [always_null, below_min_coverage]
+                      note: { type: string }
+        "400":
+          description: "`missing_event`, `invalid_window`, or `window_too_large`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: "`no_data` — no events of that name in the window, so there is nothing to infer from."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Agency key (`ak_`) or location secret key (`sk_`).
+    AgencyKeyQuery:
+      type: apiKey
+      in: query
+      name: ak
+    SecretKeyQuery:
+      type: apiKey
+      in: query
+      name: sk
+  parameters:
+    LocationId:
+      name: location_id
+      in: query
+      required: false
+      description: Location to scope to. Required for `ak_` keys (or send the `X-Location-Id` header); ignored for `sk_`.
+      schema: { type: string }
+    DateFrom:
+      name: date_from
+      in: query
+      required: false
+      description: Start of the window, ISO 8601 date or timestamp. Defaults to 1 day ago.
+      schema: { type: string, example: "2026-07-27" }
+    DateTo:
+      name: date_to
+      in: query
+      required: false
+      description: End of the window (inclusive day), ISO 8601. Defaults to now.
+      schema: { type: string, example: "2026-08-03" }
+    Sample:
+      name: sample
+      in: query
+      required: false
+      description: >
+        Keep a deterministic 1/N of events. Rates and coverage stay unbiased;
+        counts become counts of the sample and are not scaled up. Use for wide
+        windows on high-volume events — `sample=10` handles 7 days of a 300k-event
+        event name.
+      schema: { type: integer, minimum: 1, maximum: 1000, default: 1, example: 10 }
+  responses:
+    Unauthorized:
+      description: Missing or invalid key, or an `ak_` key with no location bound.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    AgencyRequired:
+      description: "`agency_required` — writes need an agency key (`ak_`), not a location secret key."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: "`rate_limited` — 30 report reads/min per location (120/min for contract CRUD)."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    PropertySpec:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [string, number, boolean, object, array]
+          description: >
+            JSON type on the wire. `null` is not declarable — it is an observed
+            state, reported as `null_values`.
+        required:
+          type: boolean
+          default: true
+          description: When true, an event missing this key is a `missing_required` violation.
+    StoredContract:
+      type: object
+      properties:
+        event: { type: string, example: order_completed }
+        properties:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/PropertySpec" }
+        note: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Window:
+      type: object
+      properties:
+        date_from: { type: string, example: "last 1 day" }
+        date_to: { type: string, example: now }
+        sample:
+          type: object
+          description: Present only when sampling was applied.
+          properties:
+            keeping: { type: string, example: 1/10 of events }
+            note: { type: string }
+    EventReport:
+      type: object
+      properties:
+        event: { type: string, example: order_completed }
+        status:
+          type: string
+          enum: [ok, violations, no_data]
+          description: "`no_data` means the event had no traffic in the window — not that its fields are missing."
+        total_events: { type: integer, example: 1000 }
+        properties:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string, example: value }
+              expected_type: { type: string, example: number }
+              required: { type: boolean, example: true }
+              present:
+                type: integer
+                example: 700
+                description: Events carrying the key with any non-null type — including the wrong type.
+              absent: { type: integer, example: 200, description: "`total_events` minus everything seen." }
+              null_values: { type: integer, example: 100 }
+              type_mismatches: { type: integer, example: 150 }
+              coverage: { type: number, nullable: true, example: 0.7 }
+              observed_types:
+                type: object
+                description: Counts per observed type, excluding the declared one.
+                additionalProperties: { type: integer }
+        violations:
+          type: array
+          description: Worst first, by count.
+          items:
+            type: object
+            properties:
+              key: { type: string, example: value }
+              kind:
+                type: string
+                enum: [missing_required, null_value, type_mismatch]
+              count: { type: integer, example: 200 }
+              rate: { type: number, nullable: true, example: 0.2 }
+              detail: { type: string, example: "`value` is absent on 200 of 1000 events" }
+        undeclared:
+          type: array
+          description: Observed keys with no declaration. Never violations — this is the scaffold for the next contract version.
+          items:
+            type: object
+            properties:
+              key: { type: string, example: shipping_tier }
+              observed_type: { type: string, example: string }
+              occurrences: { type: integer, example: 300 }
+              coverage: { type: number, nullable: true, example: 0.3 }
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string, example: window_too_large }
+            message: { type: string }
+            cause: { type: string }
