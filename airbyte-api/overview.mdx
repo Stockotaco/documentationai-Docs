@@ -253,6 +253,36 @@ The stored connection's `tables_json` always reflects the streams actually confi
   `defaultStreams` is read once, when a connection is created — adding a stream to the catalog does not reach connections that already exist. Send an explicit `streams` array to `PUT /connections/{id}` to add one to a live connection, remembering that enabling a stream triggers a backfill from the source's start date.
 </Callout>
 
+### Some streams sync weekly, on their own connection
+
+A platform can also declare `weeklyStreams` in `GET /platforms`. Those streams are expensive to sync and slow to change — Meta's `ad_creatives_from_ads` is a full refresh of every creative on every ad — so they do not belong on the same cadence as daily insights.
+
+Airbyte's cadence is a property of the **connection**, not the stream, so this is expressed the only way it can be: **one `POST /connections` for Meta creates two connections off one source.**
+
+- **Primary** — the `defaultStreams`, on whatever `sync_frequency` you asked for.
+- **Weekly companion** — the `weeklyStreams` only, `manual` in Airbyte, run by the pipeline one day a week (`sync_dow`, Sunday by default).
+
+They share a source, so there is one consent, one credential and one account list. The response to `POST /connections` (and the connection created by an OAuth callback) carries a `companions` array with the second connection's row, plus a `pipeline` object saying whether both were added to the client's pipeline scope. Both stream sets are disjoint — no stream is ever written by both connections.
+
+```json
+{
+  "id": "…", "platform": "meta_ads", "tables_json": [ /* daily streams */ ],
+  "companions": [
+    { "id": "…", "display_name": "meta_ads - acme (weekly)", "sync_dow": 1,
+      "tables_json": [{ "name": "ad_creatives_from_ads", "syncMode": "full_refresh_overwrite" }] }
+  ],
+  "pipeline": { "enrolled": true, "pipeline_id": "…", "connection_ids": ["…", "…"], "pipeline_enabled": true }
+}
+```
+
+Three things follow from the split, all of them things a portal has to handle:
+
+- **Supplying your own `streams` opts out.** An explicit stream list is a decision, so no companion is created — put the weekly streams wherever you want them.
+- **A companion needs the pipeline.** It is `manual` in Airbyte on purpose; if the client has no pipeline, nothing will ever trigger it. It appears in `GET /pipelines/{clientId}/candidates` like any other connection — add it, or sync it by hand with `POST /connections/{id}/sync`.
+- **Deleting one does not delete the other.** The shared source is removed only with the last connection using it; the response reports `source_deleted` and `siblings_kept`.
+
+`sync_dow` (0 = Sunday … 6 = Saturday, `null` = every run) is writable on `PUT /connections/{id}` if Sunday is the wrong day. It is read by the pipeline only — a connection on its own Airbyte cron ignores it, because the cron already says when it runs.
+
 ## Sync frequency
 
 **`manual` is the default.** A connection created without an explicit `sync_frequency` does not sync on a schedule — you trigger it with `POST /connections/{id}/sync`. Scheduled syncing is something you opt into.
@@ -367,7 +397,7 @@ Failed steps are retried twice, then wait for a person. `POST .../retry` resets 
 The body is `{type: "airbyte.pipeline.completed", delivered_at, data}` where `data` is a `PipelineRun`. Three fields deserve attention:
 
 - **`complete`, not `status`.** They are different questions. `status: "succeeded"` with two connections skipped is a real and normal outcome; `complete` is what tells you whether *everything that could sync, did*.
-- **`connections[].reason`.** `skipped` alone collapses "disabled on purpose", "inactive", and "first-time backfill" into one word, and only some of those mean data you expected is missing.
+- **`connections[].reason`.** `skipped` alone collapses "disabled on purpose", "inactive", "first-time backfill" and "not due this week" into one word, and only some of those mean data you expected is missing. A weekly connection reads `weekly — only runs on Sunday (UTC)` on the six days it is skipped; that is a complete run, not a partial one, and it never holds the gate.
 - **`connections[].last_success_at`.** "All done" next to a source that last succeeded nine days ago is a very different message, and you cannot work that out from a run that skipped it today.
 
 Delivery is **at-least-once**: dedupe on `run_id` and don't fail closed on a duplicate. A delivery that fails is retried automatically on later ticks, up to five attempts, after which it needs `POST .../redeliver`. Your endpoint has **10 seconds** to respond — accept and process asynchronously rather than doing work inline, or you will be timed out and retried. A delivery failure marks the run but never un-finishes it — the syncs really did complete, and a run that flipped back to held because your endpoint was briefly down would be a lie about the data. `POST .../redeliver` re-sends on demand.

@@ -481,6 +481,14 @@ paths:
         Delete the connection and its underlying Airbyte source. The remote
         Airbyte connection and source are removed on a best-effort basis before
         the local record is deleted. Requires an agency key (`ak_`).
+
+
+        THE SOURCE MAY BE SHARED. A weekly companion connection runs off the
+        same source as its primary, so the source is deleted only with the LAST
+        connection using it — otherwise deleting one half would leave the other
+        unable to sync, with nothing to say why. The response reports both
+        facts: `source_deleted`, and `siblings_kept` listing connections on this
+        source that are still there.
       parameters:
         - $ref: "#/components/parameters/ConnectionId"
       responses:
@@ -489,7 +497,23 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessResponse"
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      source_deleted:
+                        type: boolean
+                        description: Whether the Airbyte source was removed too, or kept for a sibling connection.
+                      siblings_kept:
+                        type: array
+                        description: Connections still using this source. Empty in the ordinary case.
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            display_name:
+                              type: string
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1494,6 +1518,21 @@ components:
           description: Streams selected by default when a connection is created.
           items:
             $ref: "#/components/schemas/Stream"
+        weeklyStreams:
+          type: array
+          description: >
+            Streams that get their OWN connection, synced one day a week instead
+            of on the primary connection's cadence. Empty for most platforms.
+
+
+            Non-empty means a single `POST /connections` creates TWO connections
+            off one source — the second carries only these streams, is `manual`
+            in Airbyte, and is run by the pipeline on `sync_dow`. Meta declares
+            `ad_creatives_from_ads` here: a full refresh of every creative on
+            every ad, over data that changes weekly at most. Supplying your own
+            `streams` array opts out of the split entirely.
+          items:
+            $ref: "#/components/schemas/Stream"
     Stream:
       type: object
       properties:
@@ -2032,6 +2071,8 @@ components:
           $ref: "#/components/schemas/SyncFrequency"
         sync_hour_utc:
           $ref: "#/components/schemas/SyncHourUtc"
+        sync_dow:
+          $ref: "#/components/schemas/SyncDow"
         streams:
           type: array
           items:
@@ -2074,11 +2115,52 @@ components:
           $ref: "#/components/schemas/SyncFrequency"
         sync_hour_utc:
           $ref: "#/components/schemas/SyncHourUtc"
+        sync_dow:
+          $ref: "#/components/schemas/SyncDow"
         tables_json:
           type: array
           description: Resolved stream selection stored for the connection.
           items:
             type: object
+        companions:
+          type: array
+          description: >
+            Extra connections created alongside this one, present only in the
+            response to `POST /connections` (and to an OAuth callback) for a
+            platform that declares `weeklyStreams`. Meta creates one: the
+            creatives connection, off the SAME source, carrying only the weekly
+            streams and run one day a week by the pipeline.
+
+
+            A caller that ignores this field will not know a second connection
+            exists in its workspace. An entry with an `error` key instead of an
+            `id` means the companion could not be created — the primary
+            connection is live and unaffected, and the weekly streams can be
+            added with an explicit `streams` list on a new connection.
+          items:
+            type: object
+        pipeline:
+          type: object
+          nullable: true
+          description: >
+            Whether the new connections were added to the client's pipeline
+            scope. Present only when companions were created. A weekly companion
+            is `manual` in Airbyte by design, so one that is NOT in a pipeline
+            has nothing that will ever trigger it.
+          properties:
+            enrolled:
+              type: boolean
+            reason:
+              type: string
+              description: Why not, when `enrolled` is false — usually the client has no pipeline yet.
+            pipeline_id:
+              type: string
+            connection_ids:
+              type: array
+              items:
+                type: string
+            pipeline_enabled:
+              type: boolean
         last_sync_at:
           type: string
           format: date-time
@@ -2126,6 +2208,26 @@ components:
         — `6h` at `8` runs at 02:00, 08:00, 14:00 and 20:00. Ignored when
         `sync_frequency` is `manual`.
       example: 8
+    SyncDow:
+      type: integer
+      minimum: 0
+      maximum: 6
+      nullable: true
+      description: >
+        UTC day of week (0 = Sunday) a PIPELINE RUN may include this connection.
+        `null`, the default, means every run.
+
+
+        This is how a connection syncs less often than the run that owns it —
+        Meta's weekly creatives companion is created with `0` (Sunday). A run on
+        any other day marks the step `skipped` with reason `weekly — only runs
+        on Sunday (UTC)`, which never holds the run's gate.
+
+
+        Read by the pipeline only. A connection on its own Airbyte cron ignores
+        it, because the cron already says when it runs. Writable on
+        `PUT /connections/{id}`.
+      example: 1
     SyncFrequency:
       type: string
       description: >
