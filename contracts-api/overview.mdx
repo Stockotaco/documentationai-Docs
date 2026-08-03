@@ -132,9 +132,9 @@ Sampling is uniform over a hash of the event id, so **rates and coverage are unb
 
 If the window still holds too much to scan, the API returns `400 window_too_large` naming the three fixes above, rather than a timeout dressed up as a server error.
 
-<Warning>
+<Callout kind="warning">
   A `truncated: true` flag on the response means the underlying property statistics hit their row limit. Narrow the window or pass `?event=` before trusting `absent` counts — a truncated read under-counts keys and can manufacture "missing" fields that are really a row limit.
-</Warning>
+</Callout>
 
 ## Contract types
 
