@@ -20,10 +20,15 @@ This page documents the identity record in storage as a **supported integration
 surface** so a second surface can agree with the SDK on one ID, rather than
 reverse-engineering it.
 
-<Callout kind="info">
-  If your second surface loads **after** the SDK, read the record — that is the
-  common case and it is all you need. Writing the record only matters when your
-  surface may run on pages where the SDK never loads at all.
+<Callout kind="alert">
+  Do not decide your ID from a **single read at startup**. On a cold load,
+  script order is not guaranteed: we have measured the same storefront with the
+  SDK writing first on one visit and the second surface executing first on
+  another — 77ms apart. If the record is absent, poll for it briefly (for
+  example every 50ms for a couple of seconds) before minting your own; an event
+  sent with an ID minted off one empty read becomes an orphaned visitor. Mint
+  only on timeout — the legitimate case being a page where the SDK never runs
+  at all.
 </Callout>
 
 ## The record
@@ -80,6 +85,10 @@ rather than an empty slot.
 
 Measured on a live Shopify storefront: the identity record is in `localStorage`
 at ~94ms, while the debounced keys arrive at ~1193ms.
+
+The guarantee is that the write happens as early as the SDK can make it — not
+that it happens before your surface runs. A surface that executes very early in
+the page's life can genuinely arrive first; see the callout above.
 
 <Callout kind="warning">
   This guarantee is about **when the SDK writes**, not about when your surface can
