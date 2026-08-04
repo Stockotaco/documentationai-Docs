@@ -491,7 +491,7 @@ components:
           enum: [0, 1]
           description: 1 when the clicked element was position fixed/sticky, i.e. `y_px` is viewport-relative.
         clicks: { type: integer, example: 42 }
-        visitors: { type: integer, example: 31, description: Distinct visitors, not clicks. }
+        visitors: { type: integer, example: 31, description: "Distinct visitors, not clicks." }
     ScrollBand:
       type: object
       properties:
