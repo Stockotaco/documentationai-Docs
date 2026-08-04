@@ -115,6 +115,15 @@ paths:
           description: >
             Event name counted as the conversion. Discover this client's real
             event names via `GET /client/v1/data/events/breakdown?dimension=event_name`.
+
+            Pass **`auto`** to let the endpoint choose: it runs the eligibility
+            probe first, takes its suggested pairing, and reports the choice under
+            `auto_selected` so it is visible rather than magic. That replaces a
+            round trip you would otherwise make to `/constraints/events` purely
+            to learn which event to ask about. An explicit `lead_event` still
+            wins over the suggestion. If nothing in the window can serve as a
+            conversion you get a `422 no_usable_conversion_event` rather than an
+            analysis of a dead funnel.
           required: false
           schema:
             type: string
@@ -184,6 +193,35 @@ paths:
             default: 30
             minimum: 0
             maximum: 365
+        - name: include
+          in: query
+          description: >
+            Comma-separated optional sections, all **off by default**:
+            `include=creative,audit,events`.
+
+            `creative` adds each row's ad copy, destination and assets. Off by
+            default because it is not free: measured on one client it scans
+            285.9 MB on every call at every grain, independent of the report
+            window (the creatives table sits in a single partition that nothing
+            prunes, and one JSON column is 139 MB of it). If you join creative
+            yourself, leave it off. Row labels are unaffected — `ad_name` comes
+            from ads-insights and `top_landing_page` from sessions.
+
+            `audit` returns the tracking-hygiene report (the same body as
+            `/constraints/audit`) under an `audit` key, and `events` returns the
+            event inventory (`/constraints/events`) under `event_inventory`.
+            These stay separate BigQuery jobs — one request cannot make them one
+            scan — but they run **in parallel** with the analysis, so a caller
+            that needed all three stops paying three serial round trips and pays
+            the slowest one instead.
+
+            A section that fails is reported as `{"unavailable": "<reason>"}`
+            inside a 200; the analysis itself is never failed by it. An unknown
+            name is a `400` rather than a silent omission.
+          required: false
+          schema:
+            type: string
+            example: audit,events
         - name: resolve_identities
           in: query
           description: >
@@ -481,6 +519,24 @@ paths:
                         properties:
                           code: { type: string, enum: [no_campaign_data, no_conversion_events, no_conversions_attributed, campaign_not_found, grain_unresolvable] }
                           message: { type: string }
+                      audit:
+                        type: object
+                        description: >
+                          Present only with `include=audit` — the same body as
+                          `/constraints/audit`, or `{unavailable}` if that section failed.
+                      event_inventory:
+                        type: object
+                        description: >
+                          Present only with `include=events` — the same body as
+                          `/constraints/events`, or `{unavailable}` if that section failed.
+                      auto_selected:
+                        type: object
+                        description: Present only with `conversion_event=auto` — what it chose and out of how many candidates.
+                        properties:
+                          conversion_event: { type: string }
+                          lead_event: { type: string, nullable: true }
+                          revenue_path: { type: string }
+                          chosen_from: { type: integer }
                       warning:
                         type: object
                         description: >

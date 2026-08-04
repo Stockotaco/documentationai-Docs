@@ -103,7 +103,29 @@ A campaign at or above the pooled rate on every step returns `constraint: null` 
 
 Rows are returned **ordered by opportunity**, which is deliberately not spend order.
 
+## One call instead of three
+
+The three read endpoints answer different questions, and a panel that needs all of them used to pay three serial round trips. `include=` folds the other two into the analysis response and runs them **in parallel**, so the wall clock is the slowest one rather than the sum:
+
+```bash
+# funnel + tracking audit + event inventory, one request, one round trip
+curl "$BASE/client/v1/constraints?location_id=$LOC&include=audit,events&conversion_event=auto" \
+  -H "Authorization: Bearer $AK"
+```
+
+`audit` lands under `audit`, the inventory under `event_inventory`. They stay separate BigQuery jobs — one request can't make them one scan — but you stop waiting for them in sequence.
+
+`conversion_event=auto` closes the last serial hop: instead of calling `/constraints/events` to learn which event to ask about and then calling the analysis, the endpoint runs the probe itself and reports what it chose under `auto_selected`. An explicit `lead_event` still wins.
+
+<Callout kind="info">
+A section that fails comes back as `{"unavailable": "<reason>"}` inside a `200` — the analysis is never failed by it. That matters for the audit specifically: "the audit did not run" must not be readable as "this account has no tracking problems". An unknown `include` name is a `400` rather than a silent omission, so a typo can't quietly return less than you asked for.
+</Callout>
+
 ## What the ad actually says
+
+<Callout kind="alert">
+Creative is **off by default** — request it with `include=creative`. It is the most expensive thing this endpoint can do: measured on one client it scans 285.9 MB on *every* call at *every* grain, independent of the report window, because the creatives table sits in a single partition that nothing prunes and one JSON column accounts for 139 MB of it. If you already join creative yourself, leave it off. Row labels are unaffected either way — `ad_name` comes from ads-insights and `top_landing_page` from the sessions side, never from creatives.
+</Callout>
 
 An `ad_name` is a naming convention, not content — "Lead C - SE-2 - Markus Video Adscripts 1.16.26 - Copy" tells you nothing about the promise the visitor saw. Every row carries the real creative, so the comparison that follows a `landing` constraint (ad copy vs page copy) happens in one response:
 
