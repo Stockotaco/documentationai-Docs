@@ -77,9 +77,16 @@ The value is JSON:
 
 ## Timing guarantee
 
-The SDK writes the identity record to storage **synchronously, before it returns
-from initialization** — at init, on `identify()`, and on `reset()`. It does not
-ride the SDK's normal write debounce.
+From **2.232.0**, the loader itself seeds the identity record and a session
+record into storage at parse time — the moment `init` is called, before the
+SDK core module is even fetched. Measured on a live storefront, the records
+exist ~150ms into the page, before a pixel sandbox can realistically boot. The
+core adopts the seeded identity verbatim on arrival and enriches the seeded
+session with entry attribution; the IDs never change.
+
+Independently of the seed, the SDK writes the identity record **synchronously,
+before it returns from initialization** — at init, on `identify()`, and on
+`reset()`. It does not ride the SDK's normal write debounce.
 
 This matters because every other key the SDK stores (`session`, `super_properties`,
 `geo_data`, …) is staged in memory and flushed about a second later. Identity is
