@@ -15,12 +15,15 @@ A heatmap is three separate things, and most tools blur them together:
 | **Click map** | Where on the page do people click? | `GET /client/v1/data/heatmap` |
 | **Scroll map** | How far down does the audience actually get? | `GET /client/v1/data/heatmap/scroll` |
 | **Background** | What did the page look like? | `GET /client/v1/data/heatmap/snapshot` |
+| **Page list** | Which pages have data at all? | `GET /client/v1/data/heatmap/pages` |
 
 They are separate endpoints because they fail separately. A page with no recording still has click data worth reading, and a page with a background but no traffic should say "no clicks" rather than render an empty overlay and imply nobody was there.
 
 <Note>
 Capture is **off by default**. Turn it on per client with `PUT /client/v1/settings/heatmaps` — it takes effect on the browser's next config fetch, with no change to the site's install snippet.
 </Note>
+
+Start from the page list rather than guessing a URL: it is derived from the captured points, so every entry has data and nothing with data is missing. It also reports `clicks` and `scroll_sessions` separately, which is how you tell "nobody clicked here" from "this page's visitors haven't left yet".
 
 ## The two coordinate systems
 
@@ -114,4 +117,4 @@ https://mythic-analytics.gulp.workers.dev/client/v1/data/heatmap
 
 ## Authentication
 
-The same key system as the rest of `/client/v1`: an **agency key** (`ak_`, bind a location with `?location_id=` or the `X-Location-Id` header) or a **location secret key** (`sk_`, auto-scoped to its own location). All three endpoints are reads and accept either; toggling capture is a Settings write and needs an agency key.
+The same key system as the rest of `/client/v1`: an **agency key** (`ak_`, bind a location with `?location_id=` or the `X-Location-Id` header) or a **location secret key** (`sk_`, auto-scoped to its own location). All four endpoints are reads and accept either; toggling capture is a Settings write and needs an agency key.

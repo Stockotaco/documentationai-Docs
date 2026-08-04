@@ -30,6 +30,46 @@ security:
   - AgencyKeyQuery: []
   - SecretKeyQuery: []
 paths:
+  /client/v1/data/heatmap/pages:
+    get:
+      summary: Pages that have heatmap data
+      operationId: listHeatmapPages
+      description: >
+        Busiest first. Derived from the captured points themselves, so it can
+        neither offer a page with nothing on it nor omit one that has something —
+        which is what makes it safe to drive a page picker from.
+
+
+        `clicks` and `scroll_sessions` are reported separately because a page can
+        legitimately have one and not the other: clicks land within seconds of
+        happening, while scroll depth is only banked when the visitor leaves the
+        page. Either one is enough for a page to be listed.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: date_from
+          in: query
+          description: ISO 8601 or `YYYY-MM-DD`. Defaults to 30 days ago.
+          schema: { type: string, format: date-time }
+        - name: date_to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 500, maximum: 5000 }
+      responses:
+        "200":
+          description: Pages with heatmap data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/HeatmapPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
   /client/v1/data/heatmap:
     get:
       summary: Click cells for one page
@@ -270,6 +310,18 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
   schemas:
+    HeatmapPage:
+      type: object
+      properties:
+        url_key: { type: string, example: acme.com/pricing }
+        clicks: { type: integer, example: 4821 }
+        scroll_sessions:
+          type: integer
+          example: 1204
+          description: Distinct sessions with a scroll measurement — the scroll curve's denominator, not a point count.
+        sessions: { type: integer, example: 1310 }
+        last_seen: { type: string, example: "2026-08-04 18:10:09" }
+        page_height: { type: integer, example: 5200 }
     HeatmapCell:
       type: object
       properties:
