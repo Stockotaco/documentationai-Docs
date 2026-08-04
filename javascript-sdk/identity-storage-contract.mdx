@@ -84,9 +84,10 @@ at ~94ms, while the debounced keys arrive at ~1193ms.
 <Callout type="warning">
   This guarantee is about **when the SDK writes**, not about when your surface can
   read. If your surface reads storage through an async proxy — as a sandboxed
-  Shopify Web Pixel does — that proxy's view may lag or be partitioned. Verify
-  that your surface can actually observe the value before depending on it, and
-  re-read with a short backoff if it cannot.
+  Shopify Web Pixel does, via the Web Pixel Manager rather than `localStorage`
+  directly — that proxy's view of the page's storage is eventually coherent, not
+  immediately coherent. **Read with a bounded retry**; see
+  [Reading from a sandboxed surface](#reading-from-a-sandboxed-surface).
 </Callout>
 
 ## Precedence
@@ -119,6 +120,49 @@ if (existing?.distinctId) {
 
 Omitting `deviceId` is supported: the SDK fills it from stored state, or mints
 one if there is none.
+
+## Reading from a sandboxed surface
+
+A surface that does not touch `localStorage` directly — a Shopify Web Pixel reads
+through the Web Pixel Manager — sees the page's storage through an async proxy.
+That proxy is **eventually coherent, not immediately coherent**: a value the page
+wrote moments ago may not be visible to the sandbox yet, even though it is
+genuinely in storage.
+
+The failure this produces is quiet and expensive. A single read returns nothing,
+the surface concludes "no identity exists", mints its own ID, and writes it —
+overwriting the record the SDK wrote milliseconds earlier. Both surfaces then
+report different IDs for one visitor.
+
+**Do not treat the first read as authoritative.** Retry with a short backoff and
+only mint if the record is still absent at your deadline:
+
+```js
+const KEY = `mythic_${publishableKey}_identity`;
+
+async function resolveIdentity({ deadlineMs = 500, stepMs = 25 } = {}) {
+  const started = Date.now();
+  while (Date.now() - started < deadlineMs) {
+    const raw = await readStorage(KEY);            // your sandbox's async read
+    const id = raw && JSON.parse(raw)?.distinctId;
+    if (id) return id;                             // the SDK already decided
+    await new Promise(r => setTimeout(r, stepMs));
+  }
+  return null;                                     // genuinely absent — now mint
+}
+```
+
+Reaching the deadline is the legitimate case for minting your own ID: a page
+where the SDK never loads at all, such as a checkout entered directly. On a page
+that does run the SDK, the retry is what keeps you from overwriting it.
+
+<Callout type="info">
+  Pick the deadline by measuring your own surface rather than assuming. In one
+  instrumented Shopify cold load, a value written by the page at ~95ms was still
+  not visible to the sandbox at ~179ms — so a budget under ~100ms after SDK init
+  is certainly too tight. Reading a value that predates the page load showed no
+  lag at all, so the lag applies to recent writes, not to the read path itself.
+</Callout>
 
 ## The mirrors
 
