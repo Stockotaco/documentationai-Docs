@@ -24,11 +24,14 @@ reverse-engineering it.
   Do not decide your ID from a **single read at startup**. On a cold load,
   script order is not guaranteed: we have measured the same storefront with the
   SDK writing first on one visit and the second surface executing first on
-  another — 77ms apart. If the record is absent, poll for it briefly (for
-  example every 50ms for a couple of seconds) before minting your own; an event
-  sent with an ID minted off one empty read becomes an orphaned visitor. Mint
-  only on timeout — the legitimate case being a page where the SDK never runs
-  at all.
+  another — 77ms apart. A surface running in the same page context is safe —
+  its read-then-write is atomic because JavaScript is single-threaded. But a
+  surface that reaches storage through an **async bridge** (a sandboxed Shopify
+  Web Pixel reads via the Web Pixel Manager) can read an empty slot, lose the
+  CPU, and act on stale emptiness. If that is your situation, either wait
+  (poll briefly before minting) or send immediately and
+  [heal the split](#healing-a-lost-race) with `$create_alias`. Mint-and-forget
+  is the only wrong option.
 </Callout>
 
 ## The record
@@ -149,6 +152,32 @@ ITP, for example — "no identity record" does not mean "new browser". If you mi
 a fresh `deviceId` in that state you fork a device the SDK would otherwise have
 recognised. Carry through an existing `device_id`, or omit the field and let the
 SDK resolve it.
+
+## Healing a lost race
+
+If your surface cannot hold its first event (or the record was still absent
+when it fired), send the event with your minted ID, keep watching storage, and
+when the identity record appears with a **different** `distinctId`, emit one
+alias event:
+
+```json
+{
+  "event": "$create_alias",
+  "distinct_id": "<the record's distinctId — the SDK's ID>",
+  "properties": {
+    "alias": "<the ID you minted and already sent under>"
+  }
+}
+```
+
+Mythic's identity resolution merges the two visitors server-side —
+anonymous-to-anonymous alias merges are allowed — and events already sent under
+your minted ID reattach to the real visitor, including their attribution.
+Switch to the record's ID for all subsequent events. Send the alias once.
+
+What this does not repair: session-level analytics keep the early event's own
+session row, and a visitor who bounces before the record ever appears stays
+split. Every client-side strategy shares that tail.
 
 ## Compatibility
 
