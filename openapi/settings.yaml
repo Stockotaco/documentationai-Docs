@@ -6,7 +6,8 @@ info:
     Per-location ingestion controls: the **origin allowlist** that bounds which
     sites may send events with a location's publishable key, and the
     **autocapture override** that controls server-side whether the SDK records
-    clicks and form submissions.
+    clicks and form submissions, and the **heatmap-capture override** that turns
+    click-position and scroll-depth collection on.
 
 
     Publishable keys (`pk_`) live in the browser and are public by design — they
@@ -189,6 +190,89 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /heatmaps:
+    get:
+      summary: Get the heatmap-capture override
+      operationId: getHeatmapCapture
+      description: >
+        Return the location's heatmap-capture override plus whether capture is
+        effectively on. Readable with an agency key (`ak_`, pass
+        `?location_id=`) or a viewer key (`sk_`).
+
+
+        Unlike `autocapture`, `null` here means **off**: heatmap capture is
+        opt-in per location, so an unconfigured location captures nothing.
+      responses:
+        "200":
+          description: The current override and whether capture is on
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HeatmapCaptureResponse"
+        "401":
+          description: Authorization key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Set the heatmap-capture override
+      operationId: putHeatmapCapture
+      description: >
+        Turn heatmap capture on or off for a location. Requires an agency key
+        (`ak_`) and `?location_id=`; viewer keys get `403 agency_required`.
+
+
+        Accepted values for `capture_heatmaps`:
+
+        - `true` — capture click positions and scroll depth with SDK defaults.
+        - `{ "flushIntervalMs": 5000, "maxBufferPoints": 200 }` — on, with those
+          overrides. `flushIntervalMs` must be 1000–60000 and
+          `maxBufferPoints` 10–1000; values outside the range are rejected
+          rather than clamped, and unknown keys are rejected rather than
+          ignored.
+        - `false` / `null` — off. Both mean the same thing here.
+
+
+        Capture adds one event per click and one per page-scroll, so this is off
+        until asked for. The override is served to the SDK via remote config and
+        wins over the site's `init()` configuration — which is the point: an
+        agency can enable heatmaps on a client site whose install snippet it
+        cannot edit. Browsers pick it up on their next remote-config fetch.
+
+
+        Two cases where it does **not** apply: a site with
+        `disable_remote_config: true` never fetches remote config, and
+        HIPAA-mode locations never capture heatmaps regardless of what is stored.
+
+
+        Turning capture on is not retroactive — there is no backfill of past
+        traffic. Read the data with the [Heatmaps API](/heatmaps-api/overview).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HeatmapCaptureRequest"
+      responses:
+        "200":
+          description: Updated — returns the stored override
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HeatmapCaptureUpdateResponse"
+        "400":
+          description: Body isn't JSON, or `capture_heatmaps` is missing/invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Write access requires an agency key (`ak_`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   securitySchemes:
     BearerAuth:
@@ -323,3 +407,50 @@ components:
             message:
               type: string
               example: "invalid hostname: localhost"
+    HeatmapCaptureResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            capture_heatmaps:
+              nullable: true
+              description: The stored override — `null`, `false`, `true`, or an options object.
+              oneOf:
+                - type: boolean
+                - type: object
+              example: true
+            effective:
+              type: object
+              properties:
+                enabled: { type: boolean, example: true }
+    HeatmapCaptureRequest:
+      type: object
+      required:
+        - capture_heatmaps
+      properties:
+        capture_heatmaps:
+          nullable: true
+          description: "`true`, `false`, `null`, or `{ flushIntervalMs, maxBufferPoints }`."
+          oneOf:
+            - type: boolean
+            - type: object
+              properties:
+                flushIntervalMs: { type: integer, minimum: 1000, maximum: 60000, example: 5000 }
+                maxBufferPoints: { type: integer, minimum: 10, maximum: 1000, example: 200 }
+              additionalProperties: false
+          example: true
+    HeatmapCaptureUpdateResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            capture_heatmaps:
+              nullable: true
+              oneOf:
+                - type: boolean
+                - type: object
+              example: true

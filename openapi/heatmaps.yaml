@@ -1,0 +1,306 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Heatmaps
+  description: >
+    Aggregated click positions and scroll depth for one page, plus the page
+    background to draw them on.
+
+
+    Two coordinate conventions, and they are different on purpose. `x` is
+    returned **relative** (0..1 of the viewport width it was captured at), so a
+    click in the middle of a 1440px desktop and a 360px phone land in the same
+    cell. `y` is returned in **absolute page pixels**, because page length varies
+    between visitors (lazy-loaded content, banners) and a percentage would smear
+    unrelated positions together.
+
+
+    The background is a stored session-replay snapshot, not a live frame of the
+    site: replay must be enabled for the client, and the returned rrweb events
+    rebuild the page as it actually looked when the data was captured.
+
+
+    Read-only. Accepts an agency key (`ak_`, bind a location with `location_id`
+    or the `X-Location-Id` header) or a location secret key (`sk_`). Capture is
+    off by default — see `PUT /client/v1/settings/heatmaps`.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+  - AgencyKeyQuery: []
+  - SecretKeyQuery: []
+paths:
+  /client/v1/data/heatmap:
+    get:
+      summary: Click cells for one page
+      operationId: getHeatmap
+      description: >
+        Interaction counts per grid cell, hottest first. Cells are quantized
+        server-side: `x_precision` decimals of relative x (default 2, i.e. 1%
+        columns) and `y_bucket` pixels vertically (default 10). The response
+        echoes both so a renderer knows the grid it received.
+
+
+        `truncated: true` means the page has more distinct cells than
+        `limit` — the coldest cells were dropped, never the hotspots.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: url
+          in: query
+          required: true
+          description: >
+            Full URL or bare `host/path`. Normalized the same way the SDK
+            normalized it on capture: scheme, `www.`, query string, hash and
+            trailing slash removed, lowercased. `https://www.acme.com/Pricing?utm_source=meta`
+            and `acme.com/pricing` are the same page.
+          schema: { type: string, example: acme.com/pricing }
+        - name: type
+          in: query
+          description: Point type. Only `click` is captured today.
+          schema: { type: string, default: click, enum: [click] }
+        - name: date_from
+          in: query
+          description: ISO 8601 or `YYYY-MM-DD`. Defaults to 30 days ago.
+          schema: { type: string, format: date-time }
+        - name: date_to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: viewport_min
+          in: query
+          description: >
+            Narrow to a viewport-width window, in px. This is the
+            precision-versus-volume trade-off: one window per breakpoint
+            (e.g. 0–767, 768–1199, 1200+) gives positions that are true for
+            that layout, while the default all-widths view mixes layouts.
+          schema: { type: integer, example: 1200 }
+        - name: viewport_max
+          in: query
+          schema: { type: integer, example: 20000 }
+        - name: x_precision
+          in: query
+          description: Decimal places of relative x. 2 = 1% columns, 3 = 0.1%.
+          schema: { type: integer, default: 2 }
+        - name: y_bucket
+          in: query
+          description: Vertical bucket size in px.
+          schema: { type: integer, default: 10 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20000 }
+      responses:
+        "200":
+          description: Click cells
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      page: { type: string, example: acme.com/pricing }
+                      type: { type: string, example: click }
+                      total_clicks: { type: integer, example: 4821 }
+                      x_precision: { type: integer, example: 2 }
+                      y_bucket: { type: integer, example: 10 }
+                      truncated: { type: boolean, example: false }
+                      points:
+                        type: array
+                        items: { $ref: "#/components/schemas/HeatmapCell" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /client/v1/data/heatmap/scroll:
+    get:
+      summary: Scroll-depth curve for one page
+      operationId: getHeatmapScroll
+      description: >
+        How many sessions still had eyes on each band of the page, cumulative
+        from the deepest band upward — so `sessions_reached` reads "at least this
+        far down".
+
+
+        Depth is `max scroll y + viewport height`, because a visitor who never
+        scrolled still saw one viewport. That makes the `depth_px: 0` band equal
+        to every measured session, i.e. the denominator.
+
+
+        One measurement per session per page, taken when the visitor leaves the
+        page. Sessions whose final beacon never landed are absent: this is a
+        curve over sessions we measured, not over all pageviews.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: url
+          in: query
+          required: true
+          schema: { type: string, example: acme.com/pricing }
+        - name: date_from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: date_to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: viewport_min
+          in: query
+          schema: { type: integer }
+        - name: viewport_max
+          in: query
+          schema: { type: integer }
+        - name: band
+          in: query
+          description: Band height in px.
+          schema: { type: integer, default: 100 }
+      responses:
+        "200":
+          description: Scroll bands
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      page: { type: string, example: acme.com/pricing }
+                      band: { type: integer, example: 100 }
+                      sessions:
+                        type: integer
+                        example: 1204
+                        description: Every session measured on this page — the denominator.
+                      page_height:
+                        type: integer
+                        example: 5200
+                        description: Tallest document height observed, in px.
+                      bands:
+                        type: array
+                        items: { $ref: "#/components/schemas/ScrollBand" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /client/v1/data/heatmap/snapshot:
+    get:
+      summary: Page background for the overlay
+      operationId: getHeatmapSnapshot
+      description: >
+        Two rrweb events — a Meta and the FullSnapshot that follows it — pulled
+        from a real recording of the page. Feed `data.events` into an rrweb
+        player (`rrweb-player`) to rebuild the DOM, then draw the cells on top:
+        multiply `x_rel` by `data.width`, and use `y_px` as-is.
+
+
+        Requires session replay to be enabled for the client. Candidate
+        recordings are those whose **landing** page matches, so a page visitors
+        only reach mid-session needs an explicit `session_id` (take one from
+        `GET /client/v1/data/replays`).
+
+
+        Cells with `target_fixed: true` were captured on a position
+        fixed/sticky element; their `y_px` is viewport-relative, not
+        page-absolute, so they belong wherever that element sits — not at the
+        page offset.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: url
+          in: query
+          required: true
+          schema: { type: string, example: acme.com/pricing }
+        - name: session_id
+          in: query
+          description: Take the snapshot from this recording instead of searching.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Snapshot events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      page: { type: string, example: acme.com/pricing }
+                      session_id: { type: string }
+                      captured_at: { type: integer, nullable: true, description: Epoch ms of the snapshot. }
+                      width: { type: integer, nullable: true, example: 1440, description: Viewport width the DOM was captured at — the x denominator. }
+                      height: { type: integer, nullable: true, example: 900 }
+                      events:
+                        type: array
+                        description: Exactly two rrweb events (Meta, FullSnapshot).
+                        items: { type: object }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: >
+            No recording holds a full snapshot of that page. Real causes: replay
+            is off, the 30-day replay window has rolled past it, or the page is
+            never a landing page (pass `session_id`).
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Agency key (`ak_`) or location secret key (`sk_`).
+    AgencyKeyQuery:
+      type: apiKey
+      in: query
+      name: ak
+    SecretKeyQuery:
+      type: apiKey
+      in: query
+      name: sk
+  parameters:
+    LocationId:
+      name: location_id
+      in: query
+      description: Required with an agency key (`ak_`); ignored with a location key (`sk_`). Can also be sent as the `X-Location-Id` header.
+      schema: { type: string }
+  responses:
+    BadRequest:
+      description: Missing or invalid parameter
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing or invalid key
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    HeatmapCell:
+      type: object
+      properties:
+        x_rel:
+          type: number
+          example: 0.5
+          description: Horizontal position as a fraction of the captured viewport width.
+        y_px:
+          type: integer
+          example: 940
+          description: Vertical position in absolute page pixels (bucket start).
+        target_fixed:
+          type: integer
+          enum: [0, 1]
+          description: 1 when the clicked element was position fixed/sticky, i.e. `y_px` is viewport-relative.
+        clicks: { type: integer, example: 42 }
+        visitors: { type: integer, example: 31, description: Distinct visitors, not clicks. }
+    ScrollBand:
+      type: object
+      properties:
+        depth_px: { type: integer, example: 2000 }
+        sessions_reached: { type: integer, example: 602, description: Sessions that saw at least this far down. }
+        sessions_total: { type: integer, example: 1204 }
+        reached_pct: { type: number, example: 0.5 }
+        page_height: { type: integer, example: 5200 }
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string, example: url_required }
+            message: { type: string }

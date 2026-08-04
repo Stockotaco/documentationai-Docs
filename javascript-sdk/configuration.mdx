@@ -265,6 +265,23 @@ The full set of options you can pass to `init(key, config)`.
   Session replay is normally turned on **per client from the server** (via the `/decide` remote config). The server value wins over your local config: an explicit server `enabled: false` disables recording even if you pass `enabled: true` here, and recording only starts after remote config loads. Recording is blocked entirely for HIPAA locations. Recorded sessions are read back through the [Data API](/data-api/overview) and expire after 30 days.
 </Callout>
 
+### Heatmaps
+
+<ParamField body="capture_heatmaps" param-type="boolean|object" required="false" show-location="false" deprecated="false">
+  Capture click positions and scroll depth for [heatmaps](/heatmaps-api/overview). Default: `false` (off). Pass `true` to enable with defaults, or an object for control:
+
+  - `flushIntervalMs` (number) — maximum milliseconds between batches. Default: `5000`.
+  - `maxBufferPoints` (number) — hard cap on points per interval. Points past it are **dropped** (and counted in `$heatmap_dropped` on the event) rather than triggering an early send, so a page emits at most one `$heatmap` event per interval no matter how much clicking happens on it. Default: `200`.
+
+  This is **not** the same thing as `autocapture`. Autocapture records *which element* was clicked — its text, `href`, classes. This records *which pixel*, and reads no element identity or text at all. Enable either, both, or neither.
+
+  Points ride the normal event pipeline as a batched `$heatmap` event, so consent gating, `before_send`, and opt-out apply exactly as they do to any other event. Clicks on position `fixed`/`sticky` elements are flagged so a heatmap renderer can place them correctly instead of streaking one sticky nav down the whole page. Scroll depth is measured once per page per session, when the visitor leaves it.
+</ParamField>
+
+<Callout kind="info">
+  Heatmap capture is normally turned on **per client from the server** (via remote config — `PUT /client/v1/settings/heatmaps`), which is how an agency enables it on a site whose install snippet it can't edit. The server value wins over your local config. It is blocked entirely for HIPAA locations, and it is not retroactive: turning it on collects from that moment, with no backfill of past traffic.
+</Callout>
+
 ### Geolocation
 
 <ParamField body="geolocation" param-type="boolean|object" required="false" show-location="false" deprecated="false">

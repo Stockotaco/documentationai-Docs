@@ -1,0 +1,117 @@
+---
+title: Heatmaps
+description: >-
+  Aggregated click positions and scroll depth for any page, drawn on the page as
+  it actually looked — rebuilt from a session recording, not framed from the live
+  site.
+---
+
+## Overview
+
+A heatmap is three separate things, and most tools blur them together:
+
+| What | Question it answers | Where it comes from |
+| --- | --- | --- |
+| **Click map** | Where on the page do people click? | `GET /client/v1/data/heatmap` |
+| **Scroll map** | How far down does the audience actually get? | `GET /client/v1/data/heatmap/scroll` |
+| **Background** | What did the page look like? | `GET /client/v1/data/heatmap/snapshot` |
+
+They are separate endpoints because they fail separately. A page with no recording still has click data worth reading, and a page with a background but no traffic should say "no clicks" rather than render an empty overlay and imply nobody was there.
+
+<Note>
+Capture is **off by default**. Turn it on per client with `PUT /client/v1/settings/heatmaps` — it takes effect on the browser's next config fetch, with no change to the site's install snippet.
+</Note>
+
+## The two coordinate systems
+
+This is the part that decides whether a heatmap is trustworthy, so it is worth being explicit.
+
+**Horizontal is relative.** `x_rel` is a fraction (0..1) of the viewport width the click was captured at. A click in the middle of a 1440px desktop and a click in the middle of a 360px phone are both `0.5` — the same cell, because in a responsive layout they hit the same thing.
+
+**Vertical is absolute.** `y_px` is page pixels from the top of the document. It is deliberately not a percentage of page height: page length differs between visitors — lazy-loaded sections, cookie banners, a longer product list — so "60% down the page" is a different place for different people, and averaging it invents a hotspot nobody clicked.
+
+**Fixed elements are flagged, not fixed.** A click on a sticky header or a floating chat button carries `target_fixed: 1` and its `y_px` is viewport-relative. Draw those where the element sits, not at that page offset. Without the flag, one sticky nav becomes a vertical streak down the entire page — the classic broken heatmap.
+
+## Viewport windows
+
+By default the click map mixes every screen size. That is usually what you want for a first look and wrong for a decision, because a 1200px layout and a 400px layout are different pages that happen to share a URL.
+
+Pass `viewport_min` / `viewport_max` to read one breakpoint at a time:
+
+```bash
+# desktop only
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/data/heatmap?url=acme.com/pricing&viewport_min=1200" \
+  -H "Authorization: Bearer sk_live_..."
+```
+
+Narrower window → truer positions, less data. Wider → more data, blurrier positions. There is no setting that gives you both.
+
+## Scroll depth, precisely
+
+The scroll curve is cumulative from the deepest band upward, so `sessions_reached` reads **"this many sessions saw at least this far down"**.
+
+Depth is `max scroll y + viewport height` — a visitor who never scrolled still *saw* one viewport. That makes the `depth_px: 0` band equal to every measured session: it is the denominator, not a data point.
+
+```json
+{
+  "data": {
+    "sessions": 1204,
+    "page_height": 5200,
+    "bands": [
+      { "depth_px": 0,    "sessions_reached": 1204, "reached_pct": 1.0 },
+      { "depth_px": 900,  "sessions_reached": 1204, "reached_pct": 1.0 },
+      { "depth_px": 2000, "sessions_reached": 602,  "reached_pct": 0.5 },
+      { "depth_px": 3300, "sessions_reached": 121,  "reached_pct": 0.1 }
+    ]
+  }
+}
+```
+
+Read that as: half the audience never got past 2000px, and the CTA at 3300px was seen by one visitor in ten.
+
+One measurement is taken per session per page, when the visitor leaves it. A session whose final beacon never landed (browser killed the tab) is simply absent — this is a curve over sessions we measured, not over all pageviews. Compare `sessions` against your pageview count for that page to see the gap.
+
+## Drawing it
+
+The background comes from session replay, not from framing your site. That means no `X-Frame-Options` or CSP negotiation, pages behind a login work, and — the one that matters most — the DOM is the page **as it was when the clicks happened**, not as it is today after a redesign.
+
+```js
+import rrwebPlayer from 'rrweb-player'
+
+const [snap, heat] = await Promise.all([
+  fetch(`${base}/client/v1/data/heatmap/snapshot?url=${page}`, { headers }).then((r) => r.json()),
+  fetch(`${base}/client/v1/data/heatmap?url=${page}`, { headers }).then((r) => r.json()),
+])
+
+// rebuild the page, paused, controls hidden
+new rrwebPlayer({
+  target: stage,
+  props: { events: snap.data.events, width: snap.data.width, autoPlay: false, showController: false },
+})
+
+// then draw cells on a canvas over it
+for (const cell of heat.data.points) {
+  const x = cell.x_rel * snap.data.width
+  const y = cell.y_px            // already page pixels — do not scale by height
+  paint(x, y, cell.clicks)
+}
+```
+
+Candidate recordings are the ones whose **landing** page matches the URL, so a page visitors only reach mid-funnel returns `404` — pass an explicit `session_id` from [`GET /client/v1/data/replays`](/replays-api/overview) for those.
+
+## What this is not
+
+- **Not per-visitor.** Both endpoints return aggregates. To watch one person, use session replay.
+- **Not mouse movement.** Clicks and scroll depth only. Move maps are the highest-volume, lowest-signal type and are not captured.
+- **Not element-aware.** These are pixels, not selectors. For "which button got clicked, by name", query `$autocapture` events through the [Data API](/data-api/overview) — that surface knows element text and `href`, and survives a layout change that moves the pixel.
+- **Not retroactive.** Points exist from the moment capture is enabled; there is no backfill of past traffic.
+
+## Base URL
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/data/heatmap
+```
+
+## Authentication
+
+The same key system as the rest of `/client/v1`: an **agency key** (`ak_`, bind a location with `?location_id=` or the `X-Location-Id` header) or a **location secret key** (`sk_`, auto-scoped to its own location). All three endpoints are reads and accept either; toggling capture is a Settings write and needs an agency key.

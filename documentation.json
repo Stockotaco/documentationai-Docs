@@ -188,6 +188,28 @@
             ]
           },
           {
+            "tab": "Heatmaps",
+            "icon": "flame",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "heatmaps-api/overview",
+                    "icon": "file-text"
+                  }
+                ]
+              },
+              {
+                "group": "Heatmaps",
+                "icon": "flame",
+                "openapi": "openapi/heatmaps.yaml"
+              }
+            ]
+          },
+          {
             "tab": "Incrementality",
             "icon": "trending-up",
             "groups": [
