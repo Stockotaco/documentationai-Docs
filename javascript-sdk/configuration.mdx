@@ -112,6 +112,10 @@ The full set of options you can pass to `init(key, config)`.
   Allow calling `identify` with a different user ID after one has already been set. Default: `false` — re-identification is blocked to prevent accidental merges. Call `reset()` before identifying as a different user, or set this to `true` to permit switching identities directly. (An identity previously set only by auto-capture can always be overridden by a later `identify()`.)
 </ParamField>
 
+<Callout type="info">
+  Tracking the same visitor from a second surface on the page — a Shopify Web Pixel, an embedded widget — and need both to resolve to one person? See the [Identity Storage Contract](/javascript-sdk/identity-storage-contract).
+</Callout>
+
 ### Session
 
 <ParamField body="session_timeout" param-type="number" required="false" show-location="false" deprecated="false">

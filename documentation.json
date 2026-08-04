@@ -391,6 +391,11 @@
                     "icon": "zap"
                   },
                   {
+                    "title": "Identity Storage Contract",
+                    "path": "javascript-sdk/identity-storage-contract",
+                    "icon": "fingerprint"
+                  },
+                  {
                     "title": "Troubleshooting",
                     "path": "javascript-sdk/troubleshooting",
                     "icon": "alert-triangle"
@@ -892,6 +897,11 @@
                     "title": "Auto-captured Events",
                     "path": "javascript-sdk/auto-captured-events",
                     "icon": "zap"
+                  },
+                  {
+                    "title": "Identity Storage Contract",
+                    "path": "javascript-sdk/identity-storage-contract",
+                    "icon": "fingerprint"
                   },
                   {
                     "title": "Troubleshooting",

@@ -1,0 +1,171 @@
+---
+title: Identity Storage Contract
+description: >-
+  The supported way for a second tracking surface on the same page to share one
+  anonymous identity with the Mythic Analytics SDK.
+---
+
+## Why this exists
+
+Some pages track from two places at once. The canonical case is a Shopify app: a
+theme app embed runs the SDK in the normal browser context, and a Web Pixel runs
+in a sandbox with no DOM — the only way to capture checkout, because checkout is
+not scriptable.
+
+Both surfaces are the same visitor. If they pick different anonymous IDs, the
+visit becomes two people: browsing under one ID, purchase under another, and the
+purchase carries no landing page or campaign data.
+
+This page documents the identity record in storage as a **supported integration
+surface** so a second surface can agree with the SDK on one ID, rather than
+reverse-engineering it.
+
+<Callout type="info">
+  If your second surface loads **after** the SDK, read the record — that is the
+  common case and it is all you need. Writing the record only matters when your
+  surface may run on pages where the SDK never loads at all.
+</Callout>
+
+## The record
+
+Stored under `<prefix>identity`, where `<prefix>` is `mythic_<publishable key>_`
+unless you set `persistence_name`. So by default:
+
+```
+mythic_pk_a1b2c3..._identity
+```
+
+The value is JSON:
+
+```json
+{
+  "distinctId": "019fca56-1210-7041-b114-a9f784ccef38",
+  "anonymousId": "019fca56-1210-7041-b114-a9f784ccef38",
+  "deviceId": "019fca56-1210-7042-9b69-8bb884a7800f",
+  "userId": "user_123",
+  "aliases": []
+}
+```
+
+<ParamField body="distinctId" param-type="string" required="true" show-location="false" deprecated="false">
+  The current identity — the anonymous ID until `identify()` is called, the user ID afterwards. This is the field a second surface must match.
+</ParamField>
+
+<ParamField body="anonymousId" param-type="string" required="true" show-location="false" deprecated="false">
+  The pre-identification ID, retained after `identify()` so anonymous and identified activity can be stitched. Backfilled from `distinctId` if absent.
+</ParamField>
+
+<ParamField body="deviceId" param-type="string" required="true" show-location="false" deprecated="false">
+  Device-scoped ID that survives `reset()`. **Do not mint this yourself** — see [device_id is real state](#device-id-is-real-state).
+</ParamField>
+
+<ParamField body="userId" param-type="string" required="false" show-location="false" deprecated="false">
+  Set only after `identify()`. Absent while anonymous.
+</ParamField>
+
+<ParamField body="aliases" param-type="string[]" required="true" show-location="false" deprecated="false">
+  Previous IDs, capped at 10. **Must be an array** if you write the record — `identify()` operates on it directly. Backfilled to `[]` if missing, but only from SDK 2.230.5 onward.
+</ParamField>
+
+## Timing guarantee
+
+The SDK writes the identity record to storage **synchronously, before it returns
+from initialization** — at init, on `identify()`, and on `reset()`. It does not
+ride the SDK's normal write debounce.
+
+This matters because every other key the SDK stores (`session`, `super_properties`,
+`geo_data`, …) is staged in memory and flushed about a second later. Identity is
+deliberately exempt so a second surface reading storage sees the current identity
+rather than an empty slot.
+
+Measured on a live Shopify storefront: the identity record is in `localStorage`
+at ~94ms, while the debounced keys arrive at ~1193ms.
+
+<Callout type="warning">
+  This guarantee is about **when the SDK writes**, not about when your surface can
+  read. If your surface reads storage through an async proxy — as a sandboxed
+  Shopify Web Pixel does — that proxy's view may lag or be partitioned. Verify
+  that your surface can actually observe the value before depending on it, and
+  re-read with a short backoff if it cannot.
+</Callout>
+
+## Precedence
+
+**A stored record always wins.** On initialization the SDK reads the record
+first, adopts it verbatim if present, and only then writes. It never overwrites a
+record it found — a returning visitor keeps their ID.
+
+If you write the record before the SDK initializes, the SDK adopts your ID. If
+the SDK initializes first, it writes its own and yours would overwrite it, which
+is what you must avoid — always read before writing.
+
+```js
+const KEY = `mythic_${publishableKey}_identity`;
+
+const existing = JSON.parse(localStorage.getItem(KEY) || 'null');
+if (existing?.distinctId) {
+  useThisId(existing.distinctId);        // the SDK already decided — adopt it
+} else {
+  const id = crypto.randomUUID();
+  localStorage.setItem(KEY, JSON.stringify({
+    distinctId: id,
+    anonymousId: id,
+    aliases: [],
+    // no deviceId — let the SDK own it
+  }));
+  useThisId(id);
+}
+```
+
+Omitting `deviceId` is supported: the SDK fills it from stored state, or mints
+one if there is none.
+
+## The mirrors
+
+Alongside the record, the SDK writes `<prefix>distinct_id` and
+`<prefix>device_id`. They are not equivalent, and the difference matters.
+
+<ParamField body="distinct_id" param-type="derived" required="false" show-location="false" deprecated="false">
+  **Never read this.** Pure derived state — written for redundancy and never read back by the SDK. Treat the `identity` record as the only source of truth for the current ID.
+</ParamField>
+
+<ParamField body="device_id" param-type="authoritative" required="false" show-location="false" deprecated="false">
+  **Real state.** The SDK reads it whenever the `identity` record is missing or has no `deviceId`, and under the default `localStorage+cookie` persistence it is also mirrored to a cookie while the `identity` record is not. It therefore outlives `identity`.
+</ParamField>
+
+### device_id is real state
+
+Because `device_id` can survive when `identity` does not — a storage clear under
+ITP, for example — "no identity record" does not mean "new browser". If you mint
+a fresh `deviceId` in that state you fork a device the SDK would otherwise have
+recognised. Carry through an existing `device_id`, or omit the field and let the
+SDK resolve it.
+
+## Compatibility
+
+Guaranteed within the 2.x line:
+
+- The key names — `<prefix>identity`, `<prefix>distinct_id`, `<prefix>device_id`.
+- The prefix scheme — `mythic_<publishable key>_`, overridable via `persistence_name`.
+- The field names and meanings documented above.
+- A stored record is adopted, never overwritten, at initialization.
+- The identity record is written before initialization returns.
+- Fields you omit are backfilled rather than treated as an error.
+
+Not guaranteed: additional fields may be added, so preserve fields you do not
+recognise instead of rewriting the record wholesale.
+
+## Version detection
+
+The write timing guarantee and `aliases` backfilling arrived in **2.230.5**.
+
+`window.mythic.version` is set once initialization resolves, from **2.231.0**
+onward. Because the property itself is what shipped in 2.231.0, `undefined`
+after init means the build predates it — which does not tell you whether it
+predates 2.230.5. If you need to distinguish those, check behaviour rather than
+version: read the identity record immediately after the SDK's script has run and
+see whether it is populated.
+
+```js
+const version = window.mythic?.version;   // undefined until init resolves
+```
