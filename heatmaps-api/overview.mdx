@@ -78,29 +78,134 @@ One measurement is taken per session per page, when the visitor leaves it. A ses
 
 The background comes from session replay, not from framing your site. That means no `X-Frame-Options` or CSP negotiation, pages behind a login work, and — the one that matters most — the DOM is the page **as it was when the clicks happened**, not as it is today after a redesign.
 
-```js
-import rrwebPlayer from 'rrweb-player'
+Candidate recordings are the ones whose **landing** page matches the URL, so a page visitors only reach mid-funnel returns `404` — pass an explicit `session_id` from [`GET /client/v1/data/replays`](/replays-api/overview) for those.
 
-const [snap, heat] = await Promise.all([
-  fetch(`${base}/client/v1/data/heatmap/snapshot?url=${page}`, { headers }).then((r) => r.json()),
-  fetch(`${base}/client/v1/data/heatmap?url=${page}`, { headers }).then((r) => r.json()),
-])
+<Warning>
+  Pin `rrweb-player` to exactly **`2.0.0-alpha.20`**. The "stable" 2.0.x/2.1.x ESM builds ship without the replay engine and crash on load (`Cannot read properties of undefined (reading 'on')`).
+</Warning>
 
-// rebuild the page, paused, controls hidden
-new rrwebPlayer({
-  target: stage,
-  props: { events: snap.data.events, width: snap.data.width, autoPlay: false, showController: false },
-})
+### Four traps, all of which look like working code
 
-// then draw cells on a canvas over it
-for (const cell of heat.data.points) {
-  const x = cell.x_rel * snap.data.width
-  const y = cell.y_px            // already page pixels — do not scale by height
-  paint(x, y, cell.clicks)
+Every one of these produces a page that renders — just wrong. They are worth reading before you write the renderer, because three of them fail silently.
+
+| Trap | What you see | Why |
+| --- | --- | --- |
+| Sizing the stage from `snapshot.height` | Every click below the fold is missing | That height is **one viewport**, not the document. Use `page_height` from the scroll endpoint, or the deepest `y_px` you received |
+| Overriding the player's transform once, on mount | Background aligned sometimes, shifted by half the page other times | `rrweb-player` re-applies its own centering (`top/left: 50%` + `translate(-50%,-50%)`) **after** mount, on its own schedule. A one-shot inline override is a race |
+| Painting each scroll band as its own stripe | Thin colour bands separated by unpainted page | The scroll series is **sparse** — one row per band where a session's max landed. 4 sessions on a 17,000px page is 4 rows |
+| Leaving the recorded cursor visible | A dot that reads as a data point | The player draws `.replayer-mouse` from the recording |
+
+### The background
+
+Beat the player's layout with a stylesheet, not inline styles — an `!important` rule outlives every re-layout the player does, so there is no timing to get right:
+
+```css
+/* scale and page size arrive as CSS variables, so a resize never re-applies rules */
+.hm-stage .rr-player {
+  width: 100% !important; height: 100% !important;
+  padding: 0 !important; border: 0 !important; border-radius: 0 !important;
+  box-shadow: none !important; background: transparent !important;
+  overflow: hidden !important; position: relative !important;
 }
+.hm-stage .replayer-wrapper {
+  position: absolute !important; top: 0 !important; left: 0 !important; margin: 0 !important;
+  width: var(--hm-w) !important; height: var(--hm-h) !important;   /* the DOCUMENT, not the viewport */
+  transform: scale(var(--hm-scale, 1)) !important;
+  transform-origin: top left !important;                          /* origin must match the canvas origin */
+}
+.hm-stage .replayer-wrapper iframe {
+  width: var(--hm-w) !important; height: var(--hm-h) !important; border: 0 !important;
+}
+.hm-stage .rr-controller,
+.hm-stage .replayer-mouse,
+.hm-stage .replayer-mouse-tail { display: none !important; }
 ```
 
-Candidate recordings are the ones whose **landing** page matches the URL, so a page visitors only reach mid-funnel returns `404` — pass an explicit `session_id` from [`GET /client/v1/data/replays`](/replays-api/overview) for those.
+```js
+import rrwebPlayer from 'rrweb-player'
+import 'rrweb-player/dist/style.css'
+
+const [snap, heat, scroll] = await Promise.all([
+  fetch(`${base}/client/v1/data/heatmap/snapshot?url=${page}`, { headers }).then((r) => r.json()),
+  fetch(`${base}/client/v1/data/heatmap?url=${page}`, { headers }).then((r) => r.json()),
+  fetch(`${base}/client/v1/data/heatmap/scroll?url=${page}`, { headers }).then((r) => r.json()),
+])
+
+const captureWidth = snap.data.width          // the x denominator
+// The document height. page_height only rides scroll points, so a clicks-only
+// view has to fall back to the deepest cell it received.
+const pageHeight = Math.max(
+  scroll.data.page_height || 0,
+  ...heat.data.points.map((c) => c.y_px + 300),
+  snap.data.height || 0,
+)
+
+// Fit the width, then shrink further if the canvas would exceed the browser's
+// maximum area — Safari caps it near 16M px and fails by rendering NOTHING.
+let scale = Math.min(1, stage.clientWidth / captureWidth)
+const area = captureWidth * pageHeight * scale * scale
+if (area > 12e6) scale *= Math.sqrt(12e6 / area)
+
+stage.classList.add('hm-stage')
+stage.style.setProperty('--hm-w', `${captureWidth}px`)
+stage.style.setProperty('--hm-h', `${pageHeight}px`)
+stage.style.setProperty('--hm-scale', String(scale))
+stage.style.width = `${captureWidth * scale}px`
+stage.style.height = `${pageHeight * scale}px`
+
+new rrwebPlayer({
+  target: host,   // a child of stage, behind the canvas
+  props: {
+    events: snap.data.events, width: captureWidth, height: pageHeight,
+    autoPlay: false, showController: false, mouseTail: false, skipInactive: false,
+  },
+}).pause()
+```
+
+### The click map
+
+Density has to **accumulate** — draw each cell as a radial alpha gradient in `lighter` composite mode, then colorize the accumulated alpha in one pass. Colouring each blob individually cannot show that two nearby cells overlap, which is the whole point of a heatmap.
+
+```js
+const max = Math.max(...cells.map((c) => c.clicks))
+ctx.globalCompositeOperation = 'lighter'
+for (const cell of cells) {
+  const x = cell.x_rel * captureWidth * scale
+  const y = cell.y_px * scale        // already page pixels — never scale by page height
+  // sqrt keeps one monster hotspot from flattening everything else to invisible
+  const weight = Math.sqrt(cell.clicks / max)
+  const g = ctx.createRadialGradient(x, y, 0, x, y, 24)
+  g.addColorStop(0, `rgba(0,0,0,${0.15 + 0.85 * weight})`)
+  g.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.fillStyle = g
+  ctx.beginPath(); ctx.arc(x, y, 24, 0, Math.PI * 2); ctx.fill()
+}
+ctx.globalCompositeOperation = 'source-over'
+// then map accumulated alpha -> a sequential ramp (light->dark, one direction;
+// a blue-through-red rainbow reads as four categories and its midpoints invert)
+```
+
+Cells with `target_fixed: 1` belong wherever the sticky element sits, **not** at `y_px` on the page — draw them separately or skip them.
+
+### The scroll map
+
+The series is sparse and cumulative, so each row fills from the **previous** row's depth down to its own, using its own `reached_pct`. Reach decreases monotonically, so a depth between two rows has the deeper row's value.
+
+```js
+const sorted = [...scroll.data.bands].sort((a, b) => a.depth_px - b.depth_px)
+let top = 0
+for (const b of sorted) {
+  const bottom = Math.min(height, b.depth_px * scale)
+  if (bottom > top) {
+    ctx.fillStyle = rampColor(b.reached_pct)   // 0.45 alpha keeps the page readable
+    ctx.fillRect(0, top, width, bottom - top)
+  }
+  top = Math.max(top, bottom)
+}
+// Below the deepest band, reach is genuinely ZERO. Leave it unpainted and label
+// it — "nobody ever saw this" is the most useful thing a scrollmap says, and
+// filling it with the last colour claims someone read to the bottom.
+```
 
 ## What this is not
 

@@ -236,6 +236,12 @@ paths:
         `GET /client/v1/data/replays`).
 
 
+        `height` is the captured VIEWPORT height, not the document height —
+        sizing a stage from it hides every click below the fold. Take the
+        document height from `/heatmap/scroll`'s `page_height`, or from the
+        deepest `y_px` you received, and stretch the rebuilt page to it.
+
+
         Cells with `target_fixed: true` were captured on a position
         fixed/sticky element; their `y_px` is viewport-relative, not
         page-absolute, so they belong wherever that element sits — not at the
@@ -266,7 +272,11 @@ paths:
                       session_id: { type: string }
                       captured_at: { type: integer, nullable: true, description: Epoch ms of the snapshot. }
                       width: { type: integer, nullable: true, example: 1440, description: Viewport width the DOM was captured at — the x denominator. }
-                      height: { type: integer, nullable: true, example: 900 }
+                      height:
+                        type: integer
+                        nullable: true
+                        example: 900
+                        description: Captured VIEWPORT height — not the document height. See the endpoint description.
                       events:
                         type: array
                         description: Exactly two rrweb events (Meta, FullSnapshot).
