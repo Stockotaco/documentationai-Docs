@@ -20,7 +20,7 @@ This page documents the identity record in storage as a **supported integration
 surface** so a second surface can agree with the SDK on one ID, rather than
 reverse-engineering it.
 
-<Callout type="info">
+<Callout kind="info">
   If your second surface loads **after** the SDK, read the record — that is the
   common case and it is all you need. Writing the record only matters when your
   surface may run on pages where the SDK never loads at all.
@@ -81,7 +81,7 @@ rather than an empty slot.
 Measured on a live Shopify storefront: the identity record is in `localStorage`
 at ~94ms, while the debounced keys arrive at ~1193ms.
 
-<Callout type="warning">
+<Callout kind="warning">
   This guarantee is about **when the SDK writes**, not about when your surface can
   read. A surface that reads through an async proxy rather than touching
   `localStorage` directly — a sandboxed Shopify Web Pixel reads through the Web
