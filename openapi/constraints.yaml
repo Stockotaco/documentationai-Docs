@@ -531,12 +531,23 @@ paths:
                           `/constraints/events`, or `{unavailable}` if that section failed.
                       auto_selected:
                         type: object
-                        description: Present only with `conversion_event=auto` — what it chose and out of how many candidates.
+                        description: >
+                          Present only with `conversion_event=auto` — what it chose and out
+                          of how many candidates. Note `chosen_from` is nested here, not a
+                          top-level field. If you read this, you do not need
+                          `include=events` as well: the choice is already reported.
                         properties:
                           conversion_event: { type: string }
                           lead_event: { type: string, nullable: true }
                           revenue_path: { type: string }
-                          chosen_from: { type: integer }
+                          chosen_from:
+                            type: integer
+                            description: How many events were inventoried before picking.
+                        example:
+                          conversion_event: transaction_completed
+                          lead_event: input_captured
+                          revenue_path: $.meta_amount
+                          chosen_from: 20
                       warning:
                         type: object
                         description: >
