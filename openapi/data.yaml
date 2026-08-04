@@ -967,6 +967,210 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           $ref: "#/components/responses/RateLimited"
+
+  /explain/coverage:
+    get:
+      summary: Explainability coverage gate
+      operationId: getExplainCoverage
+      description: >
+        Ask this BEFORE you analyse why a funnel step loses people. It answers
+        one question — is there enough data here to support a conclusion — and
+        returns no analysis of its own. The response is shaped to be handed to
+        an AI agent verbatim.
+
+
+        It exists because the dangerous case is not a bad number, it is a number
+        that should never have been computed. On a real paid landing page with
+        4,225 non-bot sessions over 14 days, **zero** fired the conversion
+        event: the page carries no form, and its step is a click-through to
+        another page. A conversion rate there reads 0.00% and invites "rewrite
+        this page", which is wrong. So `outcome_event_never_fires` is its own
+        verdict, kept distinct from a genuinely low rate.
+
+
+        Each evidence arm is reported `available` only when BOTH sides of its
+        contrast hold at least `min_arm_n` sessions, and every available arm
+        carries a `confound` field. Treat that field as load-bearing. On that
+        same page the 190 sessions that threw a JavaScript error bounced *less*
+        than clean ones (80.1% vs 88.1%) and reached the next step three times
+        more often — you have to engage with a page to trigger an error, so the
+        arm measures exposure, not harm. Read causally it claims errors improve
+        conversion.
+
+
+        Counts are page-scoped AND order-scoped. An exception thrown two pages
+        later is evidence about that step, not this one; and "advanced" requires a
+        page *after* this one, not just a second page somewhere in the session —
+        17 of 521 sessions on the reference page saw their other page only before
+        it, an error worth 3% on a landing page and approaching 100% mid-funnel.
+        Bots are excluded: unfiltered, that page reads 4,834 sessions instead of
+        4,225, a 12.6% inflation landing entirely in the denominator.
+
+
+        Finally, `available` does not mean `powered`. Each available arm reports
+        `mde_pp` — the smallest effect it could detect — and the top-level
+        `caveat` fires when every arm with coverage carries a confound.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - name: page
+          in: query
+          required: true
+          description: >
+            Pathname of the page, for example `/pricing`. A full URL is accepted
+            and reduced to its pathname.
+          schema:
+            type: string
+            example: /pricing
+        - name: outcome_event
+          in: query
+          required: false
+          description: >
+            The event that counts as advancing past this step. Omit it and
+            "advanced" means the session saw a second page — the correct model
+            for a bridge or advertorial page that carries no form.
+          schema:
+            type: string
+            example: form_submitted
+        - name: days
+          in: query
+          required: false
+          description: Lookback window in days.
+          schema:
+            type: integer
+            default: 14
+            minimum: 1
+            maximum: 90
+      responses:
+        "200":
+          description: Coverage verdict
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      page:
+                        type: string
+                      window_days:
+                        type: integer
+                      answerable:
+                        type: boolean
+                        description: >
+                          True only when the outcome splits the population into
+                          two usable arms AND at least one evidence source has
+                          coverage.
+                      caveat:
+                        type: string
+                        description: >
+                          Present when `answerable` is true but every available
+                          arm carries a confound — a contrast can be computed and
+                          still not be read causally.
+                        enum: [only_confounded_arms_available]
+                      caveat_note:
+                        type: string
+                      reason:
+                        type: string
+                        description: Present only when `answerable` is false. Root cause, not symptom.
+                        enum:
+                          - too_few_sessions
+                          - outcome_event_never_fires
+                          - too_few_positive_outcomes
+                          - too_few_negative_outcomes
+                          - no_evidence_arm_has_coverage
+                      hint:
+                        type: string
+                        description: Accompanies `outcome_event_never_fires`. States what the number is NOT.
+                      outcome:
+                        type: object
+                        properties:
+                          kind:
+                            type: string
+                            enum: [event, page_transition]
+                          note:
+                            type: string
+                            description: Present on `page_transition` — states what "advanced" was taken to mean.
+                          event:
+                            type: string
+                            nullable: true
+                          n_positive:
+                            type: integer
+                          n_total:
+                            type: integer
+                      arms:
+                        type: array
+                        description: >
+                          Always all three, available or not, so you can tell
+                          "checked and unavailable" from "not checked".
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              enum: [error_outcome, field_abandon, scroll_contrast]
+                            available:
+                              type: boolean
+                            n:
+                              type: integer
+                              description: Sessions on the positive side of this arm, page-scoped.
+                            mde_pp:
+                              type: number
+                              nullable: true
+                              description: >
+                                Available arms only. The smallest difference in
+                                outcome rate this arm could detect, in percentage
+                                points, at 80% power. Compare it to the effect you
+                                care about — at the bare `min_arm_n` threshold it
+                                exceeds 30pp, which almost no real conversion
+                                effect reaches.
+                            confound:
+                              type: string
+                              nullable: true
+                              description: >
+                                `exposure` for error_outcome because erroring
+                                requires engaging; `reverse_causality` for
+                                scroll_contrast because intent drives depth;
+                                null for field_abandon, the one arm with no
+                                confound.
+                              enum: [exposure, reverse_causality]
+                            confound_note:
+                              type: string
+                            reason:
+                              type: string
+                              description: Present when the arm is unavailable.
+                              enum:
+                                - too_few_error_sessions
+                                - too_few_clean_sessions
+                                - no_form_on_page
+                                - single_field_form
+                                - too_few_form_sessions
+                                - too_few_scroll_sessions
+                                - scroll_coverage_too_low
+                            coverage:
+                              type: number
+                              description: scroll_contrast only. Scroll sessions as a share of page sessions.
+                            form_field_count:
+                              type: integer
+                            hint:
+                              type: string
+                      thresholds:
+                        type: object
+                        description: Travels with the response so you need not infer what it was judged against.
+                        properties:
+                          min_arm_n:
+                            type: integer
+                            example: 30
+                          min_scroll_coverage:
+                            type: number
+                            example: 0.05
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 components:
   securitySchemes:
     BearerAuth:

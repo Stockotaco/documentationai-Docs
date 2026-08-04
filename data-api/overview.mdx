@@ -58,7 +58,121 @@ The event routes are location-scoped. The `/export` route is agency-wide and req
   <Card title="Property discovery" icon="list">
     Every event and person property key observed for the location, with value types and masked sample values — so destination field mapping is a pick-list, not a guess.
   </Card>
+  <Card title="Explainability coverage" icon="check-circle">
+    Whether a page's drop-off can be explained from the data at all — call it before you analyse, especially from an AI agent.
+  </Card>
 </Columns>
+
+## Before you explain a drop-off
+
+`GET /explain/coverage?page=/pricing` answers one question: **is there enough data
+here to support a conclusion?** It returns no analysis. Call it first — and if you
+are driving this API from an AI agent, hand the response through verbatim rather
+than summarising it.
+
+The reason is that the dangerous output is not a bad number, it is a number that
+should never have been computed. On a real paid landing page with 4,225 non-bot
+sessions over 14 days, zero of them fired the conversion event — because the page
+carries no form. Its step is a click-through to the next page. A conversion rate
+there reads 0.00%, and the obvious recommendation ("rewrite this page") is wrong.
+
+<Callout kind="info">
+  `outcome_event_never_fires` is a separate verdict from a low conversion rate.
+  Missing instrumentation and a failing page demand opposite responses, so the
+  gate never collapses them into one number. Omit `outcome_event` and "advanced"
+  means the session saw a second page — the right model for a bridge page.
+</Callout>
+
+Three evidence arms are reported, always all three, so you can distinguish
+"checked and unavailable" from "not checked". An arm is `available` only when both
+sides of its contrast hold at least `min_arm_n` sessions.
+
+<Callout kind="alert">
+  `available` means **computable**, not **powered**. Every available arm reports
+  `mde_pp`: the smallest difference in outcome rate it could actually detect, in
+  percentage points. At the bare `min_arm_n` threshold that exceeds 30pp — larger
+  than almost any real conversion effect. On the reference page the error arm
+  reports ~6.7pp while the effect present was ~8pp, which is genuinely marginal.
+  Compare `mde_pp` to the effect you care about before you believe a contrast.
+</Callout>
+
+
+| Arm | What it contrasts | Confound |
+|---|---|---|
+| `error_outcome` | Sessions that threw a JS error on the page vs those that did not | `exposure` |
+| `field_abandon` | Which form field the visitor last touched before leaving | none |
+| `scroll_contrast` | How deep advancers read vs non-advancers | `reverse_causality` |
+
+<Callout kind="alert">
+  The `confound` field is load-bearing, not a footnote. On that same page, the 190
+  sessions that threw a JavaScript error bounced **less** than clean ones (80.1%
+  vs 88.1%) and reached the next step three times more often. You have to engage
+  with a page to trigger an error, so the arm measures exposure, not harm. Read
+  causally it claims that JavaScript errors improve conversion. Hold engagement
+  depth fixed before you interpret it — or do not report it.
+</Callout>
+
+Counts are page-scoped **and order-scoped**. An exception thrown two pages later is
+evidence about that step, not this one — and "advanced" requires a page *after*
+this one, not just a second page somewhere in the session. On the reference page 17
+of 521 sessions saw their other page only before it: a 3% error on a landing page,
+approaching 100% on a mid-funnel page where every visitor arrives from somewhere
+else. Bots are excluded, which matters more than it sounds — unfiltered, that page
+reads 4,834 sessions instead of 4,225, and the whole 12.6% inflation lands in the
+denominator.
+
+When `answerable` is true but every arm with coverage carries a confound, a
+top-level `caveat` of `only_confounded_arms_available` says so. Branch on that
+field rather than inferring it from the arm list.
+
+```bash
+curl -s -H "Authorization: Bearer $MYTHIC_KEY" \
+  -H "X-Location-Id: $LOCATION_ID" \
+  "https://mythic-analytics.gulp.workers.dev/client/v1/data/explain/coverage?page=/pricing&outcome_event=form_submitted"
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "page": "/pricing",
+    "window_days": 14,
+    "answerable": false,
+    "reason": "outcome_event_never_fires",
+    "hint": "No session on /pricing fired \"form_submitted\" in 14d. This is missing instrumentation or the wrong step definition, NOT a 0% conversion rate — omit outcome_event to measure page-transition instead.",
+    "outcome": {
+      "kind": "event",
+      "event": "form_submitted",
+      "n_positive": 0,
+      "n_total": 4225
+    },
+    "arms": [
+      {
+        "id": "error_outcome",
+        "available": true,
+        "n": 190,
+        "mde_pp": 6.7,
+        "confound": "exposure",
+        "confound_note": "Throwing a client-side error requires engaging with the page, so this arm measures exposure. Hold dwell/interaction depth fixed before reading it."
+      },
+      { "id": "field_abandon", "available": false, "n": 0, "reason": "no_form_on_page" },
+      {
+        "id": "scroll_contrast",
+        "available": false,
+        "n": 7,
+        "coverage": 0.0017,
+        "reason": "too_few_scroll_sessions",
+        "hint": "Scroll capture is opt-in per location — enable capture_heatmaps for this client and wait for traffic."
+      }
+    ],
+    "thresholds": { "min_arm_n": 30, "min_scroll_coverage": 0.05 }
+  }
+}
+```
+
+A `false` here is a useful answer, not an error. It tells you which pages to turn
+[heatmap capture](/heatmaps-api/overview) on for, and which conversion events are
+missing from a funnel you thought you were measuring.
 
 ## Response envelope
 
