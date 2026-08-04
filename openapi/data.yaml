@@ -133,9 +133,15 @@ paths:
                         entities:
                           type: integer
                           description: >
-                            Distinct people (or visitors) carrying the key — the
-                            signal for whether a field is populated widely
-                            enough to map.
+                            Distinct **event-level ids** that carried the key,
+                            not merged people. One person spread across several
+                            ids counts more than once, and the catalog only sees
+                            keys that arrived on events — so a field the profile
+                            learned another way (a CRM webhook path, a backfill)
+                            can report far fewer entities than the number of
+                            people who actually have it. Use it to judge whether
+                            a field is widely used or long-tail; do not use it as
+                            a count of customers.
                         first_seen: { type: string, format: date-time }
                         last_seen: { type: string, format: date-time }
         "400":
