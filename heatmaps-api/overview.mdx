@@ -20,9 +20,9 @@ A heatmap is three separate things, and most tools blur them together:
 
 They are separate endpoints because they fail separately. A page with no recording still has click data worth reading, and a page with a background but no traffic should say "no clicks" rather than render an empty overlay and imply nobody was there.
 
-<Note>
+<Callout kind="info">
 Capture is **off by default**. Turn it on per client with `PUT /client/v1/settings/heatmaps` — it takes effect on the browser's next config fetch, with no change to the site's install snippet.
-</Note>
+</Callout>
 
 Start from the page list rather than guessing a URL: it is derived from the captured points, so every entry has data and nothing with data is missing. It also reports `clicks` and `scroll_sessions` separately, which is how you tell "nobody clicked here" from "this page's visitors haven't left yet".
 
@@ -107,9 +107,9 @@ The background comes from session replay, not from framing your site. That means
 
 Candidate recordings are the ones whose **landing** page matches the URL, so a page visitors only reach mid-funnel returns `404` — pass an explicit `session_id` from [`GET /client/v1/data/replays`](/replays-api/overview) for those.
 
-<Warning>
+<Callout kind="warning">
   Pin `rrweb-player` to exactly **`2.0.0-alpha.20`**. The "stable" 2.0.x/2.1.x ESM builds ship without the replay engine and crash on load (`Cannot read properties of undefined (reading 'on')`).
-</Warning>
+</Callout>
 
 ### Four traps, all of which look like working code
 
