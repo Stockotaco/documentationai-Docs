@@ -56,6 +56,34 @@ paths:
         - name: limit
           in: query
           schema: { type: integer, default: 500, maximum: 5000 }
+        - name: device_type
+          in: query
+          description: >
+            Session device — `mobile`, `desktop`, `tablet`. Resolved against the
+            same session data `/data/sessions` reports, so the two agree.
+          schema: { type: string, example: mobile }
+        - name: utm_source
+          in: query
+          description: >
+            Session source. Includes the referrer fallback: an untagged but
+            referred session reads as `google.com`, not blank.
+          schema: { type: string, example: facebook }
+        - name: utm_medium
+          in: query
+          schema: { type: string, example: cpc }
+        - name: utm_campaign
+          in: query
+          schema: { type: string }
+        - name: country
+          in: query
+          schema: { type: string }
+        - name: segment_id
+          in: query
+          description: >
+            Stored segment. Scopes to sessions whose visitor is a member;
+            membership resolves through the identity graph, so a person-level
+            segment catches rows captured under any identity they used.
+          schema: { type: string }
       responses:
         "200":
           description: Pages with heatmap data
@@ -68,6 +96,60 @@ paths:
                   data:
                     type: array
                     items: { $ref: "#/components/schemas/HeatmapPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /client/v1/data/heatmap/facets:
+    get:
+      summary: Filter values that exist for one page
+      operationId: getHeatmapFacets
+      description: >
+        Devices, sources and mediums with the session count behind each — what a
+        filter UI should be built from.
+
+
+        Scoped to sessions that have points ON that page, not to the location's
+        traffic. A dropdown offering `desktop` when no desktop visitor ever
+        reached the page produces an empty heatmap and reads as a bug, so every
+        value returned here yields at least one row.
+
+
+        Fetch these unfiltered. If the facets themselves are filtered, narrowing
+        one dimension empties the others and leaves no way back.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: url
+          in: query
+          required: true
+          schema: { type: string, example: acme.com/pricing }
+        - name: date_from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: date_to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Facet values per dimension
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      page: { type: string, example: acme.com/pricing }
+                      device_type:
+                        type: array
+                        items: { $ref: "#/components/schemas/HeatmapFacetValue" }
+                      utm_source:
+                        type: array
+                        items: { $ref: "#/components/schemas/HeatmapFacetValue" }
+                      utm_medium:
+                        type: array
+                        items: { $ref: "#/components/schemas/HeatmapFacetValue" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
   /client/v1/data/heatmap:
@@ -124,6 +206,34 @@ paths:
           in: query
           description: Vertical bucket size in px.
           schema: { type: integer, default: 10 }
+        - name: device_type
+          in: query
+          description: >
+            Session device — `mobile`, `desktop`, `tablet`. Resolved against the
+            same session data `/data/sessions` reports, so the two agree.
+          schema: { type: string, example: mobile }
+        - name: utm_source
+          in: query
+          description: >
+            Session source. Includes the referrer fallback: an untagged but
+            referred session reads as `google.com`, not blank.
+          schema: { type: string, example: facebook }
+        - name: utm_medium
+          in: query
+          schema: { type: string, example: cpc }
+        - name: utm_campaign
+          in: query
+          schema: { type: string }
+        - name: country
+          in: query
+          schema: { type: string }
+        - name: segment_id
+          in: query
+          description: >
+            Stored segment. Scopes to sessions whose visitor is a member;
+            membership resolves through the identity graph, so a person-level
+            segment catches rows captured under any identity they used.
+          schema: { type: string }
         - name: limit
           in: query
           schema: { type: integer, default: 20000 }
@@ -191,6 +301,34 @@ paths:
           in: query
           description: Band height in px.
           schema: { type: integer, default: 100 }
+        - name: device_type
+          in: query
+          description: >
+            Session device — `mobile`, `desktop`, `tablet`. Resolved against the
+            same session data `/data/sessions` reports, so the two agree.
+          schema: { type: string, example: mobile }
+        - name: utm_source
+          in: query
+          description: >
+            Session source. Includes the referrer fallback: an untagged but
+            referred session reads as `google.com`, not blank.
+          schema: { type: string, example: facebook }
+        - name: utm_medium
+          in: query
+          schema: { type: string, example: cpc }
+        - name: utm_campaign
+          in: query
+          schema: { type: string }
+        - name: country
+          in: query
+          schema: { type: string }
+        - name: segment_id
+          in: query
+          description: >
+            Stored segment. Scopes to sessions whose visitor is a member;
+            membership resolves through the identity graph, so a person-level
+            segment catches rows captured under any identity they used.
+          schema: { type: string }
       responses:
         "200":
           description: Scroll bands
@@ -320,6 +458,11 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
   schemas:
+    HeatmapFacetValue:
+      type: object
+      properties:
+        value: { type: string, example: mobile }
+        sessions: { type: integer, example: 412 }
     HeatmapPage:
       type: object
       properties:
