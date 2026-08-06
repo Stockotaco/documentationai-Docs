@@ -1,0 +1,352 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Correlation Analysis
+  description: >
+    Do two (or three) metrics actually move together? Pick metrics — ad spend,
+    sessions, revenue, first-time customer revenue, any captured event — pick a
+    window and a grain (day / week / month), and get back the trend of each
+    metric, every pairwise Pearson and Spearman coefficient, and the trend of the
+    correlation itself as a rolling series.
+
+
+    Read-only. Accepts an agency key (`ak_`, bind a location with `location_id`
+    or the `X-Location-Id` header) or a location secret key (`sk_`).
+
+
+    Correlation is not causation: two metrics can move together because a third
+    drives both. For a causal read on paid spend, use the Incrementality API.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+  - AgencyKeyQuery: []
+  - SecretKeyQuery: []
+paths:
+  /client/v1/correlation:
+    get:
+      summary: Correlate two to five metrics
+      operationId: getCorrelation
+      description: >
+        Returns one row per bucket per metric (the series), a summary per metric,
+        and one entry per metric pair carrying Pearson, Spearman, r², a p-value,
+        and the rolling correlation series.
+
+
+        Every empty bucket is counted as a zero — genuinely correct for spend and
+        revenue, and the single most common source of a spurious result when a
+        metric only starts partway through the window. Check each metric's
+        `first_nonzero` / `last_nonzero`, and the `partial_coverage` warning.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: metrics
+          in: query
+          required: true
+          description: >
+            2–5 comma-separated metric ids. Fixed ids (`spend`, `impressions`,
+            `clicks`, `meta_purchases`, `meta_purchase_value`, `sessions`,
+            `visitors`, `pageviews`, `events`) or a family applied to an event
+            name (`event:X`, `people:X`, `revenue:X`, `new_people:X`,
+            `new_revenue:X`). List what this client actually has with
+            `GET /client/v1/correlation/metrics`.
+          schema: { type: string, example: "spend,new_revenue:order_completed" }
+        - name: grain
+          in: query
+          description: Bucket size. Weeks start Monday.
+          schema: { type: string, enum: [day, week, month], default: day }
+        - name: lookback_days
+          in: query
+          description: Window length ending yesterday (today is partial). Ignored when `from`/`to` are given.
+          schema: { type: integer, minimum: 2, maximum: 730, default: 90 }
+        - name: from
+          in: query
+          description: Explicit window start, `YYYY-MM-DD`. Send with `to`.
+          schema: { type: string, example: "2026-05-01" }
+        - name: to
+          in: query
+          description: Explicit window end (inclusive), `YYYY-MM-DD`.
+          schema: { type: string, example: "2026-07-31" }
+        - name: rolling_window
+          in: query
+          description: >
+            Buckets in the trailing correlation series. Defaults to 14 (day),
+            6 (week), 3 (month). `0` turns the rolling series off. The first
+            `rolling_window - 1` buckets are `null` — a coefficient from three
+            points looks like signal and is not.
+          schema: { type: integer, minimum: 0, maximum: 365 }
+        - name: max_lag
+          in: query
+          description: >
+            Buckets to shift when scanning for a lead/lag relationship. Defaults
+            to 14 (day), 6 (week), 3 (month), and an unrequested default is
+            auto-capped at a quarter of the window — a wide scan over a short
+            series finds a peak in noise every time. `0` turns the scan off.
+
+
+            **Sign convention:** lag `+k` correlates the FIRST metric at bucket
+            `i` with the second at bucket `i + k`, so a positive peak means the
+            first metric **leads** the second.
+          schema: { type: integer, minimum: 0, maximum: 180 }
+        - name: new_lookback_days
+          in: query
+          description: >
+            How far before the window "first ever" is judged for `new_people:` /
+            `new_revenue:`. Without it, every returning customer in the opening
+            buckets would count as new.
+          schema: { type: integer, minimum: 0, maximum: 730, default: 90 }
+        - name: revenue_path
+          in: query
+          description: JSON path into `properties_json` used by the value metrics.
+          schema: { type: string, default: "$.value" }
+        - name: table
+          in: query
+          description: Meta ads-insights table backing the Meta metrics.
+          schema: { type: string, default: meta_ads_ads_insights_action_type }
+      responses:
+        "200":
+          description: Series, per-metric summary, and pairwise correlations
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CorrelationResult" }
+        "400": { $ref: "#/components/responses/BadParams" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "413": { $ref: "#/components/responses/ScanLimit" }
+        "424": { $ref: "#/components/responses/DatasetMissing" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/correlation/metrics:
+    get:
+      summary: Metrics available for this client
+      operationId: listCorrelationMetrics
+      description: >
+        Real discovery, not a static list: the event families are built from the
+        event names actually captured in the window, and the Meta metrics are
+        marked unavailable when the client has no ads-insights table. Value
+        metrics (`revenue:`, `new_revenue:`) appear only for events that actually
+        carry a value at `revenue_path` — otherwise the series would be a flat
+        zero, which reads as "no relationship" rather than "wrong path".
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: lookback_days
+          in: query
+          description: Window used to find event names.
+          schema: { type: integer, minimum: 2, maximum: 730, default: 90 }
+        - name: revenue_path
+          in: query
+          schema: { type: string, default: "$.value" }
+      responses:
+        "200":
+          description: Available metrics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MetricsCatalog" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "424": { $ref: "#/components/responses/DatasetMissing" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/correlation/options:
+    get:
+      summary: Vocabulary and parameters
+      operationId: getCorrelationOptions
+      description: The fixed metric ids, the metric families, the grains, and every accepted parameter. Costs no query.
+      responses:
+        "200":
+          description: Options
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  grains: { type: array, items: { type: string }, example: [day, week, month] }
+                  fixed_metrics: { type: array, items: { $ref: "#/components/schemas/MetricOption" } }
+                  metric_families: { type: array, items: { type: object } }
+                  params: { type: object }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Agency key (`ak_`) or location secret key (`sk_`).
+    AgencyKeyQuery:
+      type: apiKey
+      in: query
+      name: ak
+    SecretKeyQuery:
+      type: apiKey
+      in: query
+      name: sk
+  parameters:
+    LocationId:
+      name: location_id
+      in: query
+      required: false
+      description: Location to scope to. Required for `ak_` keys (or send the `X-Location-Id` header); ignored for `sk_`.
+      schema: { type: string }
+  responses:
+    BadParams:
+      description: "`invalid_params` — unknown metric id, fewer than two metrics, bad grain, or an impossible window."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing or invalid key, or an `ak_` key with no location bound.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ScanLimit:
+      description: "`scan_limit_exceeded` — the window is too large to scan under the bytes-billed cap. Shorten it or use a coarser grain."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    DatasetMissing:
+      description: "`dataset_missing` — this client has no BigQuery dataset yet, so nothing can be correlated."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: "`rate_limited` — 20 requests/min per location; each call is a BigQuery scan."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string, example: invalid_params }
+            message: { type: string }
+            cause: { type: string, description: "Raw upstream detail, when there is one." }
+    MetricOption:
+      type: object
+      properties:
+        id: { type: string, example: spend }
+        label: { type: string, example: Ad spend (Meta) }
+        unit: { type: string, enum: [count, currency] }
+        source: { type: string, enum: [events, meta] }
+        available: { type: boolean }
+        occurrences: { type: integer, description: Events seen in the discovery window (derived metrics only). }
+    MetricsCatalog:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        window: { type: object, properties: { from: { type: string }, to: { type: string } } }
+        revenue_path: { type: string, example: "$.value" }
+        sources:
+          type: object
+          description: Which backing tables exist for this client.
+        metrics: { type: array, items: { $ref: "#/components/schemas/MetricOption" } }
+        note: { type: string, description: "Present when the Meta table is missing, explaining what to provision." }
+    CorrelationResult:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        window:
+          type: object
+          properties:
+            from: { type: string, example: "2026-05-03" }
+            to: { type: string, example: "2026-07-31" }
+            grain: { type: string, example: day }
+            buckets: { type: integer, example: 90 }
+            rolling_window: { type: integer, example: 14 }
+        metrics:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, example: spend }
+              label: { type: string }
+              unit: { type: string }
+              source: { type: string }
+              total: { type: number, example: 48210.55 }
+              mean: { type: number }
+              min: { type: number }
+              max: { type: number }
+              nonzero_buckets: { type: integer, example: 88 }
+              first_nonzero: { type: string, nullable: true, example: "2026-05-03" }
+              last_nonzero: { type: string, nullable: true, example: "2026-07-31" }
+        correlations:
+          type: array
+          items:
+            type: object
+            properties:
+              x: { type: string, example: spend }
+              y: { type: string, example: "new_revenue:order_completed" }
+              n: { type: integer, example: 90 }
+              pearson: { type: number, nullable: true, example: 0.7412 }
+              spearman: { type: number, nullable: true, example: 0.6883 }
+              r_squared: { type: number, nullable: true, example: 0.5494 }
+              p_value: { type: number, nullable: true, example: 0.00001 }
+              direction: { type: string, nullable: true, enum: [positive, negative, none] }
+              strength: { type: string, nullable: true, example: strong }
+              lag:
+                type: object
+                description: >
+                  Cross-correlation profile: r at every shift in
+                  `[-max, +max]`. Positive lag = `x` leads `y`. Each shift
+                  discards that many buckets of overlap, so every entry carries
+                  its own `n`.
+                properties:
+                  max: { type: integer, example: 14 }
+                  unit: { type: string, example: day }
+                  interpretation: { type: string, example: "positive lag = spend leads new_revenue:order_completed by that many days; negative = new_revenue:order_completed leads spend" }
+                  best:
+                    type: object
+                    nullable: true
+                    properties:
+                      lag: { type: integer, example: 3 }
+                      r: { type: number, example: 0.8114 }
+                      n: { type: integer, example: 87 }
+                      leader: { type: string, nullable: true, example: spend, description: "Metric that leads, or null at lag 0." }
+                  values:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        lag: { type: integer, example: -2 }
+                        r: { type: number, nullable: true, example: 0.41 }
+                        n: { type: integer, example: 88 }
+              rolling:
+                type: object
+                description: The correlation's own trend. Also folded into each series row under `series_key`.
+                properties:
+                  window: { type: integer, example: 14 }
+                  series_key: { type: string, example: "corr:spend~new_revenue:order_completed" }
+                  values:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        bucket: { type: string, example: "2026-05-16" }
+                        r: { type: number, nullable: true, example: 0.81 }
+              warnings:
+                type: array
+                description: >
+                  `insufficient_data` (under 8 buckets), `constant_series` (a flat
+                  metric — no correlation is defined), `partial_coverage` (a metric
+                  covers under 80% of buckets, so zero-fill may be manufacturing
+                  the result), `outlier_sensitive` (Pearson and Spearman disagree
+                  by 0.3+, so a few extreme buckets are carrying the linear fit),
+                  `lag_not_meaningful` (the best lag barely beats lag 0 — not a
+                  lead time), `lag_at_boundary` (the peak sits at the edge of the
+                  scan, so the real one may be further out).
+                items:
+                  type: object
+                  properties:
+                    code: { type: string, example: partial_coverage }
+                    message: { type: string }
+        series:
+          type: array
+          description: >
+            One row per bucket, keyed by metric id, plus a `corr:<x>~<y>` column
+            per pair — one flat table that plots the metrics and their
+            correlation on the same x-axis.
+          items:
+            type: object
+            example:
+              bucket: "2026-05-16"
+              spend: 512.4
+              "new_revenue:order_completed": 1840
+              "corr:spend~new_revenue:order_completed": 0.81
+        notes: { type: array, items: { type: string } }

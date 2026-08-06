@@ -1,0 +1,145 @@
+---
+title: Correlation Analysis
+description: >-
+  Pick two or three metrics — spend, sessions, first-time customer revenue, any
+  captured event — and get their trends, how tightly they move together, and
+  whether that relationship is holding up or breaking down.
+---
+
+## Overview
+
+One question, asked constantly and usually answered by eyeballing two charts:
+
+> When we spend more, does new-customer revenue actually follow?
+
+This endpoint answers it with numbers. Give it 2–5 metric ids, a window, and a grain, and it returns:
+
+- **the trend of each metric** over the window (day, week, or month buckets),
+- **every pairwise coefficient** — Pearson and Spearman, r², a p-value, a direction and a strength label,
+- **the trend of the correlation itself** — a rolling coefficient per bucket, folded into the same series rows so metrics and their correlation plot on one axis,
+- **a lead/lag scan** — r at every shift, so "how long until spend shows up in revenue" gets a number instead of a guess.
+
+Both sides come out of the same per-client BigQuery dataset, which is what makes the pairing possible: ad spend only exists in the platform tables, revenue only in your events.
+
+<Warning>
+Correlation is not causation. Two metrics move together happily because a third drives both — seasonality, a promo, a tracking outage. For a causal read on paid spend, use the [Incrementality API](/incrementality-api/overview), which withholds spend from a market and measures what changed.
+</Warning>
+
+## Base URL
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/correlation
+```
+
+## Authentication
+
+The usual `/client/v1` key system: an **agency key** (`ak_`, bind a location with `?location_id=` or the `X-Location-Id` header) or a **location secret key** (`sk_`, auto-scoped). Read-only — there is nothing here to write. 20 requests/min per location, because every call is a BigQuery scan.
+
+## Quickstart
+
+```bash
+curl -H "Authorization: Bearer sk_live_xxx" \
+  "https://mythic-analytics.gulp.workers.dev/client/v1/correlation?metrics=spend,new_revenue:order_completed&lookback_days=90&grain=day"
+```
+
+```json
+{
+  "success": true,
+  "window": { "from": "2026-05-03", "to": "2026-07-31", "grain": "day", "buckets": 90, "rolling_window": 14 },
+  "metrics": [
+    { "id": "spend", "label": "Ad spend (Meta)", "unit": "currency", "total": 48210.55, "nonzero_buckets": 88, "first_nonzero": "2026-05-03", "last_nonzero": "2026-07-31" },
+    { "id": "new_revenue:order_completed", "label": "Value from first-time order_completed people", "unit": "currency", "total": 121430.0, "nonzero_buckets": 76 }
+  ],
+  "correlations": [
+    {
+      "x": "spend",
+      "y": "new_revenue:order_completed",
+      "n": 90,
+      "pearson": 0.7412,
+      "spearman": 0.6883,
+      "r_squared": 0.5494,
+      "p_value": 0.00001,
+      "direction": "positive",
+      "strength": "strong",
+      "rolling": {
+        "window": 14,
+        "series_key": "corr:spend~new_revenue:order_completed",
+        "values": [{ "bucket": "2026-05-03", "r": null }, "…", { "bucket": "2026-07-31", "r": 0.31 }]
+      }
+    }
+  ],
+  "series": [
+    { "bucket": "2026-05-16", "spend": 512.4, "new_revenue:order_completed": 1840, "corr:spend~new_revenue:order_completed": 0.81 }
+  ]
+}
+```
+
+The headline `pearson` is 0.74 and the rolling series ends at 0.31 — the relationship was real and is weakening. That second fact is the one worth acting on, and it is invisible in a single coefficient.
+
+## Lead and lag
+
+Spend rarely converts the same day. The lag scan shifts one metric against the other and reports r at every offset, so a delay becomes a measurement:
+
+```json
+"lag": {
+  "max": 14,
+  "unit": "day",
+  "interpretation": "positive lag = spend leads new_revenue:order_completed by that many days; negative = new_revenue:order_completed leads spend",
+  "best": { "lag": 3, "r": 0.8114, "n": 87, "leader": "spend" },
+  "values": [{ "lag": -14, "r": 0.12, "n": 76 }, "…", { "lag": 14, "r": 0.29, "n": 76 }]
+}
+```
+
+Read it as: **positive lag means the first metric leads the second.** A peak at `+3` says today's spend lines up with revenue three days out — the payback delay.
+
+Each shift discards that many buckets of overlap, so every entry carries its own `n`, and the profile itself plots nicely as r against lag.
+
+Two guards stop a lag scan from inventing a lead time, which is its natural failure mode:
+
+- **`lag_not_meaningful`** — the best lag barely beats lag 0 (under 0.05 of |r|). The metrics move together in the same bucket; there is no delay to report. On real data this fires often, and it is the difference between "form fills lag traffic by 3 days" and "form fills follow traffic".
+- **`lag_at_boundary`** — the peak sits at the edge of the scan, so the real one may be further out. Re-run with a bigger `max_lag` or a longer window.
+
+Ties break towards the smaller shift: two metrics that move together perfectly correlate perfectly at every lag, and the honest answer there is zero, not fourteen. An unrequested `max_lag` is also capped at a quarter of the window — scanning 14 offsets across 20 buckets finds a peak in noise every time. Set `max_lag=0` to skip the scan.
+
+## Metrics
+
+Ask for what a client actually has rather than guessing:
+
+```bash
+curl -H "Authorization: Bearer sk_live_xxx" \
+  "https://mythic-analytics.gulp.workers.dev/client/v1/correlation/metrics"
+```
+
+**Fixed ids**
+
+| Id | Source | Notes |
+| --- | --- | --- |
+| `spend`, `impressions`, `clicks` | Meta ads insights | `clicks` is link clicks, not every tap on the unit |
+| `meta_purchases`, `meta_purchase_value` | Meta ads insights | Platform-reported, one canonical action type |
+| `sessions`, `visitors`, `pageviews`, `events` | Your events | Pixel-side traffic |
+
+**Families** — apply to any captured event name:
+
+| Family | Meaning |
+| --- | --- |
+| `event:X` | How many `X` happened |
+| `people:X` | Distinct ids who did `X` |
+| `revenue:X` | Summed value on `X` (`revenue_path`, default `$.value`) |
+| `new_people:X` | Ids whose **first-ever** `X` was in that bucket |
+| `new_revenue:X` | The value those first-timers brought — "new customer revenue" |
+
+"First ever" is judged against `new_lookback_days` (default 90) of history before the window, so the opening buckets don't call every returning customer new. It is keyed on the tracked id, not on a fully resolved person: a customer who bought once on the web and once through your CRM can count as new twice.
+
+## Reading the result honestly
+
+Four things the response tells you that a bare coefficient will not:
+
+- **`partial_coverage`** — empty buckets count as zero, which is correct for spend and revenue, but a metric that only starts on day 40 will correlate with anything else that grew. Check `first_nonzero` / `last_nonzero`.
+- **`outlier_sensitive`** — Pearson and Spearman disagree by 0.3 or more, so a handful of extreme buckets (one Black Friday) is carrying the linear fit. Trust the rank correlation.
+- **`constant_series`** — a flat metric has no correlation, and the response says `null` rather than `0`. Usually a wrong `revenue_path` or an event that never fires.
+- **`lag_not_meaningful` / `lag_at_boundary`** — see [Lead and lag](#lead-and-lag). A peak that barely beats lag 0 is not a delay.
+- **`p_value`** — reported, and optimistic. Daily marketing series are autocorrelated, so the effective sample size is well below `n`. Treat it as a guide, never as a gate.
+
+## Plotting
+
+Each `series` row carries every metric plus a `corr:<x>~<y>` column, so a chart library can render all of it from one array — metrics on one axis, the rolling correlation on a second (−1 to 1). The first `rolling_window - 1` buckets are `null` on purpose: a coefficient from three points looks like signal and is not. Set `rolling_window=0` to drop the columns entirely.

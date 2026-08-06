@@ -166,6 +166,28 @@
             ]
           },
           {
+            "tab": "Correlation",
+            "icon": "chart-line",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "correlation-api/overview",
+                    "icon": "file-text"
+                  }
+                ]
+              },
+              {
+                "group": "Correlation",
+                "icon": "chart-line",
+                "openapi": "openapi/correlation.yaml"
+              }
+            ]
+          },
+          {
             "tab": "Event Contracts",
             "icon": "file-check",
             "groups": [
