@@ -1,0 +1,19 @@
+#!/bin/sh
+# Enable with: git config core.hooksPath .githooks   (once per clone)
+#
+# The docs site validates on publish, so a bad component or a comma-broken
+# OpenAPI flow mapping is only discovered after the push, on a live repo.
+# These are the same checks, before the commit.
+set -e
+
+mdx=$(git diff --cached --name-only --diff-filter=ACM | grep '\.mdx$' || true)
+[ -n "$mdx" ] && node scripts/check-components.mjs $mdx
+
+# The OpenAPI datafile checker lives in the source repo; skip if it isn't there.
+checker=../mythic-analytics/scripts/check-openapi.mjs
+yaml=$(git diff --cached --name-only --diff-filter=ACM | grep '^openapi/.*\.ya\?ml$' || true)
+if [ -n "$yaml" ] && [ -f "$checker" ]; then
+  for f in $yaml; do node "$checker" "$f"; done
+fi
+
+exit 0
