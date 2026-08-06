@@ -21,9 +21,9 @@ This endpoint answers it with numbers. Give it 2–5 metric ids, a window, and a
 
 Both sides come out of the same per-client BigQuery dataset, which is what makes the pairing possible: ad spend only exists in the platform tables, revenue only in your events.
 
-<Warning>
+<Callout kind="warning">
 Correlation is not causation. Two metrics move together happily because a third drives both — seasonality, a promo, a tracking outage. For a causal read on paid spend, use the [Incrementality API](/incrementality-api/overview), which withholds spend from a market and measures what changed.
-</Warning>
+</Callout>
 
 ## Base URL
 
@@ -132,7 +132,7 @@ curl -H "Authorization: Bearer sk_live_xxx" \
 
 ## Reading the result honestly
 
-Four things the response tells you that a bare coefficient will not:
+Five things the response tells you that a bare coefficient will not:
 
 - **`partial_coverage`** — empty buckets count as zero, which is correct for spend and revenue, but a metric that only starts on day 40 will correlate with anything else that grew. Check `first_nonzero` / `last_nonzero`.
 - **`outlier_sensitive`** — Pearson and Spearman disagree by 0.3 or more, so a handful of extreme buckets (one Black Friday) is carrying the linear fit. Trust the rank correlation.
