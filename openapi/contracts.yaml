@@ -159,7 +159,16 @@ paths:
 
         A contract whose event had no traffic returns `status: "no_data"` with no
         violations and is counted in `summary.events_no_data`. An event that
-        stopped firing must not read as "every field is missing".
+        stopped firing must not read as "every field is missing". `no_data`
+        always carries a `no_data_reason` telling you which of its three causes
+        applies — a tracking outage, this event alone not firing, or sampling —
+        because the fix is different for each. See the `EventReport` schema.
+
+
+        Every violation carries a `samples` link to
+        `GET /client/v1/contracts/violations`'s companion endpoint
+        `/client/v1/contracts/samples`, pre-filled with this window: the actual
+        offending events, with `session_id` and page URL.
 
 
         Cost note: this reads raw events to get the denominator. The window
@@ -202,6 +211,24 @@ paths:
                             example: 1
                             description: Contracted events with no traffic in the window — usually the bigger problem.
                           total_violations: { type: integer, example: 2 }
+                          reference:
+                            type: object
+                            description: >
+                              Unsampled event counts for the same window from a
+                              separate pre-aggregated source. Present unless that
+                              read failed.
+                            properties:
+                              location_events:
+                                type: integer
+                                example: 41320
+                                description: All events of any name this location sent in the window.
+                              source: { type: string, example: client_event_summary (unsampled) }
+                              warning:
+                                type: string
+                                description: >
+                                  Present only when `location_events` is 0 — the
+                                  location sent nothing at all, so every `no_data`
+                                  below is that outage rather than a contract problem.
                       events:
                         type: array
                         items: { $ref: "#/components/schemas/EventReport" }
@@ -219,6 +246,129 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/contracts/samples:
+    get:
+      summary: Show the events behind one violation
+      operationId: getContractViolationSamples
+      description: >
+        The drill-down for a single violation. `/violations` tells you `value`
+        is absent on 4,102 of 10,000 `order_completed`; this returns the most
+        recent events that are actually missing it, with `session_id` and page
+        URL, so you can see which template or campaign is responsible.
+
+
+        Every violation in the `/violations` response carries a ready-to-call
+        `samples` link with the right parameters already filled in — you rarely
+        need to build this URL by hand.
+
+
+        Deliberately **never sampled**: sampling a search for rare events
+        returns a confident empty result. It stays cheap by reading newest-first
+        and stopping once it has `limit` rows, so the volume of the event name
+        barely matters *when matches exist*. The one slow case is a violation
+        with no matching events at all — proving that requires reading every
+        event of that name — which returns `window_too_large`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: event
+          in: query
+          required: true
+          description: Event name the violation is on.
+          schema: { type: string }
+          example: order_completed
+        - name: key
+          in: query
+          required: true
+          description: The violating property key.
+          schema: { type: string }
+          example: value
+        - name: kind
+          in: query
+          required: false
+          description: >
+            Which violation to find examples of. `type_mismatch` reads the
+            expected type from the stored contract — it cannot be supplied as a
+            parameter, so you cannot "find" mismatches against a type you never
+            declared.
+          schema:
+            type: string
+            enum: [missing_required, null_value, type_mismatch]
+            default: missing_required
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 50, default: 5 }
+      responses:
+        "200":
+          description: >
+            Matching events, most recent first. An empty `samples` array with a
+            `note` means this window contained none — the violation counts come
+            from the report's window, which may be wider.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      event: { type: string, example: order_completed }
+                      key: { type: string, example: value }
+                      kind: { type: string, example: missing_required }
+                      expected_type:
+                        type: string
+                        description: Present only for `kind=type_mismatch`; read from the stored contract.
+                      window: { $ref: "#/components/schemas/Window" }
+                      samples:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            event_id: { type: string, example: 018f2c1a-7b3e-7c9d-a1b2-c3d4e5f60718 }
+                            session_id:
+                              type: string
+                              example: sess_9f2c1a7b
+                              description: Use with session replay — "show me the recording where the field went missing".
+                            distinct_id: { type: string }
+                            timestamp: { type: string, format: date-time }
+                            url:
+                              type: string
+                              example: https://shop.example.com/checkout/thank-you
+                              description: The event's `$current_url`, empty when the event did not carry one.
+                            observed_type:
+                              type: string
+                              enum: [absent, string, number, boolean, object, array, "null"]
+                            value_sample:
+                              type: string
+                              description: >
+                                The raw property value, truncated to 200
+                                characters. Empty for `missing_required`, where
+                                there is nothing to show. Properties are
+                                PII-masked at ingestion, but this is still raw
+                                customer data.
+                      note:
+                        type: string
+                        description: Present only when `samples` is empty.
+        "400":
+          description: >
+            `missing_event`, `missing_key`, `invalid_kind`, `invalid_limit`,
+            `invalid_window`, or `window_too_large`. The last one usually means
+            there are no matching events in the window — confirm the violation
+            still has a non-zero count in `/violations`, and if so **widen** the
+            window rather than narrowing it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: "`not_contracted` — `kind=type_mismatch` on a key the contract does not declare, so there is no expected type to check against."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "429": { $ref: "#/components/responses/RateLimited" }
   /client/v1/contracts/suggest:
     get:
@@ -402,7 +552,36 @@ components:
           type: string
           enum: [ok, violations, no_data]
           description: "`no_data` means the event had no traffic in the window — not that its fields are missing."
-        total_events: { type: integer, example: 1000 }
+        total_events:
+          type: integer
+          example: 1000
+          description: Events scanned for properties. Counts of the sample when `sample` is set.
+        reference_events:
+          type: integer
+          nullable: true
+          example: 1000
+          description: >
+            The same event's count in the same window from a separate,
+            **unsampled** pre-aggregated source. Reported alongside
+            `total_events` rather than replacing it: when the two disagree, that
+            disagreement is the signal (sampling, or late-arriving data). `null`
+            when the reference read was unavailable.
+        no_data_reason:
+          type: string
+          enum: [no_events_at_all, event_not_firing, sampled_out, source_disagreement, unknown]
+          description: >
+            Present only on `status: "no_data"`, and the reason that status is
+            worth acting on. `no_events_at_all` — the location sent nothing of
+            any name, so this is a tracking outage, not a contract problem.
+            `event_not_firing` — traffic is alive but this event name is absent,
+            the tagging bug worth paging for. `sampled_out` — the reference sees
+            the event but `sample` dropped it; re-run without sampling.
+            `source_disagreement` — unsampled, and the reference sees events the
+            property scan did not, usually late arrival. `unknown` — the
+            reference read failed, so none of the above can be distinguished.
+        detail:
+          type: string
+          description: Present alongside `no_data_reason`; plain-English version of it.
         properties:
           type: array
           items:
@@ -436,6 +615,15 @@ components:
               count: { type: integer, example: 200 }
               rate: { type: number, nullable: true, example: 0.2 }
               detail: { type: string, example: "`value` is absent on 200 of 1000 events" }
+              samples:
+                type: string
+                example: "/client/v1/contracts/samples?event=order_completed&key=value&kind=missing_required"
+                description: >
+                  Ready-to-call drill-down for this violation, carrying this
+                  report's window. Call it to see the actual offending events.
+              samples_note:
+                type: string
+                description: Present only when the report was sampled — the drill-down is not.
         undeclared:
           type: array
           description: Observed keys with no declaration. Never violations — this is the scaffold for the next contract version.

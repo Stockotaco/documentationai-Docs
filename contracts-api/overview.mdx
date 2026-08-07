@@ -23,9 +23,11 @@ Contracts are **read-only enforcement**. Nothing here rejects, quarantines, or d
 | Key not present on the event | `missing_required` | Field never wired, or lost in a redesign |
 | Key present, value `null` | `null_value` | Integration is sending an empty field |
 | Key present, wrong JSON type | `type_mismatch` | `"24.99"` sent as a string, `value` as text |
-| Event has no traffic at all | `status: "no_data"` | Tagging outage — not a payload problem |
+| Event has no traffic at all | `status: "no_data"` + a `no_data_reason` | Tagging outage, a dead event, or just sampling — [the reason says which](#no_data-is-not-everything-is-missing) |
 
 Those four are kept deliberately separate. Absent, `null`, and wrong-type look like one problem in a report that lumps them, and have three different fixes.
+
+Every violation also carries a `samples` link to [the events that actually break it](#finding-the-actual-broken-events) — the count tells you there is a problem, the samples tell you which page.
 
 ## Base URL
 
@@ -102,9 +104,11 @@ The same key system as the rest of `/client/v1`: an **agency key** (`ak_`, bind 
   ],
   "violations": [
     { "key": "value", "kind": "missing_required", "count": 200, "rate": 0.2,
-      "detail": "`value` is absent on 200 of 1000 events" },
+      "detail": "`value` is absent on 200 of 1000 events",
+      "samples": "/client/v1/contracts/samples?event=order_completed&key=value&kind=missing_required" },
     { "key": "value", "kind": "type_mismatch", "count": 150, "rate": 0.15,
-      "detail": "`value` expected number, got string on 150 of 1000 events" }
+      "detail": "`value` expected number, got string on 150 of 1000 events",
+      "samples": "/client/v1/contracts/samples?event=order_completed&key=value&kind=type_mismatch" }
   ],
   "undeclared": [
     { "key": "shipping_tier", "observed_type": "string", "occurrences": 300, "coverage": 0.3 }
@@ -119,6 +123,53 @@ The same key system as the rest of `/client/v1`: an **agency key** (`ak_`, bind 
 ### `no_data` is not "everything is missing"
 
 A contract whose event had no traffic in the window returns `status: "no_data"` with an empty `violations` array, and is counted separately in `summary.events_no_data`. An event that stopped firing entirely is usually the *bigger* problem, and it must not be reported as "100% of fields missing" — that would blame the payload for a tagging outage.
+
+But "no traffic" itself has three causes with three different fixes, and they look identical from inside the contract check. So every `no_data` is checked against an independent, **unsampled** count of what the location sent in the same window, and reports which cause applies:
+
+| `no_data_reason` | What happened | What to do |
+| --- | --- | --- |
+| `no_events_at_all` | The location sent **nothing** of any name | Tracking outage. Check the SDK is loading before looking at this event. |
+| `event_not_firing` | Traffic is alive; this event name is absent | The tagging bug worth paging for. |
+| `sampled_out` | The reference sees the event; `?sample=` dropped it | Nothing. Re-run without sampling. |
+| `source_disagreement` | Unsampled, and the reference sees events the scan did not | Usually late-arriving data. Re-run in a few minutes. |
+| `unknown` | The reference read failed | Can't distinguish the above — don't assume the worst. |
+
+The same reference count appears on **every** event as `reference_events`, next to `total_events`, and location-wide as `summary.reference.location_events`. The two numbers come from different sources on purpose and are never merged: when they disagree, the disagreement is the signal.
+
+## Finding the actual broken events
+
+`value` is absent on 4,102 of 10,000 `order_completed` — now which page? Every violation carries a `samples` link, pre-filled with the report's window:
+
+```bash
+curl "$BASE/client/v1/contracts/samples?location_id=$LOC\
+&event=order_completed&key=value&kind=missing_required" \
+  -H "Authorization: Bearer $AK"
+```
+
+```json
+{
+  "samples": [
+    {
+      "event_id": "018f2c1a-7b3e-7c9d-a1b2-c3d4e5f60718",
+      "session_id": "sess_9f2c1a7b",
+      "timestamp": "2026-08-05T14:22:07",
+      "url": "https://shop.example.com/checkout/thank-you?variant=b",
+      "observed_type": "absent",
+      "value_sample": ""
+    }
+  ]
+}
+```
+
+`session_id` is there because session replay is usually the real destination — *show me the recording where the field went missing*. `value_sample` carries the raw property value truncated to 200 characters (empty for `missing_required`, where there is nothing to show).
+
+<Callout kind="info">
+  `/samples` is **never sampled**, even when the report was — sampling a search for rare events returns a confident empty result.
+
+  It stays fast by reading newest-first and stopping as soon as it has enough rows, so the volume of the event name barely matters *when matches exist*. The one slow case is a violation with **no** matching events: proving that requires reading every event of that name, and on a very high-volume event it can time out. If you get `window_too_large`, check the violation still has a non-zero count in `/violations` over the same window — and if it does, **widen** the window rather than narrowing it, so the most recent match falls inside.
+</Callout>
+
+`kind=type_mismatch` reads the expected type from your stored contract rather than a query parameter, so you cannot find mismatches against a type you never declared; it returns `404 not_contracted` for an undeclared key.
 
 ## Windows and cost
 
