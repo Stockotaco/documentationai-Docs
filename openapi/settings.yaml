@@ -273,6 +273,89 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /contract-alerts:
+    get:
+      summary: Get the event-contract alert webhook
+      operationId: getContractAlerts
+      description: >
+        Where the daily [event-contract](/contracts-api/overview) digest is
+        delivered, and whether it is signed. Readable with an agency key (`ak_`,
+        pass `?location_id=`) or a viewer key (`sk_`).
+
+
+        The secret itself is never returned — only whether one is set.
+      responses:
+        "200":
+          description: The current webhook configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractAlertsResponse"
+        "401":
+          description: Authorization key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Set the event-contract alert webhook
+      operationId: putContractAlerts
+      description: >
+        Turn the daily event-contract digest on or off for a location. Requires
+        an agency key (`ak_`) and `?location_id=`; viewer keys get
+        `403 agency_required`.
+
+
+        One webhook **per location**, not per contract, and that is deliberate:
+        the most common thing worth alerting about is a tracking outage, which
+        breaks every contract on the location at once. Per-contract delivery
+        would send thirty alerts for one cause.
+
+
+        The sweep runs daily at ~08:00 UTC over the previous whole UTC day
+        (closed, so late-arriving data has landed). It POSTs only when the
+        alertable condition set **changes** — a violation that persists for a
+        month is one alert, and the recovery is one more. Delivery must return
+        2xx for that state to advance, so a failed POST is retried on the next
+        day's sweep.
+
+
+        Set `secret` (16+ characters) to have each POST carry an
+        `X-Mythic-Signature` header: `sha256=` followed by the HMAC-SHA256 of the
+        raw request body. Pass `webhook_url: null` to disable, which also clears
+        the stored state so re-enabling later reports the current condition
+        rather than staying silent about one that broke during the gap.
+
+
+        Per-event volume thresholds are **not** set here — they live on the
+        contract as `min_daily_events`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContractAlertsRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractAlertsResponse"
+        "400":
+          description: >
+            `invalid_webhook_url` (not a URL, or not `https://`) or
+            `invalid_secret` (under 16 characters).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Write access requires an agency key (`ak_`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   securitySchemes:
     BearerAuth:
@@ -454,3 +537,43 @@ components:
                 - type: boolean
                 - type: object
               example: true
+    ContractAlertsRequest:
+      type: object
+      required:
+        - webhook_url
+      properties:
+        webhook_url:
+          type: string
+          nullable: true
+          description: >
+            HTTPS endpoint for the daily digest, or `null` to disable. Plain
+            `http://` is rejected — the payload names which of a client's events
+            are broken, and a signature does not make plaintext private.
+          example: https://hooks.example.com/mythic/contracts
+        secret:
+          type: string
+          nullable: true
+          minLength: 16
+          description: >
+            Shared secret for `X-Mythic-Signature`. Omit to leave the current
+            secret untouched; pass `null` to send unsigned. Never returned by a
+            GET.
+    ContractAlertsResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            webhook_url: { type: string, nullable: true, example: "https://hooks.example.com/mythic/contracts" }
+            signed:
+              type: boolean
+              description: Whether a signing secret is stored. The secret itself is never returned.
+              example: true
+            enabled: { type: boolean, example: true }
+            last_sent_at:
+              type: string
+              format: date-time
+              nullable: true
+              description: When a digest was last delivered successfully.
+            schedule: { type: string, example: "daily, ~08:00 UTC, for the previous whole UTC day" }

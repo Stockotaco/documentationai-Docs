@@ -55,6 +55,10 @@ paths:
         optional cannot fail, and is indistinguishable from no contract at all.
 
 
+        `min_daily_events` follows the same replace rule: omit it and the volume
+        check is off.
+
+
         Agency key (`ak_`) required.
       parameters:
         - $ref: "#/components/parameters/LocationId"
@@ -93,6 +97,8 @@ paths:
                   nullable: true
                   description: Free text — where the contract came from. Echoed back on read.
                   example: Checkout v3 — value is gross, pre-refund
+                min_daily_events:
+                  $ref: "#/components/schemas/MinDailyEvents"
       responses:
         "200":
           description: Contract stored
@@ -523,6 +529,25 @@ components:
           type: boolean
           default: true
           description: When true, an event missing this key is a `missing_required` violation.
+    MinDailyEvents:
+      type: integer
+      nullable: true
+      minimum: 1
+      example: 100
+      description: >
+        Declared minimum events per day for this event name. Below it, the report
+        adds a `low_volume` violation. `null` or omitted means the check is off.
+
+
+        Compared against the **unsampled** reference count and only over an exact
+        whole-day window (pass both `date_from` and `date_to`) — a volume
+        threshold checked against a sampled scan, or against the fuzzy default
+        window, fires on healthy traffic. When either is missing the check is
+        skipped and says so under the event's `warnings`, never as a violation.
+
+
+        This is what makes alerting possible without a volume-baseline engine:
+        the threshold is declared rather than inferred.
     StoredContract:
       type: object
       properties:
@@ -531,6 +556,7 @@ components:
           type: object
           additionalProperties: { $ref: "#/components/schemas/PropertySpec" }
         note: { type: string, nullable: true }
+        min_daily_events: { $ref: "#/components/schemas/MinDailyEvents" }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     Window:
@@ -582,6 +608,15 @@ components:
         detail:
           type: string
           description: Present alongside `no_data_reason`; plain-English version of it.
+        warnings:
+          type: array
+          items: { type: string }
+          description: >
+            Checks that were SKIPPED and why — currently only
+            `min_daily_events` when it lacks an unsampled reference count or an
+            exact whole-day window. Present only when non-empty. A skipped check
+            is never reported as a violation: a configuration gap must not read
+            as broken data.
         properties:
           type: array
           items:
@@ -608,10 +643,18 @@ components:
           items:
             type: object
             properties:
-              key: { type: string, example: value }
+              key:
+                type: string
+                nullable: true
+                example: value
+                description: The property. `null` for `low_volume`, whose subject is the event itself.
               kind:
                 type: string
-                enum: [missing_required, null_value, type_mismatch]
+                enum: [missing_required, null_value, type_mismatch, low_volume]
+                description: >
+                  The first three are property violations and carry a `samples`
+                  link. `low_volume` does not — its offence is the absence of
+                  events, so there is nothing to sample.
               count: { type: integer, example: 200 }
               rate: { type: number, nullable: true, example: 0.2 }
               detail: { type: string, example: "`value` is absent on 200 of 1000 events" }

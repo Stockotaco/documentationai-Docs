@@ -16,7 +16,7 @@ The key is still very much "seen". Revenue reporting is quietly wrong.
 
 An **event contract** is the declared side of that: for one event name, the properties it is supposed to carry, their types, and which are required. `GET /violations` diffs the declaration against real traffic and tells you the share of events that break it.
 
-Contracts are **read-only enforcement**. Nothing here rejects, quarantines, or drops an event — a typo in a contract must never become data loss. It is a report.
+Contracts are **read-only enforcement**. Nothing here rejects, quarantines, or drops an event — a typo in a contract must never become data loss. It is a report, and you can [have it pushed to you daily](#getting-told-instead-of-asking) instead of asking for it.
 
 | Symptom | What the report calls it | What it usually means |
 | --- | --- | --- |
@@ -24,6 +24,7 @@ Contracts are **read-only enforcement**. Nothing here rejects, quarantines, or d
 | Key present, value `null` | `null_value` | Integration is sending an empty field |
 | Key present, wrong JSON type | `type_mismatch` | `"24.99"` sent as a string, `value` as text |
 | Event has no traffic at all | `status: "no_data"` + a `no_data_reason` | Tagging outage, a dead event, or just sampling — [the reason says which](#no_data-is-not-everything-is-missing) |
+| Event fires less than declared | `low_volume` | Traffic dropped — needs [`min_daily_events`](#declaring-how-much-traffic-an-event-should-have) set |
 
 Those four are kept deliberately separate. Absent, `null`, and wrong-type look like one problem in a report that lumps them, and have three different fixes.
 
@@ -185,6 +186,43 @@ If the window still holds too much to scan, the API returns `400 window_too_larg
 
 <Callout kind="warning">
   A `truncated: true` flag on the response means the underlying property statistics hit their row limit. Narrow the window or pass `?event=` before trusting `absent` counts — a truncated read under-counts keys and can manufacture "missing" fields that are really a row limit.
+</Callout>
+
+## Getting told, instead of asking
+
+Everything above is pull. A schema-drift report nobody opens is a report that doesn't exist, so set a webhook and get a daily digest:
+
+```bash
+curl -X PUT "$BASE/client/v1/settings/contract-alerts?location_id=$LOC" \
+  -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
+  -d '{ "webhook_url": "https://hooks.example.com/mythic/contracts",
+        "secret": "a-shared-secret-at-least-16-chars" }'
+```
+
+The sweep runs at ~08:00 UTC over the previous whole UTC day — closed, so late-arriving data has landed. With `secret` set, each POST carries `X-Mythic-Signature: sha256=<HMAC-SHA256 of the raw body>`.
+
+**One webhook per location, not per contract.** The most common thing worth alerting about is a tracking outage, and that breaks every contract at once. Per-contract delivery would send thirty alerts for one cause, so the outage case is exactly one payload with `type: "contracts.tracking_outage"`.
+
+**It only fires when something changes.** A violation that persists for a month is one alert, not thirty; the recovery is one more (`type: "contracts.recovered"`). Delivery has to return 2xx for that state to advance, so a failed POST retries on the next sweep rather than being lost.
+
+**Three things deliberately never alert**, because each is a property of how the data was read rather than a problem with it: `sampled_out`, `source_disagreement`, and a truncated property scan. `no_events_at_all` doesn't alert per-contract either — it becomes the single outage payload instead.
+
+### Declaring how much traffic an event should have
+
+A contract says what an event carries. `min_daily_events` says how often it should arrive:
+
+```bash
+curl -X PUT "$BASE/client/v1/contracts?location_id=$LOC" \
+  -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
+  -d '{ "event": "order_completed",
+        "properties": { "value": "number" },
+        "min_daily_events": 100 }'
+```
+
+Below it, the report adds a `low_volume` violation. That one integer is why there is no volume-baseline machinery here — comparing an event against its own recent behaviour exists to *infer* an expectation, and a contract already states one.
+
+<Callout kind="warning">
+  The volume check needs the **unsampled** reference count *and* an exact whole-day window (both `date_from` and `date_to`). Checked against a sampled scan it breaches on healthy traffic; checked against the default window it breaches at 01:00 UTC and passes at 23:00, because that window is 24–48 hours wide depending on when you ask. Missing either, the check is skipped and says so in the event's `warnings` — never as a violation, because a configuration gap must not read as broken data. The daily sweep always uses an exact single day, so it is unaffected.
 </Callout>
 
 ## Contract types
