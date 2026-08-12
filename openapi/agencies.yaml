@@ -199,6 +199,86 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /agencies/{id}/airbyte:
+    get:
+      summary: Airbyte provisioning status
+      operationId: getAgencyAirbyteStatus
+      description: >
+        Read the agency's Airbyte workspace and its provisioning state.
+
+
+        Creating an agency starts workspace creation in the background, so the
+        `201` returns before a workspace id exists. Poll this endpoint for it
+        rather than assuming an agency has no workspace — an interface that shows
+        nothing here invites an operator to provision a SECOND workspace for an
+        agency that already has one.
+
+
+        A `200` with `workspace_id: null` means no Airbyte configuration exists
+        yet; a `404` means no such agency.
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+      responses:
+        "200":
+          description: Airbyte configuration state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      workspace_id:
+                        type: string
+                        nullable: true
+                        description: Airbyte workspace id, once created.
+                      destination_id:
+                        type: string
+                        nullable: true
+                        description: BigQuery destination id. `null` until the workspace is fully provisioned.
+                      status:
+                        type: string
+                        nullable: true
+                        enum: [pending, provisioning, active, error]
+                        description: >
+                          `pending` means the workspace exists but has no
+                          destination yet; `active` means it is fully
+                          provisioned. `null` when no configuration exists.
+                      error_message:
+                        type: string
+                        nullable: true
+                        description: Why provisioning failed, when `status` is `error`.
+                      notifications_registered_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+                        description: >
+                          When the workspace was pointed at Mythic's sync-notification
+                          receiver. `null` means sync history for this workspace is
+                          not being recorded — repair it with
+                          `POST /client/v1/airbyte/config/notifications`.
+                      created_at:
+                        type: string
+                        format: date-time
+                      updated_at:
+                        type: string
+                        format: date-time
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: >
+            No agency with this ID. Distinct from a `200` carrying a null
+            `workspace_id`, which means the agency exists but has no Airbyte
+            configuration yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /agencies/{id}/rotate-key:
     post:
       summary: Rotate agency key
@@ -377,6 +457,21 @@ components:
           type: boolean
           default: true
           description: Whether the agency is active. Defaults to `true`.
+        notification_webhook_url:
+          type: string
+          format: uri
+          description: >
+            HTTPS endpoint to receive this agency's Airbyte sync notifications.
+            Equivalent to calling `POST /client/v1/airbyte/webhooks` afterwards,
+            and subject to the same rules: treated as opaque, stored encrypted
+            (put your own authentication in it), and only ever readable back
+            redacted. Must be `https`. Rejected values do not fail agency
+            creation — the 201 carries a `warning` instead.
+          example: "https://example.com/hooks/airbyte?secret=REPLACE_ME"
+        notification_webhook_label:
+          type: string
+          nullable: true
+          description: Your own name for that endpoint. Ignored without `notification_webhook_url`.
     UpdateAgencyRequest:
       type: object
       description: >

@@ -204,6 +204,153 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /webhooks:
+    get:
+      summary: List sync-notification subscriptions
+      operationId: listAirbyteWebhookSubscriptions
+      description: >
+        Endpoints of yours that Mythic forwards Airbyte sync notifications to.
+
+
+        Airbyte allows exactly ONE webhook URL per event type per workspace, and
+        Mythic holds it — every figure under `/sync-events`, `/stats`, `/health`
+        and each connection's `last_sync` is built from those posts. Rather than
+        take the slot from us, subscribe here: our receiver writes its own record
+        and then relays the event to each subscription.
+
+
+        The returned `url` is REDACTED. Every query-string value is replaced with
+        `***`, because the credential for these endpoints normally lives in the
+        query string. The full URL is stored encrypted and is never readable back
+        through the API.
+      responses:
+        "200":
+          description: Subscriptions for this agency
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WebhookSubscription"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      summary: Subscribe an endpoint
+      operationId: createAirbyteWebhookSubscription
+      description: >
+        Register an endpoint to receive Airbyte sync notifications. Requires an
+        agency key (`ak_`).
+
+
+        The URL is treated as opaque and stored as a secret: pass your own
+        authentication inside it (a query-string token is the usual shape, since
+        Airbyte's own notifications are unsigned) and it will be encrypted at
+        rest. Must be `https`.
+
+
+        Idempotent on the URL. Re-posting a URL that already exists updates its
+        label and clears its failure state rather than creating a second
+        subscription — a duplicate would deliver every notification twice.
+        Re-posting is also how you resume a subscription that was parked after
+        repeated delivery failures.
+
+
+        Delivery is best-effort and unordered. The event is already durable in
+        `/sync-events`, so there is no redelivery queue here; dedupe on `job_id`
+        and order on `finished_at`, never on `delivered_at` or your own receipt
+        time. A retried older failure CAN arrive after a newer success.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  description: HTTPS endpoint to POST notifications to. Stored encrypted; returned redacted.
+                  example: "https://example.com/hooks/airbyte?secret=REPLACE_ME"
+                label:
+                  type: string
+                  nullable: true
+                  description: Your own name for this endpoint, shown when listing subscriptions.
+      responses:
+        "201":
+          description: Subscription created or refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/WebhookSubscription"
+        "400":
+          description: "`url` missing, not a URL, or not `https`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+  /webhooks/{id}:
+    delete:
+      summary: Remove a subscription
+      operationId: deleteAirbyteWebhookSubscription
+      description: >
+        Stop forwarding sync notifications to this endpoint. Requires an agency
+        key (`ak_`).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Subscription identifier.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Subscription removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      deleted:
+                        type: boolean
+                      id:
+                        type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/WriteForbidden"
+        "404":
+          description: >
+            No such subscription for this agency (`code: not_found`). Deleting an
+            id you do not own reports this rather than success — a false success
+            would read as "we stopped delivering there" while delivery continues.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /config/provision:
     post:
       summary: Provision workspace
@@ -2395,6 +2542,94 @@ components:
           type: string
           nullable: true
           description: Direct link to this connection's run in the Airbyte UI.
+    WebhookSubscription:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+          nullable: true
+        url:
+          type: string
+          description: >
+            REDACTED form of the subscribed URL — origin and path in full, every
+            query-string value replaced with `***`. The parameter NAMES are kept
+            so you can tell which one carries your secret. The real URL is never
+            returned.
+          example: "https://example.com/hooks/airbyte?secret=***"
+        active:
+          type: boolean
+          description: >
+            Parked subscriptions are `false`. A subscription is parked
+            automatically after 20 consecutive delivery failures, so a dead
+            endpoint stops costing a request on every sync. POST the URL again to
+            resume it.
+        last_delivery_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When delivery was last ATTEMPTED — success or failure. Read it with `last_error`.
+        last_error:
+          type: string
+          nullable: true
+          description: Why the last attempt failed. `null` after a success.
+        consecutive_failures:
+          type: integer
+          description: Failures since the last success. Resets to 0 on any successful delivery.
+        created_at:
+          type: string
+          format: date-time
+    WebhookRelayEvent:
+      type: object
+      description: >
+        The body POSTed to each subscribed endpoint, with header
+        `X-Mythic-Event: airbyte.sync.completed`.
+      properties:
+        type:
+          type: string
+          example: airbyte.sync.completed
+        delivered_at:
+          type: string
+          format: date-time
+          description: Mythic's clock, for diagnostics only. NEVER order events on this.
+        agency_id:
+          type: string
+          format: uuid
+        client_id:
+          type: string
+          nullable: true
+          description: The Mythic client this connection syncs for. `null` for a connection Mythic does not manage.
+        platform:
+          type: string
+          nullable: true
+          description: Platform key, e.g. `meta_ads`. `null` for a connection Mythic does not manage.
+        job_id:
+          type: integer
+          nullable: true
+          description: Airbyte's job id, unmodified. Your dedupe key — the same job can be delivered more than once.
+        success:
+          type: boolean
+          nullable: true
+        finished_at:
+          type: string
+          nullable: true
+          description: >
+            Airbyte's own event time, unmodified. Your ORDERING key: ignore an
+            event older than the one you have already recorded for that
+            connection. Relayed delivery is not ordered, so a retried older
+            failure can land after a newer success and would otherwise flip a
+            healthy connection to failed.
+        started_at:
+          type: string
+          nullable: true
+        data:
+          type: object
+          description: >
+            Airbyte's notification payload verbatim — the same object described
+            under `/sync-events`. Airbyte's prebuilt Slack `text`/`blocks` are
+            dropped.
     NotificationRegistration:
       type: object
       properties:

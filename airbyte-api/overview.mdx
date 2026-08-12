@@ -348,6 +348,26 @@ Two related distinctions in the same numbers:
 
 Both paths key on `(connection_id, job_id)`, so a backfill never duplicates a notification, re-running one is a no-op, and a re-delivered notification never double-counts. Jobs still running are skipped rather than recorded as failures; the response reports how many under `skipped_in_flight`.
 
+### Getting sync results pushed to you
+
+Airbyte allows exactly **one** webhook URL per event type per workspace, and Mythic holds it. Everything on this page — `/sync-events`, `/stats`, `/health`, `last_sync`, `landed`, `consecutive_failures` — is built from those posts, so a workspace pointed somewhere else reports a permanently empty, permanently healthy-looking history.
+
+So instead of taking the slot, subscribe and Mythic relays to you:
+
+```bash
+curl -X POST https://mythic-analytics.gulp.workers.dev/client/v1/airbyte/webhooks \
+  -H "Authorization: Bearer ak_..." -H "Content-Type: application/json" \
+  -d '{"url": "https://you.example.com/hooks/airbyte?secret=...", "label": "portal"}'
+```
+
+Your endpoint receives Airbyte's payload verbatim under `data`, plus the `client_id` and `platform` Airbyte cannot know. The URL is treated as opaque and stored encrypted — put your own authentication in it, since Airbyte's notifications are themselves unsigned. `GET /webhooks` reads subscriptions back with every query-string value replaced by `***`, alongside `last_error` and `consecutive_failures`.
+
+<Callout kind="warning">
+  **Dedupe on `job_id`, order on `finished_at`.** A relay adds a hop, so a retried older failure can arrive after a newer success. A receiver that stamps its own clock and takes last-write-wins will flip a healthy connection to failed and alert on it. Both fields are forwarded unmodified for exactly this; `delivered_at` is Mythic's clock and is a diagnostic, never an ordering key.
+</Callout>
+
+Delivery is best-effort and there is no redelivery queue: the event is already durable, so reconcile a gap from `GET /sync-events` rather than waiting for a retry. An endpoint that fails 20 times in a row is parked (`active: false`) so a dead URL stops costing a request on every sync — POST the same URL again to resume it. Posting a URL that already exists updates it rather than adding a second subscription, which would deliver everything twice.
+
 ## Orchestrated syncs
 
 By default each connection runs on its own Airbyte schedule. That is fine until something has to run **after** the data lands — a transform, an export, your own pipeline. Twelve connections on twelve independent crons never produce a moment that means "today's data is here", so a consumer either guesses a time and is sometimes wrong, or polls forever.
