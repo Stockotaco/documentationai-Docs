@@ -60,7 +60,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AgencyResponse"
+                $ref: "#/components/schemas/CreateAgencyResponse"
         "400":
           description: Missing required field `name`
           content:
@@ -566,6 +566,54 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/Agency"
+    CreateAgencyResponse:
+      type: object
+      description: >-
+        Agency created. When `notification_webhook_url` is supplied in the
+        request, the response also carries the Airbyte sync-notification
+        subscription that was created — saving a separate call to
+        `POST /client/v1/airbyte/webhooks`. A rejected URL does not fail
+        agency creation; it surfaces as `warning` instead.
+      properties:
+        data:
+          $ref: "#/components/schemas/Agency"
+        airbyte_webhook_subscription:
+          type: object
+          nullable: true
+          description: >-
+            The sync-notification subscription created from
+            `notification_webhook_url`. Absent when no URL was supplied or the
+            URL was rejected. Shape matches `WebhookSubscription` in the Airbyte
+            API — the `url` is redacted (query-string values replaced with
+            `***`).
+          properties:
+            id:
+              type: string
+              format: uuid
+            label:
+              type: string
+              nullable: true
+            url:
+              type: string
+              description: Redacted URL — origin and path visible, query-string values replaced with `***`.
+              example: "https://example.com/hooks/airbyte?secret=***"
+            active:
+              type: boolean
+              example: true
+            consecutive_failures:
+              type: integer
+              example: 0
+            created_at:
+              type: string
+              format: date-time
+        warning:
+          type: string
+          nullable: true
+          description: >-
+            Present when `notification_webhook_url` was rejected (not `https`,
+            or otherwise invalid). Agency creation still succeeded; fix the URL
+            and subscribe via `POST /client/v1/airbyte/webhooks` separately.
+          example: "Agency created, but notification_webhook_url was rejected: URL must be https"
     AgencyDetailResponse:
       type: object
       properties:

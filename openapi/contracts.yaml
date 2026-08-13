@@ -455,6 +455,227 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /admin/contracts/alert-sweep:
+    post:
+      summary: Trigger contract alert sweep
+      operationId: triggerContractAlertSweep
+      description: >
+        Manually trigger the daily event-contract alert sweep — the same logic
+        that runs automatically at ~08:00 UTC. For each location that has a
+        contract-alert webhook configured (see
+        `PUT /client/v1/settings/contract-alerts`), the sweep runs contract
+        reports, builds webhook payloads, and POSTs them only when the
+        alertable condition set has changed since the last delivery.
+
+
+        Pass `?dry_run=1` to compute everything and POST nothing — the response
+        carries the exact payload each location would receive, plus whether it
+        would be sent. This is the only way to inspect real payloads without
+        waiting for the 08:00 UTC cron.
+
+
+        Requires an admin key.
+      security:
+        - AdminKey: []
+        - AdminKeyQuery: []
+      parameters:
+        - name: dry_run
+          in: query
+          required: false
+          description: >-
+            Pass `1` to compute all payloads without delivering any webhook.
+            Returns the full `results` array. Any other value is treated as
+            live mode.
+          schema:
+            type: string
+            enum: ["1"]
+      responses:
+        "200":
+          description: >-
+            Sweep completed. In live mode, returns aggregate counts. In
+            dry-run mode (`?dry_run=1`), also returns a per-location
+            `results` array with the payloads that would be sent.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  locations:
+                    type: integer
+                    description: Total locations with a contract-alert webhook configured.
+                    example: 12
+                  sent:
+                    type: integer
+                    description: >-
+                      Locations that received a new webhook delivery this sweep
+                      (always `0` in dry-run mode).
+                    example: 2
+                  dry_run:
+                    type: boolean
+                    description: Present only when `?dry_run=1` was passed.
+                    example: true
+                  results:
+                    type: array
+                    description: >-
+                      Per-location outcomes. Present only in dry-run mode
+                      (`?dry_run=1`). In live mode, delivery results are not
+                      reported — the aggregate `sent` count is the summary.
+                    items:
+                      type: object
+                      properties:
+                        location_id:
+                          type: string
+                        skipped:
+                          type: string
+                          nullable: true
+                          description: >-
+                            Why this location was skipped. One of
+                            `no_contracts`, `truncated`, or `error`.
+                            Present only when the location was skipped.
+                        error:
+                          type: string
+                          nullable: true
+                          description: Error message, present when `skipped` is `error`.
+                        kind:
+                          type: string
+                          nullable: true
+                          enum: [clean, contract_violations, tracking_outage]
+                          description: >-
+                            The alertable condition category. Present only
+                            when the location was not skipped.
+                        fingerprint:
+                          type: string
+                          nullable: true
+                          description: >-
+                            Hash of the alertable condition set, used for
+                            change detection (de-duplication latch).
+                        changed:
+                          type: boolean
+                          nullable: true
+                          description: >-
+                            Whether the condition changed since the last
+                            delivery. `false` means no new alert is warranted.
+                        sent:
+                          type: boolean
+                          nullable: true
+                          description: >-
+                            Whether a webhook was delivered. Always `false`
+                            in dry-run mode.
+                        would_send:
+                          type: boolean
+                          nullable: true
+                          description: >-
+                            Whether the webhook WOULD be sent. Present only in
+                            dry-run mode, and only when `changed` is true.
+                        signed:
+                          type: boolean
+                          nullable: true
+                          description: >-
+                            Whether the webhook payload would carry an
+                            `X-Mythic-Signature` header. Present only in
+                            dry-run mode when `would_send` is true.
+                        webhook_url:
+                          type: string
+                          nullable: true
+                          description: >-
+                            The webhook URL that would receive the payload.
+                            Present only in dry-run mode when `would_send` is
+                            true.
+                        reason:
+                          type: string
+                          nullable: true
+                          description: >-
+                            Human-readable explanation of why no delivery
+                            occurred. Present only when `changed` is false.
+                        payload:
+                          type: object
+                          nullable: true
+                          description: >-
+                            The full webhook payload object that would be
+                            POSTed. Present only in dry-run mode.
+                          properties:
+                            type:
+                              type: string
+                              description: >-
+                                One of `contracts.contract_violations`,
+                                `contracts.tracking_outage`, or
+                                `contracts.recovered`.
+                            location_id:
+                              type: string
+                            date:
+                              type: string
+                              description: The UTC day the report covers (YYYY-MM-DD).
+                            contracts_affected:
+                              type: integer
+                            events:
+                              type: array
+                              description: >-
+                                One object per alertable event. Empty for
+                                `tracking_outage`.
+                              items:
+                                type: object
+                                properties:
+                                  event:
+                                    type: string
+                                  status:
+                                    type: string
+                                    enum: [no_data, violations]
+                                  no_data_reason:
+                                    type: string
+                                    nullable: true
+                                  detail:
+                                    type: string
+                                    nullable: true
+                                  total_events:
+                                    type: integer
+                                    nullable: true
+                                  reference_events:
+                                    type: integer
+                                    nullable: true
+                                  violations:
+                                    type: array
+                                    items:
+                                      type: object
+                                      properties:
+                                        key:
+                                          type: string
+                                          nullable: true
+                                        kind:
+                                          type: string
+                                          enum: [missing_required, null_value, type_mismatch, low_volume]
+                                        count:
+                                          type: integer
+                                        rate:
+                                          type: number
+                            report:
+                              type: string
+                              description: URL to the violations report for this date.
+                            checked_at:
+                              type: string
+                              format: date-time
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Unauthorized
+        "500":
+          description: Uncaught error during the sweep
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Contract alert sweep failed: ..."
 components:
   securitySchemes:
     BearerAuth:
@@ -469,6 +690,15 @@ components:
       type: apiKey
       in: query
       name: sk
+    AdminKey:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`."
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for the admin key.
   parameters:
     LocationId:
       name: location_id

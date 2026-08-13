@@ -528,6 +528,57 @@ paths:
                 $ref: "#/components/schemas/CoefficientsResponse"
         "429":
           $ref: "#/components/responses/RateLimited"
+  /admin/incrementality/drift-check:
+    post:
+      summary: Trigger drift sweep
+      operationId: triggerDriftCheck
+      description: >
+        Manually trigger the geo-experiment drift sweep — the same logic that
+        runs automatically at ~10:00 UTC daily. For each running or
+        cooling-down experiment that has an `alert_webhook_url` configured, the
+        sweep re-runs inference, detects outlier days in the test window, and
+        fires an `incrementality.drift_alert` webhook only when the outlier set
+        has changed since the last alert.
+
+
+        The response is always `{ "success": true }` — even when no experiments
+        matched or no outliers were found. Per-experiment errors (BigQuery
+        failures, webhook timeouts) are caught individually and logged; they do
+        not surface as HTTP errors. Requires an admin key.
+      security:
+        - AdminKey: []
+        - AdminKeyQuery: []
+      responses:
+        "200":
+          description: Sweep completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Unauthorized
+        "500":
+          description: Uncaught error during the sweep
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Drift sweep failed: ..."
 components:
   securitySchemes:
     BearerAuth:
@@ -547,6 +598,15 @@ components:
       in: query
       name: sk
       description: Secret key as a query parameter. Prefer the `Authorization` header.
+    AdminKey:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`."
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for the admin key.
   parameters:
     ExperimentId:
       name: id
