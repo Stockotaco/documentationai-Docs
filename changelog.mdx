@@ -1,0 +1,61 @@
+---
+title: Changelog
+description: Track recent Mythic Analytics changes for agency teams and developers, including new APIs, behavior changes, and important fixes.
+---
+
+<Update label="August 12, 2026" description="Recent platform changes" tags={["feature", "improvement", "bugfix"]}>
+
+## New Features
+
+### Airbyte Sync Notifications
+
+Subscribe a webhook URL to receive real-time notifications when Airbyte sync jobs complete. Notifications include job status, platform, and the original sync payload, so your systems can react without polling. [Read the overview](/airbyte-api/overview).
+
+### Correlation Analysis API
+
+Analyze how metrics move together over time with a new API for 2–5 metrics, including ad spend, sessions, and revenue from any captured event. The response includes pairwise Pearson and Spearman coefficients, rolling correlation trends, and a lead/lag scan, with statistical guards that flag partial coverage, outlier-driven results, and weak lag signals. [Read the overview](/correlation-api/overview).
+
+### Explainability Coverage Gate
+
+Check whether a funnel step's drop-off can be analyzed before you run behavioral analysis. The endpoint returns whether enough data exists, which analysis approaches are available, and the minimum detectable effect sizes, and it is designed to plug cleanly into AI agents and automated workflows. [Read the overview](/data-api/overview).
+
+### Heatmap Session Filters
+
+Filter heatmaps by device type, traffic source, campaign, country, and stored segments. A new facets endpoint returns only the filter values that actually exist for a page, which prevents empty dropdown choices and makes filtered investigation faster. [Read the overview](/heatmaps-api/overview).
+
+### Contract Alert Webhooks
+
+Receive daily event contract violation digests through a webhook instead of checking reports manually. The digest covers property schema violations, tracking outages, and recoveries, and supports an optional HMAC secret for payload verification. [Read the overview](/contracts-api/overview).
+
+### Contract Violation Drill-Down
+
+The `no_data` status now separates into four causes: no events at all, event not firing, sampled out, or source disagreement. A new samples endpoint returns the offending events with session IDs and page URLs, so you can move from alert to root cause faster. [Read the overview](/contracts-api/overview).
+
+## Updates
+
+### SDK Session Timeout Default
+
+The JavaScript SDK now uses a 4-hour inactivity timeout for session boundaries instead of 30 minutes. Historical data keeps the old behavior, session counts will change gradually as the new SDK rolls out, and snippets that already set an explicit timeout stay as they are. [Read the configuration reference](/javascript-sdk/configuration).
+
+### Minimum Daily Events Threshold
+
+Set a per-event volume floor on event contracts with the new `min_daily_events` field. The violation report now flags contracts that fall below that threshold, which makes low-volume tracking issues easier to catch. [Read the overview](/contracts-api/overview).
+
+## Bug Fixes
+
+### Insight SQL Builder Security Hardening
+
+Hardened the SQL generation behind the Insight Builder against injection attacks. Operators, column names, aggregates, and sort directions are now validated more strictly, and string escaping is stronger. [Read the overview](/builder-api/overview).
+
+### Contract Alert Sweep Reliability
+
+Fixed a reliability issue that caused the daily contract alert sweep to skip tenants with many event names. Alerts now run correctly for all tenants, including larger datasets. [Read the overview](/contracts-api/overview).
+
+</Update>
+
+<Columns cols={2}>
+  <Card title="Airbyte API overview" href="/airbyte-api/overview" icon="webhook" cta="Open page" />
+  <Card title="Correlation Analysis" href="/correlation-api/overview" icon="bar-chart" cta="Open page" />
+  <Card title="Contracts API overview" href="/contracts-api/overview" icon="shield" cta="Open page" />
+  <Card title="JavaScript SDK configuration" href="/javascript-sdk/configuration" icon="code" cta="Open page" />
+</Columns>

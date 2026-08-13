@@ -32,6 +32,11 @@
                     "title": "Onboard a client",
                     "path": "for-agencies/onboard-a-client",
                     "icon": "user-plus"
+                  },
+                  {
+                    "title": "Changelog",
+                    "path": "changelog",
+                    "icon": "clock"
                   }
                 ]
               }
@@ -467,6 +472,11 @@
                     "title": "Quickstart",
                     "path": "get-started/quickstart",
                     "icon": "zap"
+                  },
+                  {
+                    "title": "Changelog",
+                    "path": "changelog",
+                    "icon": "clock"
                   }
                 ]
               }
