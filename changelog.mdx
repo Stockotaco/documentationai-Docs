@@ -1,0 +1,27 @@
+---
+title: Changelog
+description: What shipped in Mythic Analytics — new features, updates, and bug fixes.
+---
+
+<Update label="2026-08-12" description="Release highlights" tags={["feature", "improvement", "bugfix"]}>
+
+## New Features
+
+- **Heatmaps**: Click and scroll heatmaps now render on stored session-replay snapshots with no iframe or live-site dependency, and support filters for device, traffic source, campaign, country, and audience segments; see [Heatmaps](/heatmaps-api/overview).
+- **Correlation Analysis**: Measure how 2–5 metrics move together with Pearson and Spearman coefficients, rolling correlation trends, and lead/lag timing to answer how long it takes for spend to show up in revenue; see [Correlation Analysis](/correlation-api/overview).
+- **Event Contract Alerts**: Daily webhook notifications now report contract violations at about 08:00 UTC, `no_data` now breaks into four distinct reasons, and each violation links to the actual sample events behind it; see [Event Contracts](/contracts-api/overview).
+- **Airbyte Sync Webhooks**: Subscribe your own webhook endpoints to receive sync notifications instead of relying on a single shared webhook slot, with subscriptions auto-parked after 20 consecutive failures and reactivated on re-subscription; see [Airbyte Sync](/airbyte-api/overview).
+- **Coverage Analysis**: A new endpoint checks whether a page has enough data to support behavioral funnel analysis before you run it, returning a structured `answerable: true/false` verdict with reasons; see [Data API](/data-api/overview).
+
+## Updates
+
+- **SDK session timeout**: The default inactivity timeout changed from 30 minutes to 4 hours, and existing snippets without an explicit `session_timeout` pick up the new default automatically; see [SDK Configuration](/javascript-sdk/configuration).
+- **Event contracts `min_daily_events`**: Contracts now support a per-contract volume threshold checked against unsampled reference counts over a whole-day window.
+
+## Bug Fixes
+
+- **Contract alert sweep was silently skipping most locations**: Alert delivery now reads one narrowed scan per contracted event so healthy locations are no longer skipped when a single unsampled day exceeds the row limit.
+- **Contract violations endpoint returning 502 errors**: Two separate runtime failures in the violations route are resolved, and requests now complete normally.
+- **Heatmap background misalignment and scroll rendering gaps**: Heatmap backgrounds no longer shift off-position, and scroll rendering now fills continuously across the page instead of leaving large unpainted gaps.
+
+</Update>
