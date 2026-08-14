@@ -41,6 +41,7 @@ Responses are JSON, but the envelope varies by endpoint rather than following a 
 |----------|--------------|
 | `GET /agencies` | `{ "data": [ ... ] }` |
 | `GET /agencies/{id}` | `{ "data": { ...agency, "locations": [ ... ] } }` |
+| `GET /agencies/{id}/airbyte` | `{ "data": { workspace_id, destination_id, status, ... } }` |
 | `POST /agencies` | `{ "data": { ...agency } }` |
 | `PATCH /agencies/{id}` | `{ "data": { ...agency } }` |
 | `DELETE /agencies/{id}` | `{ "success": true }` |
@@ -63,6 +64,21 @@ Example error response:
 | **Agency** | A management entity that groups related client tenants |
 | **Agency key** | Auto-generated `ak_` credential (format `ak_` + 32 hex characters) used by client-facing APIs to identify the agency |
 | **Location** | A Mythic client tenant (a `location_keys` record) linked to the agency via its `agency_id` |
+
+## Airbyte workspace provisioning
+
+Creating an agency starts Airbyte workspace creation in the background. The `201` from `POST /agencies` returns before the workspace exists, so poll `GET /agencies/{id}/airbyte` for it rather than assuming the agency has no workspace — an interface that shows nothing here invites an operator to provision a second workspace for an agency that already has one.
+
+A `200` with `workspace_id: null` means no Airbyte configuration exists yet; a `404` means no such agency. The response also carries `notifications_registered_at` — `null` means sync history for this workspace is not being recorded.
+
+### Subscribing to sync notifications at creation time
+
+`POST /agencies` accepts two optional fields that subscribe the agency to [Airbyte sync notification relay](/airbyte-api/overview) inline, so you do not need a separate `POST /client/v1/airbyte/webhooks` call:
+
+| Field | Description |
+|-------|-------------|
+| `notification_webhook_url` | HTTPS endpoint to receive Airbyte sync notifications. Treated as opaque, stored encrypted, and only ever readable back redacted. Must be `https`. Rejected values do not fail agency creation — the `201` carries a `warning` instead. |
+| `notification_webhook_label` | Your own name for that endpoint. Ignored without `notification_webhook_url`. |
 
 ## Error handling
 

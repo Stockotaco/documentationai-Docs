@@ -199,6 +199,8 @@ curl -X PUT "$BASE/client/v1/settings/contract-alerts?location_id=$LOC" \
         "secret": "a-shared-secret-at-least-16-chars" }'
 ```
 
+Read the current configuration back with `GET /client/v1/settings/contract-alerts?location_id=$LOC`.
+
 The sweep runs at ~08:00 UTC over the previous whole UTC day — closed, so late-arriving data has landed. With `secret` set, each POST carries `X-Mythic-Signature: sha256=<HMAC-SHA256 of the raw body>`.
 
 **One webhook per location, not per contract.** The most common thing worth alerting about is a tracking outage, and that breaks every contract at once. Per-contract delivery would send thirty alerts for one cause, so the outage case is exactly one payload with `type: "contracts.tracking_outage"`.
@@ -206,6 +208,17 @@ The sweep runs at ~08:00 UTC over the previous whole UTC day — closed, so late
 **It only fires when something changes.** A violation that persists for a month is one alert, not thirty; the recovery is one more (`type: "contracts.recovered"`). Delivery has to return 2xx for that state to advance, so a failed POST retries on the next sweep rather than being lost.
 
 **Three things deliberately never alert**, because each is a property of how the data was read rather than a problem with it: `sampled_out`, `source_disagreement`, and a truncated property scan. `no_events_at_all` doesn't alert per-contract either — it becomes the single outage payload instead.
+
+### Triggering the sweep on demand
+
+The daily sweep runs at ~08:00 UTC. To run it immediately — for testing a webhook endpoint or inspecting what it would send — call:
+
+```bash
+curl -X POST "https://mythic-analytics.gulp.workers.dev/admin/contracts/alert-sweep" \
+  -H "Authorization: Bearer $ADMIN_KEY"
+```
+
+Pass `?dry_run=1` to compute everything and POST nothing. The response includes per-location `would_send`, `reason` (fingerprint unchanged, first-sweep baseline, truncated scan, or no contracts), and `payload` — the exact JSON each receiver would get. This endpoint requires an admin key, not an agency key.
 
 ### Declaring how much traffic an event should have
 

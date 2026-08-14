@@ -366,7 +366,7 @@ Your endpoint receives Airbyte's payload verbatim under `data`, plus the `client
   **Dedupe on `job_id`, order on `finished_at`.** A relay adds a hop, so a retried older failure can arrive after a newer success. A receiver that stamps its own clock and takes last-write-wins will flip a healthy connection to failed and alert on it. Both fields are forwarded unmodified for exactly this; `delivered_at` is Mythic's clock and is a diagnostic, never an ordering key.
 </Callout>
 
-Delivery is best-effort and there is no redelivery queue: the event is already durable, so reconcile a gap from `GET /sync-events` rather than waiting for a retry. An endpoint that fails 20 times in a row is parked (`active: false`) so a dead URL stops costing a request on every sync — POST the same URL again to resume it. Posting a URL that already exists updates it rather than adding a second subscription, which would deliver everything twice.
+Delivery is best-effort and there is no redelivery queue: the event is already durable, so reconcile a gap from `GET /sync-events` rather than waiting for a retry. An endpoint that fails 20 times in a row is parked (`active: false`) so a dead URL stops costing a request on every sync — POST the same URL again to resume it. Posting a URL that already exists updates it rather than adding a second subscription, which would deliver everything twice. Remove a subscription entirely with `DELETE /webhooks/{id}`.
 
 ## Orchestrated syncs
 
