@@ -1,0 +1,401 @@
+openapi: "3.0.0"
+info:
+  title: Admin Contract Alerts
+  version: 1.0.0
+  description: Manually trigger the event-contract alert sweep that normally runs at 08:00 UTC. Supports a dry-run mode that computes everything without delivering to any webhook.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+  - AdminKeyQuery: []
+paths:
+  /admin/contracts/alert-sweep:
+    post:
+      summary: Trigger contract alert sweep
+      operationId: triggerContractAlertSweep
+      description: Manually triggers the event-contract alert sweep that normally runs at 08:00 UTC. In dry-run mode, the endpoint computes the exact per-location results and webhook payloads without delivering any webhook requests.
+      parameters:
+        - name: dry_run
+          in: query
+          description: Run the sweep without delivering any webhooks. Returns the exact payload each location would receive.
+          required: false
+          schema:
+            type: string
+            enum:
+              - '1'
+          example: '1'
+      responses:
+        '200':
+          description: Contract alert sweep completed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SweepResponse'
+              examples:
+                live:
+                  summary: Live sweep response
+                  value:
+                    success: true
+                    locations: 12
+                    sent: 9
+                dryRun:
+                  summary: Dry-run sweep response
+                  value:
+                    success: true
+                    locations: 2
+                    sent: 0
+                    dry_run: true
+                    results:
+                      - location_id: loc_123
+                        kind: contract_violations
+                        fingerprint: fp_2026_08_14_loc_123
+                        changed: true
+                        sent: false
+                        would_send: true
+                        signed: true
+                        webhook_url: https://hooks.partner.example/contracts
+                        payload:
+                          type: contracts.contract_violations
+                          location_id: loc_123
+                          date: '2026-08-14'
+                          contracts_affected: 3
+                          events:
+                            - event: evt_1001
+                              status: violations
+                              detail: Driver hours-of-service violation detected
+                              violations:
+                                - Missing required rest period
+                            - event: evt_1002
+                              status: no_data
+                              no_data_reason: event stream missing
+                              detail: null
+                              violations: []
+                          report: /client/v1/contracts/violations?date_from=2026-08-13&date_to=2026-08-13
+                          checked_at: '2026-08-14T08:00:00Z'
+                      - location_id: loc_456
+                        kind: clean
+                        fingerprint: fp_2026_08_14_loc_456
+                        changed: false
+                        sent: false
+                        would_send: false
+                        reason: unchanged since the last delivery
+                        payload:
+                          type: contracts.recovered
+                          location_id: loc_456
+                          date: '2026-08-14'
+                          contracts_affected: 0
+                          events: []
+                          report: /client/v1/contracts/violations?date_from=2026-08-13&date_to=2026-08-13
+                          checked_at: '2026-08-14T08:00:00Z'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Unauthorized
+        '500':
+          description: Contract alert sweep failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: 'Contract alert sweep failed: upstream timeout'
+components:
+  schemas:
+    SweepResponse:
+      type: object
+      description: Response returned after triggering the contract alert sweep. In live mode, only summary counts are returned. In dry-run mode, additional per-location evaluation results are included and no webhooks are delivered.
+      required:
+        - success
+        - locations
+        - sent
+      properties:
+        success:
+          type: boolean
+          description: Indicates that the sweep completed successfully. Always true for a successful response.
+          example: true
+        locations:
+          type: integer
+          description: Total number of locations considered by the sweep. In live mode, this is the number of locations with a configured contract alert webhook. In dry-run mode, this is the total opted-in locations evaluated.
+          minimum: 0
+          example: 12
+        sent:
+          type: integer
+          description: Number of locations where a webhook POST was delivered and received a 2xx response. Always 0 in dry-run mode.
+          minimum: 0
+          example: 9
+        dry_run:
+          type: boolean
+          description: Present only when the request was executed in dry-run mode. Always true when present.
+          example: true
+        results:
+          type: array
+          description: Present only in dry-run mode. Contains the per-location evaluation result and, when applicable, the exact webhook payload that would be sent.
+          items:
+            $ref: '#/components/schemas/SweepResult'
+      example:
+        success: true
+        locations: 2
+        sent: 0
+        dry_run: true
+        results:
+          - location_id: loc_123
+            kind: contract_violations
+            fingerprint: fp_2026_08_14_loc_123
+            changed: true
+            sent: false
+            would_send: true
+            signed: true
+            webhook_url: https://hooks.partner.example/contracts
+            payload:
+              type: contracts.contract_violations
+              location_id: loc_123
+              date: '2026-08-14'
+              contracts_affected: 3
+              events:
+                - event: evt_1001
+                  status: violations
+                  detail: Driver hours-of-service violation detected
+                  violations:
+                    - Missing required rest period
+                - event: evt_1002
+                  status: no_data
+                  no_data_reason: event stream missing
+                  detail: null
+                  violations: []
+              report: /client/v1/contracts/violations?date_from=2026-08-13&date_to=2026-08-13
+              checked_at: '2026-08-14T08:00:00Z'
+    SweepResult:
+      type: object
+      description: Per-location sweep result returned only in dry-run mode. Non-skipped results include classification, fingerprint, send decision, and the payload that would be sent. Skipped results instead include a skip status and optional error details.
+      required:
+        - location_id
+      properties:
+        location_id:
+          type: string
+          description: Unique identifier of the location.
+          example: loc_123
+        kind:
+          type: string
+          description: Classification of the computed alert state. Present when the location was not skipped.
+          enum:
+            - clean
+            - tracking_outage
+            - contract_violations
+          example: contract_violations
+        fingerprint:
+          type: string
+          description: Computed fingerprint for the current alert state. Present when the location was not skipped.
+          example: fp_2026_08_14_loc_123
+        changed:
+          type: boolean
+          description: Indicates whether the computed fingerprint differs from the stored fingerprint. Present when the location was not skipped.
+          example: true
+        sent:
+          type: boolean
+          description: Indicates whether a webhook was actually delivered for this location. In dry-run mode this is typically false. Present when the location was not skipped.
+          example: false
+        would_send:
+          type: boolean
+          description: Present only in dry-run mode when the location was not skipped. Indicates whether a webhook would be sent in live mode.
+          example: true
+        reason:
+          type: string
+          description: Present only in dry-run mode when the location was not skipped and nothing would be sent. Explains why no webhook would be delivered.
+          enum:
+            - unchanged since the last delivery
+            - nothing alertable, and no previous alert to report a recovery from
+          example: unchanged since the last delivery
+        skipped:
+          type: string
+          description: Present only when the location was skipped instead of evaluated normally.
+          enum:
+            - error
+            - no_contracts
+            - truncated
+          example: error
+        error:
+          type: string
+          description: Present only when skipped is error. Contains the failure detail for that location.
+          example: failed to fetch contract snapshot
+        signed:
+          type: boolean
+          description: Present only in dry-run mode when would_send is true. Indicates whether the outgoing payload would include the X-Mythic-Signature header.
+          example: true
+        webhook_url:
+          type: string
+          format: uri
+          description: Present only in dry-run mode when would_send is true. Full destination URL for the webhook delivery.
+          example: https://hooks.partner.example/contracts
+        payload:
+          $ref: '#/components/schemas/WebhookPayload'
+      example:
+        location_id: loc_123
+        kind: contract_violations
+        fingerprint: fp_2026_08_14_loc_123
+        changed: true
+        sent: false
+        would_send: true
+        signed: true
+        webhook_url: https://hooks.partner.example/contracts
+        payload:
+          type: contracts.contract_violations
+          location_id: loc_123
+          date: '2026-08-14'
+          contracts_affected: 3
+          events:
+            - event: evt_1001
+              status: violations
+              detail: Driver hours-of-service violation detected
+              violations:
+                - Missing required rest period
+            - event: evt_1002
+              status: no_data
+              no_data_reason: event stream missing
+              detail: null
+              violations: []
+          report: /client/v1/contracts/violations?date_from=2026-08-13&date_to=2026-08-13
+          checked_at: '2026-08-14T08:00:00Z'
+    WebhookPayload:
+      type: object
+      description: Exact webhook payload that would be sent for a location in dry-run mode. Present for non-skipped results.
+      required:
+        - type
+        - location_id
+        - date
+        - contracts_affected
+        - events
+        - report
+        - checked_at
+      properties:
+        type:
+          type: string
+          description: Webhook event type. `contracts.recovered` when a prior violation cleared; `contracts.tracking_outage` when the location sent no events; `contracts.contract_violations` when at least one event has alertable violations.
+          enum:
+            - contracts.recovered
+            - contracts.tracking_outage
+            - contracts.contract_violations
+          example: contracts.contract_violations
+        location_id:
+          type: string
+          description: Location identifier associated with the alert.
+          example: loc_123
+        date:
+          type: string
+          description: Date the alert report covers, formatted as YYYY-MM-DD.
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: '2026-08-14'
+        contracts_affected:
+          type: integer
+          description: Number of contracts affected by the alert condition.
+          minimum: 0
+          example: 3
+        events:
+          type: array
+          description: List of event details included in the alert report.
+          items:
+            type: object
+            required:
+              - event
+              - status
+              - violations
+            properties:
+              event:
+                type: string
+                description: Event identifier.
+                example: evt_1001
+              status:
+                type: string
+                enum:
+                  - no_data
+                  - violations
+                description: Evaluation status for the event.
+                example: violations
+              no_data_reason:
+                type: string
+                nullable: true
+                description: Present only for no_data events. Explains why the event had no usable data.
+                example: event stream missing
+              detail:
+                type: string
+                nullable: true
+                description: Optional event-specific explanation.
+                example: Driver hours-of-service violation detected
+              violations:
+                type: array
+                description: List of violation details for the event. Empty for no_data.
+                items:
+                  type: string
+                example:
+                  - Missing required rest period
+          example:
+            - event: evt_1001
+              status: violations
+              detail: Driver hours-of-service violation detected
+              violations:
+                - Missing required rest period
+            - event: evt_1002
+              status: no_data
+              no_data_reason: event stream missing
+              detail: null
+              violations: []
+        report:
+          type: string
+          description: Relative URL path to the generated report for the location.
+          example: /client/v1/contracts/violations?date_from=2026-08-13&date_to=2026-08-13
+        checked_at:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp indicating when the sweep evaluated the location.
+          example: '2026-08-14T08:00:00Z'
+        detail:
+          type: string
+          description: Present only when kind is `tracking_outage`. Fixed explanatory string about the location sending no events.
+          example: The location sent no events during the evaluation window.
+        sampling_note:
+          type: string
+          description: Present only when the property scan was sampled (1/10). Fixed string explaining that rates are unbiased but counts are of the sample.
+          example: Rates are unbiased, but counts reflect the 1/10 sample only.
+      example:
+        type: contracts.contract_violations
+        location_id: loc_123
+        date: '2026-08-14'
+        contracts_affected: 3
+        events:
+          - event: evt_1001
+            status: violations
+            detail: Driver hours-of-service violation detected
+            violations:
+              - Missing required rest period
+          - event: evt_1002
+            status: no_data
+            no_data_reason: event stream missing
+            detail: null
+            violations: []
+        report: /client/v1/contracts/violations?date_from=2026-08-13&date_to=2026-08-13
+        checked_at: '2026-08-14T08:00:00Z'
+    ErrorResponse:
+      type: object
+      description: Error response.
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Human-readable error message.
+          example: Unauthorized
+      example:
+        error: Unauthorized
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: "Alternative to the Authorization header for server-to-server scenarios."

@@ -563,9 +563,66 @@ components:
             $ref: "#/components/schemas/Agency"
     AgencyResponse:
       type: object
+      description: >
+        Response shape for create and update. `airbyte_webhook_subscription`
+        appears only when `notification_webhook_url` was provided at creation
+        and the subscription was created successfully; `warning` appears only
+        when the URL was provided but rejected. The two are mutually exclusive,
+        and neither appears when no webhook URL was supplied.
       properties:
         data:
           $ref: "#/components/schemas/Agency"
+        airbyte_webhook_subscription:
+          $ref: "#/components/schemas/WebhookSubscription"
+          description: >
+            The subscription created inline during agency creation, when
+            `notification_webhook_url` was provided and accepted. Absent
+            otherwise — use `POST /client/v1/airbyte/webhooks` to add one
+            later.
+        warning:
+          type: string
+          description: >
+            Human-readable reason the webhook subscription could not be created
+            (invalid URL, non-HTTPS, or upstream error). Present only when
+            `notification_webhook_url` was provided but rejected.
+          example: "Agency created, but notification_webhook_url was rejected: url must be https"
+    WebhookSubscription:
+      type: object
+      description: >
+        A relay subscription for Airbyte sync notifications. The `url` is
+        always redacted — query-string values are replaced with `***`, keys are
+        kept. The full URL is stored encrypted and is never returned.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Subscription identifier.
+        label:
+          type: string
+          nullable: true
+          description: Optional human label for the subscription.
+        url:
+          type: string
+          description: Redacted URL — query-string values masked with `***`.
+          example: "https://example.com/hooks/airbyte?secret=***"
+        active:
+          type: boolean
+          description: Whether this subscription is receiving deliveries.
+        last_delivery_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When delivery was last attempted (success or failure).
+        last_error:
+          type: string
+          nullable: true
+          description: Why the last attempt failed. `null` after a success.
+        consecutive_failures:
+          type: integer
+          description: Delivery failures since the last success. Resets to 0 on any successful delivery.
+        created_at:
+          type: string
+          format: date-time
     AgencyDetailResponse:
       type: object
       properties:
