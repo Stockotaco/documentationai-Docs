@@ -113,6 +113,10 @@ paths:
         "413": { $ref: "#/components/responses/ScanLimit" }
         "424": { $ref: "#/components/responses/DatasetMissing" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "422": { $ref: "#/components/responses/ResultTruncated" }
+        "500": { $ref: "#/components/responses/BqUnconfigured" }
+        "502": { $ref: "#/components/responses/QueryFailed" }
   /client/v1/correlation/metrics:
     get:
       summary: Metrics available for this client
@@ -142,6 +146,12 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "424": { $ref: "#/components/responses/DatasetMissing" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "400": { $ref: "#/components/responses/BadParams" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
+        "413": { $ref: "#/components/responses/ScanLimit" }
+        "422": { $ref: "#/components/responses/ResultTruncated" }
+        "500": { $ref: "#/components/responses/BqUnconfigured" }
+        "502": { $ref: "#/components/responses/QueryFailed" }
   /client/v1/correlation/options:
     get:
       summary: Vocabulary and parameters
@@ -160,6 +170,8 @@ paths:
                   fixed_metrics: { type: array, items: { $ref: "#/components/schemas/MetricOption" } }
                   metric_families: { type: array, items: { type: object } }
                   params: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "405": { $ref: "#/components/responses/MethodNotAllowed" }
 components:
   securitySchemes:
     BearerAuth:
@@ -183,7 +195,7 @@ components:
       schema: { type: string }
   responses:
     BadParams:
-      description: "`invalid_params` — unknown metric id, fewer than two metrics, bad grain, or an impossible window."
+      description: "`invalid_params` — unknown metric id, fewer than two metrics, bad grain, or an impossible window. `scope_rejected` — the generated SQL references a dataset other than the authenticated location's own."
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -204,6 +216,26 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
     RateLimited:
       description: "`rate_limited` — 20 requests/min per location; each call is a BigQuery scan."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    MethodNotAllowed:
+      description: "`method_not_allowed` — this API is read-only; only GET, HEAD, and OPTIONS are accepted."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ResultTruncated:
+      description: "`result_truncated` — BigQuery returned fewer rows than expected. Narrow the window or use a coarser grain."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    BqUnconfigured:
+      description: "`bq_unconfigured` — no BigQuery service account is configured on the server."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    QueryFailed:
+      description: "`query_failed` — BigQuery rejected the query. The upstream reason is in `error.cause`."
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

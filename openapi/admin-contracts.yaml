@@ -1,0 +1,409 @@
+openapi: 3.0.0
+info:
+  title: Contract Alert Sweep
+  version: 1.0.0
+  description: >
+    Operator-facing endpoint to manually trigger contract violation alert
+    sweeps across all locations with configured webhooks. Also runs
+    automatically on a daily cron at ~08:00 UTC.
+
+
+    Authenticate with the admin key as a bearer token
+    (`Authorization: Bearer YOUR_ADMIN_KEY`) or via the `?admin_key=`
+    query parameter.
+
+
+    The sweep evaluates yesterday's contract violations for every location with
+    a configured `contract_alert_webhook_url` and posts a signed payload only
+    when that location's violation fingerprint has changed since the last
+    delivery. Pass `?dry_run=1` to compute results without sending webhooks —
+    the only way to inspect real per-location payloads without delivering
+    violation data to third-party receivers.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+tags:
+  - name: Admin Contracts
+    description: Operator-facing contract administration endpoints.
+paths:
+  /admin/contracts/alert-sweep:
+    post:
+      tags:
+        - Admin Contracts
+      summary: Trigger contract alert sweep
+      operationId: triggerContractAlertSweep
+      description: >
+        Manually trigger a sweep that evaluates yesterday's contract violations
+        for every location with a `contract_alert_webhook_url` configured, and
+        POSTs a signed payload to each location whose violation fingerprint has
+        changed since the last delivery. The same codepath runs automatically at
+        ~08:00 UTC via a scheduled cron.
+
+        Pass `?dry_run=1` to compute everything and return what each location
+        would receive, without actually posting anything. This is the only way
+        to inspect real per-location payloads without shipping violation data to
+        a third-party receiver.
+
+        Each result carries a `kind` — `contract_violations`,
+        `tracking_outage`, or `clean` — and a `fingerprint` that identifies the
+        exact set of violations. A location only receives a webhook when the
+        fingerprint changes; an unchanged fingerprint is skipped, so a flapping
+        violation does not re-alert every run.
+      security:
+        - BearerAuth: []
+        - AdminKeyQuery: []
+      parameters:
+        - name: dry_run
+          in: query
+          required: false
+          description: Pass `1` to enable dry-run mode. Any other value (including `true`) is treated as live mode.
+          schema:
+            type: string
+            example: "1"
+      responses:
+        "200":
+          description: Sweep completed. In live mode, returns summary counts. In dry-run mode (`?dry_run=1`), also returns a `results` array with per-location detail — what each location would receive, whether it would be sent, and the exact payload.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/SweepResult"
+                  - $ref: "#/components/schemas/SweepDryRunResult"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+components:
+  responses:
+    UnauthorizedError:
+      description: Admin key missing or invalid
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalServerError:
+      description: Sweep failed — the underlying error is in the response body.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  schemas:
+    SweepResult:
+      type: object
+      description: Live-mode summary for a completed contract alert sweep.
+      required:
+        - success
+        - locations
+        - sent
+      properties:
+        success:
+          type: boolean
+          example: true
+        locations:
+          type: integer
+          description: Total locations with a webhook configured.
+          example: 12
+        sent:
+          type: integer
+          description: Locations where a webhook POST was successfully delivered (2xx).
+          example: 3
+      example:
+        success: true
+        locations: 12
+        sent: 3
+    SweepDryRunResult:
+      type: object
+      description: Dry-run summary including per-location evaluation details.
+      required:
+        - success
+        - locations
+        - sent
+        - dry_run
+        - results
+      properties:
+        success:
+          type: boolean
+          example: true
+        locations:
+          type: integer
+          example: 12
+        sent:
+          type: integer
+          description: Always 0 in dry-run mode.
+          example: 0
+        dry_run:
+          type: boolean
+          example: true
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/SweepLocationResult"
+      example:
+        success: true
+        locations: 12
+        sent: 0
+        dry_run: true
+        results:
+          - location_id: loc_123
+            kind: contract_violations
+            fingerprint: 9d8f6c1a4b2e
+            changed: true
+            sent: false
+            would_send: true
+            signed: true
+            webhook_url: https://hooks.partner.test/contracts
+            reason: null
+            skipped: null
+            error: null
+            payload:
+              type: contracts.contract_violations
+              location_id: loc_123
+              date: "2026-08-14"
+              contracts_affected: 2
+              events:
+                - event: order_completed
+                  status: violations
+                  total_events: 1500
+                  reference_events: 1480
+                  violations:
+                    - kind: missing_required
+                      key: value
+                      rate: 0.42
+              report: /client/v1/contracts/violations?date_from=2026-08-14&date_to=2026-08-14
+              checked_at: "2026-08-15T08:00:00Z"
+              detail: null
+              sampling_note: null
+    SweepLocationResult:
+      type: object
+      description: Per-location evaluation result for a dry-run sweep.
+      required:
+        - location_id
+        - kind
+        - fingerprint
+        - changed
+        - sent
+        - would_send
+        - signed
+        - webhook_url
+      properties:
+        location_id:
+          type: string
+          description: Unique location identifier.
+          example: loc_123
+        kind:
+          type: string
+          description: Summary classification of the location's violation state.
+          enum:
+            - contract_violations
+            - tracking_outage
+            - clean
+          example: contract_violations
+        fingerprint:
+          type: string
+          description: Deterministic hash identifying the exact violation set. `clean` when no violations.
+          example: 9d8f6c1a4b2e
+        changed:
+          type: boolean
+          description: Whether the fingerprint differs from the last delivered alert.
+          example: true
+        sent:
+          type: boolean
+          description: Whether a webhook POST was attempted (always false in dry-run).
+          example: false
+        would_send:
+          type: boolean
+          description: Whether a webhook POST would have been sent in live mode.
+          example: true
+        signed:
+          type: boolean
+          description: Whether the payload would carry an HMAC-SHA256 signature (true when a webhook secret is set).
+          example: true
+        webhook_url:
+          type: string
+          description: The configured webhook URL for this location.
+          example: https://hooks.partner.test/contracts
+        reason:
+          type: string
+          nullable: true
+          description: Why nothing would be sent, when `would_send` is false.
+          example: null
+        skipped:
+          type: string
+          nullable: true
+          description: Present when the location was skipped entirely — no contracts declared, property stats hit row limit, or an error occurred.
+          enum:
+            - no_contracts
+            - truncated
+            - error
+          example: null
+        error:
+          type: string
+          nullable: true
+          description: Present when `skipped` is `error` — the underlying error message.
+          example: null
+        payload:
+          $ref: "#/components/schemas/SweepPayload"
+      example:
+        location_id: loc_123
+        kind: contract_violations
+        fingerprint: 9d8f6c1a4b2e
+        changed: true
+        sent: false
+        would_send: true
+        signed: true
+        webhook_url: https://hooks.partner.test/contracts
+        reason: null
+        skipped: null
+        error: null
+        payload:
+          type: contracts.contract_violations
+          location_id: loc_123
+          date: "2026-08-14"
+          contracts_affected: 2
+          events:
+            - event: order_completed
+              status: violations
+              total_events: 1500
+              reference_events: 1480
+              violations:
+                - kind: missing_required
+                  key: value
+                  rate: 0.42
+          report: /client/v1/contracts/violations?date_from=2026-08-14&date_to=2026-08-14
+          checked_at: "2026-08-15T08:00:00Z"
+          detail: null
+          sampling_note: null
+    SweepPayload:
+      type: object
+      description: The exact JSON object that would be signed and POSTed. Present for locations that were evaluated and not skipped.
+      required:
+        - type
+        - location_id
+        - date
+        - contracts_affected
+        - events
+        - report
+        - checked_at
+      properties:
+        type:
+          type: string
+          description: Event type.
+          enum:
+            - contracts.contract_violations
+            - contracts.tracking_outage
+            - contracts.recovered
+          example: contracts.contract_violations
+        location_id:
+          type: string
+          example: loc_123
+        date:
+          type: string
+          format: date
+          description: The reporting day (yesterday).
+          example: "2026-08-14"
+        contracts_affected:
+          type: integer
+          description: Number of contracts with violations.
+          example: 2
+        events:
+          type: array
+          description: Per-event violation summary — same structure as GET /client/v1/contracts/violations.
+          items:
+            $ref: "#/components/schemas/ViolationEventSummary"
+        report:
+          type: string
+          description: Path to the full violations report for this date.
+          example: /client/v1/contracts/violations?date_from=2026-08-14&date_to=2026-08-14
+        checked_at:
+          type: string
+          format: date-time
+          example: "2026-08-15T08:00:00Z"
+        detail:
+          type: string
+          nullable: true
+          description: Present for tracking_outage — explains the outage.
+          example: null
+        sampling_note:
+          type: string
+          nullable: true
+          description: Present when the property scan was sampled for large tenants.
+          example: null
+    ViolationEventSummary:
+      type: object
+      description: Per-event violation summary, same structure as GET /client/v1/contracts/violations.
+      required:
+        - event
+        - status
+        - violations
+      properties:
+        event:
+          type: string
+          description: Event name.
+          example: order_completed
+        status:
+          type: string
+          enum: [ok, violations, no_data]
+          example: violations
+        total_events:
+          type: integer
+          description: Total events of this name in the window.
+          example: 1500
+        reference_events:
+          type: integer
+          description: Independent unsampled count from the event summary table.
+          example: 1480
+        violations:
+          type: array
+          description: Individual violation details. Empty when status is `ok` or `no_data`.
+          items:
+            type: object
+            properties:
+              kind:
+                type: string
+                enum: [missing_required, null_value, type_mismatch, wrong_format, low_volume]
+                example: missing_required
+              key:
+                type: string
+                description: Property key that violated the contract.
+                example: value
+              rate:
+                type: number
+                description: Fraction of events affected (0–1).
+                example: 0.42
+        no_data_reason:
+          type: string
+          nullable: true
+          description: Present when status is `no_data` — one of `no_events_at_all`, `event_not_firing`, `sampled_out`, `source_disagreement`.
+          example: event_not_firing
+        detail:
+          type: string
+          nullable: true
+          description: Human-readable explanation, present for `no_data` and `tracking_outage` events.
+      example:
+        event: order_completed
+        status: violations
+        total_events: 1500
+        reference_events: 1480
+        violations:
+          - kind: missing_required
+            key: value
+            rate: 0.42
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: "Contract alert sweep failed: upstream database timeout"
+      example:
+        error: "Contract alert sweep failed: upstream database timeout"

@@ -566,6 +566,18 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/Agency"
+        airbyte_webhook_subscription:
+          $ref: "#/components/schemas/WebhookSubscription"
+          description: >
+            Present in the POST 201 response when `notification_webhook_url` was
+            supplied and accepted. The agency was created and the webhook
+            subscription registered in one step.
+        warning:
+          type: string
+          description: >
+            Present in the POST 201 response when `notification_webhook_url` was
+            supplied but rejected (not HTTPS, not a valid URL). The agency was
+            still created; only the webhook subscription was skipped.
     AgencyDetailResponse:
       type: object
       properties:
@@ -601,6 +613,32 @@ components:
               type: string
               nullable: true
               example: Acme Retail
+    WebhookSubscription:
+      type: object
+      description: >
+        A fan-out webhook subscription for Airbyte sync notifications, as
+        returned in the POST /agencies 201 response. The `url` is always
+        redacted — query-string values are replaced with `***`. The real URL
+        is stored encrypted and never returned.
+      properties:
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+          nullable: true
+        url:
+          type: string
+          description: Redacted form of the subscribed URL.
+          example: "https://example.com/hooks/airbyte?secret=***"
+        active:
+          type: boolean
+        last_delivery_at:
+          type: string
+          format: date-time
+          nullable: true
+        consecutive_failures:
+          type: integer
     SuccessResponse:
       type: object
       properties:
