@@ -1,0 +1,58 @@
+---
+title: Changelog
+description: Track product changes in Mythic Analytics, including new features, fixes, and security updates that affect agency teams and developers.
+---
+
+## v2.244.0 — August 12, 2026
+
+### New features
+
+<Update label="2026-08-12" description="Airbyte sync webhook relay" tags={["feature"]}>
+
+**Airbyte sync webhook relay** Agencies can now register a webhook URL to receive forwarded Airbyte sync notifications for started, succeeded, and failed jobs. Webhook URLs must use HTTPS and Mythic encrypts them at rest. [Airbyte API overview](/airbyte-api/overview)
+
+</Update>
+
+<Update label="2026-08-07" description="Daily contract violation digests" tags={["feature"]}>
+
+**Daily contract violation digests** Register a webhook to receive a daily digest of event-contract violations instead of polling manually. The sweep runs around 08:00 UTC on the previous day's data, collapses full tracking outages into one alert, and only sends new alerts when something changes. [Contracts API overview](/contracts-api/overview)
+
+</Update>
+
+<Update label="2026-08-07" description="Manual contract alert sweep with dry-run" tags={["feature"]}>
+
+**Manual contract alert sweep with dry-run** Administrators can now trigger the contract alert sweep from the admin API. Dry-run mode returns exactly what each location would receive without sending any alerts. [Contracts API overview](/contracts-api/overview)
+
+</Update>
+
+### Bug fixes
+
+<Update label="2026-08-07" description="Contract alert sweep skipped most locations" tags={["bugfix"]}>
+
+**Contract alert sweep skipped most locations** The daily sweep could hit a row limit while reading event names, causing alerts to silently stop for locations with many event names. The sweep now reads per event, which makes alert delivery more reliable and more efficient.
+
+</Update>
+
+<Update label="2026-08-07" description="Contract API endpoints returning 502" tags={["bugfix"]}>
+
+**Contract API endpoints returning 502** The contract violations and contract list endpoints were returning `502` errors for some requests. Both endpoints now respond correctly.
+
+</Update>
+
+<Update label="2026-08-07" description="First alert sweep falsely reported unchanged" tags={["bugfix"]}>
+
+**First alert sweep falsely reported unchanged** The first sweep of a healthy location could incorrectly report that nothing had changed since the last delivery even when no delivery had ever happened. First-run status reporting now behaves correctly.
+
+</Update>
+
+<Update label="2026-08-07" description="Security: SQL injection hardening in insights" tags={["security","bugfix"]}>
+
+**Security: SQL injection hardening in insights** Insight query configuration now validates input more strictly instead of accepting unsafe interpolated values. Unexpected input now fails closed. [Insight config](/builder-api/insight-config)
+
+</Update>
+
+<Update label="2026-08-12" description="Newly created Airbyte workspaces not receiving sync notifications" tags={["bugfix"]}>
+
+**Newly created Airbyte workspaces not receiving sync notifications** Airbyte workspaces created through agency onboarding were not being registered for sync notifications, so no sync events were forwarded. New workspaces now receive sync notifications as expected. [Airbyte API overview](/airbyte-api/overview)
+
+</Update>
