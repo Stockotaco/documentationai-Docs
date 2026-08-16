@@ -1,0 +1,86 @@
+---
+title: Changelog
+description: Product updates for Mythic Analytics, including new agency webhooks, contract alerting, correlation analysis, and key fixes shipped in early August 2026.
+---
+
+## Latest changes
+
+Mythic Analytics shipped new webhook, correlation, and contract-monitoring capabilities in this release period, along with performance improvements and several fixes affecting contract alerting and insights.
+
+### New Features
+
+<Update label="v2.244.0" description="Airbyte sync notification webhooks" tags={["feature"]}>
+
+Agencies can now register webhook URLs to receive notifications when Airbyte syncs complete. Mythic encrypts webhook URLs at rest and masks them in API responses.
+
+See [Airbyte API overview](/airbyte-api/overview).
+
+</Update>
+
+<Update label="v2.240.0" description="Correlation analysis" tags={["feature"]}>
+
+Analyze correlations between 2 to 5 metrics across day, week, or month intervals. Results include pairwise Pearson and Spearman coefficients, rolling correlations, and lead-lag scans, with safeguards for partial data coverage and outlier-driven fits.
+
+See [Correlation API overview](/correlation-api/overview).
+
+</Update>
+
+<Update label="v2.243.0" description="Event contract alerting" tags={["feature"]}>
+
+Receive daily webhook notifications when event contracts are violated, including tracking outages, schema drift, and other data quality issues. A manual trigger with dry-run mode is also available so you can preview what each location would receive before sending alerts.
+
+See [Contracts API overview](/contracts-api/overview).
+
+</Update>
+
+<Update label="v2.241.0" description="Event contract violation drill-down" tags={["feature"]}>
+
+No-data violations now distinguish between three root causes instead of one ambiguous message. Each violation also links to the offending events with session IDs and page URLs so you can investigate drift immediately.
+
+See [Contracts API overview](/contracts-api/overview).
+
+</Update>
+
+<Update label="v2.239.0" description="SDK default session timeout extended to 4 hours" tags={["feature"]}>
+
+The JavaScript SDK now uses a default session inactivity timeout of 4 hours instead of 30 minutes. This reduces false session breaks for users who stay on long-form pages for extended periods.
+
+See [JavaScript SDK configuration](/javascript-sdk/configuration).
+
+</Update>
+
+### Updates
+
+<Update label="v2.238.1" description="Faster analytics explanations" tags={["improvement"]}>
+
+The analytics explanation endpoint now scans 64 percent less data per call. That reduces response times and lowers query costs for explanation requests.
+
+</Update>
+
+### Bug Fixes
+
+<Update label="v2.243.1" description="Contract alerting now works reliably for large properties" tags={["bugfix"]}>
+
+Properties with many event types could be skipped because the alert sweep hit truncation limits during broad reads. Alerting now reads per event instead of relying on one full scan, so large properties are no longer silently skipped.
+
+</Update>
+
+<Update label="v2.242.2" description="Contract violation and list endpoint errors fixed" tags={["bugfix"]}>
+
+Two contract-related API routes were returning `502` errors due to internal reference issues. Both routes are now fixed.
+
+</Update>
+
+<Update label="v2.243.3" description="SQL identifier sanitization in insights" tags={["bugfix", "security"]}>
+
+Insights now sanitize all config-supplied SQL identifiers, including column names, operators, and aliases. This hardens the builder against malformed or unsafe configuration input.
+
+See [Insight config reference](/builder-api/insight-config).
+
+</Update>
+
+<Callout kind="info">
+
+This changelog covers product changes only. Internal tooling, CI, documentation-only updates, and maintenance work are not listed unless they changed user-visible behavior.
+
+</Callout>
