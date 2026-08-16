@@ -41,7 +41,8 @@ Responses are JSON, but the envelope varies by endpoint rather than following a 
 |----------|--------------|
 | `GET /agencies` | `{ "data": [ ... ] }` |
 | `GET /agencies/{id}` | `{ "data": { ...agency, "locations": [ ... ] } }` |
-| `POST /agencies` | `{ "data": { ...agency } }` |
+| `GET /agencies/{id}/airbyte` | `{ "data": { "workspace_id": "...", "status": "..." } }` |
+| `POST /agencies` | `{ "data": { ...agency }, "airbyte_webhook_subscription": { ... }? }` |
 | `PATCH /agencies/{id}` | `{ "data": { ...agency } }` |
 | `DELETE /agencies/{id}` | `{ "success": true }` |
 | `POST /agencies/{id}/rotate-key` | `{ "success": true, "agency_key": "ak_..." }` |
@@ -63,6 +64,18 @@ Example error response:
 | **Agency** | A management entity that groups related client tenants |
 | **Agency key** | Auto-generated `ak_` credential (format `ak_` + 32 hex characters) used by client-facing APIs to identify the agency |
 | **Location** | A Mythic client tenant (a `location_keys` record) linked to the agency via its `agency_id` |
+
+## Airbyte workspace provisioning
+
+Creating an agency starts an Airbyte workspace in the background — the `201` response returns before the workspace exists. Poll `GET /agencies/{id}/airbyte` for the `workspace_id` and provisioning `status` rather than assuming a workspace is absent, because an interface that shows nothing here invites an operator to provision a second one.
+
+A `200` with `workspace_id: null` means the agency exists but has no Airbyte configuration yet; a `404` means no such agency. Once the workspace is created, `status` moves from `pending` to `active` (after destination provisioning) or `error` (with `error_message`).
+
+### Pre-registering sync notifications
+
+`POST /agencies` accepts an optional `notification_webhook_url` (HTTPS) and `notification_webhook_label`. When provided, a relay subscription is created at the same time as the agency — equivalent to calling `POST /client/v1/airbyte/webhooks` afterwards. The URL is stored encrypted and returned only in redacted form. A rejected URL does not fail agency creation; the `201` carries a `warning` string instead.
+
+See the [Airbyte Sync API](/airbyte-api/overview#getting-sync-results-pushed-to-you) for the relay's delivery semantics, dedup rules, and the subscription lifecycle.
 
 ## Error handling
 
