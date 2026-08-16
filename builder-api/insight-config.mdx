@@ -440,6 +440,25 @@ Because the API stores config unchecked, run this checklist before writing:
   Building a live preview (a "Run" button on an unsaved draft)? Use [`POST /insights/preview`](/builder-api) — it runs an in-memory `config` and returns the same `data`/`comparisonData`/`trendData`/`sql` payload as the saved runner, with no write and no junk row. Pair it with [`POST /insights/validate`](/builder-api) for a cheap per-keystroke shape check.
 </Callout>
 
+## Query-time input validation
+
+When `POST /insights/{id}/query` or `POST /insights/preview` compiles your `config` into SQL, the following fields are validated and sanitized. A field that violates these rules fails at query time with a descriptive error rather than producing silently wrong results or an injection-prone query.
+
+<Callout kind="info">
+  These rules are enforced at **query time**, not at write time. An invalid value still saves successfully on `POST /builder/insights` — it fails when the query runs. Use [`POST /insights/validate`](/builder-api) or [`POST /insights/preview`](/builder-api) to catch issues before saving.
+</Callout>
+
+| Field | Rule | If violated |
+|-------|------|-------------|
+| `Filter.operator` | Must be one of `=`, `!=`, `>`, `<`, `>=`, `<=`, `LIKE`, `NOT LIKE`, `IN`, `NOT IN` | Query fails — unrecognized operator rejected |
+| `Filter.column`, `ColumnDef.name`, `groupBy[]` entries | Must match `^[A-Za-z_$][A-Za-z0-9_$]*$` — alphanumeric, underscore, and dollar sign; must start with a letter, underscore, or `$` | Query fails — invalid identifier rejected |
+| `ColumnDef.alias` | Same charset as column names above | Query fails — invalid alias rejected |
+| `ColumnDef.aggregate` | Must be one of the supported aggregates (see [series aggregates](#series-aggregates)) | Query fails — unrecognized aggregate rejected |
+| `Filter.jsonPath`, `ColumnDef.jsonPath` | Validated and escaped before insertion into SQL string literals | Query fails — malformed jsonPath rejected |
+| `Filter.value` with scalar operators (`=`, `!=`, `>`, `<`, `>=`, `<=`, `LIKE`, `NOT LIKE`) | Must be a string, number, or boolean. Objects and arrays are rejected | Query fails with "needs a string, number or boolean" |
+| `orderBy.direction` | Recognized values: `ASC`, `DESC`. Unrecognized values default to `DESC` | No error — silently coerced to `DESC` |
+| `limit` | Parsed as a number. Non-integer values default to `20` | No error — silently coerced to `20` |
+
 ## Reading the results
 
 `POST /insights/preview` and `POST /insights/{id}/query` return the same result payload:

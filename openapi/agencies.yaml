@@ -566,6 +566,38 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/Agency"
+        airbyte_webhook_subscription:
+          type: object
+          nullable: true
+          description: >
+            Present on the create-agency response when `notification_webhook_url`
+            was supplied and the subscription succeeded. The URL is returned
+            redacted. Absent when no webhook URL was provided or when the
+            subscription failed (see `warning`).
+          properties:
+            id:
+              type: string
+              description: Subscription identifier.
+            url:
+              type: string
+              description: The HTTPS endpoint, redacted.
+              example: "https://example.com/hooks/airbyte"
+            label:
+              type: string
+              nullable: true
+              description: The label supplied with the subscription, if any.
+            consecutive_failures:
+              type: integer
+              description: Consecutive delivery failures; auto-parks after 20.
+              example: 0
+        warning:
+          type: string
+          nullable: true
+          description: >
+            Present on the create-agency response when `notification_webhook_url`
+            was supplied but the subscription could not be created (e.g. the URL
+            was not `https`). Agency creation itself still succeeds.
+          example: "notification_webhook_url must be an https URL"
     AgencyDetailResponse:
       type: object
       properties:

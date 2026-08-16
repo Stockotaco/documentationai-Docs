@@ -1,0 +1,226 @@
+openapi: 3.0.0
+info:
+  title: Contracts Admin
+  version: 1.0.0
+  description: |
+    Operator-facing event-contract alert sweep management. All endpoints require the platform admin key.
+
+    ## Authentication
+
+    Provide the platform admin key using either of the supported methods:
+
+    - Bearer token in the `Authorization` header using the format `Bearer YOUR_ADMIN_KEY`
+    - `admin_key` query parameter
+
+    ## Usage notes
+
+    The alert sweep endpoint runs the same daily 08:00 UTC cron logic on-demand. In dry-run mode, the API computes the exact webhook payloads that would be sent without delivering any webhook requests.
+  contact:
+    name: Mythic Analytics API Support
+    url: https://mythic-analytics.gulp.workers.dev
+    email: support@mythic-analytics.com
+  license:
+    name: Proprietary
+    url: https://mythic-analytics.gulp.workers.dev
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+    description: Production
+tags:
+  - name: Alert Sweep
+    description: Admin operations for running contract alert sweeps.
+paths:
+  /admin/contracts/alert-sweep:
+    post:
+      tags:
+        - Alert Sweep
+      summary: Run the contract alert sweep
+      operationId: adminContractAlertSweep
+      description: Run the same daily 08:00 UTC cron logic on-demand. Scans every location with stored contracts, computes the violation fingerprint, and POSTs a digest to each location's configured webhook when the alertable condition set has changed. With `dry_run=true`, computes everything and returns the exact payload each location would receive, without POSTing to any webhook.
+      security:
+        - BearerAuth: []
+        - AdminKeyQuery: []
+      parameters:
+        - name: dry_run
+          in: query
+          description: When true, return what would be sent without delivering anything.
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Alert sweep completed successfully.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/AlertSweepDryRunResponse'
+                  - $ref: '#/components/schemas/AlertSweepResponse'
+              examples:
+                dryRun:
+                  summary: Dry-run response
+                  value:
+                    locations: 3
+                    results:
+                      - location_id: loc_123
+                        would_send: true
+                        reason: fingerprint_changed
+                        payload:
+                          location_id: loc_123
+                          violations:
+                            - contract_id: ctr_001
+                              type: missing_signature
+                      - location_id: loc_456
+                        would_send: false
+                        reason: unchanged
+                        payload: null
+                liveRun:
+                  summary: Normal response
+                  value:
+                    locations: 3
+                    sent: 1
+                    results:
+                      - location_id: loc_123
+                        would_send: true
+                        reason: fingerprint_changed
+                        payload:
+                          location_id: loc_123
+                          violations:
+                            - contract_id: ctr_001
+                              type: missing_signature
+                      - location_id: loc_456
+                        would_send: false
+                        reason: unchanged
+                        payload: null
+        '401':
+          description: Admin key missing or invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: Unauthorized
+        '503':
+          description: Admin API not configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error: Admin API not configured
+components:
+  schemas:
+    AlertSweepDryRunResponse:
+      type: object
+      description: Response returned when the sweep is run in dry-run mode.
+      required:
+        - locations
+        - results
+      properties:
+        locations:
+          type: integer
+          format: int32
+          description: Total number of locations checked.
+          example: 3
+        results:
+          type: array
+          description: Per-location sweep results.
+          items:
+            $ref: '#/components/schemas/AlertSweepResult'
+    AlertSweepResponse:
+      type: object
+      description: Response returned when the sweep is run normally and webhook delivery is attempted.
+      required:
+        - locations
+        - sent
+        - results
+      properties:
+        locations:
+          type: integer
+          format: int32
+          description: Total number of locations checked.
+          example: 3
+        sent:
+          type: integer
+          format: int32
+          description: Number of webhooks POSTed.
+          example: 1
+        results:
+          type: array
+          description: Per-location sweep results.
+          items:
+            $ref: '#/components/schemas/AlertSweepResult'
+    AlertSweepResult:
+      type: object
+      description: Result of processing a single location during the alert sweep.
+      required:
+        - location_id
+        - would_send
+        - reason
+        - payload
+      properties:
+        location_id:
+          type: string
+          description: Unique identifier for the location.
+          example: loc_123
+        would_send:
+          type: boolean
+          description: Whether a webhook POST would be or was attempted for this location.
+          example: true
+        reason:
+          type: string
+          description: Reason for the alert sweep outcome for the location.
+          enum:
+            - fingerprint_changed
+            - unchanged
+            - first_sweep_baseline
+            - truncated_scan
+            - no_contracts
+          example: fingerprint_changed
+        payload:
+          type: object
+          nullable: true
+          description: Exact webhook body that would be POSTed or was considered for posting. Present when would_send is true.
+          additionalProperties: true
+          example:
+            location_id: loc_123
+            violations:
+              - contract_id: ctr_001
+                type: missing_signature
+    ErrorResponse:
+      type: object
+      description: Standard error response.
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          description: Indicates the request failed.
+          example: false
+        error:
+          type: string
+          description: Human-readable error message.
+          example: Unauthorized
+    SuccessResponse:
+      type: object
+      description: Standard success response.
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+          description: Indicates the request succeeded.
+          example: true
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Admin API key passed in the Authorization header as `Bearer YOUR_ADMIN_KEY`.
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Admin API key passed as the `admin_key` query parameter.

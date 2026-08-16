@@ -854,6 +854,11 @@
                 "openapi": "openapi/admin-airbyte.yaml"
               },
               {
+                "group": "Contracts",
+                "icon": "file-check",
+                "openapi": "openapi/admin-contracts.yaml"
+              },
+              {
                 "group": "BigQuery Export",
                 "icon": "database",
                 "openapi": "openapi/bigquery.yaml"
