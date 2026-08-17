@@ -1,0 +1,29 @@
+---
+title: Changelog
+description: What shipped in Mythic Analytics — new features, updates, and bug fixes for each release.
+---
+
+## Latest changes
+
+<Callout kind="info">
+
+This changelog covers user-facing product changes only. For API-level details, see the relevant API reference pages.
+
+</Callout>
+
+## August 17, 2026
+
+### New Features
+
+- **Google Analytics 4 destination** — Send events to GA4 through Google's Data Manager API with support for tagless mode, batch delivery of up to 2,000 events per request, HIPAA protection for healthcare locations, DebugView support, and duplicate-event warnings for enhanced-measurement events. See [Destinations API overview](/destinations-api/overview).
+- **Airbyte sync notification webhooks** — Subscribe to Airbyte sync notifications by webhook and manage subscriptions through new add, list, and delete endpoints. Subscription URLs are encrypted at rest, and repeatedly failing endpoints are automatically parked. See [Airbyte API overview](/airbyte-api/overview).
+
+### Updates
+
+- **JavaScript SDK reads `_ga` cookie** — The JavaScript SDK now captures the Google Analytics `_ga` cookie on every event so GA4 destinations can use it for session stitching. See [JavaScript SDK overview](/javascript-sdk/overview).
+- **Faster GA4 delivery enrichment** — GA4 destination enrichment now completes in a single database round trip instead of three sequential lookups, which reduces delivery latency.
+
+### Bug Fixes
+
+- **GA4 tagless identity resolution** — Fixed an issue that caused GA4 identity fields to be read from the wrong location, which could silently break tagless client ID derivation. Tagless GA4 events now deliver correctly.
+- **GA4 destination registration gaps** — Fixed `google_analytics` missing from several destination registries, which could block GA4 destination creation or delivery.

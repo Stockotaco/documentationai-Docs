@@ -447,6 +447,23 @@
                 ]
               }
             ]
+          },
+          {
+            "tab": "Changelog",
+            "icon": "list-restart",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Changelog",
+                    "path": "changelog",
+                    "icon": "list-restart"
+                  }
+                ]
+              }
+            ]
           }
         ],
         "public": true
@@ -951,6 +968,23 @@
                     "title": "Troubleshooting",
                     "path": "javascript-sdk/troubleshooting",
                     "icon": "alert-triangle"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "Changelog",
+            "icon": "list-restart",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Changelog",
+                    "path": "changelog",
+                    "icon": "list-restart"
                   }
                 ]
               }
