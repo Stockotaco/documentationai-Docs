@@ -99,6 +99,10 @@ Hashed user identifiers are attached whenever available, including alongside a c
   `maryjane`).
 </Callout>
 
+For HIPAA-enabled locations, Google Ads delivery suppresses IP, coarse geo
+(region code, postal code), and raw device info — the fields Google's API
+accepts as plaintext. Hashed identifiers are unaffected.
+
 #### Richer conversion signal
 
 All optional, all shared with `google_analytics`:
@@ -141,6 +145,14 @@ shape and the same `https://www.googleapis.com/auth/datamanager` scope as
 `google_ads`.
 
 <Callout kind="warning">
+  `google_analytics` is **blocked for HIPAA-enabled locations** — refused at
+  both create time and delivery time. Unlike `google_ads`, which suppresses
+  plaintext IP and geo fields for HIPAA tenants, GA4 is refused outright because
+  the GA4 client ID is itself a per-visitor identifier and Google's terms
+  prohibit PHI.
+</Callout>
+
+<Callout kind="warning">
   GA4 event names must start with a letter, contain only letters, digits and
   underscores, be at most 40 characters, and avoid the reserved prefixes `ga_`,
   `google_`, `firebase_` and `_`. These are rejected when you save the
@@ -148,6 +160,15 @@ shape and the same `https://www.googleapis.com/auth/datamanager` scope as
   the event later during processing — the destination would report healthy
   deliveries while nothing arrived in the property.
 </Callout>
+
+Mapping a GA4 enhanced-measurement event (`page_view`, `scroll`,
+`file_download`, `form_submit`, `video_start`, …) returns a non-blocking
+`warnings` array on the create response — the destination is still created
+successfully. The warning notes that GA4 fires these automatically, so sending
+them server-side risks double-counting. On a tagless site sending `page_view`
+is required and the warning is informational only; when
+`client_id_strategy: 'ga_cookie'` is set the wording is stricter, because the
+tag is present and double-counting is certain.
 
 **Identity is the thing to get right.** GA4 attaches an event through one of
 three keys, in priority order:
@@ -252,7 +273,10 @@ good conversion.
 
 GA4's `AddressInfo` also accepts `addressLine`, `city` and `administrativeArea`,
 which Google Ads ignores; the first is hashed and the other two are plaintext.
-Set `send_user_data: false` to suppress hashed identifiers entirely.
+Set `send_user_data: false` to suppress hashed identifiers entirely. Set
+`debug_mode: true` to route events into GA4 DebugView instead of normal
+processing — useful for validating your mapping without inflating production
+counts.
 
 ## Trigger rules
 
@@ -298,7 +322,7 @@ Credentialed destinations (`meta_capi`, `google_ads`, `google_analytics`) read t
 ## Delivery logs & health
 
 - `GET /deliveries` returns individual delivery attempts (newest first), filterable by destination, status, source event, and time range. It defaults to the last 7 days. Rows are lean — metadata only, no payloads.
-- `GET /{id}/deliveries/{eventUuid}` returns the **detail** for one delivery: the `request_body` sent to the destination and the raw `response_body` it returned, plus redacted `request_headers`/`response_headers` and the Meta `fbtrace_id`. Key it with the `event_uuid` from a list row. Use it to answer "what did we send, and what did the destination say back?" — on **successful and failed** deliveries alike (confirming the accepted payload is as useful as debugging a failure). Bodies are truncated to 8&nbsp;KB and the audit row is retained for 30 days. HIPAA-enabled locations omit bodies entirely (kept: `fbtrace_id`, `response_status`, `error`); webhook request bodies/headers are redacted for read-only (`sk_`) keys. **Test fires** (`POST /{id}/test`) are not persisted, so this endpoint returns `404 not_found` for a synthetic `test-…` event — expected, not a bug. There is exactly **one** detail row per (destination, `event_uuid`), upserted across retry attempts (`attempt_count` reflects the latest attempt); the per-attempt stream lives in the `GET /{id}/deliveries` list.
+- `GET /{id}/deliveries/{eventUuid}` returns the **detail** for one delivery: the `request_body` sent to the destination and the raw `response_body` it returned, plus redacted `request_headers`/`response_headers`, the Meta `fbtrace_id`, and — for Google destinations — `google_request_id` (Data Manager request ID for support escalations), `field_warnings` (fields the API accepted but silently dropped), and `field_violations` (fields that caused a 4xx rejection, named by field path). Key it with the `event_uuid` from a list row. Use it to answer "what did we send, and what did the destination say back?" — on **successful and failed** deliveries alike (confirming the accepted payload is as useful as debugging a failure). Bodies are truncated to 8&nbsp;KB and the audit row is retained for 30 days. HIPAA-enabled locations omit bodies entirely (kept: `fbtrace_id`, `google_request_id`, `field_warnings`, `field_violations`, `response_status`, `error`); webhook request bodies/headers are redacted for read-only (`sk_`) keys. **Test fires** (`POST /{id}/test`) are not persisted, so this endpoint returns `404 not_found` for a synthetic `test-…` event — expected, not a bug. There is exactly **one** detail row per (destination, `event_uuid`), upserted across retry attempts (`attempt_count` reflects the latest attempt); the per-attempt stream lives in the `GET /{id}/deliveries` list.
 - `GET /health` returns per-destination aggregates over a rolling window (default 24 hours): success rate, failure counts, latency percentiles, and a `credential_ok` flag that flips to `false` when the most recent failure was a 401/403.
 
 ## Testing

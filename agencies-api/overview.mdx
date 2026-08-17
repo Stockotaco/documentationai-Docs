@@ -44,9 +44,21 @@ Responses are JSON, but the envelope varies by endpoint rather than following a 
 | `POST /agencies` | `{ "data": { ...agency } }` |
 | `PATCH /agencies/{id}` | `{ "data": { ...agency } }` |
 | `DELETE /agencies/{id}` | `{ "success": true }` |
+| `GET /agencies/{id}/airbyte` | `{ "data": { "workspace_id": ..., "destination_id": ..., "status": ... } }` |
 | `POST /agencies/{id}/rotate-key` | `{ "success": true, "agency_key": "ak_..." }` |
 | `POST /agencies/{id}/locations` | `{ "success": true, "data": { ... } }` |
 | `DELETE /agencies/{id}/locations/{locationId}` | `{ "success": true }` |
+
+<Callout kind="info">
+  `POST /agencies` accepts an optional `notification_webhook_url` — an HTTPS
+  endpoint to receive this agency's Airbyte sync notifications. It is equivalent
+  to calling `POST /client/v1/airbyte/webhooks` after creation, and subject to
+  the same rules: treated as opaque, stored encrypted, and only ever readable
+  back redacted. A rejected URL does not fail agency creation — the `201` carries
+  a `warning` instead. `GET /agencies/{id}/airbyte` polls the workspace
+  provisioning state, which is async: the `201` from `POST /agencies` returns
+  before a workspace id exists.
+</Callout>
 
 Example error response:
 
