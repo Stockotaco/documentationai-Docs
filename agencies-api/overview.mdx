@@ -41,8 +41,9 @@ Responses are JSON, but the envelope varies by endpoint rather than following a 
 |----------|--------------|
 | `GET /agencies` | `{ "data": [ ... ] }` |
 | `GET /agencies/{id}` | `{ "data": { ...agency, "locations": [ ... ] } }` |
-| `POST /agencies` | `{ "data": { ...agency } }` |
+| `POST /agencies` | `{ "data": { ...agency }, "airbyte_webhook_subscription": { ... } \| null, "warning": "..." \| null }` |
 | `PATCH /agencies/{id}` | `{ "data": { ...agency } }` |
+| `GET /agencies/{id}/airbyte` | `{ "data": { "workspace_id": "...", "destination_id": "...", "status": "active", ... } }` |
 | `DELETE /agencies/{id}` | `{ "success": true }` |
 | `POST /agencies/{id}/rotate-key` | `{ "success": true, "agency_key": "ak_..." }` |
 | `POST /agencies/{id}/locations` | `{ "success": true, "data": { ... } }` |

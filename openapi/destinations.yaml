@@ -4,10 +4,11 @@ info:
   title: Destinations
   description: >
     Partner self-serve data activation. Create and manage destinations
-    (webhooks, Meta Conversions API, Google Ads), store per-location
-    credentials, and inspect delivery logs and health. Client-scoped: an
-    agency key (`ak_`) has read-write access to a single named location, and a
-    location secret key (`sk_`) is a read-only viewer of its own location.
+    (webhooks, Meta Conversions API, Google Ads, Google Analytics 4), store
+    per-location credentials, and inspect delivery logs and health.
+    Client-scoped: an agency key (`ak_`) has read-write access to a single
+    named location, and a location secret key (`sk_`) is a read-only viewer of
+    its own location.
 servers:
   - url: https://mythic-analytics.gulp.workers.dev
 security:
@@ -134,9 +135,12 @@ paths:
         Store (or rotate, by re-sending) a credential for a credential-backed
         destination type. Requires an agency (`ak_`) key. A given
         `(destination_type, credential_name)` pair is upserted in place.
-        `google_ads` credential values must be a JSON object containing
-        `client_id`, `client_secret`, and `refresh_token`, minted against the
+        `google_ads` and `google_analytics` credential values must each be a
+        JSON object containing `client_id`, `client_secret`, and
+        `refresh_token`, minted against the
         `https://www.googleapis.com/auth/datamanager` OAuth scope.
+        `google_ads` credentials may also include an optional
+        `login_customer_id` for manager-account access.
         The response echoes metadata only — never the credential value.
       parameters:
         - $ref: "#/components/parameters/CredentialType"
@@ -533,8 +537,8 @@ paths:
       description: >
         Send a test delivery through the real ad-platform adapter using the
         stored credential. Requires an agency (`ak_`) key. Supported only for
-        ad destinations (`meta_capi`, `google_ads`) — webhooks fire on real
-        events and return `400`.
+        ad destinations (`meta_capi`, `google_ads`, `google_analytics`) —
+        webhooks fire on real events and return `400`.
       parameters:
         - $ref: "#/components/parameters/DestinationId"
       responses:
@@ -1300,7 +1304,8 @@ components:
           type: object
           description: >
             Type-specific configuration. See `WebhookConfig`, `MetaCapiConfig`,
-            and `GoogleAdsConfig`. Webhook secrets are redacted for viewer keys.
+            `GoogleAdsConfig`, and `GoogleAnalyticsConfig`. Webhook secrets are
+            redacted for viewer keys.
         enabled:
           type: boolean
         rate_limit_max:
@@ -1347,6 +1352,7 @@ components:
             - $ref: "#/components/schemas/WebhookConfig"
             - $ref: "#/components/schemas/MetaCapiConfig"
             - $ref: "#/components/schemas/GoogleAdsConfig"
+            - $ref: "#/components/schemas/GoogleAnalyticsConfig"
         enabled:
           type: boolean
           default: true
@@ -1387,9 +1393,10 @@ components:
         credential_value:
           type: string
           description: >
-            Secret value, max 8KB. For `google_ads` this must be a JSON object
-            string containing `client_id`, `client_secret`, and `refresh_token`
-            (plus an optional `login_customer_id` for manager-account access).
+            Secret value, max 8KB. For `google_ads` and `google_analytics` this
+            must be a JSON object string containing `client_id`,
+            `client_secret`, and `refresh_token` (plus an optional
+            `login_customer_id` for manager-account access, `google_ads` only).
             The refresh token must carry the
             `https://www.googleapis.com/auth/datamanager` OAuth scope.
         credential_name:
@@ -1525,6 +1532,42 @@ components:
           type: string
           nullable: true
           description: Meta trace id parsed from the response — what Meta support asks for. Retained even for HIPAA locations.
+        google_request_id:
+          type: string
+          nullable: true
+          description: Google's request id from the Data Manager API response. The identifier Google support asks for. Present only on Google Ads and Google Analytics deliveries.
+        field_warnings:
+          type: array
+          nullable: true
+          description: Fields Google silently dropped on a `200` response (partial data loss). Each entry has `field`, `reason`, and `description`.
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                nullable: true
+              reason:
+                type: string
+                nullable: true
+              description:
+                type: string
+                nullable: true
+        field_violations:
+          type: array
+          nullable: true
+          description: Fields that caused the request to fail, parsed from Google's `BadRequest.fieldViolations`. Each entry has `field`, `reason`, and `description`. Present only on failed Google deliveries.
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                nullable: true
+              reason:
+                type: string
+                nullable: true
+              description:
+                type: string
+                nullable: true
         enrichment_applied:
           type: boolean
         created_at:
@@ -1595,6 +1638,12 @@ components:
           example: true
         data:
           $ref: "#/components/schemas/Destination"
+        warnings:
+          type: array
+          nullable: true
+          description: Non-blocking warnings, present when a destination was created successfully but a mapping or configuration detail warrants attention — for example, a GA4 `event_mapping` entry that collides with a Google enhanced-measurement event name (`page_view`, `scroll`, etc.), which GA4 will deduplicate against the tag's own hit.
+          items:
+            type: string
     DestinationListResponse:
       type: object
       properties:

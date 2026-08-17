@@ -566,6 +566,22 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/Agency"
+        airbyte_webhook_subscription:
+          type: object
+          nullable: true
+          description: >
+            Present when `notification_webhook_url` was supplied and the
+            subscription was created (or reactivated). Same shape as the
+            `WebhookSubscription` returned by `POST /client/v1/airbyte/webhooks`:
+            `id`, `label`, `url` (redacted), `active`, `consecutive_failures`,
+            `created_at`. `null` when no webhook URL was provided.
+        warning:
+          type: string
+          nullable: true
+          description: >
+            Non-blocking warning explaining why an `airbyte_webhook_subscription`
+            could not be created — for example, the supplied URL was not
+            `https`. The agency itself was still created successfully.
     AgencyDetailResponse:
       type: object
       properties:
