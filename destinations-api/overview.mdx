@@ -218,6 +218,38 @@ GA4 makes every server event its own session and attributes all of it to
   so the derived id is the only record of them rather than a duplicate.
 </Callout>
 
+### Batching and the request quota
+
+Google's Data Manager quota is **300 requests/min and 100,000/day per Cloud
+project**, and a delivery is normally one event per request — an effective
+ceiling of 5 events/sec. That is irrelevant for ad conversions and immediately
+fatal for tagless GA4, which carries pageview-grade volume. Set `batch: true`
+(or a `batch_size`) to coalesce events into one request; `events:ingest` accepts
+up to 2,000.
+
+<Callout kind="warning">
+  Batching is **not** offered on `google_ads`, deliberately. Data Manager is
+  fast-fail: *"if any record fails validation for a required field, the entire
+  request fails, and the API does not process any of the data in that request."*
+  One malformed row therefore takes down every other event in its batch. For GA4
+  pageviews that is a fair trade against a hard quota wall; for purchase
+  conversions it means one bad row can drop hundreds of real conversions.
+</Callout>
+
+The damage is contained rather than accepted. A rejected batch's
+`fieldViolations` name the offending rows by index, so those events fail
+permanently and **every other event in the batch is retried** — landing in a
+later batch without the poison row. When no index can be parsed, nobody is
+blamed and the whole batch is retried, because guessing would permanently drop a
+good conversion.
+
+<Callout kind="info">
+  If a tenant uses **one OAuth client for both** `google_ads` and
+  `google_analytics`, the two share that project's quota — unbatched GA4 volume
+  will starve the conversion uploads, which are the ones that cost money to
+  lose. Either batch GA4 or give the two destinations separate Cloud projects.
+</Callout>
+
 GA4's `AddressInfo` also accepts `addressLine`, `city` and `administrativeArea`,
 which Google Ads ignores; the first is hashed and the other two are plaintext.
 Set `send_user_data: false` to suppress hashed identifiers entirely.

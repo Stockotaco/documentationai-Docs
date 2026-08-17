@@ -1126,6 +1126,41 @@ components:
             destination would look healthy while delivering nothing.
           example:
             order_completed: purchase
+        batch:
+          type: boolean
+          default: false
+          description: >
+            Coalesce events into a single `events:ingest` request. Google's
+            quota is **300 requests/min and 100,000/day per Cloud project** and
+            we otherwise send one event per request — a hard ceiling of 5
+            events/sec, which tagless GA4 (pageview-grade volume) exceeds
+            immediately. A request accepts up to 2,000 events.
+        batch_size:
+          type: integer
+          minimum: 2
+          maximum: 2000
+          default: 200
+          description: >
+            Events per request. Below Google's 2,000 cap on purpose: the win is
+            escaping the requests/min ceiling, and a smaller batch keeps the
+            fast-fail blast radius proportionate.
+        batch_wait_ms:
+          type: integer
+          minimum: 0
+          maximum: 30000
+          default: 1000
+          description: >
+            How long the first event in a batch waits for company. The window
+            starts with that first event, so worst-case added latency is this
+            value — not this value per arrival.
+        debug_mode:
+          type: boolean
+          default: false
+          description: >
+            Route events into GA4 DebugView. The only practical way to verify a
+            tagless setup end to end, since there is no tag and no browser
+            console. Leave off in production — debug events are excluded from
+            reports.
         client_id_strategy:
           type: string
           enum: [auto, ga_cookie, mythic_device_id]
