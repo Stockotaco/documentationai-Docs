@@ -20,16 +20,27 @@ https://mythic-analytics.gulp.workers.dev/client/v1/destinations
 
 ## Destination types
 
-Three destination types are supported. The `action_config` you send is validated against the `action_type`.
+Four destination types are supported. The `action_config` you send is validated against the `action_type`.
 
 | Type | `action_type` | What it does | Credential |
 |------|---------------|--------------|------------|
 | **Webhook** | `webhook` | POSTs the event to an http(s) URL you control | Inline in `action_config` (headers / body template) |
 | **Meta Conversions API** | `meta_capi` | Sends server-side conversions to a Meta pixel | Stored separately (`meta_capi`) |
 | **Google Ads** | `google_ads` | Uploads conversions to a Google Ads customer via the Data Manager API | Stored separately (`google_ads`) |
+| **Google Analytics 4** | `google_analytics` | Sends events to a GA4 property via the same Data Manager API | Stored separately (`google_analytics`) |
 
 <Callout kind="info">
-  `tiktok_events` is recognized by the schema but has no executor yet, so creating it returns `unsupported_destination_type`. Only `webhook`, `meta_capi`, and `google_ads` are live.
+  `tiktok_events` is recognized by the schema but has no executor yet, so creating it returns `unsupported_destination_type`. Only `webhook`, `meta_capi`, `google_ads`, and `google_analytics` are live.
+</Callout>
+
+<Callout kind="info">
+  `google_ads` and `google_analytics` call the **same** endpoint with the **same**
+  credential shape and differ only in the destination they address. They are
+  separate types because they want opposite event cardinality: GA4 takes many
+  events under open-ended names, Google Ads takes a few bound to conversion
+  actions. Keeping them apart means one set of trigger rules, one enable switch,
+  and one delivery log per platform — turning on GA4 pageviews cannot start
+  firing Ads conversions.
 </Callout>
 
 **Which one you want.** Use `meta_capi` or `google_ads` when the goal is ad
@@ -75,7 +86,97 @@ Credentials are stored separately as a `google_ads` credential — a JSON object
   A refresh token carrying the older `adwords` scope refreshes successfully and then fails at upload time with a permission error. If a Google Ads destination returns 403, check the scope before anything else.
 </Callout>
 
-Hashed user identifiers (email, E.164 phone, and name + country + postal address) are attached whenever available, including alongside a click ID — that is what lifts match rate. `enhanced_conversions_for_leads` governs only whether an event with **no** `gclid`/`gbraid`/`wbraid` may still be uploaded; otherwise such events are logged as `skipped`. Google requires E.164 phone numbers, so a 10-digit national number needs `default_country_code` to be usable — without it the phone identifier is dropped rather than hashed into a guaranteed non-match. Addresses send only when first name, last name, a 2-letter country code, and a postal code are all present. The event `uuid` is sent as Google's `transactionId` for deduplication.
+Hashed user identifiers are attached whenever available, including alongside a click ID — that is what lifts match rate. **Every** stitched email and phone is sent, not just the one on the event, up to Google's ceiling of 10 identifiers per event; an address identifier always keeps a reserved slot so a long tail of email aliases cannot crowd it out. `enhanced_conversions_for_leads` governs only whether an event with **no** `gclid`/`gbraid`/`wbraid` may still be uploaded; otherwise such events are logged as `skipped`. Google requires E.164 phone numbers, so a 10-digit national number needs `default_country_code` to be usable — without it the phone identifier is dropped rather than hashed into a guaranteed non-match. Addresses send only when first name, last name, a 2-letter country code, and a postal code are all present. The event `uuid` is sent as Google's `transactionId` for deduplication.
+
+<Callout kind="info">
+  Identifiers are normalized to Google's spec, which differs from Meta's in two
+  ways that are invisible when you get them wrong — Google returns `200` and
+  simply matches nobody. Emails on `gmail.com`/`googlemail.com` have dots and
+  `+tags` stripped from the local part (`Cloudy.SanFrancisco+shopping@gmail.com`
+  → `cloudysanfrancisco@gmail.com`); every other domain keeps them. Names are
+  lowercased and trimmed at the ends only, so internal spaces, hyphens and
+  apostrophes are preserved (`Mary Jane` is hashed as `mary jane`, not
+  `maryjane`).
+</Callout>
+
+#### Richer conversion signal
+
+All optional, all shared with `google_analytics`:
+
+| Field | What it adds |
+|---|---|
+| `user_properties` | `customerType` (`NEW`/`RETURNING`/`REENGAGED`) and `customerValueBucket`. `customerType` is what Google Ads' new-customer acquisition goal bids against. |
+| `cart_data` | Line items, unit prices, quantities, coupons, Merchant Center ids — Shopping and value-based bidding signals. |
+| `custom_variables` | Conversion custom variables, for value rules and segmentation. |
+| `conversion_count_property` | Quantity for counting-based conversions. |
+| `last_updated_property` | Restatements — re-upload a refunded or repriced order under the same `transactionId`. |
+| `event_location` | Store id and coarse geo. Required for Store Sales. |
+
+Device context (`userAgent`, IP, browser, screen) is attached automatically from data already captured at ingest, as both `eventDeviceInfo` and `adIdentifiers.landingPageDeviceInfo`.
+
+<Callout kind="warning">
+  `user_properties.derive_customer_type` infers `NEW`/`RETURNING` from the
+  resolved person's session count. It is **off by default** and should stay off
+  for ecommerce: sessions are not purchases, so a shopper who browsed three
+  times before their first order is reported `RETURNING`, which mislabels a
+  genuinely new customer and suppresses the bid uplift the acquisition goal
+  exists to apply. Use `customer_type_property` and your own order count.
+</Callout>
+
+### Google Analytics 4
+
+GA4 events are delivered through the **same** Data Manager `events:ingest`
+endpoint as Google Ads. This is Google's official upgrade path from the
+[Measurement Protocol](https://developers.google.com/data-manager/api/devguides/events/analytics/measurement-protocol/upgrade): no API secret, and a real
+error model instead of MP's silent `204` for anything not sent to its separate
+validation server.
+
+Requires a numeric `property_id` (the `operatingAccount`) and exactly one stream
+target — `measurement_id` (`G-XXXXXXXXXX`, a web stream) **or** `firebase_app_id`
+(an app stream), never both. `event_mapping` maps each source event name to a GA4
+event name as a plain string, unlike `google_ads`' conversion-spec object.
+
+Credentials are stored as a `google_analytics` credential with the same JSON
+shape and the same `https://www.googleapis.com/auth/datamanager` scope as
+`google_ads`.
+
+<Callout kind="warning">
+  GA4 event names must start with a letter, contain only letters, digits and
+  underscores, be at most 40 characters, and avoid the reserved prefixes `ga_`,
+  `google_`, `firebase_` and `_`. These are rejected when you save the
+  destination, because GA4 itself accepts an invalid name at ingest and drops
+  the event later during processing — the destination would report healthy
+  deliveries while nothing arrived in the property.
+</Callout>
+
+**Identity is the thing to get right.** GA4 attaches an event through one of
+three keys, in priority order:
+
+1. `clientId` — from `$ga_client_id`, which the JavaScript SDK reads from Google
+   Analytics' own `_ga` cookie. This is the **only** key that joins the event to
+   a session GA already started.
+2. `appInstanceId` — the app-stream equivalent. When present it suppresses
+   `clientId`; sending both double-counts the event.
+3. `userId` — your own id, from `user_id_property`. The path for a CRM sale no
+   browser ever saw, provided it is a value the property already knows.
+
+Mythic's own resolved person id is deliberately **not** used as a `userId`
+fallback. It is set on every enriched event, so defaulting to it would stamp an
+internal UUID as your property's User-ID on essentially every delivery — a value
+that never appears client-side, splitting the visitor from their own browser
+sessions. Set `use_canonical_user_id: true` to opt in anyway.
+
+<Callout kind="warning">
+  An event with none of the three is **skipped, not sent**. GA4 would accept it
+  and attribute it to a brand-new anonymous user, inflating the property's user
+  count and detaching the conversion from the traffic that earned it. If GA4
+  deliveries are showing as `skipped`, the usual cause is that Google Analytics
+  is not on the page, so there is no `_ga` cookie to read.
+</Callout>
+
+GA4's `AddressInfo` also accepts `addressLine`, `city` and `administrativeArea`,
+which Google Ads ignores; the first is hashed and the other two are plaintext.
+Set `send_user_data: false` to suppress hashed identifiers entirely.
 
 ## Trigger rules
 
@@ -103,7 +204,7 @@ Allowed `type` values are `mythic_event`, `event_property`, `url_pattern`, `java
 
 ### How trigger rules interact with `event_mapping`
 
-For `meta_capi` and `google_ads`, an event is delivered only when **both** conditions hold:
+For the ad/analytics destinations (`meta_capi`, `google_ads`, `google_analytics`), an event is delivered only when **both** conditions hold:
 
 1. `trigger_rules` match the event, **and**
 2. the event name is a key in the destination's `action_config.event_mapping`.
@@ -116,7 +217,7 @@ Each destination has an optional per-destination delivery cap, set with `rate_li
 
 ## Credentials
 
-Ad destinations (`meta_capi`, `google_ads`) read their secrets from a separate, never-readable credential store keyed by `(location_id, destination_type, credential_name)`. Store or rotate a credential with `PUT /credentials/{type}`; list metadata with `GET /credentials`. Credential values are write-only — no endpoint ever returns them. Webhooks carry their auth inline in `action_config` instead.
+Credentialed destinations (`meta_capi`, `google_ads`, `google_analytics`) read their secrets from a separate, never-readable credential store keyed by `(location_id, destination_type, credential_name)`. Store or rotate a credential with `PUT /credentials/{type}`; list metadata with `GET /credentials`. Credential values are write-only — no endpoint ever returns them. Webhooks carry their auth inline in `action_config` instead.
 
 ## Delivery logs & health
 
@@ -126,7 +227,7 @@ Ad destinations (`meta_capi`, `google_ads`) read their secrets from a separate, 
 
 ## Testing
 
-`POST /{id}/test` sends a test delivery through the ad-platform adapter using the stored credential. It is supported only for `meta_capi` and `google_ads`; webhooks fire on real events and return `400`. Google Ads tests use Data Manager's `validateOnly` flag, so they verify the credential, scope, destination and payload without recording a conversion in the customer's account. Meta tests are real sends and honor `test_event_code`.
+`POST /{id}/test` sends a test delivery through the ad-platform adapter using the stored credential. It is supported only for `meta_capi`, `google_ads` and `google_analytics`; webhooks fire on real events and return `400`. Both Google destinations use Data Manager's `validateOnly` flag, so they verify the credential, scope, destination and payload without recording anything in the customer's account — which is also why a GA4 test sends a synthetic client id rather than reporting `skipped`. Meta tests are real sends and honor `test_event_code`.
 
 ## Response envelope
 

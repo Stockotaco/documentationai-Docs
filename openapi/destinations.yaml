@@ -31,7 +31,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [webhook, meta_capi, google_ads]
+            enum: [webhook, meta_capi, google_ads, google_analytics]
         - name: enabled
           in: query
           description: Filter by enabled state. Pass `true` or `false`.
@@ -615,7 +615,7 @@ components:
       description: Credential-backed destination type.
       schema:
         type: string
-        enum: [meta_capi, google_ads]
+        enum: [meta_capi, google_ads, google_analytics]
     ActionIdQuery:
       name: action_id
       in: query
@@ -943,6 +943,267 @@ components:
             ad_personalization:
               type: string
               enum: [GRANTED, DENIED]
+        cart_data:
+          $ref: '#/components/schemas/CartDataConfig'
+        user_properties:
+          $ref: '#/components/schemas/UserPropertiesConfig'
+        event_parameters:
+          type: object
+          additionalProperties:
+            type: string
+          description: >
+            GA4-style event parameters, as `parameterName -> event property
+            path`. Values are stringified.
+        custom_variables:
+          type: object
+          additionalProperties:
+            type: string
+          description: >
+            Google Ads conversion custom variables, as `variableName -> event
+            property path`. A variable that does not exist on the destination is
+            ignored by Google rather than rejected.
+        conversion_count_property:
+          type: string
+          description: >
+            Event property holding the conversion quantity, for counting-based
+            conversions. Distinct from the monetary value.
+        last_updated_property:
+          type: string
+          description: >
+            Event property holding a restatement timestamp (epoch ms or a
+            parseable date). Send it when re-uploading a conversion under the
+            same `transactionId` after a refund or a price change — without it
+            Google cannot distinguish an update from a duplicate and keeps the
+            original value. An unparseable value is dropped rather than sent,
+            because one bad optional field fails the whole request.
+        event_location:
+          type: object
+          description: Where the event happened. Required for Store Sales.
+          properties:
+            store_id:
+              type: string
+            store_id_property:
+              type: string
+              description: Event property holding the store id.
+    CartDataConfig:
+      type: object
+      description: >
+        Line items behind the conversion. Feeds Merchant Center / Shopping
+        signals on Google Ads, and is required for most GA4 ecommerce events.
+      properties:
+        items_property:
+          type: string
+          description: >
+            Dot-path to the array of items in the event's properties. Required
+            when `item_mapping` or `item_parameters` is set — without it there
+            is nothing to map and the rest of the config is inert.
+          example: products
+        item_mapping:
+          type: object
+          description: >
+            Maps a Data Manager item field to a key within each item object. The
+            key set is closed; an unknown field is rejected at write time,
+            because at runtime it would simply never match and the item would
+            ship without (say) its price while Google returned 200.
+          additionalProperties:
+            type: string
+          properties:
+            itemId:
+              type: string
+            merchantProductId:
+              type: string
+            quantity:
+              type: string
+            unitPrice:
+              type: string
+            conversionValue:
+              type: string
+          example:
+            itemId: sku
+            unitPrice: price
+            quantity: qty
+        item_parameters:
+          type: object
+          additionalProperties:
+            type: string
+          description: >
+            Per-item GA4 parameters, as `parameterName -> key within the item`.
+          example:
+            item_name: name
+        merchant_id:
+          type: string
+        merchant_feed_label:
+          type: string
+        merchant_feed_language_code:
+          type: string
+        transaction_discount_property:
+          type: string
+        coupon_property:
+          type: string
+          description: >
+            Event property holding a coupon code (or an array of them). Only the
+            first is sent — Google Analytics ignores additional coupon codes.
+    UserPropertiesConfig:
+      type: object
+      description: >
+        The advertiser's own assessment of the customer. `customerType` is what
+        Google Ads' new-customer acquisition goal bids against, and most
+        tag-based integrations cannot supply it at all — the browser does not
+        know whether this person has bought before.
+      properties:
+        customer_type_property:
+          type: string
+          description: >
+            Event property holding the customer lifecycle stage. This is the
+            authoritative source: your commerce platform knows the order count.
+            Common spellings (`new_customer`, `repeat`, `lapsed`, ...) are
+            mapped onto Google's enum; an unrecognized value is dropped rather
+            than guessed, since a wrong value actively misdirects bidding.
+        customer_type:
+          type: string
+          enum: [NEW, RETURNING, REENGAGED]
+          description: Static value, used when no property is configured.
+        customer_value_bucket_property:
+          type: string
+        customer_value_bucket:
+          type: string
+          enum: [LOW, MEDIUM, HIGH]
+        derive_customer_type:
+          type: boolean
+          default: false
+          description: >
+            Opt-in fallback that infers `NEW`/`RETURNING` from the resolved
+            person's session count when no property is configured. **Off by
+            default, and deliberately so:** sessions are not purchases, so a
+            shopper who browsed three times before their first order is reported
+            `RETURNING`. That mislabels a genuinely new customer and suppresses
+            the bid uplift the acquisition goal exists to apply. Reasonable for
+            lead-gen, wrong for ecommerce — prefer `customer_type_property`.
+        additional:
+          type: object
+          additionalProperties:
+            type: string
+          description: GA4 user properties, as `propertyName -> event property path`.
+    GoogleAnalyticsConfig:
+      type: object
+      description: >
+        `action_config` for `action_type: google_analytics` — GA4 events through
+        the Data Manager API's `events:ingest`, the same endpoint and credential
+        shape as `google_ads`. This is Google's official replacement for the
+        Measurement Protocol: no API secret, and real error reporting instead of
+        MP's silent `204`.
+      required:
+        - property_id
+        - event_mapping
+      properties:
+        property_id:
+          type: string
+          pattern: "^\\d{6,}$"
+          description: Numeric GA4 property id, sent as the `operatingAccount`.
+          example: "123456789"
+        measurement_id:
+          type: string
+          description: >
+            Web stream measurement id, sent as `productDestinationId`. Set this
+            **or** `firebase_app_id`, never both — a stream is web or app, and
+            the adapter keys its `clientId`-vs-`appInstanceId` choice off which
+            one is present.
+          example: G-ABC1234567
+        firebase_app_id:
+          type: string
+          description: App stream Firebase app id, sent as `productDestinationId`.
+        event_mapping:
+          type: object
+          additionalProperties:
+            type: string
+          description: >
+            Maps a source event name to a GA4 event name (a plain string, unlike
+            `google_ads`' conversion-spec object). Names must start with a
+            letter, contain only letters, digits and underscores, be at most 40
+            characters, and avoid the reserved prefixes `ga_`, `google_`,
+            `firebase_` and `_`. Invalid names are rejected here because GA4
+            accepts them at ingest and drops the event during processing — the
+            destination would look healthy while delivering nothing.
+          example:
+            order_completed: purchase
+        client_id_property:
+          type: string
+          description: >
+            Event property holding the GA4 client id. Defaults to
+            `$ga_client_id`, which the JavaScript SDK reads from Google
+            Analytics' own `_ga` cookie. This is the only identifier that joins
+            the event to a session GA already started; without it GA4 does not
+            error, it attributes the event to a **new** user, inflating the
+            property's user count and detaching the conversion from the traffic
+            that produced it.
+        app_instance_id_property:
+          type: string
+          description: >
+            App-stream equivalent of the client id (defaults to
+            `$app_instance_id`). When present it suppresses `clientId` — sending
+            both double-counts the event.
+        user_id_property:
+          type: string
+          description: >
+            Your own user id (defaults to `$user_id`). The right identifier for
+            a server-only conversion no browser ever saw, provided it is a value
+            the GA4 property actually knows.
+        use_canonical_user_id:
+          type: boolean
+          default: false
+          description: >
+            Fall back to Mythic's resolved canonical person id when no client
+            id, app instance id or `user_id_property` is available. **Off by
+            default:** that id is ours, not yours, so GA4 would record a User-ID
+            that never appears client-side, splitting the visitor from their own
+            browser sessions and filling User-ID reporting with values you
+            cannot join to anything. Enable it only if you have no user id of
+            your own and want reach over cleanliness.
+        value_property:
+          type: string
+        currency:
+          type: string
+          example: USD
+        send_user_data:
+          type: boolean
+          default: true
+          description: >
+            Attach hashed user identifiers (up to 10). GA4's `AddressInfo` also
+            accepts `addressLine`, `city` and `administrativeArea`, which Google
+            Ads ignores.
+        event_source:
+          type: string
+          enum: [WEB, APP, IN_STORE, PHONE, MESSAGE, OTHER]
+          description: Defaults to `APP` for a `firebase_app_id` stream, else `WEB`.
+        default_country_code:
+          type: string
+          example: "1"
+        consent:
+          type: object
+          properties:
+            ad_user_data:
+              type: string
+              enum: [GRANTED, DENIED]
+            ad_personalization:
+              type: string
+              enum: [GRANTED, DENIED]
+        cart_data:
+          $ref: '#/components/schemas/CartDataConfig'
+        user_properties:
+          $ref: '#/components/schemas/UserPropertiesConfig'
+        event_parameters:
+          type: object
+          additionalProperties:
+            type: string
+        last_updated_property:
+          type: string
+        event_location:
+          type: object
+          properties:
+            store_id:
+              type: string
+            store_id_property:
+              type: string
     Destination:
       type: object
       properties:
@@ -957,7 +1218,7 @@ components:
           example: Purchase → Meta
         action_type:
           type: string
-          enum: [webhook, meta_capi, google_ads]
+          enum: [webhook, meta_capi, google_ads, google_analytics]
         trigger_rules:
           $ref: "#/components/schemas/TriggerRules"
         action_config:
@@ -1003,7 +1264,7 @@ components:
           example: Purchase → Meta
         action_type:
           type: string
-          enum: [webhook, meta_capi, google_ads]
+          enum: [webhook, meta_capi, google_ads, google_analytics]
         trigger_rules:
           $ref: "#/components/schemas/TriggerRules"
         action_config:
@@ -1068,7 +1329,7 @@ components:
           format: uuid
         destination_type:
           type: string
-          enum: [meta_capi, google_ads]
+          enum: [meta_capi, google_ads, google_analytics]
         credential_name:
           type: string
           example: default
@@ -1092,7 +1353,7 @@ components:
           type: string
         destination_type:
           type: string
-          enum: [webhook, meta_capi, google_ads]
+          enum: [webhook, meta_capi, google_ads, google_analytics]
         event_name:
           type: string
           description: Source event name that triggered the delivery.
@@ -1142,7 +1403,7 @@ components:
           type: string
         destination_type:
           type: string
-          enum: [webhook, meta_capi, google_ads]
+          enum: [webhook, meta_capi, google_ads, google_analytics]
         destination_event_name:
           type: string
         status:
@@ -1208,7 +1469,7 @@ components:
           type: string
         destination_type:
           type: string
-          enum: [webhook, meta_capi, google_ads]
+          enum: [webhook, meta_capi, google_ads, google_analytics]
         enabled:
           type: boolean
         trigger_count:

@@ -53,6 +53,17 @@ When `capture_utm` is enabled (default), the SDK captures UTM parameters and adv
 - **Twitter/X**: `$twclid`
 - **LinkedIn**: `$li_fat_id`
 - **Mythic Click ID**: `$iiid` (from link redirect tracking)
+- **Google Analytics**: `$ga_client_id` (from GA's own `_ga` cookie, when GA4 is on the page)
+
+<Callout kind="info">
+  `$ga_client_id` is **read, never written**. Google Analytics owns the `_ga`
+  cookie, and minting our own value would fork the identity and make GA4 count
+  one visitor twice — so if GA is not on the page, the property is simply
+  absent. It is the join key for the `google_analytics` destination: without it,
+  a server-side GA4 event is attributed to a brand-new user rather than the
+  session that earned it. Not on the HIPAA allowlist, so it is stripped for
+  HIPAA-enabled locations.
+</Callout>
 
 <Callout kind="info">
   `$fbc` and `$fbp` follow Meta's Conversions API formats — `fb.<subdomainIndex>.<creationTime>.<clickId>` and `fb.<subdomainIndex>.<creationTime>.<random>` — and are persisted for 90 days, with the window rolling forward on each page load. If Meta's pixel already set `_fbc`/`_fbp` on the domain, those values are reused rather than regenerated, so the SDK and the pixel report the same browser ID. Once captured, `$fbc` keeps its original creation time until a **different** `fbclid` arrives, which is what lets Meta dedupe browser and server events for the same click. `$fbclid` itself stays URL-scoped: it is not backfilled from a stored `$fbc`.
