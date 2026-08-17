@@ -152,9 +152,11 @@ shape and the same `https://www.googleapis.com/auth/datamanager` scope as
 **Identity is the thing to get right.** GA4 attaches an event through one of
 three keys, in priority order:
 
-1. `clientId` — from `$ga_client_id`, which the JavaScript SDK reads from Google
-   Analytics' own `_ga` cookie. This is the **only** key that joins the event to
-   a session GA already started.
+1. `clientId` — by default from `$ga_client_id`, the JavaScript SDK's read of
+   Google Analytics' own `_ga` cookie, which is the only key that joins the
+   event to a session GA already started. When the page has no `_ga` cookie,
+   `client_id_strategy: auto` derives a stable client id from Mythic's device id
+   instead — see [Tagless GA4](#tagless-ga4).
 2. `appInstanceId` — the app-stream equivalent. When present it suppresses
    `clientId`; sending both double-counts the event.
 3. `userId` — your own id, from `user_id_property`. The path for a CRM sale no
@@ -172,6 +174,48 @@ sessions. Set `use_canonical_user_id: true` to opt in anyway.
   count and detaching the conversion from the traffic that earned it. If GA4
   deliveries are showing as `skipped`, the usual cause is that Google Analytics
   is not on the page, so there is no `_ga` cookie to read.
+</Callout>
+
+### Tagless GA4
+
+GA4 never validates a client id — it is an opaque key whose only load-bearing
+property is **stability**: the same browser must always produce the same value,
+or GA4 counts one visitor as many while reporting success throughout. That makes
+it possible to send to GA4 with no Google tag on the site at all.
+
+With the default `client_id_strategy: auto`, Mythic uses the `_ga` cookie when
+the page has one and otherwise derives a client id from its own device id. The
+derivation is a pure function of that id — never a clock read — and emits GA's
+conventional `<random>.<first-seen seconds>` shape. Because Mythic's device id
+is a UUIDv7, the second half is the id's genuine creation time rather than a
+filler number. The device id is used rather than the distinct id because the
+latter flips to the user id on `identify()`, which would hand one browser a
+second client id mid-session.
+
+Turning the tag off also removes everything the tag used to do for you, so
+`send_session_params` and `send_campaign_params` are on by default: without them
+GA4 makes every server event its own session and attributes all of it to
+`(direct)/(none)`.
+
+<Callout kind="warning">
+  What you give up by dropping the Google tag: **Google Signals** (demographics,
+  interests, signed-in cross-device) and **cookie-based remarketing audiences**
+  exported to Google Ads and YouTube, which are built from advertising cookies
+  the tag sets in the browser. Reach those audiences through Customer Match on
+  the `google_ads` destination instead. Enhanced-measurement events
+  (`scroll`, `outbound_click`, `file_download`, …) also stop firing unless you
+  send equivalents yourself.
+</Callout>
+
+<Callout kind="info">
+  One edge case in `auto`: a **consent-gated** Google tag writes no `_ga` cookie
+  until consent is granted, so a visitor can be sent a derived client id first
+  and a cookie-based one afterwards — two GA4 users for one browser. It is
+  bounded to exactly two (both values are deterministic and neither drifts) and
+  does not arise on a fully tagless site or one where GA is always present. Pin
+  `client_id_strategy` to `mythic_device_id` to avoid it entirely. An ad blocker
+  is *not* a case of this: a blocked visitor sends no client-side hits at all,
+  so the derived id is the only record of them rather than a duplicate.
 </Callout>
 
 GA4's `AddressInfo` also accepts `addressLine`, `city` and `administrativeArea`,

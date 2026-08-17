@@ -1126,6 +1126,46 @@ components:
             destination would look healthy while delivering nothing.
           example:
             order_completed: purchase
+        client_id_strategy:
+          type: string
+          enum: [auto, ga_cookie, mythic_device_id]
+          default: auto
+          description: >
+            Which identifier becomes the GA4 client id. `auto` uses Google
+            Analytics' own `_ga` cookie when the page has one and otherwise
+            derives a stable value from Mythic's device id — this is what lets
+            you send to GA4 with **no Google tag on the site at all**. The
+            derivation is a pure function of the device id (never a clock read),
+            so the same browser always produces the same client id; a value that
+            drifted would turn one visitor into many while GA4 reported success
+            throughout. `ga_cookie` uses only the cookie and skips events
+            without one; `mythic_device_id` always derives.
+        device_id_property:
+          type: string
+          description: >
+            Event property holding the device id used by the derivation.
+            Defaults to `$device_id`. Deliberately not `distinct_id`, which
+            flips to the user id on identify() and would hand one browser a
+            second client id mid-session.
+        send_session_params:
+          type: boolean
+          default: true
+          description: >
+            Attach `session_id` and `session_number` event parameters. With no
+            Google tag on the page nothing else assembles sessions, so without
+            these GA4 treats every server event as its own session. Session ids
+            are UUIDv7, so the session start time is read out of the id itself.
+        send_campaign_params:
+          type: boolean
+          default: true
+          description: >
+            Emit a `campaign_details` event alongside the conversion, carrying
+            source/medium/campaign/term/content resolved through the
+            destination's attribution model. Without it a tagless event lands as
+            `(direct)/(none)` — delivered, and useless for attribution. It rides
+            in the same request one millisecond earlier (Google applies it to
+            events at or after its own timestamp) and is invisible in GA4
+            reports, so it does not inflate event counts.
         client_id_property:
           type: string
           description: >
