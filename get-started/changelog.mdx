@@ -1,0 +1,34 @@
+---
+title: Changelog
+description: Track product updates across Mythic Analytics, including new destination workflows, diagnostics, and fixes that affect daily operations.
+---
+
+## Product updates
+
+<Update label="August 18, 2026" description="Destination connectivity, diagnostics, and GA4 fixes" tags={["feature", "improvement", "bugfix"]}>
+
+### New Features
+
+- **Google OAuth consent flow** — Connect Google Ads and GA4 destinations through a standard Google consent screen instead of manually pasting a refresh token. Use Mythic's default OAuth client or register your own for a branded consent screen and dedicated API quota in the [Destinations API overview](/destinations-api/overview).
+
+- **Shareable OAuth connect link** — Send a short OAuth link to clients who do not have an API key. The link redirects them to Google's consent screen so they can authorize the destination connection without handling credentials directly.
+
+- **Google delivery status diagnostics** — Check Google's downstream verdict for deliveries to Google Ads and GA4 destinations, including `PROCESSING`, `SUCCESS`, `FAILED`, and `PARTIAL_SUCCESS`. This helps you confirm whether Google actually ingested an event, not only whether the request was accepted; see the [Destinations API overview](/destinations-api/overview).
+
+- **Delivery duration in detail view** — Delivery detail pages now show how long each delivery took. This closes the gap where timing appeared in list views but not in the individual delivery record.
+
+### Updates
+
+- **Admin delivery status endpoint** — Platform admins can now query Google's downstream delivery verdict through a dedicated admin endpoint. The response includes the same status model and per-record error counts used for agency-facing Google delivery diagnostics.
+
+### Bug Fixes
+
+- **GA4 `transactionId` mapping** — GA4 events now send `transactionId` from real order identifiers instead of the event UUID. This fixes a case where Google silently discarded events, and it keeps pageviews free of transaction IDs.
+
+- **GA4 `loginAccount` field removed** — Removed a GA4 request field that could trigger `403 PERMISSION_DENIED` responses from Google. Google Ads and GA4 destination connections now avoid that failure mode.
+
+- **OAuth redirect URI consistency** — OAuth routes now use the same redirect URI throughout the connection flow. This fixes exact-match failures when agencies register their own OAuth client.
+
+- **GA4 tagless identity fields** — Tagless GA4 events now read device, session, and user identifiers from the correct location. This fixes a bug that silently skipped tagless events during delivery.
+
+</Update>
