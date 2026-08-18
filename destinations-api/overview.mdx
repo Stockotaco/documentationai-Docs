@@ -86,6 +86,48 @@ Credentials are stored separately as a `google_ads` credential — a JSON object
   A refresh token carrying the older `adwords` scope refreshes successfully and then fails at upload time with a permission error. If a Google Ads destination returns 403, check the scope before anything else.
 </Callout>
 
+### Google Analytics: a 200 does not mean the data arrived
+
+The Data Manager API **accepts** an event and processes it later. A successful
+delivery in the log means Google took the request, not that the event was
+ingested and not that it is visible yet. Two consequences that will otherwise
+cost you an afternoon:
+
+- **Ingestion is asynchronous.** In practice it takes around **30 minutes** to go
+  from `PROCESSING` to `SUCCESS`. Checking GA4 seconds after a delivery shows
+  nothing, correctly.
+- **DebugView and Realtime are not valid tests.** There is no `debug_mode`
+  equivalent in this API, and Data Manager is a backend data source rather than a
+  tag hit, so it does not flow through the realtime pipeline. Look in standard
+  reports, or the BigQuery export.
+
+To find out what actually happened, ask Google:
+
+```bash
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/destinations/$ID/deliveries/$EVENT_UUID/status" \
+  -H "Authorization: Bearer ak_your_agency_key" -H "X-Location-Id: loc_abc123"
+```
+
+```json
+{ "request_status": "SUCCESS", "record_count": "1", "error_counts": [], "warning_counts": [] }
+```
+
+<Callout kind="warning">
+  `PROCESSING` is the normal state for a while — it is not a failure. Only `FAILED` and `PARTIAL_SUCCESS` carry `error_counts`, and those name the reason and the number of records affected.
+</Callout>
+
+Without this endpoint a destination that is quietly discarding every event is
+indistinguishable from one that works: both produce an unbroken run of 200s.
+
+### `transaction_id` is not a per-event id
+
+Set `transaction_id` (or point `transaction_id_property` at it) only for a
+**real order identifier**. It is how Google dedupes against your tag, and it is
+what marks an event as a *multi-source event* matched to an existing tag event —
+a mode that is **allowlist-only per property**. A random per-event value both
+misclassifies the event and can never match anything. Pageviews should carry no
+transaction id at all.
+
 ### Connecting Google without a refresh token
 
 You do not have to mint a refresh token by hand. `POST /destinations/oauth/initiate` returns a `consent_url`; send the browser there, the user picks a Google account, and the callback stores a credential for you. It is the same credential shape either way — the consent flow is a better way to obtain it, not a different one.

@@ -219,6 +219,59 @@ paths:
           $ref: "#/components/responses/RateLimited"
         "502":
           $ref: "#/components/responses/UpstreamError"
+  /client/v1/destinations/{id}/deliveries/{eventUuid}/status:
+    get:
+      summary: What Google did with a delivery after accepting it
+      operationId: getDeliveryRequestStatus
+      description: >
+        Data Manager destinations only (google_ads, google_analytics). A 200 at
+        delivery time means ACCEPTED — not ingested, and not yet visible.
+        Ingestion is asynchronous (roughly 30 minutes to settle in practice) and
+        Google reports downstream failures only here.
+
+
+        This is what distinguishes a working destination from one whose data is
+        being silently discarded: both show a clean run of 200s in the delivery
+        log. `request_status` is PROCESSING until Google finishes, then SUCCESS,
+        FAILED or PARTIAL_SUCCESS — **PROCESSING is normal, not a fault**.
+        `error_counts` names the reason and how many records it affected.
+
+
+        You do not supply Google's request id; it is stored per delivery and
+        resolved for you.
+      tags: [Destinations]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: eventUuid, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Google's verdict
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      google_request_id: { type: string }
+                      request_status:
+                        type: string
+                        enum: [PROCESSING, SUCCESS, FAILED, PARTIAL_SUCCESS, REQUEST_STATUS_UNKNOWN]
+                      record_count: { type: string, description: 'Events Google counted in the request.' }
+                      error_counts:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            reason: { type: string }
+                            recordCount: { type: string }
+                      warning_counts: { type: array, items: { type: object } }
+        '400': { description: 'Not a Data Manager destination' }
+        '404': { description: 'No delivery for that event' }
+        '409': { description: 'The delivery never reached Google, so there is no downstream status' }
+
   /client/v1/destinations/oauth/client:
     get:
       summary: Show the OAuth client consents run as
