@@ -219,6 +219,141 @@ paths:
           $ref: "#/components/responses/RateLimited"
         "502":
           $ref: "#/components/responses/UpstreamError"
+  /client/v1/destinations/oauth/client:
+    get:
+      summary: Show the OAuth client consents run as
+      operationId: getDestinationOAuthClient
+      description: >
+        Which Google OAuth client this agency's destination consents run as, and
+        the exact redirect URI that must be registered on it. The client secret
+        is never returned. Agency keys only.
+      tags: [Destinations]
+      responses:
+        '200':
+          description: OAuth client status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      has_client: { type: boolean, description: 'True when this agency registered its own client.' }
+                      source: { type: string, enum: [agency, mythic], nullable: true }
+                      client_id: { type: string, nullable: true }
+                      available: { type: boolean, description: 'False when neither the agency nor the platform has a usable client — initiate would return not_configured.' }
+                      redirect_uri: { type: string, description: 'Must be listed under Authorized redirect URIs on the OAuth client. Must match exactly.' }
+                      scope: { type: string }
+        '403': { description: Agency key required }
+    put:
+      summary: Register your own OAuth client
+      operationId: setDestinationOAuthClient
+      description: >
+        Run consents as your own Google OAuth client: your brand on the consent
+        screen, your own Cloud-project quota (300 req/min and 100,000/day, which
+        is otherwise SHARED by everyone on Mythic's client), and your own Google
+        verification. The secret is encrypted at rest and never returned.
+
+
+        Add the returned `redirect_uri` to the client's Authorized redirect URIs
+        and enable the Data Manager API on its Cloud project, or consent fails.
+      tags: [Destinations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client_id, client_secret]
+              properties:
+                client_id: { type: string }
+                client_secret: { type: string, writeOnly: true }
+      responses:
+        '200': { description: Stored }
+        '400': { description: Invalid client }
+        '403': { description: Agency key required }
+    delete:
+      summary: Revert to Mythic's OAuth client
+      operationId: deleteDestinationOAuthClient
+      description: >
+        Removes the agency's own client. Existing credentials keep working —
+        they were minted against the client that issued them.
+      tags: [Destinations]
+      responses:
+        '200': { description: Deleted }
+        '403': { description: Agency key required }
+
+  /client/v1/destinations/oauth/initiate:
+    post:
+      summary: Start the Google consent flow
+      operationId: initiateDestinationOAuth
+      description: >
+        Returns a `consent_url` so nobody has to create a Cloud project or paste
+        a refresh token. Valid for 15 minutes and single-use. The credential the
+        callback stores is identical in shape to a hand-pasted one.
+      tags: [Destinations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [destination_type]
+              properties:
+                destination_type: { type: string, enum: [google_ads, google_analytics] }
+                credential_name: { type: string, default: default }
+                login_customer_id: { type: string, description: 'Google Ads manager account, when the operating account sits under one.' }
+                login_hint: { type: string, description: 'Preselects a Google account. Convenience only — it cannot restrict who consents.' }
+                return_url:
+                  type: string
+                  description: >
+                    Where to send the browser afterwards, with mythic_oauth=success
+                    or mythic_oauth=error&mythic_error=<code> appended. The ORIGIN
+                    must be registered on the agency first — the callback is
+                    unauthenticated, so an arbitrary target would make it an open
+                    redirector. Omit for a terminal page instead.
+      responses:
+        '200':
+          description: Consent URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      consent_url: { type: string }
+                      expires_in: { type: integer, example: 900 }
+                      oauth_client_source: { type: string, enum: [agency, mythic] }
+        '400': { description: 'Unsupported destination_type, or a return_url whose origin is not registered' }
+        '403': { description: Agency key required }
+        '503': { description: No OAuth client is configured }
+
+  /client/v1/destinations/oauth/callback:
+    get:
+      summary: OAuth callback (browser)
+      operationId: destinationOAuthCallback
+      description: >
+        Where Google returns the browser after consent. **Unauthenticated by
+        construction** — a browser carries no API key, and the single-use state
+        token in the query string is the credential. Not called directly by
+        integrators; register it as the OAuth client's redirect URI.
+      tags: [Destinations]
+      security: []
+      parameters:
+        - { name: state, in: query, required: true, schema: { type: string } }
+        - { name: code, in: query, schema: { type: string } }
+        - { name: error, in: query, schema: { type: string }, description: 'Present when the user cancelled.' }
+      responses:
+        '200': { description: Connected (HTML page) }
+        '302': { description: Redirect to the registered return_url }
+        '400': { description: 'Expired, replayed or failed consent (HTML page)' }
+        '409': { description: The OAuth client changed while the user was consenting }
+
   /client/v1/destinations/deliveries:
     get:
       summary: List delivery attempts

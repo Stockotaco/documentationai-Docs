@@ -86,6 +86,38 @@ Credentials are stored separately as a `google_ads` credential — a JSON object
   A refresh token carrying the older `adwords` scope refreshes successfully and then fails at upload time with a permission error. If a Google Ads destination returns 403, check the scope before anything else.
 </Callout>
 
+### Connecting Google without a refresh token
+
+You do not have to mint a refresh token by hand. `POST /destinations/oauth/initiate` returns a `consent_url`; send the browser there, the user picks a Google account, and the callback stores a credential for you. It is the same credential shape either way — the consent flow is a better way to obtain it, not a different one.
+
+```bash
+curl -X POST https://mythic-analytics.gulp.workers.dev/client/v1/destinations/oauth/initiate \
+  -H "Authorization: Bearer ak_your_agency_key" \
+  -H "X-Location-Id: loc_abc123" \
+  -H "Content-Type: application/json" \
+  -d '{"destination_type":"google_analytics","return_url":"https://portal.example.com/settings"}'
+```
+
+The `consent_url` is valid for **15 minutes** and is **single-use**. On completion the browser is sent to `return_url` with `mythic_oauth=success` (or `mythic_oauth=error&mythic_error=<code>`) appended; omit `return_url` and the callback renders a terminal page instead.
+
+<Callout kind="warning">
+  A `return_url` origin must be registered on your agency first. The callback is unauthenticated by construction — a browser returning from Google carries no key — so an arbitrary redirect target would make it an open redirector. Unregistered origins are rejected at `initiate`, before anything is stored.
+</Callout>
+
+### Whose OAuth client
+
+By default consents run as **Mythic's** OAuth client and there is nothing to configure. Register your own with `PUT /destinations/oauth/client` (`client_id` + `client_secret`) to get:
+
+- **your brand on the consent screen** instead of "Mythic Analytics",
+- **your own Cloud project's quota.** Data Manager quota is per Cloud project (300 requests/min, 100,000/day) and Google Ads conversions are sent one per request, so everyone sharing Mythic's client shares a single 100,000/day conversion ceiling,
+- **your own Google verification**, for your own consent screen.
+
+The response echoes the `redirect_uri` you must add to your OAuth client's **Authorized redirect URIs** — it has to match exactly, and it is the most common setup mistake. `GET /destinations/oauth/client` reports `has_client`, the active `client_id` and `redirect_uri`; the secret is never returned. `DELETE` reverts to Mythic's client and leaves existing credentials working, since they were minted against the client that issued them.
+
+<Callout kind="warning">
+  If Google returns no refresh token, the connection **fails** rather than storing a short-lived one — otherwise the destination would report success and stop working within the hour. This normally means the account had already granted access; remove the app under [Google account permissions](https://myaccount.google.com/permissions) and connect again.
+</Callout>
+
 Hashed user identifiers are attached whenever available, including alongside a click ID — that is what lifts match rate. **Every** stitched email and phone is sent, not just the one on the event, up to Google's ceiling of 10 identifiers per event; an address identifier always keeps a reserved slot so a long tail of email aliases cannot crowd it out. `enhanced_conversions_for_leads` governs only whether an event with **no** `gclid`/`gbraid`/`wbraid` may still be uploaded; otherwise such events are logged as `skipped`. Google requires E.164 phone numbers, so a 10-digit national number needs `default_country_code` to be usable — without it the phone identifier is dropped rather than hashed into a guaranteed non-match. Addresses send only when first name, last name, a 2-letter country code, and a postal code are all present. The event `uuid` is sent as Google's `transactionId` for deduplication.
 
 <Callout kind="info">
