@@ -259,18 +259,29 @@ paths:
                       request_status:
                         type: string
                         enum: [PROCESSING, SUCCESS, FAILED, PARTIAL_SUCCESS, REQUEST_STATUS_UNKNOWN]
-                      record_count: { type: string, description: 'Events Google counted in the request.' }
+                      record_count:
+                        type: integer
+                        description: Number of records Google processed in the request.
                       error_counts:
                         type: array
                         items:
                           type: object
                           properties:
-                            reason: { type: string }
-                            recordCount: { type: string }
+                            errorCode:
+                              type: string
+                              description: Google error code for the affected records.
+                            count:
+                              type: integer
+                              description: Number of records affected by this error code.
                       warning_counts: { type: array, items: { type: object } }
+                      per_destination:
+                        type: array
+                        items: { type: object }
+                        description: Per-destination breakdown when multiple destinations are involved.
         '400': { description: 'Not a Data Manager destination' }
         '404': { description: 'No delivery for that event' }
         '409': { description: 'The delivery never reached Google, so there is no downstream status' }
+        '503': { description: 'Diagnostics service not available in this environment' }
 
   /client/v1/destinations/oauth/client:
     get:
@@ -343,9 +354,10 @@ paths:
       summary: Start the Google consent flow
       operationId: initiateDestinationOAuth
       description: >
-        Returns a `consent_url` so nobody has to create a Cloud project or paste
-        a refresh token. Valid for 15 minutes and single-use. The credential the
-        callback stores is identical in shape to a hand-pasted one.
+        Returns a `consent_url` and a shorter `start_url` so nobody has to
+        create a Cloud project or paste a refresh token. Valid for 15 minutes
+        and single-use. The credential the callback stores is identical in
+        shape to a hand-pasted one.
       tags: [Destinations]
       requestBody:
         required: true
@@ -380,11 +392,41 @@ paths:
                     type: object
                     properties:
                       consent_url: { type: string }
+                      start_url:
+                        type: string
+                        description: >
+                          Short shareable redirect link (~127 chars) that
+                          redirects to the same Google consent screen. Prefer
+                          this over `consent_url` (~430 chars) when the URL
+                          needs to fit in a link, email, or SMS.
                       expires_in: { type: integer, example: 900 }
                       oauth_client_source: { type: string, enum: [agency, mythic] }
         '400': { description: 'Unsupported destination_type, or a return_url whose origin is not registered' }
         '403': { description: Agency key required }
         '503': { description: No OAuth client is configured }
+
+  /client/v1/destinations/oauth/start:
+    get:
+      summary: Shareable consent redirect (browser)
+      operationId: destinationOAuthStart
+      description: >
+        A short, shareable redirect link that sends the browser to Google's
+        consent screen. Identified by a state token `t` from the initiate
+        response's `start_url`. Does NOT consume the state token — it is
+        replayable within the 15-minute window, so the same link can be opened
+        multiple times. Unauthenticated by construction. Returns a 302 redirect
+        to Google, or a 400 HTML page when the token is expired or invalid.
+      tags: [Destinations]
+      security: []
+      parameters:
+        - { name: t, in: query, required: true, schema: { type: string }, description: 'State token from the initiate response.' }
+      responses:
+        '302':
+          description: Redirect to Google's consent screen
+          headers:
+            Location:
+              schema: { type: string }
+        '400': { description: 'Expired or invalid state token (HTML page)' }
 
   /client/v1/destinations/oauth/callback:
     get:
@@ -721,8 +763,8 @@ paths:
       description: >
         Send a test delivery through the real ad-platform adapter using the
         stored credential. Requires an agency (`ak_`) key. Supported only for
-        ad destinations (`meta_capi`, `google_ads`) — webhooks fire on real
-        events and return `400`.
+        ad destinations (`meta_capi`, `google_ads`, `google_analytics`) —
+        webhooks fire on real events and return `400`.
       parameters:
         - $ref: "#/components/parameters/DestinationId"
       responses:
@@ -853,13 +895,13 @@ components:
     DeliveryLimit:
       name: limit
       in: query
-      description: Maximum rows. Default `50`, min `1`, max `500`.
+      description: Maximum rows. Default `50`, min `1`, max `200`.
       required: false
       schema:
         type: integer
         default: 50
         minimum: 1
-        maximum: 500
+        maximum: 200
     DeliveryOffset:
       name: offset
       in: query
@@ -1460,6 +1502,16 @@ components:
             type: string
         last_updated_property:
           type: string
+        transaction_id_property:
+          type: string
+          description: >
+            Event property holding a real order or transaction identifier. Use
+            this — or set `transaction_id` directly — only for genuine purchase
+            events. It is how Google deduplicates against your tag and marks the
+            event as a multi-source conversion matched to an existing tag event,
+            a mode that is allowlist-only per property. A random per-event value
+            both misclassifies the event and can never match anything. Omit for
+            non-purchase events like pageviews.
         event_location:
           type: object
           properties:
@@ -1488,7 +1540,8 @@ components:
           type: object
           description: >
             Type-specific configuration. See `WebhookConfig`, `MetaCapiConfig`,
-            and `GoogleAdsConfig`. Webhook secrets are redacted for viewer keys.
+            `GoogleAdsConfig`, and `GoogleAnalyticsConfig`. Webhook secrets are
+            redacted for viewer keys.
         enabled:
           type: boolean
         rate_limit_max:
@@ -1535,6 +1588,7 @@ components:
             - $ref: "#/components/schemas/WebhookConfig"
             - $ref: "#/components/schemas/MetaCapiConfig"
             - $ref: "#/components/schemas/GoogleAdsConfig"
+            - $ref: "#/components/schemas/GoogleAnalyticsConfig"
         enabled:
           type: boolean
           default: true
@@ -1713,6 +1767,35 @@ components:
           type: string
           nullable: true
           description: Meta trace id parsed from the response — what Meta support asks for. Retained even for HIPAA locations.
+        duration_ms:
+          type: number
+          nullable: true
+          description: Time from request send to response receipt, in milliseconds.
+        field_warnings:
+          type: array
+          nullable: true
+          items:
+            type: object
+          description: >
+            Non-fatal warnings from the destination's response (e.g. Google
+            Data Manager `fieldViolations` with severity WARNING). Each entry
+            names the field and the issue.
+        field_violations:
+          type: array
+          nullable: true
+          items:
+            type: object
+          description: >
+            Validation errors from the destination's response (e.g. Google
+            Data Manager `fieldViolations` with severity ERROR). Each entry
+            names the offending field and the rejection reason.
+        google_request_id:
+          type: string
+          nullable: true
+          description: >
+            Google Data Manager request id, present on `google_ads` and
+            `google_analytics` deliveries. Use this to correlate with the
+            downstream status endpoint.
         enrichment_applied:
           type: boolean
         created_at:
