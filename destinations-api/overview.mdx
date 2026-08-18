@@ -130,7 +130,9 @@ transaction id at all.
 
 ### Connecting Google without a refresh token
 
-You do not have to mint a refresh token by hand. `POST /destinations/oauth/initiate` returns a `consent_url`; send the browser there, the user picks a Google account, and the callback stores a credential for you. It is the same credential shape either way — the consent flow is a better way to obtain it, not a different one.
+You do not have to mint a refresh token by hand. `POST /destinations/oauth/initiate` returns a `consent_url` and a shorter `start_url`; send the browser to either one, the user picks a Google account, and the callback stores a credential for you. It is the same credential shape either way — the consent flow is a better way to obtain it, not a different one.
+
+The `consent_url` is Google's full consent-screen URL (~430 characters). The `start_url` is a compact redirect (~127 characters) that is safe to paste into emails, terminals, and chat — the raw `consent_url` can truncate in those contexts and produce a 404 at Google. Both resolve to the same consent screen; the `start_url` does not consume the state token, so clicking it twice is harmless.
 
 ```bash
 curl -X POST https://mythic-analytics.gulp.workers.dev/client/v1/destinations/oauth/initiate \
@@ -160,7 +162,7 @@ The response echoes the `redirect_uri` you must add to your OAuth client's **Aut
   If Google returns no refresh token, the connection **fails** rather than storing a short-lived one — otherwise the destination would report success and stop working within the hour. This normally means the account had already granted access; remove the app under [Google account permissions](https://myaccount.google.com/permissions) and connect again.
 </Callout>
 
-Hashed user identifiers are attached whenever available, including alongside a click ID — that is what lifts match rate. **Every** stitched email and phone is sent, not just the one on the event, up to Google's ceiling of 10 identifiers per event; an address identifier always keeps a reserved slot so a long tail of email aliases cannot crowd it out. `enhanced_conversions_for_leads` governs only whether an event with **no** `gclid`/`gbraid`/`wbraid` may still be uploaded; otherwise such events are logged as `skipped`. Google requires E.164 phone numbers, so a 10-digit national number needs `default_country_code` to be usable — without it the phone identifier is dropped rather than hashed into a guaranteed non-match. Addresses send only when first name, last name, a 2-letter country code, and a postal code are all present. The event `uuid` is sent as Google's `transactionId` for deduplication.
+Hashed user identifiers are attached whenever available, including alongside a click ID — that is what lifts match rate. **Every** stitched email and phone is sent, not just the one on the event, up to Google's ceiling of 10 identifiers per event; an address identifier always keeps a reserved slot so a long tail of email aliases cannot crowd it out. `enhanced_conversions_for_leads` governs only whether an event with **no** `gclid`/`gbraid`/`wbraid` may still be uploaded; otherwise such events are logged as `skipped`. Google requires E.164 phone numbers, so a 10-digit national number needs `default_country_code` to be usable — without it the phone identifier is dropped rather than hashed into a guaranteed non-match. Addresses send only when first name, last name, a 2-letter country code, and a postal code are all present. `transactionId` is mapped from `transaction_id` / `order_id` / `transaction_id_property` (in that order) and only appears on events that carry one — see [transaction_id is not a per-event id](#transaction_id-is-not-a-per-event-id).
 
 <Callout kind="info">
   Identifiers are normalized to Google's spec, which differs from Meta's in two

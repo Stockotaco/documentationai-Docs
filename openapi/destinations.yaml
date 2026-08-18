@@ -380,6 +380,7 @@ paths:
                     type: object
                     properties:
                       consent_url: { type: string }
+                      start_url: { type: string, description: "Compact redirect to Google's consent screen (~127 chars), safe for email and chat. The raw `consent_url` can truncate in those contexts." }
                       expires_in: { type: integer, example: 900 }
                       oauth_client_source: { type: string, enum: [agency, mythic] }
         '400': { description: 'Unsupported destination_type, or a return_url whose origin is not registered' }
@@ -406,6 +407,26 @@ paths:
         '302': { description: Redirect to the registered return_url }
         '400': { description: 'Expired, replayed or failed consent (HTML page)' }
         '409': { description: The OAuth client changed while the user was consenting }
+
+  /client/v1/destinations/oauth/start:
+    get:
+      summary: Short shareable connect link
+      operationId: destinationOAuthStart
+      description: >
+        A compact URL (~127 characters) that redirects to Google's consent
+        screen. The raw consent_url is ~430 characters and truncates in
+        terminals, email, and chat, producing 404s at Google. This endpoint
+        resolves the stored state token and 302-redirects to the same consent
+        screen. Public/unauthenticated — like the callback, the single-use
+        state token in the query string is the credential. Does not consume the
+        state (the callback does), so clicking the link twice is safe.
+      tags: [Destinations]
+      security: []
+      parameters:
+        - { name: t, in: query, required: true, schema: { type: string }, description: 'The state token returned by `POST /oauth/initiate`.' }
+      responses:
+        '302': { description: "Redirect to Google's consent screen" }
+        '400': { description: 'Expired, missing, or invalid state token' }
 
   /client/v1/destinations/deliveries:
     get:
@@ -720,8 +741,7 @@ paths:
       operationId: testDestination
       description: >
         Send a test delivery through the real ad-platform adapter using the
-        stored credential. Requires an agency (`ak_`) key. Supported only for
-        ad destinations (`meta_capi`, `google_ads`) — webhooks fire on real
+        stored credential. Requires an agency (`ak_`) key. Supported for ad and analytics destinations (`meta_capi`, `google_ads`, `google_analytics`) — webhooks fire on real
         events and return `400`.
       parameters:
         - $ref: "#/components/parameters/DestinationId"
@@ -1173,6 +1193,9 @@ components:
             store_id_property:
               type: string
               description: Event property holding the store id.
+        transaction_id_property:
+          type: string
+          description: Event property holding the transaction (order) id. If set, this is used as Google's `transactionId` for deduplication; otherwise the adapter checks `transaction_id` then `order_id` on the event. Use a real order identifier — a random per-event value opts every event into GA4's allowlist-only multi-source event path and causes silent data loss.
     CartDataConfig:
       type: object
       description: >
@@ -1467,6 +1490,9 @@ components:
               type: string
             store_id_property:
               type: string
+        transaction_id_property:
+          type: string
+          description: Event property holding the transaction (order) id. If set, this is used as Google's `transactionId` for deduplication; otherwise the adapter checks `transaction_id` then `order_id` on the event. Use a real order identifier — a random per-event value opts every event into GA4's allowlist-only multi-source event path and causes silent data loss.
     Destination:
       type: object
       properties:
@@ -1488,7 +1514,7 @@ components:
           type: object
           description: >
             Type-specific configuration. See `WebhookConfig`, `MetaCapiConfig`,
-            and `GoogleAdsConfig`. Webhook secrets are redacted for viewer keys.
+            `GoogleAdsConfig`, and `GoogleAnalyticsConfig`. Webhook secrets are redacted for viewer keys.
         enabled:
           type: boolean
         rate_limit_max:
@@ -1535,6 +1561,7 @@ components:
             - $ref: "#/components/schemas/WebhookConfig"
             - $ref: "#/components/schemas/MetaCapiConfig"
             - $ref: "#/components/schemas/GoogleAdsConfig"
+            - $ref: "#/components/schemas/GoogleAnalyticsConfig"
         enabled:
           type: boolean
           default: true
@@ -1722,6 +1749,10 @@ components:
           type: string
           format: date-time
           nullable: true
+        duration_ms:
+          type: number
+          nullable: true
+          description: Delivery duration in milliseconds.
     Health:
       type: object
       properties:
