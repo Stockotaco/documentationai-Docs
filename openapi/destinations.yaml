@@ -1378,6 +1378,50 @@ components:
             Google tag on the page nothing else assembles sessions, so without
             these GA4 treats every server event as its own session. Session ids
             are UUIDv7, so the session start time is read out of the id itself.
+        send_page_params:
+          type: boolean
+          default: true
+          description: >
+            Attach `page_location` (the FULL url from `$current_url`, falling
+            back to `$canonical_url`), `page_title`, and `page_referrer`
+            (omitted when empty — GA4 would read "" as a referrer named "").
+            GA4 builds its entire page reporting from `page_location`; with a
+            tag these are collected automatically, tagless nobody sends them
+            and every page_view lands under one unnamed row.
+        send_engagement_time:
+          type: boolean
+          default: true
+          description: >
+            Attach `engagement_time_msec`. GA4 computes engaged sessions — and
+            therefore ACTIVE USERS — from it; a property without it reports
+            views and zero users forever. Defaults to the minimum 1ms rather
+            than an invented duration (enough to count the user, too small to
+            inflate average engagement time); a measured
+            `$engagement_time_msec` on the event is used when present.
+        send_all_properties:
+          type: boolean
+          default: true
+          description: >
+            Pass every remaining event property through as a GA4 event
+            parameter. Names are sanitised to GA4's rules ($ stripped, reserved
+            ga_/google_/firebase_/_ prefixes dropped, 40-char names, 100-char
+            values); properties already sent as structured fields are not
+            duplicated. Prioritised in tiers — the client's own (non-$)
+            properties such as ecommerce, lead-gen and experiment ids first,
+            curated $-props (referring_domain, session_entry_*, screen sizes)
+            second, SDK internals last — under a deterministic 25-parameter
+            TOTAL cap. Measured live: an event sent with 32 parameters returns
+            200, gets a SUCCESS ingestion verdict, and lands with a random 7
+            discarded; the cap exists so Google never makes that choice.
+        send_source_param:
+          type: boolean
+          default: true
+          description: >
+            Stamp `data_source: "mythic"` on every emitted event (including
+            campaign_details). One filter isolates Mythic-delivered events in a
+            shared property, in the UI or the BigQuery export. A client event
+            property named data_source cannot shadow it; an explicit
+            property_mapping to that name still wins. Set false to opt out.
         send_campaign_params:
           type: boolean
           default: true

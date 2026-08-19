@@ -328,6 +328,43 @@ GA4's `AddressInfo` also accepts `addressLine`, `city` and `administrativeArea`,
 which Google Ads ignores; the first is hashed and the other two are plaintext.
 Set `send_user_data: false` to suppress hashed identifiers entirely.
 
+## What GA4 receives without configuration
+
+A Google tag collects page context, engagement time and session identity
+automatically. Server-side, nobody does — so the adapter does, on every event:
+
+| parameter | source | why it exists |
+|---|---|---|
+| `page_location` | `$current_url` (full URL) | GA4 builds ALL page reporting from it; without it every page_view lands under one unnamed row |
+| `page_title` / `page_referrer` | `$page_title` / `$referrer` | referrer omitted when empty — `""` would read as a referrer named "" |
+| `engagement_time_msec` | measured, else **1** | GA4 counts ACTIVE USERS from it; missing means views with zero users, forever |
+| `session_id` / `session_number` | UUIDv7 session id | GA4 converts these to its native `ga_session_id`/`ga_session_number` and computes entrances |
+| `data_source: "mythic"` | constant | one filter isolates Mythic-delivered events in any shared property — UI or BigQuery export |
+
+Everything else on the event passes through as parameters
+(`send_all_properties`, default on), prioritised in tiers under GA4's
+25-parameter budget: **your own event properties first** (ecommerce, lead-gen,
+experiment ids — a non-`$` key is business data someone expects to report on),
+curated context second (`referring_domain`, `session_entry_*`, screen sizes),
+SDK internals last. Names are sanitised to GA4's rules; structured fields are
+never duplicated.
+
+<Callout kind="warning" title="The 25-parameter limit fails silently — we measured it">
+  A live probe sent one event with exactly 25 parameters and one with 32. The
+  25-param event landed fully intact. The 32-param event returned HTTP 200,
+  received a SUCCESS ingestion verdict, showed zero errors in the Cloud
+  Console — and landed with a **random seven parameters discarded**, including
+  the one that identified the event. Not first-N, not alphabetical: arbitrary.
+  This is why the adapter caps at 25 TOTAL deterministically and reports its
+  own overflow: the alternative is letting Google choose which of your
+  parameters to lose, differently each time, while every dashboard shows green.
+</Callout>
+
+Each toggle (`send_page_params`, `send_engagement_time`, `send_all_properties`,
+`send_source_param`, `send_session_params`, `send_campaign_params`) can be
+disabled independently; the defaults are what a correctly-tagged site would
+produce.
+
 ## Trigger rules
 
 Every destination carries `trigger_rules`: an object with a non-empty `rules` array and an optional `operator` (`AND` or `OR`, default `AND`). Each rule requires a `type`. The only rule type that filters on the **event name** server-side is `mythic_event`:
