@@ -125,10 +125,11 @@ paths:
       summary: Test a destination
       operationId: adminTestDestination
       description: >
-        Send a test delivery through the real ad-platform adapter (Meta CAPI /
-        Google Ads) using the stored credential. Proxies to the identity
-        processor; only ad destinations are testable — webhooks fire on real
-        events.
+        Send a test delivery through the real ad-platform adapter (Meta CAPI,
+        Google Ads, GA4) using the stored credential. Proxies to the identity
+        processor; ad destinations and GA4 are testable — webhooks fire on
+        real events. Both Google destinations use `validateOnly` so nothing
+        is recorded in the customer's account.
       requestBody:
         required: true
         content:
@@ -163,6 +164,104 @@ paths:
                 $ref: "#/components/schemas/AdminErrorResponse"
         "503":
           description: Destination testing is not available in this environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+  /admin/destinations/request-status:
+    get:
+      summary: Retrieve Google's downstream verdict for a delivery
+      operationId: adminGetRequestStatus
+      description: >
+        Retrieve Google's Diagnostics API verdict for a specific delivery's
+        `google_request_id`. A `200` at delivery time means Google accepted
+        the request — not that the data was ingested. Downstream processing
+        failures (e.g., a property not allowlisted for a given data path)
+        surface only here. This is the only way to distinguish a working
+        destination from one whose data is being silently discarded.
+
+
+        Proxies through the worker to the identity processor, which holds the
+        OAuth credential and performs the token refresh. Returns Google's raw
+        response: `request_status` (PROCESSING, SUCCESS, FAILED,
+        PARTIAL_SUCCESS), `record_count`, `error_counts`, and
+        `warning_counts`. PROCESSING is normal — Google's ingestion is
+        asynchronous (roughly 30 minutes to settle).
+      parameters:
+        - name: location_id
+          in: query
+          required: true
+          description: Location (tenant) identifier.
+          schema:
+            type: string
+        - name: request_id
+          in: query
+          required: true
+          description: The `google_request_id` stored per delivery.
+          schema:
+            type: string
+        - name: destination_type
+          in: query
+          required: false
+          description: Credential type to look up. Defaults to `google_analytics`.
+          schema:
+            type: string
+            default: google_analytics
+        - name: credential_name
+          in: query
+          required: false
+          description: Named credential slot. Defaults to `default`.
+          schema:
+            type: string
+            default: default
+      responses:
+        "200":
+          description: Google's Diagnostics API verdict
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    description: Whether Google's Diagnostics API returned a 2xx.
+                  status:
+                    type: integer
+                    description: HTTP status Google returned.
+                  data:
+                    type: object
+                    nullable: true
+                    description: >
+                      Raw JSON body from Google's requestStatus:retrieve API.
+                      Contains `request_status`, `record_count`,
+                      `error_counts`, `warning_counts`. Null if the body
+                      could not be parsed as JSON.
+        "400":
+          description: Missing required `location_id` or `request_id`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "404":
+          description: No stored credential for that location/type combination
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "502":
+          description: Failed to reach the diagnostics service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "503":
+          description: Diagnostics are not available in this environment
           content:
             application/json:
               schema:

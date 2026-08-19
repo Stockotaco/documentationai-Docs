@@ -4,7 +4,7 @@ info:
   title: Destinations
   description: >
     Partner self-serve data activation. Create and manage destinations
-    (webhooks, Meta Conversions API, Google Ads), store per-location
+    (webhooks, Meta Conversions API, Google Ads, Google Analytics 4), store per-location
     credentials, and inspect delivery logs and health. Client-scoped: an
     agency key (`ak_`) has read-write access to a single named location, and a
     location secret key (`sk_`) is a read-only viewer of its own location.
@@ -134,10 +134,10 @@ paths:
         Store (or rotate, by re-sending) a credential for a credential-backed
         destination type. Requires an agency (`ak_`) key. A given
         `(destination_type, credential_name)` pair is upserted in place.
-        `google_ads` credential values must be a JSON object containing
-        `client_id`, `client_secret`, and `refresh_token`, minted against the
-        `https://www.googleapis.com/auth/datamanager` OAuth scope.
-        The response echoes metadata only — never the credential value.
+        `google_ads` and `google_analytics` credential values must be a JSON
+        object containing `client_id`, `client_secret`, and `refresh_token`,
+        minted against the `https://www.googleapis.com/auth/datamanager` OAuth
+        scope. The response echoes metadata only — never the credential value.
       parameters:
         - $ref: "#/components/parameters/CredentialType"
       requestBody:
@@ -720,9 +720,11 @@ paths:
       operationId: testDestination
       description: >
         Send a test delivery through the real ad-platform adapter using the
-        stored credential. Requires an agency (`ak_`) key. Supported only for
-        ad destinations (`meta_capi`, `google_ads`) — webhooks fire on real
-        events and return `400`.
+        stored credential. Requires an agency (`ak_`) key. Supported for
+        `meta_capi`, `google_ads`, and `google_analytics` — webhooks fire on
+        real events and return `400`. Both Google destinations use
+        `validateOnly` so Google validates the credential, scope, and payload
+        without recording anything in the customer's account.
       parameters:
         - $ref: "#/components/parameters/DestinationId"
       responses:
@@ -1471,6 +1473,18 @@ components:
         currency:
           type: string
           example: USD
+        transaction_id_property:
+          type: string
+          description: >
+            Dot-path into the event's properties pointing to the real order
+            identifier to use as GA4's `transactionId`. When unset, the adapter
+            falls back to `transaction_id`, then `order_id`, then
+            `$transaction_id` on the event. Only a genuine order id should be
+            sent — setting `transactionId` marks an event as a multi-source
+            data source matched to an existing tag event, a mode that is
+            allowlist-only per property. A random per-event value both
+            misclassifies the event and can never match anything. Absent on
+            pageviews, which is correct: they are not multi-source events.
         send_user_data:
           type: boolean
           default: true
@@ -1532,7 +1546,7 @@ components:
           type: object
           description: >
             Type-specific configuration. See `WebhookConfig`, `MetaCapiConfig`,
-            and `GoogleAdsConfig`. Webhook secrets are redacted for viewer keys.
+            `GoogleAdsConfig`, and `GoogleAnalyticsConfig`. Webhook secrets are redacted for viewer keys.
         enabled:
           type: boolean
         rate_limit_max:
@@ -1579,6 +1593,7 @@ components:
             - $ref: "#/components/schemas/WebhookConfig"
             - $ref: "#/components/schemas/MetaCapiConfig"
             - $ref: "#/components/schemas/GoogleAdsConfig"
+            - $ref: "#/components/schemas/GoogleAnalyticsConfig"
         enabled:
           type: boolean
           default: true
@@ -1619,10 +1634,10 @@ components:
         credential_value:
           type: string
           description: >
-            Secret value, max 8KB. For `google_ads` this must be a JSON object
-            string containing `client_id`, `client_secret`, and `refresh_token`
-            (plus an optional `login_customer_id` for manager-account access).
-            The refresh token must carry the
+            Secret value, max 8KB. For `google_ads` and `google_analytics` this
+            must be a JSON object string containing `client_id`, `client_secret`,
+            and `refresh_token` (plus an optional `login_customer_id` for
+            manager-account access). The refresh token must carry the
             `https://www.googleapis.com/auth/datamanager` OAuth scope.
         credential_name:
           type: string
