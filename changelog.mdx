@@ -1,0 +1,43 @@
+---
+title: Changelog
+description: Track Mythic Analytics product updates, new features, and bug fixes so your team can adopt changes quickly and troubleshoot with confidence.
+---
+
+## Recent release
+
+<Update label="2026-08-19" description="v2.257.0" tags={["feature", "improvement", "bugfix"]}>
+
+### New features
+
+- **Convert.com experiment capture** — The JavaScript SDK now detects Convert.com experiment assignments automatically and attaches them to session events with no manual tagging. You can break down metrics by the `$experiments` super property and review the related data model in [super properties](/javascript-sdk/super-properties).
+- **Google OAuth consent flow** — Connect Google Ads and GA4 destinations with a consent link instead of manually generating and pasting tokens. Agencies can also use their own OAuth client for branded consent screens and separate quota; see the [Destinations API](/destinations-api/overview).
+- **GA4 tagless mode** — Send events to GA4 without installing a Google tag on the site. Mythic now supplies client, session, campaign, and engagement context automatically for this flow; see the [Destinations API](/destinations-api/overview).
+- **GA4 delivery diagnostics** — Agencies can now retrieve Google's downstream ingestion verdict for a delivery, including partial failures and field-level errors. This makes silent GA4 delivery issues visible without admin escalation; see the [Destinations API](/destinations-api/overview).
+- **GA4 source stamping** — Events sent from Mythic to GA4 now include a constant `data_source` value of `mythic`. This makes it easy to isolate Mythic-delivered traffic in shared GA4 properties and BigQuery exports.
+- **GA4 automatic page and engagement mapping** — Page location, title, referrer, and engagement time now map to GA4 automatically. SDK properties also pass through automatically, within GA4's parameter limits.
+- **GA4 parameter priority tiers** — Important business fields now take priority over low-value diagnostic properties when GA4's event parameter budget is tight. This helps preserve ecommerce fields, UTM data, and referring domain data on property-heavy events; see the [Destinations API](/destinations-api/overview).
+
+### Updates
+
+- **Batched GA4 deliveries** — GA4 destinations can now batch up to 2,000 events per request to stay within Google's request quotas. Google Ads deliveries remain unbatched so a single bad conversion cannot block an entire batch.
+- **GA4 DebugView support** — GA4 destinations now support debug routing for setup verification. This is especially useful when validating a tagless implementation end to end.
+- **GA4 HIPAA enforcement** — GA4 destinations are now blocked for HIPAA-enabled locations at both setup time and delivery time. This prevents configurations that would violate GA4's data handling restrictions.
+- **Delivery duration in detail view** — Delivery detail pages now show the same duration value already visible in delivery lists. You can inspect slow deliveries without switching between views.
+- **Short OAuth share link** — The consent flow now returns a short start link alongside the full consent URL. This reduces copy-paste errors when sharing the link over email or chat.
+
+### Bug fixes
+
+- **GA4 silent discards** — GA4 was treating every event as a multi-source event because transaction IDs were populated incorrectly, which caused accepted requests to disappear downstream. Transaction IDs now map only from real order identifiers, so valid events appear in GA4 as expected.
+- **GA4 parameter budget overflow** — Automatically mapped fields could push required GA4 fields out of the 25-parameter limit, including page reporting fields. Standard GA4 fields now keep their place and the remaining budget is shared safely.
+- **GA4 tagless event drops** — Tagless GA4 deliveries could skip events because identity fields were read from the wrong part of the event payload. Tagless sites now deliver correctly.
+- **GA4 device language mapping** — The GA4 adapter was reading a language field the SDK does not send. GA4 now receives the browser language value correctly.
+- **OAuth redirect URI** — The OAuth client endpoint could return an invalid redirect URI, which would cause Google consent to fail with a mismatch error. The returned redirect URI is now correct.
+
+</Update>
+
+## What to read next
+
+<Columns cols={2}>
+  <Card title="JavaScript SDK super properties" href="/javascript-sdk/super-properties" icon="code" cta="View SDK docs" />
+  <Card title="Destinations API" href="/destinations-api/overview" icon="arrow-right" cta="View destination docs" />
+</Columns>
