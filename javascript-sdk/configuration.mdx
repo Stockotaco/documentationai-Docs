@@ -282,6 +282,32 @@ The full set of options you can pass to `init(key, config)`.
   Heatmap capture is normally turned on **per client from the server** (via remote config — `PUT /client/v1/settings/heatmaps`), which is how an agency enables it on a site whose install snippet it can't edit. The server value wins over your local config. It is blocked entirely for HIPAA locations, and it is not retroactive: turning it on collects from that moment, with no backfill of past traffic.
 </Callout>
 
+### A/B experiments
+
+<ParamField body="capture_experiments" param-type="boolean|object" required="false" show-location="false" deprecated="false">
+  Detect that a third-party split-testing tool has bucketed this visitor and attach the assignment to the session. Default: `true` (on). Supported platform: **Convert.com**. Pass `false` to disable, or an object for control:
+
+  - `trackExposures` (boolean) — emit the `$experiment_viewed` event. Default: `true`.
+  - `pollWindowMs` (number) — how long after init to keep re-reading the testing tool's cookie, in milliseconds. The tool usually buckets within a second; the window exists because it runs *after* the SDK on a normal page load. Default: `10000`.
+  - `dataLayerName` (string) — the dataLayer global to observe. Default: `'dataLayer'`.
+
+  Nothing needs tagging on the page. Every event after detection carries two super properties — `$experiments` (an array of `"<experimentId>:<variationId>"`) and `$ab_platform` — and each assignment produces one `$experiment_viewed` event per session, with `experiment_id`, `variation_id` and `variation_name` where the tool exposes them.
+
+  Assignments are read from the testing tool's own cookie, which holds the authoritative experiment-to-variation mapping and is already populated for visitors who arrived through a split-URL redirect. The tool's `dataLayer` announcement is observed as well, to catch bucketing that happens later in a single-page app and to pick up variation names.
+</ParamField>
+
+<Callout kind="info">
+  On a page with no testing tool this costs a single cookie read: no properties are published, and your `dataLayer` is not touched or created. The observer is only attached once the testing tool has actually been detected.
+</Callout>
+
+<Callout kind="note">
+  Sessions in the tool's visual editor or with a forced variation (Convert's `convert_action`, `_conv_eforce`, `visualEditor` parameters) are treated as QA and record no assignment — counting them would inflate whichever variation the tester picked.
+</Callout>
+
+<Callout kind="warning">
+  This is the one feature where the server override can only turn things **off**. `PUT /client/v1/settings/experiments` with `false` disables detection (and un-publishes `$experiments`), but enabling it there takes effect late: the SDK sends its first `$pageview` before remote config loads, and for a split-URL test that pageview *is* the exposure. Leave the default in place on sites you want measured. Detection is blocked entirely for HIPAA locations.
+</Callout>
+
 ### Geolocation
 
 <ParamField body="geolocation" param-type="boolean|object" required="false" show-location="false" deprecated="false">

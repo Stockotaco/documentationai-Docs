@@ -48,6 +48,16 @@ const ctx = mythic.getPageContext();
 // e.g. { $framework: 'nuxt', $route_path: '/products/123', funnel_id: '...' }
 ```
 
+### `getExperimentAssignments()`
+
+Returns this visitor's detected A/B test assignments, or `[]`. Empty means one of: no testing tool on the page, `capture_experiments` disabled, or the tool has not bucketed yet — it runs after the SDK on a normal page load, so poll briefly if you are checking by hand.
+
+```javascript
+mythic.getExperimentAssignments();
+// [{ platform: 'convert', experimentId: '1004208131',
+//    variationId: '1004489003', variationName: 'Homepage — short form' }]
+```
+
 ### `debug(enabled?)`
 
 Toggle debug logging. When enabled, the SDK logs queued events, network requests, and configuration decisions to the console.

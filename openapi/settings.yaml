@@ -6,8 +6,9 @@ info:
     Per-location ingestion controls: the **origin allowlist** that bounds which
     sites may send events with a location's publishable key, and the
     **autocapture override** that controls server-side whether the SDK records
-    clicks and form submissions, and the **heatmap-capture override** that turns
-    click-position and scroll-depth collection on.
+    clicks and form submissions, the **heatmap-capture override** that turns
+    click-position and scroll-depth collection on, and the **experiment-detection
+    override** for A/B test assignments.
 
 
     Publishable keys (`pk_`) live in the browser and are public by design — they
@@ -273,6 +274,100 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /experiments:
+    get:
+      summary: Get the A/B experiment-detection override
+      operationId: getExperimentCapture
+      description: >
+        Whether Mythic attaches third-party A/B test assignments to this
+        location's sessions, and which platforms are supported. Readable with an
+        agency key (`ak_`, pass `?location_id=`) or a viewer key (`sk_`).
+
+
+        `effective.source` is `sdk_default` when nothing is stored and `override`
+        when it is. Note that the default is **on**: unlike heatmaps, `null` here
+        means detection runs.
+      responses:
+        "200":
+          description: The current override and whether detection is on
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentCaptureResponse"
+        "401":
+          description: Authorization key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Set the A/B experiment-detection override
+      operationId: putExperimentCapture
+      description: >
+        Turn A/B experiment detection on or off for a location. Requires an
+        agency key (`ak_`) and `?location_id=`; viewer keys get
+        `403 agency_required`.
+
+
+        Accepted values for `capture_experiments`:
+
+        - `null` — use the SDK default, which is **on**.
+        - `true` — on with SDK defaults.
+        - `{ "trackExposures": true, "pollWindowMs": 10000, "dataLayerName": "dataLayer" }`
+          — on, with those overrides. `pollWindowMs` must be 1000–30000;
+          `dataLayerName` must be a plain JavaScript identifier. Values outside
+          the range and unknown keys are rejected rather than ignored.
+        - `false` — off.
+
+
+        When on, the SDK detects that a supported testing tool has bucketed the
+        visitor and attaches the assignment to every subsequent event as the
+        `$experiments` super property (`["<experimentId>:<variationId>"]`) plus
+        `$ab_platform`, and emits one `$experiment_viewed` event per session per
+        assignment. Nothing needs tagging on the client's site.
+
+
+        **This is the one override that is on by default, and only `false`
+        changes anything.** The SDK sends its first `$pageview` before it fetches
+        remote config, and for a split-URL test that pageview *is* the exposure —
+        so a detection feature that waited for this setting would miss the
+        assignment on every page load. Enabling it here is honoured but late; it
+        cannot attach an assignment to a pageview already sent.
+
+
+        Setting `false` also un-publishes `$experiments` in the browser, so
+        opting out does not leave the property stuck on sessions from an earlier
+        load. HIPAA-mode locations never run detection, and a site with
+        `disable_remote_config: true` never sees this setting at all.
+
+
+        Detection is inert on sites with no testing tool: one cookie read, no
+        properties published, and the page's `dataLayer` is left untouched.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExperimentCaptureRequest"
+      responses:
+        "200":
+          description: Updated — returns the stored override
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentCaptureUpdateResponse"
+        "400":
+          description: Body isn't JSON, or `capture_experiments` is missing/invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Write access requires an agency key (`ak_`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /contract-alerts:
     get:
       summary: Get the event-contract alert webhook
@@ -508,6 +603,64 @@ components:
               type: object
               properties:
                 enabled: { type: boolean, example: true }
+    ExperimentCaptureResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            capture_experiments:
+              nullable: true
+              description: The stored override — `null` (SDK default, on), `false`, `true`, or an options object.
+              oneOf:
+                - type: boolean
+                - type: object
+              example: null
+            effective:
+              type: object
+              properties:
+                enabled: { type: boolean, example: true }
+                source:
+                  type: string
+                  description: "`sdk_default` when nothing is stored, `override` when it is."
+                  enum: [sdk_default, override]
+                  example: sdk_default
+            platforms:
+              type: array
+              description: Testing tools this location's SDK can detect.
+              items: { type: string }
+              example: [convert]
+    ExperimentCaptureRequest:
+      type: object
+      required:
+        - capture_experiments
+      properties:
+        capture_experiments:
+          nullable: true
+          description: "`true`, `false`, `null`, or `{ trackExposures, pollWindowMs, dataLayerName }`."
+          oneOf:
+            - type: boolean
+            - type: object
+              properties:
+                trackExposures: { type: boolean, example: true }
+                pollWindowMs: { type: integer, minimum: 1000, maximum: 30000, example: 10000 }
+                dataLayerName: { type: string, example: dataLayer }
+              additionalProperties: false
+          example: false
+    ExperimentCaptureUpdateResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            capture_experiments:
+              nullable: true
+              oneOf:
+                - type: boolean
+                - type: object
+              example: false
     HeatmapCaptureRequest:
       type: object
       required:
