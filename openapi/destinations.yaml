@@ -61,6 +61,8 @@ paths:
         Create a destination for the calling location. Requires an agency
         (`ak_`) key. The `action_config` shape is validated against
         `action_type`. HIPAA-enabled locations reject `http://` webhook URLs.
+        HIPAA-enabled locations also reject `google_analytics` destinations —
+        GA4 user-data fields cannot be guaranteed HIPAA-compliant.
       requestBody:
         required: true
         content:
@@ -380,6 +382,9 @@ paths:
                     type: object
                     properties:
                       consent_url: { type: string }
+                      start_url:
+                        type: string
+                        description: A shareable link that redirects to the consent URL without an API key. Give this to the person who needs to consent.
                       expires_in: { type: integer, example: 900 }
                       oauth_client_source: { type: string, enum: [agency, mythic] }
         '400': { description: 'Unsupported destination_type, or a return_url whose origin is not registered' }
@@ -406,6 +411,31 @@ paths:
         '302': { description: Redirect to the registered return_url }
         '400': { description: 'Expired, replayed or failed consent (HTML page)' }
         '409': { description: The OAuth client changed while the user was consenting }
+
+  /client/v1/destinations/oauth/start:
+    get:
+      summary: OAuth start link (browser)
+      operationId: destinationOAuthStart
+      description: >
+        A shareable link that rebuilds the Google consent URL from a stored
+        state token. **Unauthenticated** — no API key required. Returns a 302
+        redirect to Google's consent screen. The token is not consumed (the
+        callback does that), so it is replayable within the 15-minute window.
+        Returns a 400 HTML page if the token is expired or missing. Rate
+        limited per IP (30 requests / 10 minutes).
+      tags: [Destinations]
+      security: []
+      parameters:
+        - { name: t, in: query, required: true, schema: { type: string }, description: "State token from the initiate response's `start_url`." }
+      responses:
+        '302':
+          description: Redirect to Google's consent URL
+          headers:
+            Location:
+              description: Google consent URL
+              schema:
+                type: string
+        '400': { description: Expired or missing token (HTML page) }
 
   /client/v1/destinations/deliveries:
     get:
@@ -1466,6 +1496,9 @@ components:
             browser sessions and filling User-ID reporting with values you
             cannot join to anything. Enable it only if you have no user id of
             your own and want reach over cleanliness.
+        transaction_id_property:
+          type: string
+          description: Event property holding the transaction or order id. Sent as GA4 `transactionId` on purchase events — without it GA4 cannot deduplicate conversions or join them to a Merchant Center feed. When absent, no `transactionId` is sent, which is correct for non-purchase events.
         value_property:
           type: string
         currency:
@@ -1532,7 +1565,7 @@ components:
           type: object
           description: >
             Type-specific configuration. See `WebhookConfig`, `MetaCapiConfig`,
-            and `GoogleAdsConfig`. Webhook secrets are redacted for viewer keys.
+            `GoogleAdsConfig`, and `GoogleAnalyticsConfig`. Webhook secrets are redacted for viewer keys.
         enabled:
           type: boolean
         rate_limit_max:
@@ -1579,6 +1612,7 @@ components:
             - $ref: "#/components/schemas/WebhookConfig"
             - $ref: "#/components/schemas/MetaCapiConfig"
             - $ref: "#/components/schemas/GoogleAdsConfig"
+            - $ref: "#/components/schemas/GoogleAnalyticsConfig"
         enabled:
           type: boolean
           default: true
@@ -1766,6 +1800,26 @@ components:
           type: string
           format: date-time
           nullable: true
+        duration_ms:
+          type: number
+          nullable: true
+          description: How long the destination took to respond, in milliseconds.
+        field_warnings:
+          type: array
+          nullable: true
+          description: Per-field data Google accepted but dropped. Populated on 200 responses for google_analytics destinations.
+          items:
+            type: object
+        field_violations:
+          type: array
+          nullable: true
+          description: Per-field failures Google reported. Populated on 4xx responses for google_analytics destinations.
+          items:
+            type: object
+        google_request_id:
+          type: string
+          nullable: true
+          description: Google Data Manager request id. Quote this to Google support when investigating delivery issues.
     Health:
       type: object
       properties:
@@ -1827,6 +1881,16 @@ components:
           example: true
         data:
           $ref: "#/components/schemas/Destination"
+        warnings:
+          type: array
+          description: Non-blocking validation warnings. Present on create responses when the destination configuration is accepted but has potential issues, such as a GA4 event_mapping that maps to a GA4 enhanced-measurement event name.
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
     DestinationListResponse:
       type: object
       properties:

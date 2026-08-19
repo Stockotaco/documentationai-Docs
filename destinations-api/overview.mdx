@@ -58,7 +58,7 @@ platforms at once, each with its own trigger rules and mappings.
 
 ### Webhook
 
-Requires a fetchable `url`. Optional `method`, `headers`, `body_template`, `timeout_ms`, and `retry_count`. Because webhook credentials live inline in `action_config`, header values and `body_template` are redacted to `***` when read with a secret (viewer) key. HIPAA-enabled locations reject `http://` URLs at write time.
+Requires a fetchable `url`. Optional `method`, `headers`, `body_template`, `timeout_ms`, and `retry_count`. Because webhook credentials live inline in `action_config`, header values and `body_template` are redacted to `***` when read with a secret (viewer) key. HIPAA-enabled locations reject `http://` URLs at write time. They also reject `google_analytics` destinations entirely — GA4 user-data fields cannot be guaranteed HIPAA-compliant.
 
 Webhooks run through the same delivery pipeline as the ad destinations, so they get identical **profile enrichment (on by default)**, delivery logging, payload capture, retry classification, and auth-failure auto-disable. `body_template` supports `{{profile.x}}` tokens filled from the merged person profile; set `enrichment.enabled: false` to opt out, in which case those tokens are left verbatim instead of blanked.
 
@@ -96,10 +96,7 @@ cost you an afternoon:
 - **Ingestion is asynchronous.** In practice it takes around **30 minutes** to go
   from `PROCESSING` to `SUCCESS`. Checking GA4 seconds after a delivery shows
   nothing, correctly.
-- **DebugView and Realtime are not valid tests.** There is no `debug_mode`
-  equivalent in this API, and Data Manager is a backend data source rather than a
-  tag hit, so it does not flow through the realtime pipeline. Look in standard
-  reports, or the BigQuery export.
+- **DebugView and Realtime are not valid tests.** Set `debug_mode: true` on the destination config to route events into GA4 DebugView — the only practical way to verify a tagless setup end to end, since there is no browser console. Realtime is still not a valid test: Data Manager is a backend data source rather than a tag hit, so it does not flow through the realtime pipeline. Look in standard reports, or the BigQuery export.
 
 To find out what actually happened, ask Google:
 
@@ -141,6 +138,8 @@ curl -X POST https://mythic-analytics.gulp.workers.dev/client/v1/destinations/oa
 ```
 
 The `consent_url` is valid for **15 minutes** and is **single-use**. On completion the browser is sent to `return_url` with `mythic_oauth=success` (or `mythic_oauth=error&mythic_error=<code>`) appended; omit `return_url` and the callback renders a terminal page instead.
+
+The initiate response also includes a `start_url` — a shareable link that redirects to the consent screen without an API key. Give it to the person who needs to consent; it is replayable within the 15-minute window (the token is consumed only on callback, not on start).
 
 <Callout kind="warning">
   A `return_url` origin must be registered on your agency first. The callback is unauthenticated by construction — a browser returning from Google carries no key — so an arbitrary redirect target would make it an open redirector. Unregistered origins are rejected at `initiate`, before anything is stored.
@@ -409,7 +408,7 @@ Credentialed destinations (`meta_capi`, `google_ads`, `google_analytics`) read t
 ## Delivery logs & health
 
 - `GET /deliveries` returns individual delivery attempts (newest first), filterable by destination, status, source event, and time range. It defaults to the last 7 days. Rows are lean — metadata only, no payloads.
-- `GET /{id}/deliveries/{eventUuid}` returns the **detail** for one delivery: the `request_body` sent to the destination and the raw `response_body` it returned, plus redacted `request_headers`/`response_headers` and the Meta `fbtrace_id`. Key it with the `event_uuid` from a list row. Use it to answer "what did we send, and what did the destination say back?" — on **successful and failed** deliveries alike (confirming the accepted payload is as useful as debugging a failure). Bodies are truncated to 8&nbsp;KB and the audit row is retained for 30 days. HIPAA-enabled locations omit bodies entirely (kept: `fbtrace_id`, `response_status`, `error`); webhook request bodies/headers are redacted for read-only (`sk_`) keys. **Test fires** (`POST /{id}/test`) are not persisted, so this endpoint returns `404 not_found` for a synthetic `test-…` event — expected, not a bug. There is exactly **one** detail row per (destination, `event_uuid`), upserted across retry attempts (`attempt_count` reflects the latest attempt); the per-attempt stream lives in the `GET /{id}/deliveries` list.
+- `GET /{id}/deliveries/{eventUuid}` returns the **detail** for one delivery: the `request_body` sent to the destination and the raw `response_body` it returned, plus redacted `request_headers`/`response_headers` and the Meta `fbtrace_id`. For `google_analytics` and `google_ads` destinations, the detail also includes `google_request_id` (quote to Google support), `field_warnings` (per-field data Google accepted but dropped on 200), `field_violations` (per-field failures on 4xx), and `duration_ms`. Key it with the `event_uuid` from a list row. Use it to answer "what did we send, and what did the destination say back?" — on **successful and failed** deliveries alike (confirming the accepted payload is as useful as debugging a failure). Bodies are truncated to 8&nbsp;KB and the audit row is retained for 30 days. HIPAA-enabled locations omit bodies entirely (kept: `fbtrace_id`, `response_status`, `error`); webhook request bodies/headers are redacted for read-only (`sk_`) keys. **Test fires** (`POST /{id}/test`) are not persisted, so this endpoint returns `404 not_found` for a synthetic `test-…` event — expected, not a bug. There is exactly **one** detail row per (destination, `event_uuid`), upserted across retry attempts (`attempt_count` reflects the latest attempt); the per-attempt stream lives in the `GET /{id}/deliveries` list.
 - `GET /health` returns per-destination aggregates over a rolling window (default 24 hours): success rate, failure counts, latency percentiles, and a `credential_ok` flag that flips to `false` when the most recent failure was a 401/403.
 
 ## Testing
@@ -430,6 +429,10 @@ All endpoints return a JSON envelope.
 
 <ResponseField name="error" field-type="object" required="false" deprecated="false">
   Present on failed requests. Contains `code`, `message`, and — for validation failures — a `details` array of per-field errors.
+</ResponseField>
+
+<ResponseField name="warnings" field-type="array" required="false" deprecated="false">
+  Non-blocking validation warnings, present on create responses when the destination is accepted but has potential issues — e.g. a GA4 `event_mapping` that maps to a GA4 enhanced-measurement event name. Each entry has a `field` and `message`.
 </ResponseField>
 
 ## Error handling

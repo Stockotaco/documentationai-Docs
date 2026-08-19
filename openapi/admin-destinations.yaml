@@ -3,9 +3,10 @@ info:
   version: 1.0.0
   title: Destinations (Admin)
   description: >
-    Platform-admin management of destination credentials and destination
-    testing. Operates on any location by explicit `location_id`. Authenticated
-    with the platform admin key, not a client key.
+    Platform-admin management of destination credentials, destination testing,
+    and delivery request-status retrieval. Operates on any location by
+    explicit `location_id`. Authenticated with the platform admin key, not a
+    client key.
 servers:
   - url: https://mythic-analytics.gulp.workers.dev
 security:
@@ -167,6 +168,66 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminErrorResponse"
+  /admin/destinations/request-status:
+    get:
+      summary: Google downstream verdict for a delivery
+      operationId: adminGetDeliveryRequestStatus
+      description: >
+        Retrieves Google Data Manager's downstream processing verdict for a
+        past delivery. The identity processor proxies the request to Google's
+        `requestStatus:retrieve` API. Returns 503 when the identity processor
+        is not configured in this environment.
+      parameters:
+        - name: location_id
+          in: query
+          required: true
+          description: Location (tenant) identifier.
+          schema:
+            type: string
+        - name: request_id
+          in: query
+          required: true
+          description: Google Data Manager request id stored per delivery.
+          schema:
+            type: string
+        - name: destination_type
+          in: query
+          required: true
+          description: Destination type — `google_ads` or `google_analytics`.
+          schema:
+            type: string
+        - name: credential_name
+          in: query
+          required: true
+          description: Named credential used for the delivery.
+          schema:
+            type: string
+            default: default
+      responses:
+        "200":
+          description: Google's downstream verdict
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  status:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      requestStatusPerDestination:
+                        type: array
+                        items:
+                          type: object
+        "400":
+          description: Missing required query parameters
+        "401":
+          description: Admin key missing or invalid
+        "503":
+          description: Identity processor not configured in this environment
 components:
   securitySchemes:
     BearerAuth:
