@@ -4,7 +4,7 @@ info:
   title: Destinations
   description: >
     Partner self-serve data activation. Create and manage destinations
-    (webhooks, Meta Conversions API, Google Ads), store per-location
+    (webhooks, Meta Conversions API, Google Ads, Google Analytics 4), store per-location
     credentials, and inspect delivery logs and health. Client-scoped: an
     agency key (`ak_`) has read-write access to a single named location, and a
     location secret key (`sk_`) is a read-only viewer of its own location.
@@ -60,7 +60,8 @@ paths:
       description: >
         Create a destination for the calling location. Requires an agency
         (`ak_`) key. The `action_config` shape is validated against
-        `action_type`. HIPAA-enabled locations reject `http://` webhook URLs.
+        `action_type`. HIPAA-enabled locations reject `http://` webhook URLs
+        and reject `google_analytics` destinations entirely.
       requestBody:
         required: true
         content:
@@ -134,8 +135,10 @@ paths:
         Store (or rotate, by re-sending) a credential for a credential-backed
         destination type. Requires an agency (`ak_`) key. A given
         `(destination_type, credential_name)` pair is upserted in place.
-        `google_ads` credential values must be a JSON object containing
-        `client_id`, `client_secret`, and `refresh_token`, minted against the
+        For `google_ads` and `google_analytics`, credential values must be a
+        JSON object containing `client_id`, `client_secret`, and
+        `refresh_token` (plus an optional `login_customer_id` for
+        manager-account access), minted against the
         `https://www.googleapis.com/auth/datamanager` OAuth scope.
         The response echoes metadata only — never the credential value.
       parameters:
@@ -343,8 +346,10 @@ paths:
       summary: Start the Google consent flow
       operationId: initiateDestinationOAuth
       description: >
-        Returns a `consent_url` so nobody has to create a Cloud project or paste
-        a refresh token. Valid for 15 minutes and single-use. The credential the
+        Returns both a `consent_url` (the full Google consent URL) and a
+        `start_url` (a short link that redirects to it, suitable for sharing by
+        email or messaging) so nobody has to create a Cloud project or paste a
+        refresh token. Valid for 15 minutes and single-use. The credential the
         callback stores is identical in shape to a hand-pasted one.
       tags: [Destinations]
       requestBody:
@@ -380,11 +385,40 @@ paths:
                     type: object
                     properties:
                       consent_url: { type: string }
+                      start_url:
+                        type: string
+                        description: Short, human-shareable link that redirects to the Google consent URL. The raw consent_url is long and can truncate when copied; share this link instead.
                       expires_in: { type: integer, example: 900 }
                       oauth_client_source: { type: string, enum: [agency, mythic] }
         '400': { description: 'Unsupported destination_type, or a return_url whose origin is not registered' }
         '403': { description: Agency key required }
         '503': { description: No OAuth client is configured }
+
+  /client/v1/destinations/oauth/start:
+    get:
+      summary: Consent redirect link
+      operationId: destinationOAuthStart
+      description: >
+        A short, human-shareable link that redirects to Google's consent URL.
+        Intended for sharing by email or messaging — the full consent_url is too
+        long to copy reliably. Unauthenticated by design: the recipient has no
+        API key, and the single-use state token in the query string is the
+        credential. Looks up the pending state and redirects to the Google
+        consent URL. Replayable within the 15-minute state TTL — opening the
+        link twice is supported.
+      tags: [Destinations]
+      security: []
+      parameters:
+        - name: t
+          in: query
+          required: true
+          description: The state token returned by POST /oauth/initiate.
+          schema:
+            type: string
+      responses:
+        '302': { description: Redirect to Google's consent URL }
+        '400': { description: Expired or invalid state token (HTML page) }
+        '429': { description: Too many attempts — rate limited by IP (30 per 10 minutes) }
 
   /client/v1/destinations/oauth/callback:
     get:
@@ -721,8 +755,8 @@ paths:
       description: >
         Send a test delivery through the real ad-platform adapter using the
         stored credential. Requires an agency (`ak_`) key. Supported only for
-        ad destinations (`meta_capi`, `google_ads`) — webhooks fire on real
-        events and return `400`.
+        ad destinations (`meta_capi`, `google_ads`, and `google_analytics`) —
+        webhooks fire on real events and return `400`.
       parameters:
         - $ref: "#/components/parameters/DestinationId"
       responses:
@@ -1504,6 +1538,15 @@ components:
             type: string
         last_updated_property:
           type: string
+        transaction_id_property:
+          type: string
+          description: >
+            Event property holding a real order identifier to send as Google's
+            `transactionId` for deduplication. Defaults to reading
+            `transaction_id` or `order_id` from the event. Only set this for a
+            genuine order id — a random per-event value misclassifies the event
+            as a multi-source event and can never match an existing tag event.
+            Pageviews should carry no transaction id at all.
         event_location:
           type: object
           properties:
@@ -1532,7 +1575,7 @@ components:
           type: object
           description: >
             Type-specific configuration. See `WebhookConfig`, `MetaCapiConfig`,
-            and `GoogleAdsConfig`. Webhook secrets are redacted for viewer keys.
+            `GoogleAdsConfig`, and `GoogleAnalyticsConfig`. Webhook secrets are redacted for viewer keys.
         enabled:
           type: boolean
         rate_limit_max:
@@ -1579,6 +1622,7 @@ components:
             - $ref: "#/components/schemas/WebhookConfig"
             - $ref: "#/components/schemas/MetaCapiConfig"
             - $ref: "#/components/schemas/GoogleAdsConfig"
+            - $ref: "#/components/schemas/GoogleAnalyticsConfig"
         enabled:
           type: boolean
           default: true
@@ -1619,10 +1663,11 @@ components:
         credential_value:
           type: string
           description: >
-            Secret value, max 8KB. For `google_ads` this must be a JSON object
-            string containing `client_id`, `client_secret`, and `refresh_token`
-            (plus an optional `login_customer_id` for manager-account access).
-            The refresh token must carry the
+            Secret value, max 8KB. For `google_ads` and
+            `google_analytics`, this must be a JSON object string containing
+            `client_id`, `client_secret`, and `refresh_token` (plus an optional
+            `login_customer_id` for manager-account access). The refresh token
+            must carry the
             `https://www.googleapis.com/auth/datamanager` OAuth scope.
         credential_name:
           type: string
@@ -1757,6 +1802,26 @@ components:
           type: string
           nullable: true
           description: Meta trace id parsed from the response — what Meta support asks for. Retained even for HIPAA locations.
+        duration_ms:
+          type: number
+          nullable: true
+          description: Delivery duration in milliseconds.
+        google_request_id:
+          type: string
+          nullable: true
+          description: Google Data Manager request id, stored per delivery for downstream diagnostics via the delivery status endpoint.
+        field_warnings:
+          type: array
+          nullable: true
+          description: Google's per-delivery field-level warnings. A 200 from Google can still report these.
+          items:
+            type: object
+        field_violations:
+          type: array
+          nullable: true
+          description: Google's per-delivery field violations naming the offending fields.
+          items:
+            type: object
         enrichment_applied:
           type: boolean
         created_at:

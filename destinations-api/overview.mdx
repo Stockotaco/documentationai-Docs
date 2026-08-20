@@ -2,7 +2,7 @@
 title: Destinations API
 description: >-
   Activate your resolved event data by forwarding conversions to webhooks,
-  the Meta Conversions API, and Google Ads, with per-destination credentials,
+  the Meta Conversions API, Google Ads, and Google Analytics 4, with per-destination credentials,
   delivery logs, and health monitoring.
 ---
 
@@ -130,7 +130,7 @@ transaction id at all.
 
 ### Connecting Google without a refresh token
 
-You do not have to mint a refresh token by hand. `POST /destinations/oauth/initiate` returns a `consent_url`; send the browser there, the user picks a Google account, and the callback stores a credential for you. It is the same credential shape either way — the consent flow is a better way to obtain it, not a different one.
+You do not have to mint a refresh token by hand. `POST /destinations/oauth/initiate` returns both a `consent_url` and a `start_url`: the raw `consent_url` is long, while `start_url` is a short, human-shareable link that redirects to it and is less likely to truncate when copied into email or chat. Send either URL to the browser, the user picks a Google account, and the callback stores a credential for you. It is the same credential shape either way — the consent flow is a better way to obtain it, not a different one. `GET /destinations/oauth/start?t=<state>` is an unauthenticated redirect endpoint by design: the recipient has no API key, and the state token in the query string is the credential. It remains replayable until the 15-minute state TTL expires.
 
 ```bash
 curl -X POST https://mythic-analytics.gulp.workers.dev/client/v1/destinations/oauth/initiate \
@@ -213,6 +213,12 @@ event name as a plain string, unlike `google_ads`' conversion-spec object.
 Credentials are stored as a `google_analytics` credential with the same JSON
 shape and the same `https://www.googleapis.com/auth/datamanager` scope as
 `google_ads`.
+
+<Callout kind="warning">
+  HIPAA-enabled locations reject `google_analytics` destinations at create time.
+  GA4's data model sends user identifiers to Google, which is incompatible with
+  HIPAA-mode data isolation.
+</Callout>
 
 <Callout kind="warning">
   GA4 event names must start with a letter, contain only letters, digits and
@@ -409,7 +415,7 @@ Credentialed destinations (`meta_capi`, `google_ads`, `google_analytics`) read t
 ## Delivery logs & health
 
 - `GET /deliveries` returns individual delivery attempts (newest first), filterable by destination, status, source event, and time range. It defaults to the last 7 days. Rows are lean — metadata only, no payloads.
-- `GET /{id}/deliveries/{eventUuid}` returns the **detail** for one delivery: the `request_body` sent to the destination and the raw `response_body` it returned, plus redacted `request_headers`/`response_headers` and the Meta `fbtrace_id`. Key it with the `event_uuid` from a list row. Use it to answer "what did we send, and what did the destination say back?" — on **successful and failed** deliveries alike (confirming the accepted payload is as useful as debugging a failure). Bodies are truncated to 8&nbsp;KB and the audit row is retained for 30 days. HIPAA-enabled locations omit bodies entirely (kept: `fbtrace_id`, `response_status`, `error`); webhook request bodies/headers are redacted for read-only (`sk_`) keys. **Test fires** (`POST /{id}/test`) are not persisted, so this endpoint returns `404 not_found` for a synthetic `test-…` event — expected, not a bug. There is exactly **one** detail row per (destination, `event_uuid`), upserted across retry attempts (`attempt_count` reflects the latest attempt); the per-attempt stream lives in the `GET /{id}/deliveries` list.
+- `GET /{id}/deliveries/{eventUuid}` returns the **detail** for one delivery: the `request_body` sent to the destination and the raw `response_body` it returned, plus redacted `request_headers`/`response_headers`, the Meta `fbtrace_id`, Google's per-delivery `field_warnings` and `field_violations`, `google_request_id` for the delivery status endpoint, and `duration_ms`. The Google-specific fields are `null` for non-Google destinations. Key it with the `event_uuid` from a list row. Use it to answer "what did we send, and what did the destination say back?" — on **successful and failed** deliveries alike (confirming the accepted payload is as useful as debugging a failure). A `200` from Google can still include field-level warnings or violations here. Bodies are truncated to 8&nbsp;KB and the audit row is retained for 30 days. HIPAA-enabled locations omit bodies entirely (kept: `fbtrace_id`, `response_status`, `error`); webhook request bodies/headers are redacted for read-only (`sk_`) keys. **Test fires** (`POST /{id}/test`) are not persisted, so this endpoint returns `404 not_found` for a synthetic `test-…` event — expected, not a bug. There is exactly **one** detail row per (destination, `event_uuid`), upserted across retry attempts (`attempt_count` reflects the latest attempt); the per-attempt stream lives in the `GET /{id}/deliveries` list.
 - `GET /health` returns per-destination aggregates over a rolling window (default 24 hours): success rate, failure counts, latency percentiles, and a `credential_ok` flag that flips to `false` when the most recent failure was a 401/403.
 
 ## Testing
