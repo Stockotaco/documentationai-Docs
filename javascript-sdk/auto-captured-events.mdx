@@ -34,7 +34,7 @@ These fire only when their feature is enabled (most are on by default — see th
 | `$web_vital_lcp`, `$web_vital_cls`, `$web_vital_inp`, … | One event per Core Web Vital metric | `web_vitals` |
 | `$cross_domain_linked` | Session adopted from a cross-domain link | `cross_domain_tracking` |
 | `$heatmap` | Batch of click positions and scroll depths (pixels, no element identity) | `capture_heatmaps` |
-| `$experiment_viewed` | A third-party A/B tool (Convert.com) bucketed this visitor — once per session per assignment, with `experiment_id`, `variation_id`, `variation_name` | `capture_experiments` |
+| `$experiment_viewed` | A third-party A/B tool (Convert.com) bucketed this visitor — once per session per assignment, with `experiment_id`, `variation_id`, `variation_name`, `first_exposure` | `capture_experiments` |
 
 <Callout kind="info">
   When remote-config tags or snippets fail, the SDK also reports `$tag_error`, `$snippet_error`, and `$snippet_compilation_error`; a failing event transformer reports `$transformer_error`.
@@ -42,6 +42,10 @@ These fire only when their feature is enabled (most are on by default — see th
 
 <Callout kind="note">
   `$experiment_viewed` fires **once per session per assignment**, so it counts sessions exposed to a variation — not pageviews. To split other events by variation, filter on the `$experiments` super property (`["<experimentId>:<variationId>"]`) that every event carries once the assignment is known.
+</Callout>
+
+<Callout kind="warning">
+  Count exposures with `first_exposure: true`. A testing tool keeps its assignment for months (Convert: ~6), so a visitor bucketed on a landing page carries that variation into later visits — and `$experiment_viewed` fires again in each new session, sometimes on pages the test never touched. `first_exposure: false` marks those: correct for attributing later behaviour to the variation, wrong as an exposure count.
 </Callout>
 
 <Callout kind="warning">
