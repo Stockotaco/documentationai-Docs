@@ -1,0 +1,119 @@
+---
+title: Changelog
+description: What shipped in Mythic Analytics — new features, updates, and bug fixes for the JavaScript SDK, Destinations API, and GA4 integration.
+---
+
+## Recent releases
+
+Track user-facing changes across the JavaScript SDK, Destinations API, and GA4 integration.
+
+<Update label="2026-08-20" description="v2.257.1" tags={["bugfix"]}>
+
+### Bug Fixes
+
+- A/B test exposure counts no longer inflate for returning visitors. The SDK now marks whether an experiment exposure is the visitor's first on that device, so carried-over assignments from prior visits are not counted as new experiment entries.
+
+</Update>
+
+<Update label="2026-08-19" description="v2.257.0" tags={["feature", "bugfix"]}>
+
+### New Features
+
+- The JavaScript SDK now automatically detects Convert.com A/B test assignments with no client-side instrumentation. Experiment and variation IDs are attached to subsequent events as super properties, and one `$experiment_viewed` event fires per session for each assignment. See [Super Properties](/javascript-sdk/super-properties) and [Configuration](/javascript-sdk/configuration).
+- Added `getExperimentAssignments()` so you can read the current Convert.com assignments from the SDK. Detection is controlled by `capture_experiments`, which is enabled by default. See [Configuration](/javascript-sdk/configuration).
+
+### Bug Fixes
+
+- Generated loader snippets now include `getPageContext` and `getExperimentAssignments`, fixing pre-init "not a function" errors on client sites.
+
+</Update>
+
+<Update label="2026-08-19" description="v2.256.0" tags={["feature"]}>
+
+### New Features
+
+- GA4 now spends its 25-parameter budget by priority instead of alphabetically. Your event properties survive first, curated reporting dimensions come next, and SDK diagnostics only fill the remaining space. See [Destinations API](/destinations-api/overview).
+
+</Update>
+
+<Update label="2026-08-19" description="v2.255.0" tags={["feature"]}>
+
+### New Features
+
+- Every event delivered to GA4 now includes `data_source` set to `mythic`, making Mythic-originated traffic easier to filter in shared GA4 properties and BigQuery exports. Disable it with `send_source_param: false`. See [Destinations API](/destinations-api/overview).
+
+</Update>
+
+<Update label="2026-08-19" description="v2.254.1" tags={["bugfix"]}>
+
+### Bug Fixes
+
+- GA4's 25-parameter limit is now enforced per event across all parameter sources. This prevents silent truncation when standard parameters and auto-mapped properties would otherwise exceed the GA4 limit.
+
+</Update>
+
+<Update label="2026-08-18" description="v2.254.0" tags={["feature", "bugfix"]}>
+
+### New Features
+
+- GA4 events now include `page_location` from the full URL and `engagement_time_msec` by default, which restores page-level reporting and active-user counting. SDK-collected properties also pass through to GA4 automatically by default, with names sanitized to match GA4 rules. See [Destinations API](/destinations-api/overview).
+
+### Bug Fixes
+
+- Fixed the `languageCode` device parameter so it now uses the browser language instead of missing fields.
+
+</Update>
+
+<Update label="2026-08-18" description="v2.253.0" tags={["feature"]}>
+
+### New Features
+
+- Agency users can now check GA4 delivery verdicts directly through the Destinations API, including `SUCCESS`, `PROCESSING`, `FAILED`, and `PARTIAL_SUCCESS`. Deliveries that never reached Google now return a `409` status instead of an empty result. See [Destinations API](/destinations-api/overview).
+
+</Update>
+
+<Update label="2026-08-18" description="v2.252.0" tags={["feature"]}>
+
+### New Features
+
+- Admins can now retrieve Google's downstream verdict for any past GA4 delivery by request ID, making failed or delayed deliveries easier to diagnose with specific error counts.
+
+</Update>
+
+<Update label="2026-08-18" description="v2.251.2" tags={["bugfix"]}>
+
+### Bug Fixes
+
+- `transactionId` is now sent only on purchase events with a real order identifier. This prevents non-purchase events from entering GA4's restricted transaction flow and being silently discarded. See [Destinations API](/destinations-api/overview).
+
+</Update>
+
+<Update label="2026-08-18" description="v2.251.1" tags={["bugfix"]}>
+
+### Bug Fixes
+
+- Delivery duration now persists on the delivery detail endpoint. The value no longer appears in list responses while returning `null` for the same delivery in detail responses.
+
+</Update>
+
+<Update label="2026-08-18" description="v2.250.0" tags={["feature"]}>
+
+### New Features
+
+- Google OAuth consent now includes a short connect link you can paste into chat or email without truncation. The initiate response also returns `start_url` alongside `consent_url`. See [Destinations API](/destinations-api/overview).
+
+</Update>
+
+<Update label="2026-08-18" description="v2.249.1" tags={["bugfix"]}>
+
+### Bug Fixes
+
+- OAuth routes now derive the same `redirect_uri`, preventing callback rejections caused by exact URL mismatches.
+
+</Update>
+
+<Callout kind="info">
+
+Older releases are not listed here. For SDK version detection, see [Identity Storage Contract](/javascript-sdk/identity-storage-contract).
+
+</Callout>

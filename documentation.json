@@ -32,6 +32,11 @@
                     "title": "Onboard a client",
                     "path": "for-agencies/onboard-a-client",
                     "icon": "user-plus"
+                  },
+                  {
+                    "title": "Changelog",
+                    "path": "changelog",
+                    "icon": "newspaper"
                   }
                 ]
               }
