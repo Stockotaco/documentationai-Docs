@@ -130,7 +130,7 @@ transaction id at all.
 
 ### Connecting Google without a refresh token
 
-You do not have to mint a refresh token by hand. `POST /destinations/oauth/initiate` returns a `consent_url`; send the browser there, the user picks a Google account, and the callback stores a credential for you. It is the same credential shape either way — the consent flow is a better way to obtain it, not a different one.
+You do not have to mint a refresh token by hand. `POST /destinations/oauth/initiate` returns a `consent_url` and a `start_url`; send the browser to either — the user picks a Google account, and the callback stores a credential for you. The `start_url` is a short, shareable link on the Mythic domain that redirects to Google's consent screen, useful when you need to send the consent link to someone outside your application. It is the same credential shape either way — the consent flow is a better way to obtain it, not a different one.
 
 ```bash
 curl -X POST https://mythic-analytics.gulp.workers.dev/client/v1/destinations/oauth/initiate \
@@ -140,7 +140,7 @@ curl -X POST https://mythic-analytics.gulp.workers.dev/client/v1/destinations/oa
   -d '{"destination_type":"google_analytics","return_url":"https://portal.example.com/settings"}'
 ```
 
-The `consent_url` is valid for **15 minutes** and is **single-use**. On completion the browser is sent to `return_url` with `mythic_oauth=success` (or `mythic_oauth=error&mythic_error=<code>`) appended; omit `return_url` and the callback renders a terminal page instead.
+The `consent_url` is valid for **15 minutes** and is **single-use**. The `start_url` expires at the same time but is **replayable** — opening it twice simply redirects to Google again; the state token is consumed only when the callback runs. On completion the browser is sent to `return_url` with `mythic_oauth=success` (or `mythic_oauth=error&mythic_error=<code>`) appended; omit `return_url` and the callback renders a terminal page instead.
 
 <Callout kind="warning">
   A `return_url` origin must be registered on your agency first. The callback is unauthenticated by construction — a browser returning from Google carries no key — so an arbitrary redirect target would make it an open redirector. Unregistered origins are rejected at `initiate`, before anything is stored.

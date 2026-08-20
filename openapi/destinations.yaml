@@ -380,12 +380,40 @@ paths:
                     type: object
                     properties:
                       consent_url: { type: string }
+                      start_url:
+                        type: string
+                        description: >-
+                          Short, shareable link that 302-redirects to Google's
+                          consent screen. The token is not consumed by visiting
+                          this URL — the callback still uses it — so the link
+                          is replayable within the 15-minute window. Useful when
+                          you need to send the consent link to someone outside
+                          your application.
                       expires_in: { type: integer, example: 900 }
                       oauth_client_source: { type: string, enum: [agency, mythic] }
         '400': { description: 'Unsupported destination_type, or a return_url whose origin is not registered' }
         '403': { description: Agency key required }
         '503': { description: No OAuth client is configured }
 
+  /client/v1/destinations/oauth/start:
+    get:
+      summary: OAuth start (browser redirect)
+      operationId: destinationOAuthStart
+      description: >
+        Unauthenticated browser redirect to Google's consent screen. Takes a
+        state token (`?t=<state>`) issued by `/oauth/initiate` and returns a
+        302 to Google. The token is NOT consumed — the callback still uses it —
+        so the link is replayable within the 15-minute window. Rate-limited by
+        IP. Not called directly by integrators; it is the target of the
+        `start_url` returned by `initiate`.
+      tags: [Destinations]
+      security: []
+      parameters:
+        - { name: t, in: query, required: true, schema: { type: string }, description: 'State token from `/oauth/initiate`.' }
+      responses:
+        '302': { description: Redirect to Google's consent screen }
+        '400': { description: 'Missing, expired or invalid token (HTML page)' }
+        '429': { description: 'Rate limit exceeded (HTML page)' }
   /client/v1/destinations/oauth/callback:
     get:
       summary: OAuth callback (browser)
@@ -1471,6 +1499,15 @@ components:
         currency:
           type: string
           example: USD
+        transaction_id_property:
+          type: string
+          description: >
+            Event property (dot-path) holding a real order identifier for GA4
+            multi-source deduplication. When set, overrides the default
+            waterfall of `transaction_id`, `order_id`, then
+            `$transaction_id`. Never set this to a random per-event value —
+            it marks the event as a multi-source event matched to an existing
+            tag event, a mode that is allowlist-only per GA4 property.
         send_user_data:
           type: boolean
           default: true
