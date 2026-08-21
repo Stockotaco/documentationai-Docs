@@ -4,10 +4,11 @@ info:
   title: Destinations
   description: >
     Partner self-serve data activation. Create and manage destinations
-    (webhooks, Meta Conversions API, Google Ads), store per-location
-    credentials, and inspect delivery logs and health. Client-scoped: an
-    agency key (`ak_`) has read-write access to a single named location, and a
-    location secret key (`sk_`) is a read-only viewer of its own location.
+    (webhooks, Meta Conversions API, Google Ads, Google Analytics 4), store
+    per-location credentials, and inspect delivery logs and health.
+    Client-scoped: an agency key (`ak_`) has read-write access to a single named
+    location, and a location secret key (`sk_`) is a read-only viewer of its own
+    location.
 servers:
   - url: https://mythic-analytics.gulp.workers.dev
 security:
@@ -134,7 +135,7 @@ paths:
         Store (or rotate, by re-sending) a credential for a credential-backed
         destination type. Requires an agency (`ak_`) key. A given
         `(destination_type, credential_name)` pair is upserted in place.
-        `google_ads` credential values must be a JSON object containing
+        `google_ads` and `google_analytics` credential values must be a JSON object containing
         `client_id`, `client_secret`, and `refresh_token`, minted against the
         `https://www.googleapis.com/auth/datamanager` OAuth scope.
         The response echoes metadata only — never the credential value.
@@ -268,9 +269,43 @@ paths:
                             reason: { type: string }
                             recordCount: { type: string }
                       warning_counts: { type: array, items: { type: object } }
-        '400': { description: 'Not a Data Manager destination' }
-        '404': { description: 'No delivery for that event' }
-        '409': { description: 'The delivery never reached Google, so there is no downstream status' }
+                      per_destination:
+                        type: array
+                        description: Raw requestStatusPerDestination array from Google Diagnostics. One entry per destination product in the request.
+                        items:
+                          type: object
+        '400':
+          description: Not a Data Manager destination (only google_ads and google_analytics)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '404':
+          description: Destination not found, or no delivery for this event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '409':
+          description: The delivery never reached Google, so there is no downstream status to report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '429':
+          $ref: "#/components/responses/RateLimited"
+        '502':
+          description: Identity processor returned an error or timed out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        '503':
+          description: Diagnostics service is not configured in this environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /client/v1/destinations/oauth/client:
     get:
@@ -380,6 +415,7 @@ paths:
                     type: object
                     properties:
                       consent_url: { type: string }
+                      start_url: { type: string, description: 'Short shareable link (~127 chars) that redirects to the full consent_url. Safe to send to a human who has no API key.' }
                       expires_in: { type: integer, example: 900 }
                       oauth_client_source: { type: string, enum: [agency, mythic] }
         '400': { description: 'Unsupported destination_type, or a return_url whose origin is not registered' }
@@ -406,6 +442,28 @@ paths:
         '302': { description: Redirect to the registered return_url }
         '400': { description: 'Expired, replayed or failed consent (HTML page)' }
         '409': { description: The OAuth client changed while the user was consenting }
+
+  /client/v1/destinations/oauth/start:
+    get:
+      summary: Shareable consent link
+      operationId: destinationOAuthStart
+      description: A short (~127 character) link that reconstructs and redirects to the full Google consent URL. **Unauthenticated** — the state token in `?t=` is the credential. Use this when the raw `consent_url` (430+ chars) would truncate in chat, email, or a terminal. Does not consume the state token; the callback does.
+      tags: [Destinations]
+      security: []
+      parameters:
+        - name: t
+          in: query
+          required: true
+          description: The state token from `POST /oauth/initiate`'s `start_url`.
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to Google
+        '400':
+          description: Expired or invalid state token
+        '404':
+          description: Unknown state
 
   /client/v1/destinations/deliveries:
     get:
@@ -721,7 +779,7 @@ paths:
       description: >
         Send a test delivery through the real ad-platform adapter using the
         stored credential. Requires an agency (`ak_`) key. Supported only for
-        ad destinations (`meta_capi`, `google_ads`) — webhooks fire on real
+        ad destinations (`meta_capi`, `google_ads`, `google_analytics`) — webhooks fire on real
         events and return `400`.
       parameters:
         - $ref: "#/components/parameters/DestinationId"
@@ -1468,6 +1526,14 @@ components:
             your own and want reach over cleanliness.
         value_property:
           type: string
+        transaction_id_property:
+          type: string
+          description: >
+            Event property holding a real order identifier for deduplication
+            against existing tag events. Must not be a per-event random value
+            like a UUID — it is how Google matches the server event to a tag
+            event, and a random value can never match. Omit for pageviews and
+            events with no natural order id.
         currency:
           type: string
           example: USD
@@ -1532,7 +1598,7 @@ components:
           type: object
           description: >
             Type-specific configuration. See `WebhookConfig`, `MetaCapiConfig`,
-            and `GoogleAdsConfig`. Webhook secrets are redacted for viewer keys.
+            `GoogleAdsConfig`, and `GoogleAnalyticsConfig`. Webhook secrets are redacted for viewer keys.
         enabled:
           type: boolean
         rate_limit_max:
@@ -1579,6 +1645,7 @@ components:
             - $ref: "#/components/schemas/WebhookConfig"
             - $ref: "#/components/schemas/MetaCapiConfig"
             - $ref: "#/components/schemas/GoogleAdsConfig"
+            - $ref: "#/components/schemas/GoogleAnalyticsConfig"
         enabled:
           type: boolean
           default: true
@@ -1619,7 +1686,7 @@ components:
         credential_value:
           type: string
           description: >
-            Secret value, max 8KB. For `google_ads` this must be a JSON object
+            Secret value, max 8KB. For `google_ads` and `google_analytics` this must be a JSON object
             string containing `client_id`, `client_secret`, and `refresh_token`
             (plus an optional `login_customer_id` for manager-account access).
             The refresh token must carry the
@@ -1757,6 +1824,40 @@ components:
           type: string
           nullable: true
           description: Meta trace id parsed from the response — what Meta support asks for. Retained even for HIPAA locations.
+        google_request_id:
+          type: string
+          nullable: true
+          description: Google Data Manager request id. Present on google_ads and google_analytics deliveries; use it to correlate with the delivery status endpoint.
+        field_warnings:
+          type: array
+          nullable: true
+          description: Non-fatal field-level warnings from Google (200 returned but some fields were dropped). Each entry names the field, the reason it was dropped, and a human-readable description.
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              reason:
+                type: string
+              description:
+                type: string
+        field_violations:
+          type: array
+          nullable: true
+          description: Field-level violations from Google that accompany a failure. Names the offending field, the reason, and a description.
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              reason:
+                type: string
+              description:
+                type: string
+        duration_ms:
+          type: number
+          nullable: true
+          description: Time from request send to response received, in milliseconds.
         enrichment_applied:
           type: boolean
         created_at:
