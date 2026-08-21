@@ -60,3 +60,31 @@ Remove all super properties.
 ```javascript
 mythic.clear_super_properties();
 ```
+
+## Auto-populated super properties
+
+The SDK manages some super properties for you when experiment detection is enabled with [`capture_experiments`](/javascript-sdk/configuration). Once Convert.com buckets the visitor, these properties are added to every event and persist for the rest of the session. See [`$experiment_viewed`](/javascript-sdk/auto-captured-events) for the event emitted when an experiment is detected.
+
+### `$experiments`
+
+Contains an array of experiment and variation pairs in the format `"<experimentId>:<variationId>"`.
+
+```javascript
+{
+  "$experiments": ["12345:67890", "98765:43210"]
+}
+```
+
+### `$ab_platform`
+
+Contains the name of the testing tool that provided the bucket assignment. The current value is `"convert"`.
+
+```javascript
+{
+  "$ab_platform": "convert"
+}
+```
+
+<Callout kind="info">
+  Calling `set()`, `set_once()`, or `unset()` on `$experiments` or `$ab_platform` has no effect. The experiment detection module manages these properties automatically.
+</Callout>

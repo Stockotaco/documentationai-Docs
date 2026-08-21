@@ -1,11 +1,13 @@
 openapi: "3.0.0"
 info:
   version: 1.0.0
-  title: KV Management
+  title: Admin Settings & KV Management
   description: >
-    Inspect and delete Cloudflare KV entries in the Mythic Analytics platform.
-    Every request must target a namespace via the required `namespace` query
-    parameter (`MYTHIC_KEYS` or `MYTHIC_CFG`). Mounted at `/admin/kv`.
+    Inspect and delete Cloudflare KV entries, and manage per-location feature
+    settings (such as A/B experiment detection). Every KV request must target a
+    namespace via the required `namespace` query parameter (`MYTHIC_KEYS` or
+    `MYTHIC_CFG`). KV endpoints are mounted at `/admin/kv`; experiment settings
+    at `/admin/experiments`.
 servers:
   - url: https://mythic-analytics.gulp.workers.dev
 security:
@@ -178,6 +180,131 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: Failed to bulk delete keys
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/experiments/capture:
+    get:
+      summary: Get the A/B experiment-detection override
+      operationId: adminGetExperimentCapture
+      description: >
+        Whether Mythic attaches third-party A/B test assignments to this
+        location's sessions, and which platforms are supported.
+        `effective.source` is `sdk_default` when nothing is stored and
+        `override` when it is. The default is on — `null` means detection runs.
+      parameters:
+        - name: location_id
+          in: query
+          required: true
+          description: Location (tenant) identifier.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The current override and whether detection is on
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      capture_experiments:
+                        type: string
+                        nullable: true
+                        description: The stored override — `null` (SDK default, on), `false`, `true`, or an options object.
+                      effective:
+                        type: object
+                        properties:
+                          enabled:
+                            type: boolean
+                          source:
+                            type: string
+                            enum:
+                              - sdk_default
+                              - override
+                      platforms:
+                        type: array
+                        description: Testing tools this location's SDK can detect.
+                        items:
+                          type: string
+        "400":
+          description: Missing location_id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Set the A/B experiment-detection override
+      operationId: adminSetExperimentCapture
+      description: >
+        Turn A/B experiment detection on or off for a location. Accepted values
+        for `capture_experiments` — `null` (SDK default, on), `true` (on with
+        SDK defaults), `false` (off), or an object with `trackExposures`,
+        `pollWindowMs`, and `dataLayerName` for control. `pollWindowMs` must be
+        1000–30000; `dataLayerName` must be a valid JavaScript identifier.
+        Unknown keys are rejected. When the SDK default applies, detection is on
+        because it must bucket the visitor before the first pageview.
+      parameters:
+        - name: location_id
+          in: query
+          required: true
+          description: Location (tenant) identifier.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - capture_experiments
+              properties:
+                capture_experiments:
+                  type: string
+                  nullable: true
+                  description: "`true`, `false`, `null`, or `{ trackExposures, pollWindowMs, dataLayerName }`."
+      responses:
+        "200":
+          description: Override updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      capture_experiments:
+                        type: string
+                        nullable: true
+        "400":
+          description: Missing location_id, non-JSON body, missing capture_experiments field, or validation failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Failed to persist capture_experiments
           content:
             application/json:
               schema:

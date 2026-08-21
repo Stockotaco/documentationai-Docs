@@ -167,6 +167,103 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminErrorResponse"
+  /admin/destinations/request-status:
+    get:
+      summary: Check Google's downstream delivery verdict
+      operationId: adminGetRequestStatus
+      description: "Retrieve Google's downstream processing verdict for a Data Manager delivery (google_ads, google_analytics). A 200 at delivery time means accepted — not ingested. This endpoint checks Google's `requestStatus.retrieve` to report whether the data actually landed. Proxied to the identity processor with a 15-second timeout."
+      parameters:
+        - name: location_id
+          in: query
+          required: true
+          description: "Location (tenant) identifier."
+          schema:
+            type: string
+        - name: request_id
+          in: query
+          required: true
+          description: "The Google-side delivery request id to diagnose."
+          schema:
+            type: string
+        - name: destination_type
+          in: query
+          required: false
+          description: "Destination adapter to query."
+          schema:
+            type: string
+            default: google_analytics
+            enum:
+              - google_ads
+              - google_analytics
+        - name: credential_name
+          in: query
+          required: false
+          description: "Named credential set to use."
+          schema:
+            type: string
+            default: default
+      responses:
+        "200":
+          description: Google's downstream verdict
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      google_request_id:
+                        type: string
+                      request_status:
+                        type: string
+                        enum:
+                          - PROCESSING
+                          - SUCCESS
+                          - FAILED
+                          - PARTIAL_SUCCESS
+                          - REQUEST_STATUS_UNKNOWN
+                      record_count:
+                        type: string
+                      error_counts:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            reason:
+                              type: string
+                            recordCount:
+                              type: string
+                      warning_counts:
+                        type: array
+                        items:
+                          type: object
+        "400":
+          description: "Missing required parameters: location_id and request_id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "502":
+          description: Failed to reach the diagnostics service (timeout or upstream error)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "503":
+          description: Diagnostics are not available in this environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
 components:
   securitySchemes:
     BearerAuth:

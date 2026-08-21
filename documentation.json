@@ -834,7 +834,7 @@
                 ]
               },
               {
-                "group": "KV Management",
+                "group": "Settings & KV Management",
                 "icon": "database",
                 "openapi": "openapi/admin-kv.yaml"
               },
