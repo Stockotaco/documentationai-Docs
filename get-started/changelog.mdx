@@ -1,0 +1,32 @@
+---
+title: Changelog
+description: What's new and what's fixed in Mythic Analytics — new features, updates, and bug fixes by release date.
+---
+
+## Recent releases
+
+<Update label="2026-08-20" description="August 20, 2026" tags={["feature", "improvement", "bugfix"]}>
+
+### New Features
+
+- **A/B experiment tracking with Convert.com** — The JavaScript SDK now automatically detects Convert.com A/B test assignments with no extra instrumentation. Visitor experiment assignments are attached as the [`$experiments` super property](/javascript-sdk/super-properties) to every event, and the [`$experiment_viewed` event](/javascript-sdk/auto-captured-events) fires once per session per assignment. Enabled by default and can be toggled per location in [SDK configuration](/javascript-sdk/configuration).
+- **`data_source=mythic` stamp on GA4 events** — Every event delivered to GA4 now carries `data_source=mythic` as a constant parameter, so you can filter to exactly Mythic-delivered events in shared GA4 properties or BigQuery exports. Disable it with `send_source_param: false`. See [destinations overview](/destinations-api/overview).
+- **GA4 page and engagement parameters auto-mapped** — GA4 now receives `page_location` from the full page URL and `engagement_time_msec` automatically, closing reporting gaps where page views had no URL attribution and active-user counts were zero. All SDK-collected properties now pass through to GA4 by default. See [destinations overview](/destinations-api/overview).
+- **GA4 parameter priority system** — GA4's 25-parameter budget now uses a three-tier priority system: client properties first, then valuable SDK properties, then diagnostics. Business-critical data such as transaction IDs and experiment IDs no longer get crowded out by SDK internals. See [destinations overview](/destinations-api/overview).
+- **Delivery diagnostics for destinations** — You can now check the delivery status of individual events to see why they may not have reached Google. The delivery status endpoint returns whether an event was accepted, failed, or never arrived. See [destinations overview](/destinations-api/overview).
+- **Google request status for GA4 deliveries** — A new endpoint surfaces Google's downstream verdict for GA4 deliveries, including `SUCCESS`, `PROCESSING`, `FAILED`, and `PARTIAL_SUCCESS`. Delivery troubleshooting now points to a specific diagnosis instead of a generic accepted response. See [destinations overview](/destinations-api/overview).
+
+### Updates
+
+- **`first_exposure` field on experiment events** — The [`$experiment_viewed` event](/javascript-sdk/auto-captured-events) now includes a `first_exposure` boolean. Use `true` for exposure counts and `false` for carried assignments from earlier visits, which keeps A/B test denominators accurate for returning visitors.
+
+### Bug Fixes
+
+- **GA4 `page_location` was never sent** — Page reporting in GA4 now includes the full URL, including host and campaign parameters.
+- **GA4 `engagement_time_msec` was never sent** — Active-user counts in GA4 now work correctly because engagement time is sent with a minimum value of `1`.
+- **GA4 `transactionId` misclassified all events** — Purchase identifiers now map from real order IDs and are only sent on purchase events, preventing non-purchase events from being dropped downstream.
+- **GA4 25-parameter limit applied per source** — Parameter limits now apply as a shared budget across all GA4 parameter sources, preventing silent overflow when explicit and auto-mapped parameters are combined.
+- **GA4 `languageCode` reading wrong property** — Language code delivery now reads from the correct browser language value.
+- **Delivery duration missing from detail endpoint** — Delivery duration now appears consistently in both list and detail responses.
+
+</Update>
