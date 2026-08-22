@@ -167,6 +167,79 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminErrorResponse"
+  /admin/destinations/request-status:
+    get:
+      summary: Check Google's downstream delivery verdict
+      operationId: adminGetRequestStatus
+      description: >
+        Retrieve the downstream verdict from Google's Data Manager API for a delivery that was accepted at ingest time. A 200 at delivery time means accepted, not ingested — ingestion is asynchronous and Google reports downstream failures only here. The response is the raw Google `requestStatus:retrieve` payload, passed through unfiltered. Proxies to the identity processor's internal diagnostics endpoint.
+      parameters:
+        - name: location_id
+          in: query
+          required: true
+          description: Tenant/location identifier.
+          schema:
+            type: string
+        - name: request_id
+          in: query
+          required: true
+          description: Google's request ID, stored per delivery at ingest time.
+          schema:
+            type: string
+        - name: destination_type
+          in: query
+          required: false
+          description: Destination type for credential lookup.
+          schema:
+            type: string
+            default: google_analytics
+        - name: credential_name
+          in: query
+          required: false
+          description: Named credential slot.
+          schema:
+            type: string
+            default: default
+      responses:
+        "200":
+          description: Google's downstream verdict
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  status:
+                    type: number
+                    description: Google's HTTP status code
+                  data:
+                    type: object
+                    description: Raw Google Data Manager `requestStatus:retrieve` response. Includes `requestStatusPerDestination`, `eventsIngestionStatus`, `errorInfo`, and `warningInfo`.
+        "400":
+          description: "Missing required query parameters: location_id and request_id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "502":
+          description: Diagnostics service unreachable or returned an error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "503":
+          description: Delivery diagnostics are not available in this environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
 components:
   securitySchemes:
     BearerAuth:
