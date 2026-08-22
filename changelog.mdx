@@ -1,0 +1,54 @@
+---
+title: Changelog
+description: What shipped in Mythic Analytics — new features, updates, and bug fixes by release date.
+---
+
+## Latest changes
+
+The latest releases add tagless GA4 delivery, Google OAuth setup for destinations, automatic Convert.com experiment tracking, and several GA4 reliability fixes.
+
+<Update label="2026-08-20" description="v2.245.0 to v2.257.1" tags={["feature", "improvement", "bugfix"]}>
+
+### New features
+
+- **Tagless GA4 destination** — Send analytics events to GA4 with no Google tag installed. Mythic derives a stable client ID from its own device ID, and includes session parameters and campaign attribution by default. See [Tagless GA4](/destinations-api/overview#tagless-ga4).
+- **Google OAuth consent flow** — Connect Google Ads or GA4 destinations through OAuth consent instead of pasting a refresh token. Share a consent link with clients, or register your own OAuth client for dedicated quota and custom branding. See [connecting Google without a refresh token](/destinations-api/overview#connecting-google-without-a-refresh-token).
+- **Automatic A/B experiment tracking** — The JavaScript SDK auto-detects Convert.com split tests and attaches experiment assignments to every subsequent event. Call `getExperimentAssignments()` to read the current assignments at runtime. See [super properties](/javascript-sdk/super-properties).
+- **GA4 delivery batching** — Batch up to 2,000 GA4 events per request to handle pageview-grade volume within Google's quota. See [batching and the request quota](/destinations-api/overview#batching-and-the-request-quota).
+- **GA4 delivery diagnostics** — Check Google's downstream processing verdict for any delivery, including `SUCCESS`, `PROCESSING`, `FAILED`, and `PARTIAL_SUCCESS`. Agency clients can now access these diagnostics directly. See [Google Analytics: a 200 does not mean the data arrived](/destinations-api/overview#google-analytics-a-200-does-not-mean-the-data-arrived).
+
+### Updates
+
+- **`data_source=mythic` on all GA4 events** — Every GA4 event now includes `data_source=mythic`, which makes Mythic-delivered traffic easy to isolate in shared GA4 properties and BigQuery exports.
+- **GA4 parameter priority tiers** — GA4 now prioritizes your own event properties ahead of SDK internals within the 25-parameter limit, so business-critical fields survive on property-heavy events.
+- **Default GA4 auto-mapping expanded** — GA4 now auto-maps page location, engagement time, session parameters, and all SDK-collected properties by default.
+- **GA4 debug mode** — Route destination traffic into GA4 DebugView when you need to verify a tagless setup before relying on production reporting.
+- **HIPAA guardrail for GA4** — GA4 destinations are now refused when HIPAA is enabled on the location.
+- **Warnings for enhanced-measurement event names** — Creating a GA4 mapping for event names such as `page_view` or `scroll` now returns a warning instead of failing silently later.
+
+### Bug fixes
+
+- **GA4 25-parameter limit enforced correctly** — The limit now applies per event, not per source, which prevents silent parameter drops in live deliveries.
+- **GA4 `transactionId` mapping corrected** — Mythic now maps `transactionId` from `transaction_id` or `order_id` only on purchase events. It was previously set from the event UUID on every event, which caused GA4 to silently discard them.
+- **A/B experiment exposure counts corrected** — Convert.com's persistent assignment cookie was causing experiment views to fire in every session, which inflated denominators. Exposure tracking now distinguishes first assignment from carried-forward attribution.
+- **OAuth `redirect_uri` fixed on client info** — The client info endpoint now returns the correct `redirect_uri`. The previous value would have caused consent failures for agencies who registered it in Google Cloud Console.
+- **Delivery duration now matches across endpoints** — Delivery duration is now returned consistently in both the delivery list and delivery detail views.
+
+</Update>
+
+## Related docs
+
+<Columns cols={2}>
+  <Card
+    title="Destinations API"
+    href="/destinations-api/overview"
+    icon="cloud"
+    cta="Open docs"
+  />
+  <Card
+    title="JavaScript SDK"
+    href="/javascript-sdk/overview"
+    icon="code"
+    cta="Open docs"
+  />
+</Columns>
