@@ -167,6 +167,79 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminErrorResponse"
+  /admin/destinations/request-status:
+    get:
+      summary: Google Data Manager downstream verdict (admin)
+      operationId: adminGetRequestStatus
+      security:
+        - BearerAuth: []
+        - AdminKeyQuery: []
+      description: >
+        Proxies a Google Data Manager Diagnostics API lookup to the identity
+        processor. After a delivery returns HTTP 200 (which only means
+        "accepted"), this endpoint checks what Google actually did with the data
+        downstream — asynchronous ingestion status, errors, and warnings. This is
+        the admin-key equivalent of the client-facing
+        `GET /client/v1/destinations/{id}/deliveries/{eventUuid}/status`, but
+        resolves the location and request id directly from query params.
+      parameters:
+        - name: location_id
+          in: query
+          required: true
+          description: The location to look up credentials for
+          schema:
+            type: string
+        - name: request_id
+          in: query
+          required: true
+          description: Google's request ID from the delivery
+          schema:
+            type: string
+        - name: destination_type
+          in: query
+          required: false
+          description: Which Data Manager destination
+          schema:
+            type: string
+            default: google_analytics
+        - name: credential_name
+          in: query
+          required: false
+          description: Which stored credential to authenticate with
+          schema:
+            type: string
+            default: default
+      responses:
+        "200":
+          description: Google's verdict (pass-through from identity-processor)
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Missing location_id or request_id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "502":
+          description: Proxy failure — identity processor unreachable or returned an error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "503":
+          description: Request status lookup is not available in this environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
 components:
   securitySchemes:
     BearerAuth:

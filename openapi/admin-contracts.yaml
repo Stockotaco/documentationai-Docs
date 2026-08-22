@@ -1,0 +1,221 @@
+openapi: 3.0.0
+info:
+  title: Contracts (Admin)
+  version: 1.0.0
+  description: |
+    Platform-admin management of event contract alert sweeps. Authenticated with the platform admin key.
+
+    ## Authentication
+
+    Provide the admin key using either of the following methods:
+    - `Authorization: Bearer YOUR_ADMIN_KEY`
+    - `?admin_key=YOUR_ADMIN_KEY`
+
+    ## Usage notes
+
+    The alert sweep can be triggered manually to run the same workflow as the daily 08:00 UTC cron job.
+    Use `dry_run=1` to calculate results without delivering webhook POST requests.
+  contact:
+    name: Mythic Analytics API Support
+    url: https://mythic-analytics.gulp.workers.dev
+    email: support@mythic-analytics.com
+  license:
+    name: Proprietary
+    url: https://mythic-analytics.gulp.workers.dev
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+tags:
+  - name: Admin Contracts
+    description: Platform-admin operations for contract alert sweeps.
+paths:
+  /admin/contracts/alert-sweep:
+    post:
+      tags:
+        - Admin Contracts
+      summary: Trigger contract alert sweep
+      description: >
+        Manually triggers the same sweepContractAlerts function that runs
+        automatically on the 08:00 UTC daily cron. It iterates every location
+        with a contract_alert_webhook_url configured, runs the contract
+        violation report for yesterday UTC, computes a fingerprint, and POSTs
+        to each webhook only if the fingerprint changed since the last delivery.
+        Pass ?dry_run=1 to compute everything and POST nothing — returns what
+        each location would receive.
+      operationId: adminContractAlertSweep
+      security:
+        - BearerAuth: []
+        - AdminKeyQuery: []
+      parameters:
+        - name: dry_run
+          in: query
+          required: false
+          description: Compute everything, POST nothing — returns what each location would receive.
+          schema:
+            type: string
+            enum:
+              - '1'
+      responses:
+        '200':
+          description: Sweep completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertSweepResponse'
+              examples:
+                standard:
+                  summary: Standard sweep response
+                  value:
+                    success: true
+                    locations: 12
+                    sent: 3
+                dryRun:
+                  summary: Dry run response
+                  value:
+                    success: true
+                    locations: 12
+                    sent: 0
+                    dry_run: true
+                    results:
+                      - location_id: loc_123
+                        kind: contract_violations
+                        fingerprint: 0d4f2f9d6f1dbe9f5adf3a6f9f0d6c1e
+                        changed: true
+                        sent: false
+                        would_send: true
+                        signed: true
+                        webhook_url: https://hooks.partner.example/contracts
+                        payload:
+                          location_id: loc_123
+                          kind: contract_violations
+                          date: 2026-08-21
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: 'Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`'
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.
+  responses:
+    UnauthorizedError:
+      description: Admin key missing or invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Admin key missing or invalid
+    InternalServerError:
+      description: Sweep failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Sweep failed
+  schemas:
+    AlertSweepResponse:
+      type: object
+      description: Result of running the contract alert sweep.
+      required:
+        - success
+        - locations
+        - sent
+      properties:
+        success:
+          type: boolean
+          description: Indicates whether the sweep completed successfully.
+          example: true
+        locations:
+          type: integer
+          description: Total locations with webhooks configured.
+          example: 12
+        sent:
+          type: integer
+          description: How many actually triggered a POST.
+          example: 3
+        dry_run:
+          type: boolean
+          description: Present only when `dry_run=1`.
+          example: true
+        results:
+          type: array
+          description: Present only when `dry_run=1`.
+          items:
+            $ref: '#/components/schemas/AlertSweepDryRunResult'
+    AlertSweepDryRunResult:
+      type: object
+      description: Per-location dry run result for the contract alert sweep.
+      required:
+        - location_id
+        - kind
+        - fingerprint
+        - changed
+        - sent
+        - would_send
+        - signed
+        - webhook_url
+        - payload
+      properties:
+        location_id:
+          type: string
+          description: Location identifier.
+          example: loc_123
+        kind:
+          type: string
+          description: What the sweep found for this location.
+          enum:
+            - contract_violations
+            - clean
+            - tracking_outage
+          example: contract_violations
+        fingerprint:
+          type: string
+          description: Content hash; a POST is sent only when this changed since the last delivery.
+          example: 0d4f2f9d6f1dbe9f5adf3a6f9f0d6c1e
+        changed:
+          type: boolean
+          description: Whether the fingerprint differs from the last delivery.
+          example: true
+        sent:
+          type: boolean
+          description: Always false in dry_run mode.
+          example: false
+        would_send:
+          type: boolean
+          description: Whether a POST would have been sent in dry_run mode.
+          example: true
+        signed:
+          type: boolean
+          description: Whether the webhook payload is HMAC-signed.
+          example: true
+        webhook_url:
+          type: string
+          description: The configured webhook URL (HTTPS only).
+          format: uri
+          example: https://hooks.partner.example/contracts
+        payload:
+          type: object
+          description: The exact body that would be POST-ed in dry_run mode.
+          additionalProperties: true
+          example:
+            location_id: loc_123
+            kind: contract_violations
+            date: 2026-08-21
+    ErrorResponse:
+      type: object
+      description: Error response.
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message.
+          example: Admin key missing or invalid

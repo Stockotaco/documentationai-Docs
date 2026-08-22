@@ -857,6 +857,11 @@
                 "group": "BigQuery Export",
                 "icon": "database",
                 "openapi": "openapi/bigquery.yaml"
+              },
+              {
+                "group": "Contract Alerts",
+                "icon": "file-check",
+                "openapi": "openapi/admin-contracts.yaml"
               }
             ]
           },
