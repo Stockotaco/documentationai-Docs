@@ -4,7 +4,7 @@ info:
   title: Destinations
   description: >
     Partner self-serve data activation. Create and manage destinations
-    (webhooks, Meta Conversions API, Google Ads), store per-location
+    (webhooks, Meta Conversions API, Google Ads, Google Analytics 4), store per-location
     credentials, and inspect delivery logs and health. Client-scoped: an
     agency key (`ak_`) has read-write access to a single named location, and a
     location secret key (`sk_`) is a read-only viewer of its own location.
@@ -343,9 +343,9 @@ paths:
       summary: Start the Google consent flow
       operationId: initiateDestinationOAuth
       description: >
-        Returns a `consent_url` so nobody has to create a Cloud project or paste
-        a refresh token. Valid for 15 minutes and single-use. The credential the
-        callback stores is identical in shape to a hand-pasted one.
+        Returns a `consent_url` and a shareable `start_url` so nobody has to create a
+        Cloud project or paste a refresh token. Valid for 15 minutes and single-use.
+        The credential the callback stores is identical in shape to a hand-pasted one.
       tags: [Destinations]
       requestBody:
         required: true
@@ -380,6 +380,12 @@ paths:
                     type: object
                     properties:
                       consent_url: { type: string }
+                      start_url:
+                        type: string
+                        description: >-
+                          A short, shareable redirect link for the Google consent flow. Safe to
+                          email to a client with no API key — the link carries its own state token.
+                          Replayable within the 15-minute window. See `GET /oauth/start`.
                       expires_in: { type: integer, example: 900 }
                       oauth_client_source: { type: string, enum: [agency, mythic] }
         '400': { description: 'Unsupported destination_type, or a return_url whose origin is not registered' }
@@ -406,6 +412,38 @@ paths:
         '302': { description: Redirect to the registered return_url }
         '400': { description: 'Expired, replayed or failed consent (HTML page)' }
         '409': { description: The OAuth client changed while the user was consenting }
+
+  /client/v1/destinations/oauth/start:
+    get:
+      summary: Shareable consent redirect (browser)
+      operationId: destinationOAuthStart
+      description: >
+        A short, shareable redirect link for the Google consent flow. Safe to
+        email to a client who has no API key — the link carries its own state
+        token and requires no authentication. Does NOT consume the state (the
+        callback does), so it is replayable within the 15-minute window. All
+        non-redirect responses are HTML pages because the client is a browser.
+      tags: [Destinations]
+      security: []
+      parameters:
+        - name: t
+          in: query
+          required: true
+          description: The state token issued by `POST /oauth/initiate`.
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to Google's consent screen.
+          headers:
+            Location:
+              description: The Google consent URL.
+              schema:
+                type: string
+        '400':
+          description: Expired, invalid, or missing token (HTML page).
+        '429':
+          description: Too many attempts from this IP (HTML page).
 
   /client/v1/destinations/deliveries:
     get:
@@ -721,8 +759,8 @@ paths:
       description: >
         Send a test delivery through the real ad-platform adapter using the
         stored credential. Requires an agency (`ak_`) key. Supported only for
-        ad destinations (`meta_capi`, `google_ads`) — webhooks fire on real
-        events and return `400`.
+        ad destinations (`meta_capi`, `google_ads`, `google_analytics`) —
+        webhooks fire on real events and return `400`.
       parameters:
         - $ref: "#/components/parameters/DestinationId"
       responses:
@@ -1504,6 +1542,15 @@ components:
             type: string
         last_updated_property:
           type: string
+        transaction_id_property:
+          type: string
+          description: >-
+            Event property path to read the GA4 `transactionId` from. Defaults
+            to checking `transaction_id`, then `order_id`, then
+            `$transaction_id` in priority order when unset. A `transactionId`
+            marks an event as a multi-source event matched to an existing tag
+            hit — only set this for a real order identifier, never a per-event
+            UUID, and omit it entirely for pageviews.
         event_location:
           type: object
           properties:
@@ -1532,7 +1579,7 @@ components:
           type: object
           description: >
             Type-specific configuration. See `WebhookConfig`, `MetaCapiConfig`,
-            and `GoogleAdsConfig`. Webhook secrets are redacted for viewer keys.
+            `GoogleAdsConfig`, and `GoogleAnalyticsConfig`. Webhook secrets are redacted for viewer keys.
         enabled:
           type: boolean
         rate_limit_max:
@@ -1579,6 +1626,7 @@ components:
             - $ref: "#/components/schemas/WebhookConfig"
             - $ref: "#/components/schemas/MetaCapiConfig"
             - $ref: "#/components/schemas/GoogleAdsConfig"
+            - $ref: "#/components/schemas/GoogleAnalyticsConfig"
         enabled:
           type: boolean
           default: true
@@ -1757,6 +1805,51 @@ components:
           type: string
           nullable: true
           description: Meta trace id parsed from the response — what Meta support asks for. Retained even for HIPAA locations.
+        duration_ms:
+          type: number
+          nullable: true
+          description: Wall-clock delivery time in milliseconds for the latest attempt.
+        google_request_id:
+          type: string
+          nullable: true
+          description: >-
+            Google's correlation ID for Data Manager requests (google_ads,
+            google_analytics). Present on both success and failure responses.
+            Also used by the delivery-status endpoint to drive the downstream
+            diagnostics lookup. Null for non-Google destinations.
+        field_warnings:
+          type: array
+          nullable: true
+          description: >-
+            Per-field warnings from Google on a successful (2xx) GA4 response.
+            Google accepted the event but dropped fields it did not like — a 200
+            with warnings is partial, silent data loss. Null when no warnings.
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              reason:
+                type: string
+              description:
+                type: string
+        field_violations:
+          type: array
+          nullable: true
+          description: >-
+            Per-field violations from Google on a failed (4xx) GA4 response.
+            Names the offending event fields Google rejected. In the batched
+            path, only the blamed events receive this; bystanders in the same
+            batch get a retryable error. Null when no violations.
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              reason:
+                type: string
+              description:
+                type: string
         enrichment_applied:
           type: boolean
         created_at:

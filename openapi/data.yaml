@@ -546,6 +546,7 @@ paths:
               - engaged
               - bounce
               - is_identified
+              - experiment_arm
         - name: limit
           in: query
           required: false
@@ -1614,6 +1615,15 @@ components:
         country: { type: string }
         city: { type: string }
         timezone: { type: string }
+        experiment_arm:
+          type: string
+          nullable: true
+          description: >-
+            The A/B experiment arm the session's visitor was bucketed into, if
+            any. Derived from the first non-empty experiment assignment in the
+            session (argMin). Null when no experiment was active. Previously
+            available only by parsing `$experiments` from event properties;
+            now a typed column for direct GROUP BY queries.
     SessionBreakdownRow:
       type: object
       description: Session aggregates for one group.

@@ -126,9 +126,9 @@ paths:
       operationId: adminTestDestination
       description: >
         Send a test delivery through the real ad-platform adapter (Meta CAPI /
-        Google Ads) using the stored credential. Proxies to the identity
-        processor; only ad destinations are testable — webhooks fire on real
-        events.
+        Google Ads / Google Analytics 4) using the stored credential. Proxies
+        to the identity processor; only ad destinations are testable — webhooks
+        fire on real events.
       requestBody:
         required: true
         content:
@@ -167,6 +167,66 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminErrorResponse"
+  /admin/destinations/request-status:
+    get:
+      summary: Google downstream delivery verdict
+      operationId: adminGetRequestStatus
+      description: >
+        Retrieve Google's downstream verdict for a Data Manager delivery
+        (google_ads, google_analytics). Proxies to the identity processor, which
+        calls Google's requestStatus.retrieve. A 200 at delivery time means
+        ACCEPTED — not ingested. `request_status` is PROCESSING until Google
+        finishes, then SUCCESS, FAILED or PARTIAL_SUCCESS.
+      parameters:
+        - name: location_id
+          in: query
+          required: true
+          description: Location identifier.
+          schema:
+            type: string
+        - name: action_id
+          in: query
+          required: true
+          description: Destination id.
+          schema:
+            type: string
+            format: uuid
+        - name: event_uuid
+          in: query
+          required: true
+          description: The event uuid of the delivery to check.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Google's verdict
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      google_request_id: { type: string }
+                      request_status:
+                        type: string
+                        enum: [PROCESSING, SUCCESS, FAILED, PARTIAL_SUCCESS, REQUEST_STATUS_UNKNOWN]
+                      record_count: { type: string }
+                      error_counts:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            reason: { type: string }
+                            recordCount: { type: string }
+                      warning_counts: { type: array, items: { type: object } }
+        '400': { description: 'Not a Data Manager destination, or missing required parameters' }
+        '404': { description: 'No delivery for that event' }
+        '409': { description: 'The delivery never reached Google, so there is no downstream status' }
+        '401': { description: Admin key missing or invalid }
+        '502': { description: Identity processor error }
 components:
   securitySchemes:
     BearerAuth:
