@@ -1,0 +1,32 @@
+---
+title: Changelog
+description: What shipped in Mythic Analytics — new features, updates, and fixes.
+---
+
+## Recent releases
+
+<Update label="2026-08-23" description="v2.258.0 through v2.254.0" tags={["feature", "improvement", "bugfix"]}>
+
+### New Features
+
+- **GA4 auto-mapping** — Events sent to Google Analytics 4 now include page URL, page title, referrer, engagement time, and session parameters automatically. All event properties now pass through by default, so pageviews land with correct URLs and active user counts without manual property mapping. See [What GA4 receives without configuration](/destinations-api/overview#what-ga4-receives-without-configuration).
+
+- **GA4 data source marker** — Every event sent to GA4 now carries `data_source: "mythic"`, which makes it easier to isolate Mythic-delivered events in shared GA4 properties and BigQuery exports. If you need to turn it off for a destination, set `send_source_param: false`.
+
+- **Convert.com A/B experiment detection** — The JavaScript SDK now detects Convert.com assignments automatically and attaches them to every event in the session as super properties. A `$experiment_viewed` event fires once per session per assignment with the experiment ID, variation ID, and detection method; disable it with `capture_experiments: false` in SDK configuration or remote settings. See [SDK configuration](/javascript-sdk/configuration).
+
+- **Experiment arm on sessions** — Session records now include the A/B experiment arm as a queryable dimension. You can use it directly in session analytics without reconstructing arm membership from raw events.
+
+### Updates
+
+- **GA4 parameter prioritization** — When auto-mapped properties hit GA4's 25-parameter event limit, your custom event properties now win over lower-value SDK diagnostics. Business data such as ecommerce fields, lead details, and experiment IDs are more likely to survive on property-heavy events. See [What GA4 receives without configuration](/destinations-api/overview#what-ga4-receives-without-configuration).
+
+### Bug Fixes
+
+- **GA4 parameter cap exceeded** — Explicit GA4 parameters such as page, session, engagement, and data source values were not being counted toward the 25-parameter per-event limit. Mythic now enforces the cap on the total parameter count, which prevents silent drops on Google's side.
+
+- **A/B exposure count inflation** — Convert.com assignments can persist across visits, which caused `$experiment_viewed` to refire in later sessions and overstate exposure counts. The event now includes a `first_exposure` flag so you can separate genuine first exposures from carried assignments.
+
+- **Missing variation IDs in A/B exposures** — Convert.com could report an assignment before its cookie was available, which caused some exposures to fire without a variation ID and made arm-split analysis incomplete. Mythic now waits for the variation ID when possible before emitting the exposure event.
+
+</Update>

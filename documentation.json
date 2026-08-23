@@ -447,6 +447,23 @@
                 ]
               }
             ]
+          },
+          {
+            "tab": "Changelog",
+            "icon": "newspaper",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Changelog",
+                    "path": "changelog",
+                    "icon": "newspaper"
+                  }
+                ]
+              }
+            ]
           }
         ],
         "public": true
