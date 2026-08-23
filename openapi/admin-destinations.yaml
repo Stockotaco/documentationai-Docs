@@ -167,6 +167,80 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminErrorResponse"
+  /admin/destinations/request-status:
+    get:
+      summary: Retrieve Google's downstream delivery verdict
+      operationId: adminGetRequestStatus
+      description: Resolve what Google did with a delivery after accepting it. A 200 at delivery time means ACCEPTED — not ingested. This endpoint calls Google's Diagnostics API (`requestStatus:retrieve`) with the stored credential for the given location and destination type. Returns Google's raw response. Only Data Manager destination types (`google_ads`, `google_analytics`) have a downstream verdict.
+      tags:
+        - Destinations
+      parameters:
+        - name: location_id
+          in: query
+          required: true
+          description: The location (tenant) identifier.
+          schema:
+            type: string
+        - name: request_id
+          in: query
+          required: true
+          description: The Google request id returned at ingest time (stored per delivery in the `google_request_id` column).
+          schema:
+            type: string
+        - name: destination_type
+          in: query
+          required: false
+          description: Which Data Manager destination type to query.
+          schema:
+            type: string
+            default: google_analytics
+            enum:
+              - google_ads
+              - google_analytics
+        - name: credential_name
+          in: query
+          required: false
+          description: Named credential slot to use.
+          schema:
+            type: string
+            default: default
+      responses:
+        "200":
+          description: Downstream delivery verdict retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRequestStatusResponse"
+        "400":
+          description: Missing location_id or request_id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "404":
+          description: No credential found for that location_id/destination_type combination
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "502":
+          description: Identity processor returned an error or was unreachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "503":
+          description: Identity processor is not configured in this environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
 components:
   securitySchemes:
     BearerAuth:
@@ -187,6 +261,18 @@ components:
       schema:
         type: string
   schemas:
+    AdminRequestStatusResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        status:
+          type: integer
+          example: 200
+        data:
+          type: object
+          description: Raw Google requestStatus:retrieve response body, passed through unmodified.
     AdminUpsertCredentialRequest:
       type: object
       required:

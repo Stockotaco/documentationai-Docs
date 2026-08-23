@@ -1468,6 +1468,17 @@ components:
             your own and want reach over cleanliness.
         value_property:
           type: string
+        transaction_id_property:
+          type: string
+          description: >
+            Event property holding the transaction or order identifier, sent as
+            GA4's `transactionId`. When unset, the adapter falls back to
+            `transaction_id`, then `order_id`, then `$transaction_id` on the
+            event. Only set this for a real order identifier — `transactionId`
+            marks the event as a multi-source event matched to an existing tag
+            event, a mode that is allowlist-only per GA4 property. A random
+            per-event value both misclassifies the event and can never match
+            anything. Pageviews should carry no transaction id at all.
         currency:
           type: string
           example: USD
