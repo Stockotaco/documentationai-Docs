@@ -45,7 +45,7 @@ These fire only when their feature is enabled (most are on by default — see th
 </Callout>
 
 <Callout kind="warning">
-  Count exposures with `first_exposure: true`. A testing tool keeps its assignment for months (Convert: ~6), so a visitor bucketed on a landing page carries that variation into later visits — and `$experiment_viewed` fires again in each new session, sometimes on pages the test never touched. `first_exposure: false` marks those: correct for attributing later behaviour to the variation, wrong as an exposure count.
+  Count exposures with `first_exposure: true`. A testing tool keeps its assignment for months (Convert: ~6), so a visitor bucketed on a landing page carries that variation into later visits — and `$experiment_viewed` fires again in each new session, sometimes on pages the test never touched. `first_exposure: false` marks those: correct for attributing later behaviour to the variation, wrong as an exposure count. A sighting that arrives with a variation name but no id yet (the tool announced itself before writing its cookie) is held briefly and completed from the cookie; `detected_via: held_then_enriched` marks those, and `<source>_unresolved` marks one that never completed.
 </Callout>
 
 <Callout kind="warning">

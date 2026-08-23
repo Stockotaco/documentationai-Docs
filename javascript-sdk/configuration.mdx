@@ -293,7 +293,7 @@ The full set of options you can pass to `init(key, config)`.
 
   Nothing needs tagging on the page. Every event after detection carries two super properties — `$experiments` (an array of `"<experimentId>:<variationId>"`) and `$ab_platform` — and each assignment produces one `$experiment_viewed` event per session, with `experiment_id`, `variation_id` and `variation_name` where the tool exposes them.
 
-  Assignments are read from the testing tool's own cookie, which holds the authoritative experiment-to-variation mapping and is already populated for visitors who arrived through a split-URL redirect. The tool's `dataLayer` announcement is observed as well, to catch bucketing that happens later in a single-page app and to pick up variation names.
+  Assignments are read from the testing tool's own cookie, which holds the authoritative experiment-to-variation mapping and is already populated for visitors who arrived through a split-URL redirect. Sessions the SDK identifies as bots record no assignment — a crawler executing a testing tool would otherwise count as an exposure in whichever arm it landed in. The tool's `dataLayer` announcement is observed as well, to catch bucketing that happens later in a single-page app and to pick up variation names.
 </ParamField>
 
 <Callout kind="info">
