@@ -31,7 +31,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [webhook, meta_capi, google_ads, google_analytics]
+            enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads]
         - name: enabled
           in: query
           description: Filter by enabled state. Pass `true` or `false`.
@@ -803,7 +803,7 @@ components:
       description: Credential-backed destination type.
       schema:
         type: string
-        enum: [meta_capi, google_ads, google_analytics]
+        enum: [meta_capi, google_ads, google_analytics, openai_ads]
     ActionIdQuery:
       name: action_id
       in: query
@@ -1525,14 +1525,15 @@ components:
           example: Purchase → Meta
         action_type:
           type: string
-          enum: [webhook, meta_capi, google_ads, google_analytics]
+          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads]
         trigger_rules:
           $ref: "#/components/schemas/TriggerRules"
         action_config:
           type: object
           description: >
             Type-specific configuration. See `WebhookConfig`, `MetaCapiConfig`,
-            and `GoogleAdsConfig`. Webhook secrets are redacted for viewer keys.
+            `GoogleAdsConfig`, `GoogleAnalyticsConfig` and `OpenAiAdsConfig`.
+            Webhook secrets are redacted for viewer keys.
         enabled:
           type: boolean
         rate_limit_max:
@@ -1556,6 +1557,82 @@ components:
         updated_at:
           type: string
           format: date-time
+    OpenAiAdsConfig:
+      type: object
+      description: >
+        `action_config` for `action_type: openai_ads` — server-side conversions
+        to OpenAI / ChatGPT Ads (`POST bzr.openai.com/v1/events`). The click id
+        is `oppref`, captured from the landing-page URL by the Mythic SDK and
+        replayed from the person profile on later conversions.
+      required:
+        - pixel_id
+        - event_mapping
+      properties:
+        pixel_id:
+          type: string
+          description: Pixel ID from the Conversions tab in OpenAI Ads Manager.
+          example: px_1234567890
+        event_mapping:
+          type: object
+          description: >
+            Maps a source event name to one of OpenAI's event types, or to
+            `custom:<name>`. Their taxonomy is closed, so a name outside it is
+            rejected at write time rather than failing on every delivery.
+            Allowed: order_created, checkout_started, items_added,
+            contents_viewed, page_viewed, lead_created, appointment_scheduled,
+            registration_completed, app_installed, app_opened,
+            subscription_created, trial_started, custom:&lt;name&gt;.
+          additionalProperties:
+            type: string
+          example:
+            transaction_completed: order_created
+            form_submitted: lead_created
+            vip_signup: custom:vip_signup
+        data_mapping:
+          type: object
+          additionalProperties:
+            type: string
+          description: >
+            Extra `data` fields as `dataKey -> event property path` (dot-paths
+            allowed). Only `contents` on a contents-type event, `plan_id` on
+            `subscription_created`/`trial_started`, and arbitrary keys on a
+            `custom:` event are legal; anything else is dropped rather than sent
+            as a payload the API rejects.
+          example:
+            contents: products
+        action_source:
+          type: string
+          enum: [web, mobile_app, offline, physical_store, phone_call, email, other]
+          default: web
+          description: >
+            Where the conversion happened. `web` requires a source url; an event
+            with no page is sent as `offline` instead of being rejected.
+        default_source_url:
+          type: string
+          description: >
+            Fallback `source_url` when the event carries no `$current_url` —
+            for server-side conversions that should still count as web.
+        default_country_code:
+          type: string
+          description: >
+            Numeric country calling code (e.g. "1") used to build the
+            country-coded form of a national phone number.
+          example: "1"
+        validate_only:
+          type: boolean
+          default: false
+          description: >
+            Send with OpenAI's `validate_only` flag — the payload is validated
+            and discarded. Useful to prove a mapping before it counts.
+        credential_name:
+          type: string
+          default: default
+        timeout_ms:
+          type: number
+          default: 5000
+        enrichment:
+          type: object
+          description: Same shape as the other destinations.
     CreateDestinationRequest:
       type: object
       required:
@@ -1571,7 +1648,7 @@ components:
           example: Purchase → Meta
         action_type:
           type: string
-          enum: [webhook, meta_capi, google_ads, google_analytics]
+          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads]
         trigger_rules:
           $ref: "#/components/schemas/TriggerRules"
         action_config:
@@ -1579,6 +1656,8 @@ components:
             - $ref: "#/components/schemas/WebhookConfig"
             - $ref: "#/components/schemas/MetaCapiConfig"
             - $ref: "#/components/schemas/GoogleAdsConfig"
+            - $ref: "#/components/schemas/GoogleAnalyticsConfig"
+            - $ref: "#/components/schemas/OpenAiAdsConfig"
         enabled:
           type: boolean
           default: true
@@ -1636,7 +1715,7 @@ components:
           format: uuid
         destination_type:
           type: string
-          enum: [meta_capi, google_ads, google_analytics]
+          enum: [meta_capi, google_ads, google_analytics, openai_ads]
         credential_name:
           type: string
           example: default
@@ -1660,7 +1739,7 @@ components:
           type: string
         destination_type:
           type: string
-          enum: [webhook, meta_capi, google_ads, google_analytics]
+          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads]
         event_name:
           type: string
           description: Source event name that triggered the delivery.
@@ -1710,7 +1789,7 @@ components:
           type: string
         destination_type:
           type: string
-          enum: [webhook, meta_capi, google_ads, google_analytics]
+          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads]
         destination_event_name:
           type: string
         status:
@@ -1776,7 +1855,7 @@ components:
           type: string
         destination_type:
           type: string
-          enum: [webhook, meta_capi, google_ads, google_analytics]
+          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads]
         enabled:
           type: boolean
         trigger_count:

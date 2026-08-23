@@ -20,7 +20,7 @@ https://mythic-analytics.gulp.workers.dev/client/v1/destinations
 
 ## Destination types
 
-Four destination types are supported. The `action_config` you send is validated against the `action_type`.
+Five destination types are supported. The `action_config` you send is validated against the `action_type`.
 
 | Type | `action_type` | What it does | Credential |
 |------|---------------|--------------|------------|
@@ -28,9 +28,10 @@ Four destination types are supported. The `action_config` you send is validated 
 | **Meta Conversions API** | `meta_capi` | Sends server-side conversions to a Meta pixel | Stored separately (`meta_capi`) |
 | **Google Ads** | `google_ads` | Uploads conversions to a Google Ads customer via the Data Manager API | Stored separately (`google_ads`) |
 | **Google Analytics 4** | `google_analytics` | Sends events to a GA4 property via the same Data Manager API | Stored separately (`google_analytics`) |
+| **OpenAI (ChatGPT) Ads** | `openai_ads` | Sends server-side conversions to an OpenAI Ads pixel | Stored separately (`openai_ads`) |
 
 <Callout kind="info">
-  `tiktok_events` is recognized by the schema but has no executor yet, so creating it returns `unsupported_destination_type`. Only `webhook`, `meta_capi`, `google_ads`, and `google_analytics` are live.
+  `tiktok_events` is recognized by the schema but has no executor yet, so creating it returns `unsupported_destination_type`. Only `webhook`, `meta_capi`, `google_ads`, `google_analytics`, and `openai_ads` are live.
 </Callout>
 
 <Callout kind="info">
@@ -67,6 +68,38 @@ Webhooks run through the same delivery pipeline as the ad destinations, so they 
 </Callout>
 
 Unlike the ad destinations, webhooks are filtered by `trigger_rules` alone (there is no `event_mapping`). Note that every **client-side** rule type — `url_pattern`, `cookie`, `device`, `time`, `javascript_variable`, `custom_js`, `query_param` — always passes server-side, so a webhook whose only rule is one of those matches *every* event for the location. Pair it with a `mythic_event` rule unless that is what you want.
+
+### OpenAI (ChatGPT) Ads
+
+Requires a `pixel_id` and an `event_mapping`. Optional `data_mapping`, `action_source`, `default_source_url`, `default_country_code`, `validate_only`, `credential_name`, `timeout_ms`, and `enrichment`. The credential is the Conversions API key from the Conversions tab in OpenAI Ads Manager, stored separately as an `openai_ads` credential.
+
+**The event taxonomy is closed.** OpenAI accepts thirteen event types and nothing else, and each one pins the shape of the payload's `data` object — so `event_mapping` targets must be one of `order_created`, `checkout_started`, `items_added`, `contents_viewed`, `page_viewed`, `lead_created`, `appointment_scheduled`, `registration_completed`, `app_installed`, `app_opened`, `subscription_created`, `trial_started`, or `custom:<name>` for anything outside it. A name outside the list is rejected when you create the destination rather than failing on every delivery.
+
+```bash
+curl -X POST https://mythic-analytics.gulp.workers.dev/client/v1/destinations \
+  -H "Authorization: Bearer ak_your_agency_key" \
+  -H "X-Location-Id: loc_abc123" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Orders → ChatGPT Ads",
+    "action_type": "openai_ads",
+    "trigger_rules": {"rules":[{"type":"mythic_event","event":"transaction_completed"}]},
+    "action_config": {
+      "pixel_id": "px_1234567890",
+      "event_mapping": {"transaction_completed": "order_created"}
+    }
+  }'
+```
+
+**The click id is `oppref`**, appended to your landing-page URL when someone clicks a ChatGPT ad. The Mythic SDK captures it like any other click id, the identity resolver stores it on the person, and it is replayed on a later conversion — so a purchase that happens days after the click still carries the click that earned it. Without it OpenAI can count the conversion but cannot tell you which ad, ad group or campaign produced it, and conversion-optimized bidding learns nothing from it. If you also run OpenAI's own OAIQ pixel on the page, its `__obref` browser reference is picked up and sent alongside, which is what lets their side dedupe browser and server events; the event `uuid` is sent as the dedup `id`, so reuse it as the pixel's `event_id` if you fire both.
+
+<Callout kind="warning">
+  **Conversions older than 7 days are rejected by OpenAI**, not by us. A subscription rebill, a replayed backfill, or a conversion credited to a click from last month lands in the delivery log as a permanent failure naming its age — deliberately, rather than as a silent skip. It is the one destination where a slow CRM sync loses conversions outright.
+</Callout>
+
+<Callout kind="info">
+  Monetary values are sent as an integer in the currency's **minor unit** (`$129.99` becomes `12999`), converted per currency — so JPY is not multiplied and KWD is multiplied by 1000. `amount` is only sent when a currency is known, since an integer with no unit is unreadable. Geo (city, region, postal, country) goes as plaintext on this API rather than hashed, so it is suppressed entirely for HIPAA-enabled locations, along with the client IP.
+</Callout>
 
 ### Meta Conversions API
 

@@ -1606,6 +1606,8 @@ components:
         ttclid: { type: string }
         twclid: { type: string }
         li_fat_id: { type: string }
+        oppref: { type: string }
+        obref: { type: string }
         epik: { type: string }
         sccid: { type: string }
         device_type: { type: string }

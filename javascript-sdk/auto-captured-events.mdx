@@ -61,8 +61,18 @@ When `capture_utm` is enabled (default), the SDK captures UTM parameters and adv
 - **Facebook**: `$fbclid`, `$fbc`, `$fbp`
 - **Twitter/X**: `$twclid`
 - **LinkedIn**: `$li_fat_id`
+- **OpenAI / ChatGPT Ads**: `$oppref` (the click id), `$obref` (read from OpenAI's own `__obref` cookie when their OAIQ pixel is on the page)
 - **Mythic Click ID**: `$iiid` (from link redirect tracking)
 - **Google Analytics**: `$ga_client_id` (from GA's own `_ga` cookie, when GA4 is on the page)
+
+<Callout kind="info">
+  `$obref` is read from OpenAI's cookie the same way `$ga_client_id` is read from
+  Google's, and for the same reason: it is their browser identifier, not ours.
+  Their `__oppref` cookie is deliberately **not** read back — `oppref` is a
+  *click* id, and a cookie that outlives the click would mark 30 days of direct
+  traffic as paid ChatGPT traffic. A conversion that happens later gets its
+  `oppref` from the person's stored attribution server-side instead.
+</Callout>
 
 <Callout kind="info">
   `$ga_client_id` is **read, never written**. Google Analytics owns the `_ga`
