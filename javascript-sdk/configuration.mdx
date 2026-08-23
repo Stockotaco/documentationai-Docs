@@ -308,6 +308,32 @@ The full set of options you can pass to `init(key, config)`.
   This is the one feature where the server override can only turn things **off**. `PUT /client/v1/settings/experiments` with `false` disables detection (and un-publishes `$experiments`), but enabling it there takes effect late: the SDK sends its first `$pageview` before remote config loads, and for a split-URL test that pageview *is* the exposure. Leave the default in place on sites you want measured. Detection is blocked entirely for HIPAA locations.
 </Callout>
 
+### Conversion forwarding
+
+<ParamField body="experiment_conversions" param-type="boolean|object" required="false" show-location="false" deprecated="false">
+  Forward Mythic conversion events to the visitor's testing tool so its own experiment readout gets credited — the client maintains the conversion once, in Mythic, instead of tagging goals in both systems. Default: `false` (off). Pass `true` or an object:
+
+  - `goals` (object, required to do anything) — maps Mythic event names to the tool goals to notify:
+    ```javascript
+    { goals: {
+        order_completed: [{ platform: 'convert', goalId: '<dashboard goal id>' }],
+        purchase: [{ platform: 'growthbook', name: 'purchase' }]
+    } }
+    ```
+  - `oncePerSession` (boolean) — forward each goal at most once per session. Default: `true`.
+  - `maxPerSession` (number) — hard cap on forwards per session. Default: `10`.
+
+  Platform support: **Convert.com** (`goalId` is the dashboard goal id; queued through Convert's `_conv_q` so it works whether Convert loads before or after us), **GrowthBook** (`.track(name)`), and a generic **custom** platform that dispatches a `mythic:ab_conversion` CustomEvent on `window` for tools without a native adapter. VWO and Mida are not wired yet — their programmatic goal APIs are unverified, and guessed API shapes produce silent no-ops.
+</ParamField>
+
+<Callout kind="info">
+  Forwarding rides the normal capture pipeline: consent gating, opt-out, HIPAA mode, and `before_send` all apply. A tool that loads after the conversion still receives it (Convert replays queued commands on init). An absent or failing tool does not consume the once-per-session slot — the next matching event retries.
+</Callout>
+
+<Callout kind="tip">
+  This one is server-toggleable in both directions: unlike A/B detection, nothing here needs to beat the first pageview. Enable or disable it per location with `PUT /client/v1/settings/conversions`.
+</Callout>
+
 ### Geolocation
 
 <ParamField body="geolocation" param-type="boolean|object" required="false" show-location="false" deprecated="false">

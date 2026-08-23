@@ -368,6 +368,74 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /conversions:
+    get:
+      summary: Get the A/B conversion-forwarding override
+      operationId: getExperimentConversions
+      description: >
+        Whether Mythic forwards conversion events to the visitor's testing tool,
+        and which platforms have adapters. Readable with an agency key (`ak_`,
+        pass `?location_id=`) or a viewer key (`sk_`). Opt-in: null/false mean
+        off.
+      responses:
+        "200":
+          description: The current override and whether forwarding is on
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentConversionsResponse"
+        "401":
+          description: Authorization key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Set the A/B conversion-forwarding override
+      operationId: putExperimentConversions
+      description: >
+        Configure which Mythic events notify the visitor's testing tool so its
+        own goal is credited. Requires an agency key (`ak_`) and
+        `?location_id=`; viewer keys get `403 agency_required`.
+
+
+        Accepted values for `experiment_conversions`: `null`/`false` (off),
+        `true` (on with SDK defaults), or an object `{enabled, goals,
+        oncePerSession, maxPerSession}` where `goals` maps Mythic event names to
+        1–10 targets each. Targets carry `platform` (`convert`, `growthbook`, or
+        `custom`) plus `goalId` (convert) / `name` (growthbook, custom).
+        Unknown keys, unverified platforms, missing ids, and out-of-range caps
+        are rejected rather than ignored.
+
+
+        Unlike detection this is fully server-toggleable in both directions — a
+        conversion happens later in the session, so there is no first-pageview
+        race. HIPAA-mode locations never forward.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExperimentConversionsRequest"
+      responses:
+        "200":
+          description: Updated — returns the stored override
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentConversionsUpdateResponse"
+        "400":
+          description: Body isn't JSON, or `experiment_conversions` is missing/invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Write access requires an agency key (`ak_`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /contract-alerts:
     get:
       summary: Get the event-contract alert webhook
@@ -603,6 +671,62 @@ components:
               type: object
               properties:
                 enabled: { type: boolean, example: true }
+    ExperimentConversionsResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            experiment_conversions:
+              nullable: true
+              description: The stored override — `null`/`false` (off), `true`, or a config object.
+              oneOf:
+                - type: boolean
+                - type: object
+              example: null
+            effective:
+              type: object
+              properties:
+                enabled: { type: boolean, example: false }
+            platforms:
+              type: array
+              items: { type: string }
+              example: [convert, growthbook, custom]
+    ExperimentConversionsRequest:
+      type: object
+      required:
+        - experiment_conversions
+      properties:
+        experiment_conversions:
+          nullable: true
+          description: "`true`, `false`, `null`, or `{ enabled, goals, oncePerSession, maxPerSession }`."
+          oneOf:
+            - type: boolean
+            - type: object
+              properties:
+                enabled: { type: boolean, example: true }
+                goals:
+                  type: object
+                  description: Mythic event name -> array of 1-10 targets.
+                  additionalProperties: true
+                oncePerSession: { type: boolean, example: true }
+                maxPerSession: { type: integer, minimum: 1, maximum: 100, example: 10 }
+              additionalProperties: false
+          example: false
+    ExperimentConversionsUpdateResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            experiment_conversions:
+              nullable: true
+              oneOf:
+                - type: boolean
+                - type: object
+              example: false
     ExperimentCaptureResponse:
       type: object
       properties:
