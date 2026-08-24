@@ -4,7 +4,7 @@ info:
   title: Destinations
   description: >
     Partner self-serve data activation. Create and manage destinations
-    (webhooks, Meta Conversions API, Google Ads), store per-location
+    (webhooks, Meta Conversions API, Google Ads, Google Analytics 4, and OpenAI Ads), store per-location
     credentials, and inspect delivery logs and health. Client-scoped: an
     agency key (`ak_`) has read-write access to a single named location, and a
     location secret key (`sk_`) is a read-only viewer of its own location.
@@ -60,7 +60,7 @@ paths:
       description: >
         Create a destination for the calling location. Requires an agency
         (`ak_`) key. The `action_config` shape is validated against
-        `action_type`. HIPAA-enabled locations reject `http://` webhook URLs.
+        `action_type`. HIPAA-enabled locations reject `http://` webhook URLs and reject `google_analytics` destinations entirely (DOM-level data capture is incompatible with HIPAA mode).
       requestBody:
         required: true
         content:
@@ -134,9 +134,10 @@ paths:
         Store (or rotate, by re-sending) a credential for a credential-backed
         destination type. Requires an agency (`ak_`) key. A given
         `(destination_type, credential_name)` pair is upserted in place.
-        `google_ads` credential values must be a JSON object containing
+        `google_ads` and `google_analytics` credential values must be a JSON object containing
         `client_id`, `client_secret`, and `refresh_token`, minted against the
         `https://www.googleapis.com/auth/datamanager` OAuth scope.
+        `meta_capi` and `openai_ads` credentials are plain string API keys or access tokens.
         The response echoes metadata only — never the credential value.
       parameters:
         - $ref: "#/components/parameters/CredentialType"
@@ -720,9 +721,9 @@ paths:
       operationId: testDestination
       description: >
         Send a test delivery through the real ad-platform adapter using the
-        stored credential. Requires an agency (`ak_`) key. Supported only for
-        ad destinations (`meta_capi`, `google_ads`) — webhooks fire on real
-        events and return `400`.
+        stored credential. Requires an agency (`ak_`) key. Supported for
+        `meta_capi`, `google_ads`, and `google_analytics` — webhooks fire on real
+        events and return `400`, and `openai_ads` is not yet supported for testing.
       parameters:
         - $ref: "#/components/parameters/DestinationId"
       responses:
@@ -1698,11 +1699,12 @@ components:
         credential_value:
           type: string
           description: >
-            Secret value, max 8KB. For `google_ads` this must be a JSON object
+            Secret value, max 8KB. For `google_ads` and `google_analytics` this must be a JSON object
             string containing `client_id`, `client_secret`, and `refresh_token`
             (plus an optional `login_customer_id` for manager-account access).
             The refresh token must carry the
-            `https://www.googleapis.com/auth/datamanager` OAuth scope.
+            `https://www.googleapis.com/auth/datamanager` OAuth scope. For
+            `meta_capi` and `openai_ads` the value is a plain string API key or access token.
         credential_name:
           type: string
           default: default
@@ -1906,6 +1908,18 @@ components:
           example: true
         data:
           $ref: "#/components/schemas/Destination"
+        warnings:
+          type: array
+          description: Optional configuration warnings returned when the destination is created successfully but may have settings that cause issues such as double-counting.
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: action_config.event_mapping.my_pageview
+              message:
+                type: string
+                example: "'page_view' is fired automatically by GA4 enhanced measurement and may be double-counted when a tag also sends it."
     DestinationListResponse:
       type: object
       properties:

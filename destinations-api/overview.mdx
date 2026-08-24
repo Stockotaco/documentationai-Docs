@@ -2,8 +2,8 @@
 title: Destinations API
 description: >-
   Activate your resolved event data by forwarding conversions to webhooks,
-  the Meta Conversions API, and Google Ads, with per-destination credentials,
-  delivery logs, and health monitoring.
+  the Meta Conversions API, Google Ads, Google Analytics 4, and OpenAI Ads,
+  with per-destination credentials, delivery logs, and health monitoring.
 ---
 
 ## Overview
@@ -248,6 +248,10 @@ shape and the same `https://www.googleapis.com/auth/datamanager` scope as
 `google_ads`.
 
 <Callout kind="warning">
+  `google_analytics` destinations cannot be created on HIPAA-enabled locations. GA4's data model includes DOM-level identifiers and session context that are incompatible with HIPAA's PHI restrictions — the destination is rejected at creation time rather than silently stripping data later.
+</Callout>
+
+<Callout kind="warning">
   GA4 event names must start with a letter, contain only letters, digits and
   underscores, be at most 40 characters, and avoid the reserved prefixes `ga_`,
   `google_`, `firebase_` and `_`. These are rejected when you save the
@@ -437,7 +441,7 @@ Each destination has an optional per-destination delivery cap, set with `rate_li
 
 ## Credentials
 
-Credentialed destinations (`meta_capi`, `google_ads`, `google_analytics`) read their secrets from a separate, never-readable credential store keyed by `(location_id, destination_type, credential_name)`. Store or rotate a credential with `PUT /credentials/{type}`; list metadata with `GET /credentials`. Credential values are write-only — no endpoint ever returns them. Webhooks carry their auth inline in `action_config` instead.
+Credentialed destinations (`meta_capi`, `google_ads`, `google_analytics`, `openai_ads`) read their secrets from a separate, never-readable credential store keyed by `(location_id, destination_type, credential_name)`. Store or rotate a credential with `PUT /credentials/{type}`; list metadata with `GET /credentials`. Credential values are write-only — no endpoint ever returns them. Webhooks carry their auth inline in `action_config` instead.
 
 ## Delivery logs & health
 
@@ -447,7 +451,7 @@ Credentialed destinations (`meta_capi`, `google_ads`, `google_analytics`) read t
 
 ## Testing
 
-`POST /{id}/test` sends a test delivery through the ad-platform adapter using the stored credential. It is supported only for `meta_capi`, `google_ads` and `google_analytics`; webhooks fire on real events and return `400`. Both Google destinations use Data Manager's `validateOnly` flag, so they verify the credential, scope, destination and payload without recording anything in the customer's account — which is also why a GA4 test sends a synthetic client id rather than reporting `skipped`. Meta tests are real sends and honor `test_event_code`.
+`POST /{id}/test` sends a test delivery through the ad-platform adapter using the stored credential. It is supported for `meta_capi`, `google_ads` and `google_analytics`; `openai_ads` is not yet supported for testing, and webhooks fire on real events and return `400`. Both Google destinations use Data Manager's `validateOnly` flag, so they verify the credential, scope, destination and payload without recording anything in the customer's account — which is also why a GA4 test sends a synthetic client id rather than reporting `skipped`. Meta tests are real sends and honor `test_event_code`.
 
 ## Response envelope
 
@@ -463,6 +467,10 @@ All endpoints return a JSON envelope.
 
 <ResponseField name="error" field-type="object" required="false" deprecated="false">
   Present on failed requests. Contains `code`, `message`, and — for validation failures — a `details` array of per-field errors.
+</ResponseField>
+
+<ResponseField name="warnings" field-type="array" required="false" deprecated="false">
+  Present on successful destination creation when the configuration may cause issues — e.g. a `google_analytics` event mapping to `page_view` or other GA4 enhanced-measurement events that a tag also fires, which would double-count. Each entry has a `field` and a `message`.
 </ResponseField>
 
 ## Error handling

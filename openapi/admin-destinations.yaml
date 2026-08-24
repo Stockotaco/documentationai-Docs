@@ -125,10 +125,10 @@ paths:
       summary: Test a destination
       operationId: adminTestDestination
       description: >
-        Send a test delivery through the real ad-platform adapter (Meta CAPI /
-        Google Ads) using the stored credential. Proxies to the identity
-        processor; only ad destinations are testable — webhooks fire on real
-        events.
+        Send a test delivery through the real ad-platform adapter (Meta CAPI,
+        Google Ads, Google Analytics) using the stored credential. Proxies to
+        the identity processor; only ad destinations are testable — webhooks
+        fire on real events. OpenAI Ads is not yet supported for testing.
       requestBody:
         required: true
         content:
@@ -167,6 +167,64 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminErrorResponse"
+  /admin/destinations/request-status:
+    get:
+      summary: Google downstream delivery verdict
+      operationId: adminGetRequestStatus
+      description: Retrieve Google's downstream processing verdict for a delivery by its request id. Calls Google's Data Manager requestStatus:retrieve API via the identity processor. The caller supplies Google's request id directly — unlike the client-facing endpoint which resolves it from an event uuid.
+      parameters:
+        - name: location_id
+          in: query
+          required: true
+          description: Location (tenant) identifier.
+          schema:
+            type: string
+        - name: request_id
+          in: query
+          required: true
+          description: Google's request id from the delivery row.
+          schema:
+            type: string
+        - name: destination_type
+          in: query
+          required: false
+          description: Which Data Manager destination type to query.
+          schema:
+            type: string
+            default: google_analytics
+            enum:
+              - google_ads
+              - google_analytics
+        - name: credential_name
+          in: query
+          required: false
+          description: Named credential to use.
+          schema:
+            type: string
+            default: default
+      responses:
+        "200":
+          description: Google's verdict
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  status:
+                    type: integer
+                  data:
+                    type: object
+                    description: Raw Google Data Manager response — requestStatusPerDestination array with requestStatus, eventsIngestionStatus, errorInfo, warningInfo.
+        "400":
+          description: Missing location_id or request_id
+        "401":
+          description: Admin key missing or invalid
+        "502":
+          description: Network or processor error
+        "503":
+          description: Diagnostics service is not configured in this environment
 components:
   securitySchemes:
     BearerAuth:

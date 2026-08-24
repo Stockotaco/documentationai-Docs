@@ -1,13 +1,14 @@
 ---
 title: Admin API
 description: >-
-  Inspect Cloudflare KV storage and manage Google Cloud Pub/Sub subscriptions
-  via the Mythic Analytics Admin API.
+  Inspect Cloudflare KV storage, manage Google Cloud Pub/Sub subscriptions,
+  administer destination credentials and testing, and override per-location A/B
+  experiment and conversion settings via the Mythic Analytics Admin API.
 ---
 
 ## Overview
 
-The Admin API groups the operational surfaces of the Mythic Analytics platform: Cloudflare KV inspection and cleanup, Google Cloud Pub/Sub subscription management, and admin management of destinations, Airbyte connections, and BigQuery exports. All of these are true admin routes protected by the admin key.
+The Admin API groups the operational surfaces of the Mythic Analytics platform: Cloudflare KV inspection and cleanup, Google Cloud Pub/Sub subscription management, admin management of destinations, Airbyte connections, and BigQuery exports, and admin mirrors of the client-facing A/B experiment-detection and conversion-forwarding settings. All of these are true admin routes protected by the admin key.
 
 ## Base URL
 
@@ -17,7 +18,7 @@ All endpoints are served from the platform host at the root path (no version pre
 https://mythic-analytics.gulp.workers.dev
 ```
 
-KV management lives under `/admin/kv`, Pub/Sub under `/admin/pubsub`, destinations under `/admin/destinations`, Airbyte under `/admin/airbyte`, and BigQuery exports under `/admin/bigquery-exports`.
+KV management lives under `/admin/kv`, Pub/Sub under `/admin/pubsub`, destinations under `/admin/destinations`, Airbyte under `/admin/airbyte`, and BigQuery exports under `/admin/bigquery-exports`. A/B experiment-detection overrides live at `/admin/experiments/capture` and conversion-forwarding overrides at `/admin/conversions/capture`, both mirroring the client-facing settings endpoints with explicit `location_id`.
 
 ## Response shapes
 

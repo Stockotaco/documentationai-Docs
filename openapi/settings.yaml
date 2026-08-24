@@ -7,8 +7,10 @@ info:
     sites may send events with a location's publishable key, and the
     **autocapture override** that controls server-side whether the SDK records
     clicks and form submissions, the **heatmap-capture override** that turns
-    click-position and scroll-depth collection on, and the **experiment-detection
-    override** for A/B test assignments.
+    click-position and scroll-depth collection on, the **experiment-detection
+    override** for A/B test assignments, the **conversion-forwarding override**
+    that forwards conversion events to the visitor's testing tool, and the
+    **contract-alert webhook** for daily event-contract digest delivery.
 
 
     Publishable keys (`pk_`) live in the browser and are public by design — they
