@@ -1,0 +1,27 @@
+---
+title: Changelog
+description: What shipped in Mythic Analytics — new features, updates, and bug fixes.
+---
+
+## Latest release
+
+<Update label="August 23, 2026" description="Recent product changes" tags={["feature", "improvement", "bugfix"]}>
+
+### New Features
+
+- **ChatGPT OpenAI Ads destination** — A new destination type captures the `oppref` click ID from ChatGPT ad clicks, stitches it to the person profile, and sends server-side conversions to OpenAI's Conversions API. It supports a closed 13-event taxonomy, automatic currency conversion to minor units, and browser-server deduplication via the `obref` browser reference. See [Destinations API overview](/destinations-api/overview).
+- **Automatic A/B experiment detection for Convert.com** — The SDK now auto-detects Convert.com A/B test assignments and attaches them to every event as super properties `\$experiments` and `\$ab_platform`. Assignment data is also available as a typed session column for query and segmentation, and the feature is enabled by default. See [JavaScript SDK overview](/javascript-sdk/overview) and [super properties](/javascript-sdk/super-properties).
+- **A/B conversion forwarding** — When a Mythic event fires, the SDK can now notify the visitor's testing tool so its own goal is credited, which removes the need to tag both systems. It supports Convert.com through `triggerConversion` and GrowthBook through `track`, and you enable it with the `experiment_conversions` configuration option. See [JavaScript SDK configuration](/javascript-sdk/configuration).
+
+### Updates
+
+- **GA4 events stamped with `data_source: "mythic"`** — Every event sent to Google Analytics 4 now includes `data_source: "mythic"`, so you can isolate Mythic-delivered events with a single filter in the GA4 UI or BigQuery export. This is most useful when multiple senders share the same property. See [Destinations API overview](/destinations-api/overview).
+- **GA4 parameter prioritization** — Auto-mapped GA4 parameters now use priority tiers instead of alphabetical sorting. Your own event properties survive GA4's 25-parameter cap first, followed by curated context fields, then SDK internals. See [Destinations API overview](/destinations-api/overview).
+
+### Bug Fixes
+
+- **Paid ChatGPT clicks misclassified as organic** — Paid ChatGPT ad clicks tagged with `oppref` were being reported as organic `chatgpt.com/ai` traffic instead of `chatgpt/paid`. Attribution now correctly distinguishes paid from organic traffic.
+- **Convert.com exposures lost when the variation ID arrived late** — Some Convert.com experiment exposures fired before the variation ID was available, which caused them to be dropped. The SDK now holds those sightings and completes them when the ID arrives.
+- **Carried A/B assignments inflating exposure counts** — Convert.com persists assignments across sessions, which caused `\$experiment_viewed` to re-fire and inflate exposure counts. A new `first_exposure` flag now distinguishes genuine new exposures from carried assignments.
+
+</Update>
