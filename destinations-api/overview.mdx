@@ -163,7 +163,7 @@ transaction id at all.
 
 ### Connecting Google without a refresh token
 
-You do not have to mint a refresh token by hand. `POST /destinations/oauth/initiate` returns a `consent_url`; send the browser there, the user picks a Google account, and the callback stores a credential for you. It is the same credential shape either way — the consent flow is a better way to obtain it, not a different one.
+You do not have to mint a refresh token by hand. `POST /destinations/oauth/initiate` returns a `consent_url` **and a `start_url`**. The `consent_url` is the full Google consent URL (~430 characters) and is what you redirect to programmatically. The `start_url` is a short link (~127 characters) that redirects to the same consent — hand it to a person in an email or chat where the long URL would truncate. It resolves through `GET /destinations/oauth/start?t=<state>`, which looks up the pending consent and 302s the browser to Google. The link does not consume the state, so it can be opened more than once within the 15-minute window; only the callback deletes it. The callback stores a credential for you. It is the same credential shape either way — the consent flow is a better way to obtain it, not a different one.
 
 ```bash
 curl -X POST https://mythic-analytics.gulp.workers.dev/client/v1/destinations/oauth/initiate \

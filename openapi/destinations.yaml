@@ -379,12 +379,35 @@ paths:
                   data:
                     type: object
                     properties:
-                      consent_url: { type: string }
+                      consent_url: { type: string, description: 'Full Google consent URL (~430 characters). Suitable for programmatic redirect.' }
+                      start_url: { type: string, description: 'Short link (~127 characters) that redirects to the same consent. Hand this to a person instead of the long consent_url — see `GET /oauth/start`.' }
                       expires_in: { type: integer, example: 900 }
                       oauth_client_source: { type: string, enum: [agency, mythic] }
         '400': { description: 'Unsupported destination_type, or a return_url whose origin is not registered' }
         '403': { description: Agency key required }
         '503': { description: No OAuth client is configured }
+
+  /client/v1/destinations/oauth/start:
+    get:
+      summary: Short link that redirects to Google consent
+      operationId: destinationOAuthStart
+      description: >
+        An unauthenticated redirect endpoint that takes the opaque state token
+        (`t`) from `/oauth/initiate`, looks up the pending consent, and 302s
+        the browser to Google — byte-identical to the `consent_url` that
+        `/oauth/initiate` returned. It exists because Google's consent URL is
+        ~430 characters and truncates when pasted in chat or email; the
+        `start_url` is ~127 characters. Does NOT consume the state — the token
+        stays valid for its 15-minute window, so the link can be opened more
+        than once. Only the callback deletes it.
+      tags: [Destinations]
+      security: []
+      parameters:
+        - { name: t, in: query, required: true, schema: { type: string }, description: 'Opaque state token from `/oauth/initiate`.' }
+      responses:
+        '302': { description: Redirect to Google's consent URL }
+        '400': { description: 'Missing, expired, or unreadable token (HTML page)' }
+        '429': { description: 'IP-based rate limit — 30 requests per 10 minutes (HTML page)' }
 
   /client/v1/destinations/oauth/callback:
     get:
@@ -1504,6 +1527,16 @@ components:
             type: string
         last_updated_property:
           type: string
+        transaction_id_property:
+          type: string
+          description: >
+            Dot-path into event properties for the GA4 `transactionId`. Defaults
+            to checking `transaction_id`, then `order_id`, then
+            `$transaction_id` — set this only when your order id lives under a
+            non-standard key. Only a real order identifier should be sent:
+            `transactionId` marks the event as a multi-source event matched to
+            an existing tag event, which is allowlist-only per GA4 property. A
+            pageview should carry no transaction id at all.
         event_location:
           type: object
           properties:
