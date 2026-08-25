@@ -8,7 +8,9 @@ info:
     **autocapture override** that controls server-side whether the SDK records
     clicks and form submissions, the **heatmap-capture override** that turns
     click-position and scroll-depth collection on, and the **experiment-detection
-    override** for A/B test assignments.
+    override** for A/B test assignments, and the **conversion-forwarding
+    override** that routes Mythic conversion events into the visitor's testing
+    tool.
 
 
     Publishable keys (`pk_`) live in the browser and are public by design — they
@@ -368,6 +370,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded (60 requests per 10 seconds per location)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Failed to persist the override to the data store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /conversions:
     get:
       summary: Get the A/B conversion-forwarding override
@@ -432,6 +446,18 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "403":
           description: Write access requires an agency key (`ak_`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded (60 requests per 10 seconds per location)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Failed to persist the override to the data store
           content:
             application/json:
               schema:
@@ -708,12 +734,49 @@ components:
                 enabled: { type: boolean, example: true }
                 goals:
                   type: object
-                  description: Mythic event name -> array of 1-10 targets.
-                  additionalProperties: true
+                  description: >-
+                    Maps Mythic event names to 1-10 conversion targets each.
+                    Maximum 25 event name keys; each key is a non-empty string
+                    up to 200 characters.
+                  additionalProperties:
+                    type: array
+                    minItems: 1
+                    maxItems: 10
+                    items:
+                      $ref: "#/components/schemas/ConversionTarget"
                 oncePerSession: { type: boolean, example: true }
                 maxPerSession: { type: integer, minimum: 1, maximum: 100, example: 10 }
               additionalProperties: false
           example: false
+    ConversionTarget:
+      type: object
+      required:
+        - platform
+      properties:
+        platform:
+          type: string
+          enum: [convert, growthbook, custom]
+          description: >-
+            Testing tool to notify. `convert` calls Convert.com's `_conv_q
+            triggerConversion`; `growthbook` calls `growthbook.track(name)`;
+            `custom` dispatches a `mythic:ab_conversion` CustomEvent on
+            `window`.
+        goalId:
+          type: string
+          maxLength: 128
+          description: >-
+            Convert.com dashboard goal ID. Required when `platform` is
+            `convert`; ignored for other platforms.
+        name:
+          type: string
+          maxLength: 128
+          description: >-
+            Goal name. Required when `platform` is `growthbook`; optional for
+            `custom` (passed as the CustomEvent detail's `name` field);
+            ignored for `convert`.
+      example:
+        platform: convert
+        goalId: "100414195-100477001"
     ExperimentConversionsUpdateResponse:
       type: object
       properties:

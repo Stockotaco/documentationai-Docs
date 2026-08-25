@@ -1,0 +1,412 @@
+openapi: 3.0.0
+info:
+  title: Settings (Admin)
+  version: 1.0.0
+  description: |
+    Platform-admin management of per-location A/B experiment and conversion-forwarding settings. Mirrors the client Settings API but authenticates with the platform admin key and targets locations by explicit `location_id` query parameter. Mounted under `/admin`.
+
+    ## Authentication
+
+    Authenticate with either:
+
+    - `Authorization: Bearer YOUR_ADMIN_KEY`
+    - `admin_key` query parameter for server-to-server scenarios
+
+    ## Usage notes
+
+    All endpoints require a `location_id` query parameter to identify the target tenant location. These admin endpoints mirror the client settings endpoints, but use platform-admin authentication instead of client keys.
+  contact:
+    name: Mythic Analytics API Support
+    url: https://mythic-analytics.gulp.workers.dev
+    email: support@mythic-analytics.com
+  license:
+    name: Proprietary
+    url: https://mythic-analytics.gulp.workers.dev
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+tags:
+  - name: Admin Settings
+    description: Admin endpoints for reading and updating per-location SDK settings mirrors.
+paths:
+  /admin/conversions/capture:
+    get:
+      tags:
+        - Admin Settings
+      summary: Get the A/B conversion-forwarding override
+      operationId: adminGetConversionsCapture
+      description: Admin mirror of `GET /client/v1/settings/conversions`. Returns the stored conversion-forwarding override plus the effective state and supported platforms.
+      security:
+        - BearerAuth: []
+        - AdminKeyQuery: []
+      parameters:
+        - $ref: '#/components/parameters/LocationId'
+      responses:
+        '200':
+          description: Conversion-forwarding override retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversionsCaptureResponse'
+        '400':
+          description: Missing location_id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '401':
+          description: Admin key missing or invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+    put:
+      tags:
+        - Admin Settings
+      summary: Set the A/B conversion-forwarding override
+      operationId: adminPutConversionsCapture
+      description: Admin mirror of `PUT /client/v1/settings/conversions`. Stores the conversion-forwarding override for the location. Accepted values are `null` or `false` for off, `true` for on with SDK defaults, or an object with `enabled`, `goals`, `oncePerSession`, and `maxPerSession`. `goals` maps Mythic event names to 1-10 targets each. Targets carry `platform` (`convert`, `growthbook`, or `custom`) plus `goalId` for `convert` and `name` for `growthbook` or `custom`. Unknown keys, unverified platforms, missing identifiers, and out-of-range caps are rejected. On success, the override is pushed to the edge config cache immediately.
+      security:
+        - BearerAuth: []
+        - AdminKeyQuery: []
+      parameters:
+        - $ref: '#/components/parameters/LocationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConversionsCaptureRequest'
+      responses:
+        '200':
+          description: Conversion-forwarding override stored successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversionsCaptureUpdateResponse'
+        '400':
+          description: Missing location_id, invalid JSON, missing experiment_conversions field, or validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '401':
+          description: Admin key missing or invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '502':
+          description: Failed to persist the override.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+  /admin/experiments/capture:
+    get:
+      tags:
+        - Admin Settings
+      summary: Get the A/B experiment-detection override
+      operationId: adminGetExperimentsCapture
+      description: Admin mirror of `GET /client/v1/settings/experiments`. Returns the stored experiment-detection override plus the effective state and supported platforms.
+      security:
+        - BearerAuth: []
+        - AdminKeyQuery: []
+      parameters:
+        - $ref: '#/components/parameters/LocationId'
+      responses:
+        '200':
+          description: Experiment-detection override retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentsCaptureResponse'
+        '400':
+          description: Missing location_id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '401':
+          description: Admin key missing or invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+    put:
+      tags:
+        - Admin Settings
+      summary: Set the A/B experiment-detection override
+      operationId: adminPutExperimentsCapture
+      description: Admin mirror of `PUT /client/v1/settings/experiments`. Stores the experiment-detection override for the location. Accepted values are `null` for SDK default on, `true` for on with SDK defaults, `false` for off, or an object with `trackExposures`, `pollWindowMs`, and `dataLayerName`. `pollWindowMs` must be 1000-30000. `dataLayerName` must be a plain JavaScript identifier. On success, the override is pushed to the edge config cache immediately.
+      security:
+        - BearerAuth: []
+        - AdminKeyQuery: []
+      parameters:
+        - $ref: '#/components/parameters/LocationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExperimentsCaptureRequest'
+      responses:
+        '200':
+          description: Experiment-detection override stored successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentsCaptureUpdateResponse'
+        '400':
+          description: Missing location_id, invalid JSON, missing capture_experiments field, or validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '401':
+          description: Admin key missing or invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+        '502':
+          description: Failed to persist the override.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminErrorResponse'
+components:
+  parameters:
+    LocationId:
+      name: location_id
+      in: query
+      required: true
+      description: Location (tenant) identifier.
+      schema:
+        type: string
+        example: loc_12345
+  schemas:
+    ConversionsCaptureResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          required:
+            - experiment_conversions
+            - effective
+            - platforms
+          properties:
+            experiment_conversions:
+              nullable: true
+              description: The stored override — `null`/`false` (off), `true`, or a config object.
+              oneOf:
+                - type: boolean
+                - type: object
+              example: null
+            effective:
+              type: object
+              required:
+                - enabled
+              properties:
+                enabled:
+                  type: boolean
+                  example: false
+            platforms:
+              type: array
+              items:
+                type: string
+              example:
+                - convert
+                - growthbook
+                - custom
+    ConversionsCaptureRequest:
+      type: object
+      required:
+        - experiment_conversions
+      properties:
+        experiment_conversions:
+          nullable: true
+          description: '`true`, `false`, `null`, or `{ enabled, goals, oncePerSession, maxPerSession }`.'
+          oneOf:
+            - type: boolean
+            - type: object
+              properties:
+                enabled:
+                  type: boolean
+                  example: true
+                goals:
+                  type: object
+                  description: Maps Mythic event names to 1-10 conversion targets each. Maximum 25 event name keys; each key is a non-empty string up to 200 characters.
+                  additionalProperties:
+                    type: array
+                    minItems: 1
+                    maxItems: 10
+                    items:
+                      $ref: '#/components/schemas/ConversionTarget'
+                oncePerSession:
+                  type: boolean
+                  example: true
+                maxPerSession:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                  example: 10
+              additionalProperties: false
+          example: false
+    ConversionTarget:
+      type: object
+      required:
+        - platform
+      properties:
+        platform:
+          type: string
+          enum:
+            - convert
+            - growthbook
+            - custom
+          description: Testing tool to notify. `convert` calls Convert.com's `_conv_q triggerConversion`; `growthbook` calls `growthbook.track(name)`; `custom` dispatches a `mythic:ab_conversion` CustomEvent on `window`.
+        goalId:
+          type: string
+          maxLength: 128
+          description: Convert.com dashboard goal ID. Required when `platform` is `convert`; ignored for other platforms.
+        name:
+          type: string
+          maxLength: 128
+          description: Goal name. Required when `platform` is `growthbook`; optional for `custom` (passed as the CustomEvent detail's `name` field); ignored for `convert`.
+      example:
+        platform: convert
+        goalId: '100414195-100477001'
+    ConversionsCaptureUpdateResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          required:
+            - experiment_conversions
+          properties:
+            experiment_conversions:
+              nullable: true
+              oneOf:
+                - type: boolean
+                - type: object
+              example: false
+    ExperimentsCaptureResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          required:
+            - capture_experiments
+            - effective
+            - platforms
+          properties:
+            capture_experiments:
+              nullable: true
+              description: The stored override — `null` (SDK default, on), `false`, `true`, or an options object.
+              oneOf:
+                - type: boolean
+                - type: object
+              example: null
+            effective:
+              type: object
+              required:
+                - enabled
+                - source
+              properties:
+                enabled:
+                  type: boolean
+                  example: true
+                source:
+                  type: string
+                  description: '`sdk_default` when nothing is stored, `override` when it is.'
+                  enum:
+                    - sdk_default
+                    - override
+                  example: sdk_default
+            platforms:
+              type: array
+              description: Testing tools this location's SDK can detect.
+              items:
+                type: string
+              example:
+                - convert
+    ExperimentsCaptureRequest:
+      type: object
+      required:
+        - capture_experiments
+      properties:
+        capture_experiments:
+          nullable: true
+          description: '`true`, `false`, `null`, or `{ trackExposures, pollWindowMs, dataLayerName }`.'
+          oneOf:
+            - type: boolean
+            - type: object
+              properties:
+                trackExposures:
+                  type: boolean
+                  example: true
+                pollWindowMs:
+                  type: integer
+                  minimum: 1000
+                  maximum: 30000
+                  example: 10000
+                dataLayerName:
+                  type: string
+                  example: dataLayer
+              additionalProperties: false
+          example: false
+    ExperimentsCaptureUpdateResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          required:
+            - capture_experiments
+          properties:
+            capture_experiments:
+              nullable: true
+              oneOf:
+                - type: boolean
+                - type: object
+              example: false
+    AdminErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: location_id required
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: 'Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`'
+    AdminKeyQuery:
+      type: apiKey
+      in: query
+      name: admin_key
+      description: Alternative to the Authorization header for server-to-server scenarios.

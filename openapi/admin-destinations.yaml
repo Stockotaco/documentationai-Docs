@@ -167,6 +167,55 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminErrorResponse"
+  /admin/destinations/request-status:
+    get:
+      summary: Get delivery request status
+      operationId: adminGetRequestStatus
+      description: Retrieve the downstream delivery status from Google's Data Manager for a specific delivery request. Returns the platform's verdict (SUCCESS, PROCESSING, FAILED, or PARTIAL_SUCCESS) with error counts if applicable.
+      parameters:
+        - name: location_id
+          in: query
+          required: true
+          description: Location (tenant) identifier.
+          schema:
+            type: string
+        - name: request_id
+          in: query
+          required: true
+          description: Google Data Manager request ID for the delivery.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Delivery status retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestStatusResponse"
+        "400":
+          description: Missing location_id or request_id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "401":
+          description: Admin key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "404":
+          description: Request ID not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
+        "502":
+          description: Failed to retrieve status from Google
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminErrorResponse"
 components:
   securitySchemes:
     BearerAuth:
@@ -262,6 +311,33 @@ components:
         success:
           type: boolean
           example: true
+    RequestStatusResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [SUCCESS, PROCESSING, FAILED, PARTIAL_SUCCESS]
+              description: Google's downstream verdict for the delivery.
+              example: SUCCESS
+            request_id:
+              type: string
+              description: The Google Data Manager request ID.
+              example: "projects/123/locations/us/operations/abc"
+            error_counts:
+              type: object
+              nullable: true
+              description: Error breakdown by category when status is FAILED or PARTIAL_SUCCESS.
+              additionalProperties:
+                type: integer
+              example:
+                schema_errors: 2
+                partial_errors: 1
     AdminErrorResponse:
       type: object
       properties:

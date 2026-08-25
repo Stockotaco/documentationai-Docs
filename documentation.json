@@ -839,6 +839,11 @@
                 "openapi": "openapi/admin-kv.yaml"
               },
               {
+                "group": "Settings",
+                "icon": "sliders-horizontal",
+                "openapi": "openapi/admin-settings.yaml"
+              },
+              {
                 "group": "Pub/Sub",
                 "icon": "radio",
                 "openapi": "openapi/admin-pubsub.yaml"
