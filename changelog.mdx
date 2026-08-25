@@ -1,0 +1,28 @@
+---
+title: Changelog
+description: Track what's new in Mythic Analytics — features, improvements, and fixes shipped in each release.
+---
+
+## Recent releases
+
+<Update label="August 23, 2026" description="Latest releases">
+
+### New Features
+
+- **OpenAI Ads destination** — Send server-side conversions directly to your OpenAI Ads pixel. Mythic now captures ChatGPT ad click IDs, carries them forward to later conversions for attribution, and applies the correct currency minor units; events older than 7 days are rejected per OpenAI policy. See [Destinations API](destinations-api/overview).
+- **A/B experiment conversion forwarding** — Forward Mythic conversion events to your testing tool so its own goals stay in sync. Configure event-to-goal mappings for Convert, GrowthBook, or a custom event target through the SDK or settings API. See [JavaScript SDK configuration](javascript-sdk/configuration).
+- **Convert.com A/B experiment auto-detection** — Detect Convert.com experiment assignments automatically and attach them to subsequent events without extra client instrumentation. Mythic also emits one experiment-view event per session per assignment, and you can read assignments through the SDK utility methods. See [JavaScript SDK utility methods](javascript-sdk/utility-methods).
+- **GA4 parameter priority tiers** — Preserve the most important GA4 event parameters when the 25-parameter limit is reached. Your event properties are kept first, reporting context second, and SDK internals last, so business data is less likely to be dropped. See [Destinations API](destinations-api/overview).
+- **GA4 data source stamp** — Mark every GA4 event sent by Mythic with a fixed `data_source` value so you can isolate Mythic traffic in shared properties and BigQuery exports. This makes filtering and auditing easier. See [Destinations API](destinations-api/overview).
+
+### Updates
+
+- **A/B experiment arm as a session attribute** — Segment sessions by experiment arm directly, without re-scanning event-level data. Mythic now also excludes bots from experiment assignment recording.
+
+### Bug Fixes
+
+- **Paid ChatGPT clicks misattributed as organic** — Paid ChatGPT ad clicks were being classified as organic AI referrer traffic. Mythic now attributes those visits correctly as paid ChatGPT traffic.
+- **A/B experiment exposures missing variation IDs** — Some Convert assignments arrived before the browser stored the variation ID, which caused incomplete experiment exposure data. Mythic now waits briefly for the assignment to complete before recording it.
+- **Carried A/B assignments inflated exposure counts** — Returning visitors could trigger repeat experiment-view events from older assignments, which inflated exposure totals. Mythic now marks whether an assignment is the first exposure so test denominators stay accurate.
+
+</Update>
