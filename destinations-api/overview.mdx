@@ -20,7 +20,7 @@ https://mythic-analytics.gulp.workers.dev/client/v1/destinations
 
 ## Destination types
 
-Five destination types are supported. The `action_config` you send is validated against the `action_type`.
+Six destination types are supported. The `action_config` you send is validated against the `action_type`.
 
 | Type | `action_type` | What it does | Credential |
 |------|---------------|--------------|------------|
@@ -29,9 +29,10 @@ Five destination types are supported. The `action_config` you send is validated 
 | **Google Ads** | `google_ads` | Uploads conversions to a Google Ads customer via the Data Manager API | Stored separately (`google_ads`) |
 | **Google Analytics 4** | `google_analytics` | Sends events to a GA4 property via the same Data Manager API | Stored separately (`google_analytics`) |
 | **OpenAI (ChatGPT) Ads** | `openai_ads` | Sends server-side conversions to an OpenAI Ads pixel | Stored separately (`openai_ads`) |
+| **Convert.com experiments** | `convert_experiments` | Credits an off-browser conversion to the A/B variation the visitor was in | None for delivery (see [Convert.com experiments](#convertcom-experiments)) |
 
 <Callout kind="info">
-  `tiktok_events` is recognized by the schema but has no executor yet, so creating it returns `unsupported_destination_type`. Only `webhook`, `meta_capi`, `google_ads`, `google_analytics`, and `openai_ads` are live.
+  `tiktok_events` is recognized by the schema but has no executor yet, so creating it returns `unsupported_destination_type`. Only `webhook`, `meta_capi`, `google_ads`, `google_analytics`, `openai_ads` and `convert_experiments` are live.
 </Callout>
 
 <Callout kind="info">
@@ -68,6 +69,38 @@ Webhooks run through the same delivery pipeline as the ad destinations, so they 
 </Callout>
 
 Unlike the ad destinations, webhooks are filtered by `trigger_rules` alone (there is no `event_mapping`). Note that every **client-side** rule type — `url_pattern`, `cookie`, `device`, `time`, `javascript_variable`, `custom_js`, `query_param` — always passes server-side, so a webhook whose only rule is one of those matches *every* event for the location. Pair it with a `mythic_event` rule unless that is what you want.
+
+### Convert.com experiments
+
+Requires `account_id`, `project_id` and `goal_id` — all Convert dashboard ids, all numeric. Optional `send_revenue` and `timeout_ms`. Which events reach the goal is decided by `trigger_rules`; there is no `event_mapping`.
+
+This is for the conversions your A/B tool cannot see. Convert's own script only counts what happens in the browser, so a CRM close, a phone sale or a subscription rebill never reaches the experiment — and those are frequently the conversions that decide which variation actually won. The Mythic SDK captures Convert's visitor id and the variation from Convert's cookies and stores both on the person profile; this destination replays the conversion under that id whenever it arrives, days or weeks later.
+
+It follows that the destination only fires for people who were in a **running** Convert experiment while they were on the site. Everyone else is logged as `skipped` with a reason (`no $convert_visitor_id on person` / `no $convert_experiments on person`). That is the normal state for most of your traffic, not a fault.
+
+```json
+{
+  "name": "Closed-won → Convert",
+  "action_type": "convert_experiments",
+  "trigger_rules": { "operator": "AND", "rules": [
+    { "type": "mythic_event", "event_name": "transaction_completed" }
+  ]},
+  "action_config": {
+    "account_id": "100414195",
+    "project_id": "100415644",
+    "goal_id": "1004125117",
+    "send_revenue": true
+  }
+}
+```
+
+<Callout kind="warning">
+  **One conversion per person per goal, ever.** Convert counts a visitor once per goal and ignores every later hit for that pair — this is Convert's behaviour, not a Mythic limit. A customer's second purchase adds nothing to the conversion count. Revenue is the exception: it accumulates per transaction, which is why `send_revenue` is the only way repeat purchases show up at all.
+</Callout>
+
+**Revenue.** Conversions and revenue are separate counters in Convert with separate de-duplication rules, so `send_revenue` is additive — the goal hit is still sent. It is only meaningful when `goal_id` names a Convert goal of type **Revenue**; pointed at any other goal type, the effect is undefined. The amount comes from the conversion event's value, and a missing, zero or unparseable value sends no revenue rather than a number we cannot stand behind.
+
+**There is no delivery credential.** Convert's tracking endpoint is unauthenticated and returns `200` for everything, including payloads it discards — so a success in the delivery log means "accepted", never "counted". Use [verification](#verifying-a-convert-destination) to find out what actually landed.
 
 ### OpenAI (ChatGPT) Ads
 
@@ -437,7 +470,19 @@ Each destination has an optional per-destination delivery cap, set with `rate_li
 
 ## Credentials
 
-Credentialed destinations (`meta_capi`, `google_ads`, `google_analytics`) read their secrets from a separate, never-readable credential store keyed by `(location_id, destination_type, credential_name)`. Store or rotate a credential with `PUT /credentials/{type}`; list metadata with `GET /credentials`. Credential values are write-only — no endpoint ever returns them. Webhooks carry their auth inline in `action_config` instead.
+Credentialed destinations (`meta_capi`, `google_ads`, `google_analytics`, `openai_ads`) read their secrets from a separate, never-readable credential store keyed by `(location_id, destination_type, credential_name)`. Store or rotate a credential with `PUT /credentials/{type}`; list metadata with `GET /credentials`. Credential values are write-only — no endpoint ever returns them. Webhooks carry their auth inline in `action_config` instead.
+
+`convert_experiments` is the one type where "needs a credential to deliver" and "can store a credential" differ. Delivering to Convert needs no auth at all; **reading** Convert's report to verify a delivery does. Store that one under `credential_name: "reporting"`:
+
+```json
+PUT /client/v1/destinations/credentials/convert_experiments
+{
+  "credential_name": "reporting",
+  "credential_value": "{\"application_id\":\"…\",\"application_secret\":\"…\"}"
+}
+```
+
+Create the key pair in Convert under **Account → API keys** (v2 Reporting API). `reporting` is the only accepted `credential_name` for this type.
 
 ## Delivery logs & health
 
@@ -448,6 +493,30 @@ Credentialed destinations (`meta_capi`, `google_ads`, `google_analytics`) read t
 ## Testing
 
 `POST /{id}/test` sends a test delivery through the ad-platform adapter using the stored credential. It is supported only for `meta_capi`, `google_ads` and `google_analytics`; webhooks fire on real events and return `400`. Both Google destinations use Data Manager's `validateOnly` flag, so they verify the credential, scope, destination and payload without recording anything in the customer's account — which is also why a GA4 test sends a synthetic client id rather than reporting `skipped`. Meta tests are real sends and honor `test_event_code`.
+
+### Verifying a Convert destination
+
+`GET /{id}/verification?days=7` answers the question the delivery log cannot: did any of this actually count?
+
+It is needed because Convert's endpoint returns `200` for payloads it silently discards, so a destination delivering nothing produces exactly the same clean delivery log as one that works. The endpoint folds your deliveries and asks Convert's own report for the same window.
+
+**The evidence is asymmetric, and the answer says so.** Convert counts a goal from every source at once — its own pixel goals, its client-side adapter, and this destination — and other sources can only ever *add*. So a matching number comes back as `consistent`, never as "verified": your contribution can only be isolated when the goal belongs to this destination alone. A **shortfall** is the real signal, because nothing can subtract.
+
+| `verdict` | What it means |
+|---|---|
+| `consistent` | Convert counted at least what was sent. Consistent with delivery, not proof of it. |
+| `shortfall` | Convert counted fewer than the distinct visitors delivered. Deliveries are being discarded. |
+| `not_counted` | Deliveries were accepted and Convert counted nothing. The run of 200s is hiding a total failure. |
+| `nothing_sent` | Nothing was delivered in the window. `sent.skipped` says why. |
+| `no_experiment_seen` | Deliveries succeeded but named no experience, so Convert was not queried. |
+| `experiment_inactive` | The experience is not active. Convert discards conversions for a non-active experience, which explains a zero on its own. |
+| `report_unavailable` | Convert's report could not be read. No verdict rather than a guess. |
+
+The comparison uses **distinct visitors**, not deliveries — Convert counts one conversion per visitor per goal, so comparing raw delivery counts would show a permanent phantom shortfall for any account whose customers buy twice. `caveats` is always populated with what the comparison cannot tell you, and `sent.truncated` warns when the delivery scan hit its row cap and the counts are a lower bound.
+
+<Callout kind="note">
+  Convert's report lags roughly 60–90 seconds behind a delivery, so a verification run immediately after a test fire will under-count.
+</Callout>
 
 ## Response envelope
 

@@ -34,7 +34,7 @@ These fire only when their feature is enabled (most are on by default — see th
 | `$web_vital_lcp`, `$web_vital_cls`, `$web_vital_inp`, … | One event per Core Web Vital metric | `web_vitals` |
 | `$cross_domain_linked` | Session adopted from a cross-domain link | `cross_domain_tracking` |
 | `$heatmap` | Batch of click positions and scroll depths (pixels, no element identity) | `capture_heatmaps` |
-| `$experiment_viewed` | A third-party A/B tool (Convert.com) bucketed this visitor — once per session per assignment, with `experiment_id`, `variation_id`, `variation_name`, `first_exposure` | `capture_experiments` |
+| `$experiment_viewed` | A third-party A/B tool (Convert.com) bucketed this visitor — once per session per assignment, with `experiment_id`, `variation_id`, `variation_name`, `first_exposure`, `convert_visitor_id` | `capture_experiments` |
 
 <Callout kind="info">
   When remote-config tags or snippets fail, the SDK also reports `$tag_error`, `$snippet_error`, and `$snippet_compilation_error`; a failing event transformer reports `$transformer_error`.
@@ -46,6 +46,10 @@ These fire only when their feature is enabled (most are on by default — see th
 
 <Callout kind="warning">
   Count exposures with `first_exposure: true`. A testing tool keeps its assignment for months (Convert: ~6), so a visitor bucketed on a landing page carries that variation into later visits — and `$experiment_viewed` fires again in each new session, sometimes on pages the test never touched. `first_exposure: false` marks those: correct for attributing later behaviour to the variation, wrong as an exposure count. A sighting that arrives with a variation name but no id yet (the tool announced itself before writing its cookie) is held briefly and completed from the cookie; `detected_via: held_then_enriched` marks those, and `<source>_unresolved` marks one that never completed.
+</Callout>
+
+<Callout kind="note">
+  Alongside the event, the SDK stores the A/B assignment on the **person profile** as `$convert_visitor_id` and `$convert_experiments`. `$experiments` is a super property, so it only rides events sent from the browser — a conversion that arrives server-side (a CRM close, a subscription rebill) carries no super properties at all. The person copy is what lets a later off-browser conversion still be credited to the variation, and it is what the [`convert_experiments` destination](/destinations-api/overview#convertcom-experiments) reads. Both are erased with the rest of a person's data on a deletion request, and neither is written for HIPAA-enabled locations, where experiment capture is off entirely.
 </Callout>
 
 <Callout kind="warning">

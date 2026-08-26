@@ -31,7 +31,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads]
+            enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads, convert_experiments]
         - name: enabled
           in: query
           description: Filter by enabled state. Pass `true` or `false`.
@@ -714,6 +714,157 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
           $ref: "#/components/responses/RateLimited"
+  /client/v1/destinations/{id}/verification:
+    get:
+      summary: Did the Convert deliveries actually count?
+      operationId: getConvertVerification
+      description: >
+        `convert_experiments` destinations only. Convert's track endpoint
+        returns HTTP 200 for payloads it silently discards and offers no
+        per-request status, so a destination delivering nothing looks exactly
+        like a healthy one — a clean run of 200s either way. The only evidence
+        is whether the number in Convert's own report moved. This endpoint
+        folds the delivery log and asks Convert's report for the same window.
+
+
+        **The evidence is asymmetric.** Convert counts a goal from every
+        source — its own pixel goals, the client-side adapter, and this
+        destination — and other sources can only ADD. So a matching number is
+        reported as `consistent`, never as "verified": your contribution can
+        only be isolated when the goal is used by this destination alone. A
+        shortfall is the real signal, because nothing else can subtract.
+
+
+        The comparison uses **distinct visitors sent**, not deliveries: Convert
+        counts one conversion per visitor per goal, so comparing raw delivery
+        counts would show a permanent phantom shortfall for any account whose
+        customers convert more than once.
+
+
+        Requires a stored reporting credential
+        (`PUT /client/v1/destinations/credentials/convert_experiments` with
+        `credential_name: reporting`). Without one this returns 409.
+      tags: [Destinations]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - name: days
+          in: query
+          required: false
+          description: Window to check, in days. 1-90, default 7.
+          schema: { type: integer, default: 7, minimum: 1, maximum: 90 }
+        - name: experience_id
+          in: query
+          required: false
+          description: >
+            Convert experience to check. Defaults to one discovered from the
+            deliveries in the window; pass this when they span several.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Verdict for the window
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      action_id: { type: string, format: uuid }
+                      window:
+                        type: object
+                        properties:
+                          days: { type: integer }
+                          start: { type: string, format: date-time }
+                          end: { type: string, format: date-time }
+                      convert:
+                        type: object
+                        description: The Convert ids the verdict was computed against.
+                        properties:
+                          account_id: { type: string }
+                          project_id: { type: string }
+                          goal_id: { type: string }
+                          experience_id: { type: string }
+                      sent:
+                        type: object
+                        properties:
+                          success: { type: integer, description: Deliveries the track endpoint accepted. }
+                          failed: { type: integer }
+                          distinct_visitors:
+                            type: integer
+                            description: >
+                              Distinct Convert visitor ids delivered for. This is
+                              what `counted` is compared against.
+                          skipped:
+                            type: object
+                            description: >
+                              Normal states, not faults. `no_visitor_id` means the
+                              person was never seen in a Convert experiment;
+                              `no_experiments` means no variation was recorded for
+                              them.
+                            properties:
+                              no_visitor_id: { type: integer }
+                              no_experiments: { type: integer }
+                          truncated:
+                            type: boolean
+                            description: >
+                              The delivery scan hit its row cap, so the sent counts
+                              are a lower bound and the comparison is incomplete.
+                              Narrow the window.
+                      counted:
+                        type: integer
+                        nullable: true
+                        description: >
+                          Conversions Convert reports for this goal in the window,
+                          from ALL sources.
+                      by_variation:
+                        type: object
+                        nullable: true
+                        description: Per-variation visitors and conversions from Convert's report.
+                      experiment:
+                        type: object
+                        nullable: true
+                        properties:
+                          status: { type: string }
+                          name: { type: string }
+                      expected: { type: integer }
+                      verdict:
+                        type: string
+                        enum:
+                          - consistent
+                          - shortfall
+                          - not_counted
+                          - nothing_sent
+                          - no_experiment_seen
+                          - experiment_inactive
+                          - report_unavailable
+                        description: >
+                          `consistent` — Convert counted at least what was sent.
+                          Not proof, see the endpoint description.
+                          `shortfall` — Convert counted fewer than the distinct
+                          visitors delivered. Deliveries are being discarded.
+                          `not_counted` — deliveries were accepted and Convert
+                          counted nothing at all.
+                          `nothing_sent` — nothing was delivered in the window.
+                          `no_experiment_seen` — deliveries succeeded but named no
+                          experience, so Convert was not queried.
+                          `experiment_inactive` — the experience is not active, and
+                          Convert discards conversions for a non-active experience,
+                          which explains a zero on its own.
+                          `report_unavailable` — Convert's report could not be read,
+                          so no verdict is given.
+                      headline: { type: string, description: One-sentence plain reading of the verdict. }
+                      caveats:
+                        type: array
+                        items: { type: string }
+                        description: >
+                          What this comparison cannot tell you. Always populated.
+        "400": { description: "Not a convert_experiments destination, or a non-numeric experience_id" }
+        "404": { description: Destination not found }
+        "409": { description: "Config is incomplete, or no reporting credential is stored for this location" }
+        "503": { description: Verification is not available in this environment }
+
   /client/v1/destinations/{id}/test:
     post:
       summary: Test a destination
@@ -800,10 +951,14 @@ components:
       name: type
       in: path
       required: true
-      description: Credential-backed destination type.
+      description: >
+        Destination type the credential belongs to. `convert_experiments` is a
+        special case: delivering to Convert needs no credential at all, but
+        reading Convert's report to verify a delivery does, so its only valid
+        `credential_name` is `reporting`.
       schema:
         type: string
-        enum: [meta_capi, google_ads, google_analytics, openai_ads]
+        enum: [meta_capi, google_ads, google_analytics, openai_ads, convert_experiments]
     ActionIdQuery:
       name: action_id
       in: query
@@ -1525,14 +1680,15 @@ components:
           example: Purchase → Meta
         action_type:
           type: string
-          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads]
+          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads, convert_experiments]
         trigger_rules:
           $ref: "#/components/schemas/TriggerRules"
         action_config:
           type: object
           description: >
             Type-specific configuration. See `WebhookConfig`, `MetaCapiConfig`,
-            `GoogleAdsConfig`, `GoogleAnalyticsConfig` and `OpenAiAdsConfig`.
+            `GoogleAdsConfig`, `GoogleAnalyticsConfig`, `OpenAiAdsConfig` and
+            `ConvertExperimentsConfig`.
             Webhook secrets are redacted for viewer keys.
         enabled:
           type: boolean
@@ -1557,6 +1713,64 @@ components:
         updated_at:
           type: string
           format: date-time
+    ConvertExperimentsConfig:
+      type: object
+      description: >
+        `action_config` for `action_type: convert_experiments` — credits a
+        conversion that never touched the browser (a CRM close, a subscription
+        rebill) against the Convert.com A/B variation the visitor was bucketed
+        into, so the experiment readout includes revenue their pixel cannot see.
+
+
+        The Mythic SDK captures Convert's own visitor id and the variation from
+        Convert's cookies and stores both on the person profile. This
+        destination replays the conversion under that id later. It therefore
+        only fires for people who were in a running Convert experiment while
+        they were on the site; everyone else is logged as `skipped`, which is a
+        normal state and not a fault.
+
+
+        There is no delivery credential — Convert's track endpoint is
+        unauthenticated. Verifying that a delivery counted is a separate
+        endpoint and does need one; see
+        `/client/v1/destinations/{id}/verification`.
+      required:
+        - account_id
+        - project_id
+        - goal_id
+      properties:
+        account_id:
+          type: string
+          description: Convert account id. Numeric.
+          example: "100414195"
+        project_id:
+          type: string
+          description: Convert project id. Numeric.
+          example: "100415644"
+        goal_id:
+          type: string
+          description: >
+            Convert goal id to credit. Numeric. Which events reach this goal is
+            decided by `trigger_rules`, not by an event mapping.
+          example: "1004125117"
+        send_revenue:
+          type: boolean
+          default: false
+          description: >
+            Also send the conversion value as a Convert `tr` event alongside the
+            goal hit. Conversions and revenue are separate counters in Convert
+            with separate de-duplication rules, so this is additive, never a
+            replacement.
+
+
+            Only meaningful when `goal_id` names a Convert goal of type
+            `revenue`. The amount comes from the conversion event's value; a
+            missing, zero or unparseable value sends no revenue rather than a
+            figure we cannot stand behind.
+        timeout_ms:
+          type: number
+          default: 10000
+          description: Request timeout in milliseconds. 1-30000.
     OpenAiAdsConfig:
       type: object
       description: >
@@ -1648,7 +1862,7 @@ components:
           example: Purchase → Meta
         action_type:
           type: string
-          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads]
+          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads, convert_experiments]
         trigger_rules:
           $ref: "#/components/schemas/TriggerRules"
         action_config:
@@ -1658,6 +1872,7 @@ components:
             - $ref: "#/components/schemas/GoogleAdsConfig"
             - $ref: "#/components/schemas/GoogleAnalyticsConfig"
             - $ref: "#/components/schemas/OpenAiAdsConfig"
+            - $ref: "#/components/schemas/ConvertExperimentsConfig"
         enabled:
           type: boolean
           default: true
@@ -1739,7 +1954,7 @@ components:
           type: string
         destination_type:
           type: string
-          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads]
+          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads, convert_experiments]
         event_name:
           type: string
           description: Source event name that triggered the delivery.
@@ -1789,7 +2004,7 @@ components:
           type: string
         destination_type:
           type: string
-          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads]
+          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads, convert_experiments]
         destination_event_name:
           type: string
         status:
@@ -1855,7 +2070,7 @@ components:
           type: string
         destination_type:
           type: string
-          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads]
+          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads, convert_experiments]
         enabled:
           type: boolean
         trigger_count:
