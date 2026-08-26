@@ -750,7 +750,10 @@ paths:
         - name: days
           in: query
           required: false
-          description: Window to check, in days. 1-90, default 7.
+          description: >-
+            Window to check, in days. Default 7. Values outside 1-90 are clamped
+            to that range rather than rejected, so the `window` in the response
+            is the authority on what was actually compared.
           schema: { type: integer, default: 7, minimum: 1, maximum: 90 }
         - name: experience_id
           in: query
