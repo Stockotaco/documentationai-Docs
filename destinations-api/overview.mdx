@@ -72,7 +72,7 @@ Unlike the ad destinations, webhooks are filtered by `trigger_rules` alone (ther
 
 ### Convert.com experiments
 
-Requires `account_id`, `project_id` and `goal_id` — all Convert dashboard ids, all numeric. Optional `send_revenue` and `timeout_ms`. Which events reach the goal is decided by `trigger_rules`; there is no `event_mapping`.
+Requires `account_id`, `project_id` and `goal_id` — all Convert dashboard ids, all numeric. Optional `sdk_key`, `send_revenue` and `timeout_ms`. Which events reach the goal is decided by `trigger_rules`; there is no `event_mapping`.
 
 This is for the conversions your A/B tool cannot see. Convert's own script only counts what happens in the browser, so a CRM close, a phone sale or a subscription rebill never reaches the experiment — and those are frequently the conversions that decide which variation actually won. The Mythic SDK captures Convert's visitor id and the variation from Convert's cookies and stores both on the person profile; this destination replays the conversion under that id whenever it arrives, days or weeks later.
 
@@ -100,7 +100,9 @@ It follows that the destination only fires for people who were in a **running** 
 
 **Revenue.** Conversions and revenue are separate counters in Convert with separate de-duplication rules, so `send_revenue` is additive — the goal hit is still sent. It is only meaningful when `goal_id` names a Convert goal of type **Revenue**; pointed at any other goal type, the effect is undefined. The amount comes from the conversion event's value, and a missing, zero or unparseable value sends no revenue rather than a number we cannot stand behind.
 
-**There is no delivery credential.** Convert's tracking endpoint is unauthenticated and returns `200` for everything, including payloads it discards — so a success in the delivery log means "accepted", never "counted". Use [verification](#verifying-a-convert-destination) to find out what actually landed.
+**There is no delivery credential** — Convert's account/project tracking endpoint takes no authentication at all. That also means anyone who knows your account and project ids can write conversions into your project, so set `sdk_key` if you have one and conversions go to Convert's authenticated endpoint instead.
+
+Either way the endpoint returns `200` for everything, including payloads it discards — so a success in the delivery log means "accepted", never "counted". Use [verification](#verifying-a-convert-destination) to find out what actually landed.
 
 ### OpenAI (ChatGPT) Ads
 
@@ -515,7 +517,7 @@ It is needed because Convert's endpoint returns `200` for payloads it silently d
 The comparison uses **distinct visitors**, not deliveries — Convert counts one conversion per visitor per goal, so comparing raw delivery counts would show a permanent phantom shortfall for any account whose customers buy twice. `caveats` is always populated with what the comparison cannot tell you, and `sent.truncated` warns when the delivery scan hit its row cap and the counts are a lower bound.
 
 <Callout kind="note">
-  Convert's report lags roughly 60–90 seconds behind a delivery, so a verification run immediately after a test fire will under-count.
+  Convert's report lags behind a delivery, and the two counters do not land together — measured on a live account, a conversion appeared within about a minute and its revenue about three minutes later. A verification run immediately after a test fire will under-count.
 </Callout>
 
 ## Response envelope
