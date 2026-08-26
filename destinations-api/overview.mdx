@@ -83,7 +83,7 @@ It follows that the destination only fires for people who were in a **running** 
   "name": "Closed-won → Convert",
   "action_type": "convert_experiments",
   "trigger_rules": { "operator": "AND", "rules": [
-    { "type": "mythic_event", "event_name": "transaction_completed" }
+    { "type": "mythic_event", "eventName": "transaction_completed", "operator": "equals" }
   ]},
   "action_config": {
     "account_id": "100414195",
@@ -118,7 +118,7 @@ curl -X POST https://mythic-analytics.gulp.workers.dev/client/v1/destinations \
   -d '{
     "name": "Orders → ChatGPT Ads",
     "action_type": "openai_ads",
-    "trigger_rules": {"rules":[{"type":"mythic_event","event":"transaction_completed"}]},
+    "trigger_rules": {"rules":[{"type":"mythic_event","eventName":"transaction_completed","operator":"equals"}]},
     "action_config": {
       "pixel_id": "px_1234567890",
       "event_mapping": {"transaction_completed": "order_created"}
