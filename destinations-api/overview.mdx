@@ -72,7 +72,7 @@ Unlike the ad destinations, webhooks are filtered by `trigger_rules` alone (ther
 
 ### Convert.com experiments
 
-Requires `account_id`, `project_id` and `goal_id` — all Convert dashboard ids, all numeric. Optional `sdk_key`, `send_revenue` and `timeout_ms`. Which events reach the goal is decided by `trigger_rules`; there is no `event_mapping`.
+Requires `account_id`, `project_id` and `goal_id` — all Convert dashboard ids, all numeric. Optional `send_revenue` and `timeout_ms`. Which events reach the goal is decided by `trigger_rules`; there is no `event_mapping`.
 
 This is for the conversions your A/B tool cannot see. Convert's own script only counts what happens in the browser, so a CRM close, a phone sale or a subscription rebill never reaches the experiment — and those are frequently the conversions that decide which variation actually won. The Mythic SDK captures Convert's visitor id and the variation from Convert's cookies and stores both on the person profile; this destination replays the conversion under that id whenever it arrives, days or weeks later.
 
@@ -98,11 +98,11 @@ It follows that the destination only fires for people who were in a **running** 
   **One conversion per person per goal, ever.** Convert counts a visitor once per goal and ignores every later hit for that pair — this is Convert's behaviour, not a Mythic limit. A customer's second purchase adds nothing to the conversion count. Revenue is the exception: it accumulates per transaction, which is why `send_revenue` is the only way repeat purchases show up at all.
 </Callout>
 
-**Revenue.** Conversions and revenue are separate counters in Convert with separate de-duplication rules, so `send_revenue` is additive — the goal hit is still sent. It is only meaningful when `goal_id` names a Convert goal of type **Revenue**; pointed at any other goal type, the effect is undefined. The amount comes from the conversion event's value, and a missing, zero or unparseable value sends no revenue rather than a number we cannot stand behind.
+**Revenue.** Conversions and revenue are separate counters in Convert with separate de-duplication rules, so `send_revenue` is additive — the bare conversion is still sent. It is only meaningful when `goal_id` names a Convert goal of type **Revenue**; pointed at any other goal type, the effect is undefined. The amount comes from the conversion event's value, and a missing, zero or unparseable value sends no revenue rather than a number we cannot stand behind.
 
-**There is no delivery credential** — Convert's account/project tracking endpoint takes no authentication at all. That also means anyone who knows your account and project ids can write conversions into your project, so set `sdk_key` if you have one and conversions go to Convert's authenticated endpoint instead.
+**There is no delivery credential.** Deliveries use Convert's documented `sendTrackingEvents` operation, `POST /track/{account_id}/{project_id}`, which their own spec marks as taking no authentication. That also means anyone who knows your account and project ids can write conversions into your project — that is Convert's design for this operation, not something this destination can configure away. Convert's spec does list a second, authenticated operation on a different path; this destination does not use it, so there is one delivery path and it is the documented one.
 
-Either way the endpoint returns `200` for everything, including payloads it discards — so a success in the delivery log means "accepted", never "counted". Use [verification](#verifying-a-convert-destination) to find out what actually landed.
+The endpoint returns `200` for everything, including payloads it discards — so a success in the delivery log means "accepted", never "counted". Use [verification](#verifying-a-convert-destination) to find out what actually landed.
 
 ### OpenAI (ChatGPT) Ads
 

@@ -1756,22 +1756,13 @@ components:
             Convert goal id to credit. Numeric. Which events reach this goal is
             decided by `trigger_rules`, not by an event mapping.
           example: "1004125117"
-        sdk_key:
-          type: string
-          description: >
-            Convert SDK key. When set, conversions are sent to Convert's
-            authenticated tracking endpoint instead of the open one.
-
-
-            Recommended. Convert's account/project tracking endpoint takes no
-            authentication at all, so anyone who knows those two ids can write
-            conversions into the project. Supplying an SDK key closes that."
         send_revenue:
           type: boolean
           default: false
           description: >
-            Also send the conversion value as a Convert `tr` event alongside the
-            goal hit. Conversions and revenue are separate counters in Convert
+            Also send the conversion value as a second Convert `conversion`
+            event carrying `goalData` (amount + transactionId), alongside the
+            bare one. Conversions and revenue are separate counters in Convert
             with separate de-duplication rules, so this is additive, never a
             replacement.
 
