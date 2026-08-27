@@ -507,14 +507,25 @@ It is needed because Convert's endpoint returns `200` for payloads it silently d
 | `verdict` | What it means |
 |---|---|
 | `consistent` | Convert counted at least what was sent. Consistent with delivery, not proof of it. |
-| `shortfall` | Convert counted fewer than the distinct visitors delivered. Deliveries are being discarded. |
+| `shortfall` | Convert counted fewer than the distinct visitors delivered **to the compared experience**. Deliveries are being discarded. |
 | `not_counted` | Deliveries were accepted and Convert counted nothing. The run of 200s is hiding a total failure. |
 | `nothing_sent` | Nothing was delivered in the window. `sent.skipped` says why. |
+| `nothing_sent_for_experience` | Deliveries succeeded, but none for the experience compared — so Convert's count for it is entirely other sources. Not a fault. |
 | `no_experiment_seen` | Deliveries succeeded but named no experience, so Convert was not queried. |
 | `experiment_inactive` | The experience is not active. Convert discards conversions for a non-active experience, which explains a zero on its own. |
 | `report_unavailable` | Convert's report could not be read. No verdict rather than a guess. |
 
 The comparison uses **distinct visitors**, not deliveries — Convert counts one conversion per visitor per goal, so comparing raw delivery counts would show a permanent phantom shortfall for any account whose customers buy twice. `caveats` is always populated with what the comparison cannot tell you, and `sent.truncated` warns when the delivery scan hit its row cap and the counts are a lower bound.
+
+**Both sides are scoped to one experience.** Convert's report is per experience and goal, so the sent side counts only the deliveries that named that same experience. This is why `expected` is usually smaller than `sent.distinct_visitors`:
+
+| Field | Scope |
+|---|---|
+| `sent.distinct_visitors` | Every experience in the window. Context, **not** the comparison basis. |
+| `sent.for_experience` | The compared experience alone. Its `distinct_visitors` **is** `expected`. |
+| `sent.by_experience` | The full per-experience split, so you can see where the rest went. |
+
+A destination running two experiments at once therefore reads `expected: 3` against `sent.distinct_visitors: 16` when only three of those visitors were in the experience being checked — that is correct, not a truncated count. Without `experience_id` the experience with the most delivered visitors is compared; pass `experience_id` to check another, and note that a visitor in two experiments at once counts toward both.
 
 <Callout kind="note">
   Convert's report lags behind a delivery, and the two counters do not land together — measured on a live account, a conversion appeared within about a minute and its revenue about three minutes later. A verification run immediately after a test fire will under-count.

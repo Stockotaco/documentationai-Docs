@@ -741,6 +741,16 @@ paths:
         customers convert more than once.
 
 
+        **Both sides are scoped to ONE experience.** Convert's report is per
+        experience and goal, so the sent side counts only deliveries that named
+        the same experience. `expected` is therefore usually smaller than
+        `sent.distinct_visitors`, which stays the window total across every
+        experience — `sent.for_experience` is what was compared, and
+        `sent.by_experience` shows the full split. Without a query parameter the
+        experience with the most delivered visitors is chosen; pass
+        `experience_id` to compare a different one.
+
+
         Requires a stored reporting credential
         (`PUT /client/v1/destinations/credentials/convert_experiments` with
         `credential_name: reporting`). Without one this returns 409.
@@ -797,8 +807,30 @@ paths:
                           distinct_visitors:
                             type: integer
                             description: >
-                              Distinct Convert visitor ids delivered for. This is
-                              what `counted` is compared against.
+                              Distinct Convert visitor ids delivered for, across
+                              EVERY experience in the window. This is NOT what
+                              `counted` is compared against — see
+                              `for_experience`.
+                          for_experience:
+                            type: object
+                            description: >
+                              The sent-side numbers for the compared experience
+                              alone, and the actual basis of the verdict.
+                              `distinct_visitors` here is `expected`.
+                            properties:
+                              success: { type: integer }
+                              distinct_visitors: { type: integer }
+                          by_experience:
+                            type: object
+                            description: >
+                              Per-experience split of the successful deliveries in
+                              the window, keyed by Convert experience id. A visitor
+                              in two experiments at once counts toward both.
+                            additionalProperties:
+                              type: object
+                              properties:
+                                success: { type: integer }
+                                distinct_visitors: { type: integer }
                           skipped:
                             type: object
                             description: >
@@ -831,7 +863,13 @@ paths:
                         properties:
                           status: { type: string }
                           name: { type: string }
-                      expected: { type: integer }
+                      expected:
+                        type: integer
+                        description: >
+                          Distinct visitors delivered for the compared experience
+                          — the number `counted` is checked against. Equal to
+                          `sent.for_experience.distinct_visitors`.
+
                       verdict:
                         type: string
                         enum:
@@ -839,6 +877,7 @@ paths:
                           - shortfall
                           - not_counted
                           - nothing_sent
+                          - nothing_sent_for_experience
                           - no_experiment_seen
                           - experiment_inactive
                           - report_unavailable
@@ -846,10 +885,14 @@ paths:
                           `consistent` — Convert counted at least what was sent.
                           Not proof, see the endpoint description.
                           `shortfall` — Convert counted fewer than the distinct
-                          visitors delivered. Deliveries are being discarded.
+                          visitors delivered TO THIS EXPERIENCE. Deliveries are
+                          being discarded.
                           `not_counted` — deliveries were accepted and Convert
                           counted nothing at all.
                           `nothing_sent` — nothing was delivered in the window.
+                          `nothing_sent_for_experience` — deliveries succeeded,
+                          but none for the experience compared, so Convert's
+                          count for it is entirely other sources. Not a fault.
                           `no_experiment_seen` — deliveries succeeded but named no
                           experience, so Convert was not queried.
                           `experiment_inactive` — the experience is not active, and
