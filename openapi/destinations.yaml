@@ -769,8 +769,15 @@ paths:
           in: query
           required: false
           description: >
-            Convert experience to check. Defaults to one discovered from the
-            deliveries in the window; pass this when they span several.
+            Convert experience to check. Numeric; a non-numeric value is a
+            `400`. Defaults to the delivered experience with the most distinct
+            visitors; pass this when the deliveries span several.
+
+
+            An id that is numeric but does not exist in the project returns
+            `report_unavailable` — Convert cannot report on it — NOT
+            `nothing_sent_for_experience`. `sent.by_experience` in any response
+            lists the ids actually delivered to.
           schema: { type: string }
       responses:
         "200":
@@ -893,13 +900,18 @@ paths:
                           `nothing_sent_for_experience` — deliveries succeeded,
                           but none for the experience compared, so Convert's
                           count for it is entirely other sources. Not a fault.
+                          Implies the id is valid; an invalid one returns
+                          `report_unavailable` instead.
                           `no_experiment_seen` — deliveries succeeded but named no
                           experience, so Convert was not queried.
                           `experiment_inactive` — the experience is not active, and
                           Convert discards conversions for a non-active experience,
                           which explains a zero on its own.
                           `report_unavailable` — Convert's report could not be read,
-                          so no verdict is given.
+                          so no verdict is given. A mistyped `experience_id`
+                          produces THIS, not `nothing_sent_for_experience`:
+                          Convert cannot report on an id it does not have, and
+                          this is evaluated before any sent-side verdict.
                       headline: { type: string, description: One-sentence plain reading of the verdict. }
                       caveats:
                         type: array

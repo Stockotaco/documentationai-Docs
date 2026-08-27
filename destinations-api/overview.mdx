@@ -513,7 +513,7 @@ It is needed because Convert's endpoint returns `200` for payloads it silently d
 | `nothing_sent_for_experience` | Deliveries succeeded, but none for the experience compared — so Convert's count for it is entirely other sources. Not a fault. |
 | `no_experiment_seen` | Deliveries succeeded but named no experience, so Convert was not queried. |
 | `experiment_inactive` | The experience is not active. Convert discards conversions for a non-active experience, which explains a zero on its own. |
-| `report_unavailable` | Convert's report could not be read. No verdict rather than a guess. |
+| `report_unavailable` | Convert's report could not be read. No verdict rather than a guess. **A mistyped `experience_id` lands here**, not in `nothing_sent_for_experience` — Convert cannot report on an id it does not have. |
 
 The comparison uses **distinct visitors**, not deliveries — Convert counts one conversion per visitor per goal, so comparing raw delivery counts would show a permanent phantom shortfall for any account whose customers buy twice. `caveats` is always populated with what the comparison cannot tell you, and `sent.truncated` warns when the delivery scan hit its row cap and the counts are a lower bound.
 
@@ -526,6 +526,10 @@ The comparison uses **distinct visitors**, not deliveries — Convert counts one
 | `sent.by_experience` | The full per-experience split, so you can see where the rest went. |
 
 A destination running two experiments at once therefore reads `expected: 3` against `sent.distinct_visitors: 16` when only three of those visitors were in the experience being checked — that is correct, not a truncated count. Without `experience_id` the experience with the most delivered visitors is compared; pass `experience_id` to check another, and note that a visitor in two experiments at once counts toward both.
+
+<Callout kind="warning">
+  Two verdicts are easy to confuse when guessing at an `experience_id`, and they have opposite fixes. An id that **does not exist in the project** returns `report_unavailable`: Convert cannot report on it, and `report_ok` is evaluated before anything on the sent side, so no sent-side verdict can be reached. An id that **exists but this destination never delivered to** returns `nothing_sent_for_experience`. The first means check the id; the second means the id is fine and there is simply nothing of yours on that experiment. `sent.by_experience` lists the ids actually delivered to.
+</Callout>
 
 <Callout kind="note">
   Convert's report lags behind a delivery, and the two counters do not land together — measured on a live account, a conversion appeared within about a minute and its revenue about three minutes later. A verification run immediately after a test fire will under-count.
