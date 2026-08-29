@@ -100,8 +100,9 @@ client for that one call — so passing it always is the portable choice.
 ## Tool families & scopes
 
 Every tool is gated by a scope on the key (`resource:read` / `resource:write`,
-`resource:*`, or `*`; an empty `scopes` array is unrestricted). `list_clients`
-and `select_client` need no scope — agency-wide keys get them automatically.
+`resource:*`, or `*`). An empty `scopes` array grants **nothing** — unrestricted
+is the explicit `["*"]`. `list_clients` and `select_client` need no scope —
+agency-wide keys get them automatically.
 
 | Resource | Tools |
 |----------|-------|

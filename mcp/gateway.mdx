@@ -1,13 +1,17 @@
 ---
 title: MCP Gateway
 description: >-
-  Call MCP tools over JSON-RPC 2.0. The gateway exposes built-in analytics
-  tools plus any upstream tools the key's agency and location can reach.
+  Call upstream MCP tools over JSON-RPC 2.0. The gateway proxies the tools of
+  registered MCP servers that the key's agency and location can reach.
 ---
 
 ## Overview
 
-The MCP Gateway is a single JSON-RPC 2.0 endpoint. It authenticates the caller's `mcp_` key, enforces scopes and agency/location access, then either runs a **built-in tool** directly against Supabase or proxies the call to a registered **upstream** MCP server (injecting that client's credentials).
+The MCP Gateway is a single JSON-RPC 2.0 endpoint. It authenticates the caller's `mcp_` key, enforces scopes and agency/location access, then proxies the call to a registered **upstream** MCP server, injecting that client's credentials.
+
+<Callout kind="note">
+  The gateway no longer serves the built-in insights/dashboards/canvases tools — those (and much more) live on the [Settings Server](/mcp/settings-server), which accepts the same `mcp_` keys. Calling a retired tool name here returns `-32601` with the Settings Server URL.
+</Callout>
 
 ## Endpoint
 
@@ -37,7 +41,7 @@ See [Authentication](/mcp/authentication) for scope rules.
   "id": "req-001",
   "method": "tools/call",
   "params": {
-    "name": "list_insights",
+    "name": "an_upstream_tool",
     "arguments": { "limit": 10 }
   }
 }
@@ -144,7 +148,7 @@ Client lifecycle notification. The gateway accepts it and returns an empty resul
 
 ### tools/list
 
-Returns every tool the key can use — built-in tools allowed by scope, plus upstream tools allowed by scope, agency access, and location access. Each entry has `name`, `description`, `inputSchema`, and `annotations`. Tools come back sorted by name, so the list is stable across calls and safe to cache. The result also carries `ttlMs` (300000) and `cacheScope` (`"private"`) as caching hints.
+Returns every upstream tool the key can use, filtered by scope, agency access, and location access. Each entry has `name`, `description`, `inputSchema`, and `annotations`. Tools come back sorted by name, so the list is stable across calls and safe to cache. The result also carries `ttlMs` (300000) and `cacheScope` (`"private"`) as caching hints.
 
 ```json
 { "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {} }
@@ -160,40 +164,25 @@ Execute a tool by name.
   "id": 3,
   "method": "tools/call",
   "params": {
-    "name": "create_dashboard",
-    "arguments": { "name": "Q3 Overview" }
+    "name": "an_upstream_tool",
+    "arguments": { "query": "Q3 overview" }
   }
 }
 ```
 
-The result is the tool's MCP content payload (`{ "content": [...] }`, optionally with `"isError": true`). Built-in tools return their content as a JSON string inside a text block. Upstream tool results are proxied through unchanged.
+The result is the tool's MCP content payload (`{ "content": [...] }`, optionally with `"isError": true`), proxied through from the upstream server unchanged.
 
 <Callout kind="info">
-  `location_id` is injected from the API key for built-in tools — you do not pass it when creating resources. Upstream calls receive that client's credentials automatically.
+  Upstream calls receive that client's stored credentials automatically — you do not pass credentials in `arguments`.
 </Callout>
 
-## Built-in tools
+## Tools
 
-These tools are always implemented by the gateway (subject to scope). They operate on the key's location.
+Every tool comes from a registered upstream server and requires the `<scope_prefix>:call` scope (or `upstream:call` when the server has no scope prefix).
 
-| Tool | Scope required |
-|------|----------------|
-| `list_insights` | `insights:read` |
-| `get_insight` | `insights:read` |
-| `create_insight` | `insights:write` |
-| `update_insight` | `insights:write` |
-| `delete_insight` | `insights:write` |
-| `list_dashboards` | `dashboards:read` |
-| `get_dashboard` | `dashboards:read` |
-| `create_dashboard` | `dashboards:write` |
-| `update_dashboard` | `dashboards:write` |
-| `delete_dashboard` | `dashboards:write` |
-| `add_insight_to_dashboard` | `dashboards:write` |
-| `remove_insight_from_dashboard` | `dashboards:write` |
-| `list_canvases` | `canvases:read` |
-| `get_canvas` | `canvases:read` |
+## Retired built-in tools
 
-Any additional tools come from registered upstream servers and require `<scope_prefix>:call` (or `upstream:call`).
+The gateway previously implemented `list_insights`, `get_insight`, `create_insight`, `update_insight`, `delete_insight`, `list_dashboards`, `get_dashboard`, `create_dashboard`, `update_dashboard`, `delete_dashboard`, `add_insight_to_dashboard`, `remove_insight_from_dashboard`, `list_canvases`, and `get_canvas` itself. These names now return `-32601` with a message pointing at the [Settings Server](/mcp/settings-server), which serves them (and many more) with the same `mcp_` key.
 
 ## Error codes
 

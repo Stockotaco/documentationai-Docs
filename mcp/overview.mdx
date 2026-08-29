@@ -54,7 +54,6 @@ Management endpoints return a small JSON envelope — there is no `success` or `
 |---------|-------------|
 | **MCP Server** | A registered upstream server that exposes tools over MCP. A server is either platform-wide (`agency_id` is null) or owned by one agency. |
 | **Tool** | A capability discovered on a server by probing. Tools are never created directly — they come from `initialize` + `tools/list`. |
-| **Built-in tool** | A tool the gateway implements itself (insights, dashboards, canvases) backed by Supabase. Always available; not tied to any server. |
 | **Agency access** | Per-agency enable/disable rules on a server or tool. When no record exists, access defaults to enabled. |
 | **API key** | An `mcp_` credential scoped to one agency and one location, used to authenticate against the gateway. |
 | **Scope prefix** | Optional namespace on a server, mapping its tools to a `<prefix>:call` scope for gateway keys. |

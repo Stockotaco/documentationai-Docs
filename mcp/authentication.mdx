@@ -43,8 +43,8 @@ An `mcp_` key carries a `scopes` array that gates which tools it can list and ca
 | `resource:*` | `dashboards:*` | Any action on one resource |
 | `*` | `*` | Any tool |
 
-<Callout kind="info">
-  An **empty** `scopes` array grants unrestricted access to every tool the key's agency and location can reach. Grant explicit scopes to narrow a key down.
+<Callout kind="warning">
+  An **empty** `scopes` array grants **nothing**. Unrestricted access is the explicit `["*"]`. (Keys created while an empty array still meant "unrestricted" were backfilled to `["*"]`, so no existing key lost access. Keys created without a `scopes` field default to `["*"]`.)
 </Callout>
 
 <Callout kind="info">
@@ -57,12 +57,9 @@ An `mcp_` key carries a `scopes` array that gates which tools it can list and ca
 
 ### How tool names map to scopes
 
-Built-in tools are mapped by name prefix, and the resource is normalized to `insights`, `dashboards`, or `canvases`:
+Gateway (upstream) tools require `<scope_prefix>:call`, where `<scope_prefix>` is the owning server's configured prefix. If the server has no scope prefix, the required scope is `upstream:call`.
 
-- `list_*`, `get_*` require `<resource>:read`
-- `create_*`, `update_*`, `delete_*`, `add_*`, `remove_*` require `<resource>:write`
-
-Upstream tools require `<scope_prefix>:call`, where `<scope_prefix>` is the owning server's configured prefix. If the server has no scope prefix, the required scope is `upstream:call`.
+Settings Server tools use `<resource>:read` for `list_*`/`get_*` tools and `<resource>:write` for mutations; each tool's required scope is listed on the [Settings Server](/mcp/settings-server) page.
 
 <Callout kind="alert">
   Never expose the admin key or `mcp_` API keys in client-side JavaScript, public repositories, or logs. Both are server-side credentials. The raw `mcp_` key is shown only once, at creation.
