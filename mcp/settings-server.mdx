@@ -1,17 +1,35 @@
 ---
 title: Settings Server (agency)
 description: >-
-  A hosted MCP server that lets an agency's AI client manage a client's
-  analytics settings — insights, dashboards, canvases, destinations, and tenant
-  config — with a select-a-client session flow.
+  A hosted MCP server exposing the full agency product surface — 169 tools
+  across data, sessions, replays, analysis, settings, links, Airbyte,
+  segments, insights, dashboards, canvases, destinations, contracts, and
+  tenant config — with a select-a-client session flow.
 ---
 
 ## Overview
 
-The Settings Server is a hosted MCP server for **managing a client's analytics
-settings** from any MCP-compatible AI client. It is separate from the
+The Settings Server is a hosted MCP server exposing the **full agency product
+surface** — 169 tools across 16 scope families — from any MCP-compatible AI
+client. It is separate from the
 [Gateway](/mcp/gateway) (which proxies upstream tools) but authenticates with
 the **same `mcp_` API keys** and scopes.
+
+Most tools are **thin proxies of the documented REST endpoints** on
+`/client/v1` and `/builder`: the single implementation of each operation lives
+in the worker, so a tool's parameters, semantics, and error codes are those of
+the underlying route. The per-surface REST docs are therefore the reference
+for what each tool does — see the [Data API](/data-api/overview),
+[Client Links](/client-links-api/overview),
+[Destinations](/destinations-api/overview),
+[Constraint Finder](/constraints-api/overview),
+[Correlation](/correlation-api/overview),
+[Event Contracts](/contracts-api/overview),
+[Heatmaps](/heatmaps-api/overview),
+[Incrementality](/incrementality-api/overview),
+[Airbyte Sync](/airbyte-api/overview),
+[Client Config](/config-api/overview), and
+[Builder](/builder-api/overview) sections.
 
 Its defining feature: an agency connects once with an agency-wide key, calls
 `list_clients` to see its clients, `select_client` to pick one, and every
@@ -104,22 +122,36 @@ Every tool is gated by a scope on the key (`resource:read` / `resource:write`,
 is the explicit `["*"]`. `list_clients` and `select_client` need no scope —
 agency-wide keys get them automatically.
 
+Sixteen scope families gate the 169 tools:
+
 | Resource | Tools |
 |----------|-------|
-| `insights` | `list_insights`, `get_insight`, `create_insight`, `update_insight`, `delete_insight` |
+| `insights` | `list_insights`, `get_insight`, `run_insight`, `preview_insight`, `create_insight`, `update_insight`, `delete_insight` |
+| `data` | Read-only. People & identity: `list_people`, `get_person`, `get_person_summary`, `get_person_activity`, `get_person_attribution`, `list_identities`, `list_merges`, `get_person_merges`, `list_merge_warnings`. Events: `list_events`, `list_event_properties`, `get_event_volume_daily`, `get_event_trend`, `get_event_breakdown`. Export: `get_bigquery_export`, `get_bigquery_export_schema`. Errors: `list_exception_issues`, `get_exception_issue`, `list_exception_occurrences`, `get_exception_digest`. Heatmaps: `get_heatmap`, `list_heatmap_pages`, `get_heatmap_facets`, `get_heatmap_scroll`. Plus `explain_tracking_coverage` |
+| `sessions` | Read-only: `list_sessions`, `get_sessions_breakdown` |
+| `analysis` | Constraint finder (`find_constraint`, `list_constraint_events`, `get_constraint_audit`, `get_constraint_options`, benchmark get/set/delete), correlation (`get_correlation`, `list_correlation_metrics`, `get_correlation_options`), and incrementality (markets, eligibility, experiment CRUD, launch plan, validate, `compute_incrementality`, coefficients + history) |
+| `settings` | `get_tracking_settings`, `update_tracking_setting` — allowed origins, autocapture, heatmaps, experiments, conversions, contract alerts |
+| `links` | `get_client_status`, `set_client_status` (the tenant ingestion kill switch), link CRUD, click analytics/trend/stream, UTM values, uptime webhooks CRUD, uptime status + history, `get_core_web_vitals` |
+| `airbyte` | Agency-grain: config get/update, `provision_airbyte`, `register_airbyte_notifications`, relay webhook CRUD, connection CRUD + `replace_airbyte_connection`, `trigger_airbyte_sync`, `list_airbyte_jobs`, `set_airbyte_schedule`, `initiate_airbyte_oauth`, `list_airbyte_sync_events`, stats/health, and pipeline get/set/candidates/runs/start/action |
+| `segments` | `list_segments`, `get_segment`, `get_segment_count`, `list_segment_members`, `create_segment`, `update_segment`, `delete_segment` |
 | `dashboards` | `list_dashboards`, `get_dashboard`, `create_dashboard`, `update_dashboard`, `delete_dashboard`, `add_insight_to_dashboard`, `remove_insight_from_dashboard` |
 | `canvases` | `list_canvases`, `get_canvas`, `create_canvas`, `update_canvas`, `delete_canvas`, and node/edge/event tools |
-| `destinations` | `list_destinations`, `get_destination`, `create_destination`, `update_destination`, `delete_destination` |
+| `replays` | Read-only: `list_replays`, `get_session_timeline` |
+| `destinations` | `list_destinations`, `get_destination`, `create_destination`, `update_destination`, `delete_destination`, plus delivery/health/verification reads (`list_destination_deliveries`, `get_destination_delivery`, `get_destination_delivery_status`, `get_destination_health`, `verify_destination`), `test_destination`, and credential/OAuth management (`list_destination_credentials`, `set_destination_credential`, `delete_destination_credential`, `get_destination_oauth_client`, `set_destination_oauth_client`, `delete_destination_oauth_client`, `initiate_destination_oauth`) |
 | `tags` | `list_tags`, `create_tag`, `update_tag`, `delete_tag` |
 | `snippets` | `list_snippets`, `get_snippet`, `create_snippet`, `update_snippet`, `delete_snippet` |
+| `contracts` | `list_event_contracts`, `suggest_event_contract`, `check_event_contracts`, `get_contract_samples`, `set_event_contract`, `delete_event_contract` |
 | `transformers` | `list_transformers`, `get_transformer`, `create_transformer`, `update_transformer`, `delete_transformer` |
-| `replays` | `get_session_timeline` (read-only) |
-| `data` | `list_events`, `list_event_properties` (read-only discovery) |
-| `contracts` | `list_event_contracts`, `suggest_event_contract`, `check_event_contracts`, `set_event_contract`, `delete_event_contract` |
+
+For each `read-write` family, the `:read` scope grants the read tools and the
+`:write` scope grants the write tools (write implies read at the gate);
+`data`, `sessions`, and `replays` are read-only families.
 
 Destination writes are validated per type (`webhook`, `meta_capi`, `google_ads`);
 runtime secrets are never exposed. Tag/snippet/transformer writes sync to the
-edge automatically.
+edge automatically — the same operations are available over REST on the
+[Client Config API](/config-api/overview), whose responses carry an explicit
+`kv_sync` field.
 
 ### Discovering events and enforcing their shape
 
@@ -164,13 +196,12 @@ inputs, identify, custom events) — the LLM-ready view of a session, not the
 raw rrweb replay. The connected model does the summarizing; the server runs no
 LLM of its own. No PII: form/input values are excluded, only field metadata.
 
-The MCP has no list tool for recordings — get session ids from the
-[Data API](/data-api/overview):
-`GET /client/v1/data/replays` lists recorded sessions (newest first, with
-duration and activity counters); pass a row's `session_id` (a UUIDv7) to the
-tool. A typical agent flow: pick sessions from the list (e.g. high
-`console_errors` or long duration), call `get_session_timeline` for each, and
-summarize behavior, drop-off, and friction.
+Its companion `list_replays` (a proxy of `GET /client/v1/data/replays` — see
+the [Data API](/data-api/overview)) lists recorded sessions newest first, with
+duration and activity counters; pass a row's `session_id` (a UUIDv7) to the
+timeline tool. A typical agent flow: pick sessions from `list_replays` (e.g.
+high `console_errors` or long duration), call `get_session_timeline` for each,
+and summarize behavior, drop-off, and friction.
 
 ## Rate limiting
 

@@ -1,0 +1,158 @@
+---
+title: Client Config
+description: >-
+  Manage the configuration the SDK runs from — tags, snippets, and event
+  transformers — over REST, with every write synced to the edge and the sync
+  outcome reported back as kv_sync.
+---
+
+## Overview
+
+Three things the Mythic SDK executes on a client's site are configured per
+location:
+
+| Resource | What it is | Table |
+| --- | --- | --- |
+| **Tags** | GTM-like tag assignments (a template id plus `params`) fired by the SDK | `tenant_tags` |
+| **Snippets** | Custom JavaScript (`code`) injected by the SDK | `tenant_snippets` |
+| **Transformers** | Event transforms (`map` field mappings or `code`) applied during ingestion, in `priority` order | `transformers` |
+
+The Client Config API is CRUD over those three on `/client/v1/config` — 14
+routes. The same operations exist as MCP tools on the
+[Settings Server](/mcp/settings-server) (`tags`, `snippets`, `transformers`
+scope families); this is their headless REST form.
+
+## Base URL
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/config
+```
+
+## Authentication
+
+The same key system as the rest of `/client/v1`: an **agency key** (`ak_`,
+bind a location with `?location_id=` or the `X-Location-Id` header) or a
+**location secret key** (`sk_`, auto-scoped to its own location). Reads accept
+either. **Writes require an agency key** — same rule as Settings,
+Destinations, and Event Contracts.
+
+<Callout kind="alert">
+  This surface deliberately serves **no CORS headers**. `ak_` and `sk_` keys
+  are server-side credentials — never call it from browser JavaScript.
+</Callout>
+
+## `kv_sync` — why every write reports its edge sync
+
+The SDK does not read the database. It runs from the location's edge config (a
+Cloudflare KV entry), and tenant-config writes are **not** synced to it by
+database triggers. A write that lands in the database but never reaches the
+edge is the classic failure mode here: the API says "saved", and the site
+keeps running the old tags forever.
+
+So every write on this surface rebuilds the edge config inline, and the
+response tells you how that went:
+
+```json
+{ "success": true, "data": { "...": "..." }, "kv_sync": "synced" }
+```
+
+- `"synced"` — the edge config was rebuilt from database truth. The SDK picks
+  the change up on its next config fetch.
+- `"failed: <reason>"` — the database write landed, but **the edge is still
+  serving the previous config**. Retry the write (any successful write
+  re-syncs the whole location config), or rebuild via the admin API.
+
+Treat a `failed` sync as the write not having taken effect yet — because for
+the SDK, it hasn't.
+
+## Quickstart
+
+<Steps>
+  <Step title="Assign a tag">
+    ```bash
+    curl -X POST "$BASE/client/v1/config/tags?location_id=$LOC" \
+      -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
+      -d '{
+        "tag_id": "meta-pixel",
+        "params": { "pixel_id": "1234567890" },
+        "trigger_rules": { "url_contains": "/checkout" }
+      }'
+    ```
+
+    `enabled` defaults to `true` and `params` to `{}`. Tags are keyed by
+    `tenant_key` + `tag_id`, so updates and deletes address the assignment by
+    its `tag_id`.
+  </Step>
+
+  <Step title="Add a snippet">
+    ```bash
+    curl -X POST "$BASE/client/v1/config/snippets?location_id=$LOC" \
+      -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
+      -d '{
+        "code": "console.log(\"hello from mythic\");",
+        "description": "Debug logger",
+        "enabled": true
+      }'
+    ```
+
+    `code` is required. The list endpoint omits `code` bodies — `GET
+    /snippets/{id}` returns the full row.
+  </Step>
+
+  <Step title="Create a transformer">
+    ```bash
+    curl -X POST "$BASE/client/v1/config/transformers?location_id=$LOC" \
+      -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
+      -d '{
+        "name": "Normalize order value",
+        "type": "map",
+        "config": { "mappings": [{ "from": "order_total", "to": "value" }] },
+        "priority": 50
+      }'
+    ```
+
+    `type` is `map` (declared field mappings) or `code` (a JS transform);
+    `config` is required and type-specific. Transformers run at ingestion in
+    `priority` order, lowest first. Like snippets, the list omits `config`.
+  </Step>
+
+  <Step title="Update and verify">
+    ```bash
+    curl -X PATCH "$BASE/client/v1/config/tags/meta-pixel?location_id=$LOC" \
+      -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
+      -d '{ "enabled": false }'
+    ```
+
+    ```json
+    {
+      "success": true,
+      "data": {
+        "tenant_key": "loc_abc123",
+        "tag_id": "meta-pixel",
+        "enabled": false,
+        "params": { "pixel_id": "1234567890" },
+        "trigger_rules": { "url_contains": "/checkout" }
+      },
+      "kv_sync": "synced"
+    }
+    ```
+
+    PATCH is partial — only the fields you pass change. A PATCH with no
+    recognized fields returns `400 nothing_to_update`. Always check
+    `kv_sync` before considering a write done.
+  </Step>
+</Steps>
+
+## Errors and limits
+
+| Status | Code | Meaning |
+| --- | --- | --- |
+| `400` | `bad_json`, `missing_field`, `bad_type`, `nothing_to_update` | Malformed body, a required field missing, transformer `type` not `map`/`code`, or an empty PATCH |
+| `401` | `unauthorized` | Missing/invalid key, or an `ak_` with no location bound |
+| `403` | `agency_required` | Write attempted with an `sk_` key |
+| `404` | `not_found` | No such tag assignment, snippet, or transformer for this location |
+| `429` | `rate_limited` | 120 requests/min per location — retry after `Retry-After` |
+
+Deletes are idempotent for tags (removing an absent assignment succeeds);
+snippet and transformer deletes verify ownership first and return `404` for a
+row that is not this location's.

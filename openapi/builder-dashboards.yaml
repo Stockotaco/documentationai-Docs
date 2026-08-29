@@ -100,6 +100,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      summary: Update dashboard metadata
+      operationId: updateDashboard
+      description: >
+        Partial update of a dashboard's metadata — only the fields you pass
+        change. Accepts `name`, `description`, and `is_public`. The dashboard
+        must belong to the resolved location. Requires an agency key (`ak_`).
+        Returns the updated row.
+      parameters:
+        - $ref: "#/components/parameters/DashboardId"
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDashboardRequest"
+      responses:
+        "200":
+          description: Dashboard updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardResponse"
+        "400":
+          description: No recognized fields in the body ("Nothing to update")
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Write access requires an agency key (`ak_`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Dashboard not found for this location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       summary: Delete dashboard
       operationId: deleteDashboard
@@ -432,6 +474,21 @@ components:
         is_public:
           type: boolean
           default: false
+    UpdateDashboardRequest:
+      type: object
+      description: >-
+        Partial update — include only the fields to change. At least one is
+        required.
+      properties:
+        name:
+          type: string
+          example: Marketing Overview
+        description:
+          type: string
+          nullable: true
+          example: Key marketing metrics at a glance
+        is_public:
+          type: boolean
     AddDashboardInsightRequest:
       type: object
       required:

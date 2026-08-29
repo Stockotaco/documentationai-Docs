@@ -1,0 +1,602 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Client Config
+  description: >
+    Tenant configuration served to the SDK at the edge — tags, snippets, and
+    transformers — as a REST surface on `/client/v1/config`.
+
+
+    Reads accept an agency key (`ak_`, bind a location with `location_id` or
+    the `X-Location-Id` header) or a location secret key (`sk_`); **writes
+    require an agency key**. Every write rebuilds the location's edge config
+    (the `CFG` KV entry) inline and reports the outcome in a `kv_sync` response
+    field — a write that lands in the database but never reaches the edge is
+    the failure mode this surface exists to prevent, so a failed sync is
+    visible to the caller instead of silent.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+paths:
+  /client/v1/config/tags:
+    get:
+      summary: List tag assignments
+      operationId: listConfigTags
+      description: Every tag assignment for this location.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Tag assignments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Tag" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      summary: Assign a tag
+      operationId: createConfigTag
+      description: >
+        Assign a tag to this location. `tag_id` is required; `enabled` defaults
+        to `true` and `params` to `{}`. Agency key (`ak_`) required. Rebuilds
+        the edge config — check `kv_sync`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tag_id]
+              properties:
+                tag_id:
+                  type: string
+                  description: Id of the tag template to assign.
+                  example: meta-pixel
+                enabled: { type: boolean, default: true }
+                params:
+                  type: object
+                  description: Template parameters for this assignment.
+                  example: { pixel_id: "1234567890" }
+                trigger_rules:
+                  $ref: "#/components/schemas/TriggerRules"
+      responses:
+        "201":
+          description: Tag assigned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Tag" }
+                  kv_sync: { $ref: "#/components/schemas/KvSync" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/config/tags/{tagId}:
+    patch:
+      summary: Update a tag assignment
+      operationId: updateConfigTag
+      description: >
+        Partial update — only the fields you pass change. Accepts `enabled`,
+        `params`, `trigger_rules`. Agency key (`ak_`) required. Rebuilds the
+        edge config — check `kv_sync`.
+      parameters:
+        - $ref: "#/components/parameters/TagId"
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                params: { type: object }
+                trigger_rules:
+                  $ref: "#/components/schemas/TriggerRules"
+      responses:
+        "200":
+          description: Tag assignment updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Tag" }
+                  kv_sync: { $ref: "#/components/schemas/KvSync" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      summary: Remove a tag assignment
+      operationId: deleteConfigTag
+      description: >
+        Remove the tag assignment from this location. The tag stops being
+        served to the SDK once the edge config rebuilds. Agency key (`ak_`)
+        required.
+      parameters:
+        - $ref: "#/components/parameters/TagId"
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Tag assignment removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  kv_sync: { $ref: "#/components/schemas/KvSync" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/config/snippets:
+    get:
+      summary: List snippets
+      operationId: listConfigSnippets
+      description: >
+        Every custom code snippet for this location. The list omits the `code`
+        body — fetch a single snippet to read it.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Snippets (without `code`)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/SnippetSummary" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      summary: Create a snippet
+      operationId: createConfigSnippet
+      description: >
+        Create a custom code snippet injected by the SDK. `code` is required.
+        Agency key (`ak_`) required. Rebuilds the edge config — check
+        `kv_sync`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  description: JavaScript executed by the SDK on matching pages.
+                  example: "console.log('hello from mythic');"
+                description:
+                  type: string
+                  example: Debug logger
+                enabled: { type: boolean, default: true }
+                trigger_rules:
+                  $ref: "#/components/schemas/TriggerRules"
+      responses:
+        "201":
+          description: Snippet created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Snippet" }
+                  kv_sync: { $ref: "#/components/schemas/KvSync" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/config/snippets/{id}:
+    get:
+      summary: Retrieve a snippet
+      operationId: getConfigSnippet
+      description: One snippet by id, including its `code` body.
+      parameters:
+        - $ref: "#/components/parameters/SnippetId"
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: The snippet
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Snippet" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    patch:
+      summary: Update a snippet
+      operationId: updateConfigSnippet
+      description: >
+        Partial update — only the fields you pass change. Accepts `code`,
+        `description`, `enabled`, `trigger_rules`. Agency key (`ak_`)
+        required. Rebuilds the edge config — check `kv_sync`.
+      parameters:
+        - $ref: "#/components/parameters/SnippetId"
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string }
+                description: { type: string }
+                enabled: { type: boolean }
+                trigger_rules:
+                  $ref: "#/components/schemas/TriggerRules"
+      responses:
+        "200":
+          description: Snippet updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Snippet" }
+                  kv_sync: { $ref: "#/components/schemas/KvSync" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      summary: Delete a snippet
+      operationId: deleteConfigSnippet
+      description: >
+        Permanently delete a snippet. It stops being served to the SDK once
+        the edge config rebuilds. Agency key (`ak_`) required.
+      parameters:
+        - $ref: "#/components/parameters/SnippetId"
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Snippet deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  kv_sync: { $ref: "#/components/schemas/KvSync" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/config/transformers:
+    get:
+      summary: List transformers
+      operationId: listConfigTransformers
+      description: >
+        Every event transformer for this location, ordered by `priority`
+        ascending (the order they run at ingestion). The list omits the
+        `config` body — fetch a single transformer to read it.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Transformers (without `config`)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/TransformerSummary" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      summary: Create a transformer
+      operationId: createConfigTransformer
+      description: >
+        Create an event transformer applied during ingestion. `name`, a valid
+        `type` (`map` or `code`), and a `config` object are required;
+        `priority` defaults to `50` and `enabled` to `true`. Agency key
+        (`ak_`) required. Rebuilds the edge config — check `kv_sync`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type, config]
+              properties:
+                name:
+                  type: string
+                  example: Normalize order value
+                type:
+                  type: string
+                  enum: [map, code]
+                  description: "`map` declares field mappings; `code` runs a JS transform."
+                config:
+                  type: object
+                  description: Type-specific transformer configuration.
+                  example: { mappings: [{ from: order_total, to: value }] }
+                priority:
+                  type: integer
+                  default: 50
+                  description: Lower runs first.
+                enabled: { type: boolean, default: true }
+      responses:
+        "201":
+          description: Transformer created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Transformer" }
+                  kv_sync: { $ref: "#/components/schemas/KvSync" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/config/transformers/{id}:
+    get:
+      summary: Retrieve a transformer
+      operationId: getConfigTransformer
+      description: One transformer by id, including its `config` body.
+      parameters:
+        - $ref: "#/components/parameters/TransformerId"
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: The transformer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Transformer" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    patch:
+      summary: Update a transformer
+      operationId: updateConfigTransformer
+      description: >
+        Partial update — only the fields you pass change. Accepts `name`,
+        `type` (`map` or `code`), `config`, `priority`, `enabled`. Agency key
+        (`ak_`) required. Rebuilds the edge config — check `kv_sync`.
+      parameters:
+        - $ref: "#/components/parameters/TransformerId"
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                type:
+                  type: string
+                  enum: [map, code]
+                config: { type: object }
+                priority: { type: integer }
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: Transformer updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Transformer" }
+                  kv_sync: { $ref: "#/components/schemas/KvSync" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      summary: Delete a transformer
+      operationId: deleteConfigTransformer
+      description: >
+        Permanently delete a transformer. Ingestion stops applying it once the
+        edge config rebuilds. Agency key (`ak_`) required.
+      parameters:
+        - $ref: "#/components/parameters/TransformerId"
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Transformer deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  kv_sync: { $ref: "#/components/schemas/KvSync" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Agency key (`ak_`) or location secret key (`sk_`). Writes require an
+        agency key. Keys are server-side credentials — this surface serves no
+        CORS headers on purpose.
+  parameters:
+    LocationId:
+      name: location_id
+      in: query
+      required: false
+      description: >-
+        Location to scope to. Required for `ak_` keys (or send the
+        `X-Location-Id` header); ignored for `sk_`.
+      schema: { type: string }
+    TagId:
+      name: tagId
+      in: path
+      required: true
+      description: The tag template id of the assignment.
+      schema: { type: string }
+      example: meta-pixel
+    SnippetId:
+      name: id
+      in: path
+      required: true
+      description: Snippet UUID.
+      schema: { type: string, format: uuid }
+    TransformerId:
+      name: id
+      in: path
+      required: true
+      description: Transformer UUID.
+      schema: { type: string, format: uuid }
+  responses:
+    BadRequest:
+      description: >-
+        `bad_json` (body is not JSON), `missing_field` (a required field is
+        absent), `bad_type` (transformer `type` is not `map` or `code`), or
+        `nothing_to_update` (a PATCH with no recognized fields).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing or invalid key, or an `ak_` key with no location bound.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    AgencyRequired:
+      description: "`agency_required` — writes need an agency key (`ak_`), not a location secret key."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: "`not_found` — no such row for this location."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: "`rate_limited` — 120 requests/min per location. Retry after the `Retry-After` header."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    KvSync:
+      type: string
+      example: synced
+      description: >-
+        Outcome of the inline edge-config rebuild that follows every write.
+        `synced` means the location's `CFG` KV entry was rebuilt from database
+        truth and the SDK will pick the change up; `failed: <reason>` means
+        the database write landed but the edge is still serving the previous
+        config — retry the write (any successful write re-syncs everything)
+        or rebuild via the admin API. This field exists because tenant-config
+        KV sync is not trigger-driven; a write the SDK never sees is the
+        failure mode, so a failed sync is reported instead of silent.
+    TriggerRules:
+      type: object
+      nullable: true
+      description: >-
+        Optional page/condition rules controlling where the tag or snippet
+        fires. Omitted or `null` means everywhere.
+      example:
+        url_contains: /checkout
+    Tag:
+      type: object
+      properties:
+        tenant_key:
+          type: string
+          description: The location this assignment belongs to.
+          example: loc_abc123
+        tag_id: { type: string, example: meta-pixel }
+        enabled: { type: boolean, example: true }
+        params:
+          type: object
+          example: { pixel_id: "1234567890" }
+        trigger_rules:
+          $ref: "#/components/schemas/TriggerRules"
+    SnippetSummary:
+      type: object
+      description: List shape — `code` is omitted.
+      properties:
+        id: { type: string, format: uuid }
+        tenant_key: { type: string, example: loc_abc123 }
+        description: { type: string, nullable: true, example: Debug logger }
+        enabled: { type: boolean, example: true }
+        trigger_rules:
+          $ref: "#/components/schemas/TriggerRules"
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Snippet:
+      allOf:
+        - $ref: "#/components/schemas/SnippetSummary"
+        - type: object
+          properties:
+            code:
+              type: string
+              example: "console.log('hello from mythic');"
+    TransformerSummary:
+      type: object
+      description: List shape — `config` is omitted.
+      properties:
+        id: { type: string, format: uuid }
+        tenant_key: { type: string, example: loc_abc123 }
+        name: { type: string, example: Normalize order value }
+        type:
+          type: string
+          enum: [map, code]
+        priority: { type: integer, example: 50 }
+        enabled: { type: boolean, example: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Transformer:
+      allOf:
+        - $ref: "#/components/schemas/TransformerSummary"
+        - type: object
+          properties:
+            config:
+              type: object
+              example: { mappings: [{ from: order_total, to: value }] }
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string, example: agency_required }
+            message: { type: string }

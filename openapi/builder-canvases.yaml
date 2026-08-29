@@ -132,6 +132,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      summary: Update canvas metadata
+      operationId: updateCanvas
+      description: >
+        Partial update of a canvas's metadata — only the fields you pass
+        change. Accepts `name`, `description`, and `is_active`. The canvas
+        must belong to the resolved location. Requires an agency key (`ak_`).
+        Returns the updated row.
+      parameters:
+        - $ref: "#/components/parameters/CanvasId"
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCanvasRequest"
+      responses:
+        "200":
+          description: Canvas updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CanvasResponse"
+        "400":
+          description: No recognized fields in the body ("Nothing to update")
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Write access requires an agency key (`ak_`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Canvas not found for this location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       summary: Delete canvas
       operationId: deleteCanvas
@@ -532,6 +574,20 @@ components:
         description:
           type: string
           nullable: true
+    UpdateCanvasRequest:
+      type: object
+      description: >-
+        Partial update — include only the fields to change. At least one is
+        required.
+      properties:
+        name:
+          type: string
+          example: Product Launch Funnel
+        description:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
     ImportFunnelRequest:
       type: object
       required:

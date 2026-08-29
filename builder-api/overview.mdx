@@ -44,8 +44,8 @@ Pass a Builder key as a bearer token, or as an `ak`/`sk` query parameter (useful
 The Builder does not use a single fixed envelope. The shape depends on the operation:
 
 - **Reads** return `{ "data": ... }` — an array for list endpoints, an object for single-resource endpoints. There is no top-level `success` or `count`.
-- **Writes that return a row** (create/update) return `{ "data": { ... } }`.
-- **Writes that return no row** (delete, patch metadata, toggle) return `{ "success": true }`. Some lifecycle writes add a field, e.g. `{ "success": true, "version": 4 }`.
+- **Writes that return a row** (create/update, including the metadata `PATCH /dashboards/{id}` and `PATCH /canvases/{id}`) return `{ "data": { ... } }`.
+- **Writes that return no row** (delete, layout patch, toggle) return `{ "success": true }`. Some lifecycle writes add a field, e.g. `{ "success": true, "version": 4 }`.
 - **Query endpoints** return `{ "success": true, "data": [...], "rows": <n>, ... }`.
 - **Errors** return `{ "error": "<message>" }` with the matching HTTP status. Query failures may also include `"success": false`.
 
