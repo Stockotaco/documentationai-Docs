@@ -3,10 +3,14 @@
   "initialRoute": "for-agencies/overview",
   "colors": {
     "light": {
-      "brand": "#F97316"
+      "brand": "#caff6f",
+      "heading": "#1a1a1a",
+      "text": "#374151"
     },
     "dark": {
-      "brand": "#FDBA74"
+      "brand": "#caff6f",
+      "heading": "#f2f2f2",
+      "text": "#c1c1c1"
     }
   },
   "navigation": {
@@ -1055,5 +1059,8 @@
         ]
       }
     ]
-  }
+  },
+  "logo-dark": "https://blob-cdn.documentation.ai/org-fc95cd15-c077-4392-93a6-0386943df3a9/doc-0c8d53b4-01d9-4cfd-b0b3-e307056e1870/1787978401811-m60cor4ddy-mythic-favicon-512.png?fm=auto&auto=compress%2Cformat",
+  "logo-light": "https://blob-cdn.documentation.ai/org-fc95cd15-c077-4392-93a6-0386943df3a9/doc-0c8d53b4-01d9-4cfd-b0b3-e307056e1870/1787978401811-m60cor4ddy-mythic-favicon-512.png?fm=auto&auto=compress%2Cformat",
+  "favicon": "https://blob-cdn.documentation.ai/org-fc95cd15-c077-4392-93a6-0386943df3a9/doc-0c8d53b4-01d9-4cfd-b0b3-e307056e1870/1787978401811-m60cor4ddy-mythic-favicon-512.png?fm=auto&auto=compress%2Cformat"
 }

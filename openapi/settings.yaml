@@ -573,6 +573,7 @@ components:
           nullable: true
           oneOf:
             - type: boolean
+              nullable: true
             - type: object
               properties:
                 elements:
