@@ -424,6 +424,43 @@
             ]
           },
           {
+            "tab": "MCP",
+            "icon": "cpu",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "mcp/overview",
+                    "icon": "file-text"
+                  },
+                  {
+                    "title": "Authentication",
+                    "path": "mcp/authentication",
+                    "icon": "lock"
+                  },
+                  {
+                    "title": "Gateway (JSON-RPC)",
+                    "path": "mcp/gateway",
+                    "icon": "radio"
+                  },
+                  {
+                    "title": "Settings Server (agency)",
+                    "path": "mcp/settings-server",
+                    "icon": "sliders"
+                  },
+                  {
+                    "title": "Tool Reference",
+                    "path": "mcp/tools",
+                    "icon": "list"
+                  }
+                ]
+              }
+            ]
+          },
+          {
             "tab": "JavaScript SDK",
             "icon": "braces",
             "groups": [
