@@ -457,6 +457,11 @@
                     "icon": "list"
                   }
                 ]
+              },
+              {
+                "group": "Manage Keys & Servers",
+                "icon": "key",
+                "openapi": "openapi/mcp-agency.yaml"
               }
             ]
           },
@@ -876,6 +881,11 @@
                     "icon": "list"
                   }
                 ]
+              },
+              {
+                "group": "Manage Keys & Servers (agency)",
+                "icon": "key",
+                "openapi": "openapi/mcp-agency.yaml"
               },
               {
                 "group": "Servers",

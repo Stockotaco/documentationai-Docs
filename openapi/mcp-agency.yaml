@@ -1,0 +1,568 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: MCP Management
+  description: >
+    Agency-owned MCP administration on `/builder/mcp` — issue and revoke the
+    `mcp_` keys your team and your clients connect with, register upstream MCP
+    servers behind the gateway, and control which of their tools each client
+    may reach.
+
+
+    **Every route requires an agency key (`ak_`).** A location secret key
+    (`sk_`) is rejected with `403`, because these routes issue and rescope
+    credentials: minting is the privilege boundary, so it sits above the grain
+    of any single client. Ownership is enforced per row — a server, tool, or key
+    belonging to another agency reads as `404`, and naming a location outside
+    your roster returns `403`.
+
+
+    These operations are deliberately **not** available as MCP tools. A tool
+    that mints or rescopes an `mcp_` key would let a narrowly-scoped session
+    call its way to an unrestricted one, since the create route accepts
+    arbitrary scopes. Credentials are issued from outside the session they
+    authorize.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+paths:
+  /builder/mcp/api-keys:
+    get:
+      summary: List MCP API keys
+      operationId: listMcpApiKeys
+      description: >
+        Keys belonging to your agency. Narrowed to one client when a location is
+        bound to the request. The key hash is never returned, and the raw key is
+        unrecoverable — only `key_prefix` identifies a key after creation.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Keys, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ApiKey" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+    post:
+      summary: Create an MCP API key
+      operationId: createMcpApiKey
+      description: >
+        Issues a key and returns it **once**. Store it on receipt: only the
+        prefix and a hash are kept, so the raw value cannot be retrieved again.
+
+
+        A key is either client-scoped or agency-wide. Client-scoped is the
+        default and fixes the key to one location. Pass `agency_wide: true` (or
+        an explicit `location_id: null`) for a key that picks its client per
+        session with `list_clients` / `select_client`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  description: Label shown in the key list.
+                  example: Reporting agent
+                location_id:
+                  type: string
+                  nullable: true
+                  description: >
+                    Client to bind the key to. Defaults to the location bound to
+                    the request. Explicit `null` means agency-wide. Must belong
+                    to your agency.
+                  example: loc_abc123
+                agency_wide:
+                  type: boolean
+                  description: >
+                    Issue an unbound key that selects its client per session.
+                  example: false
+                scopes:
+                  type: array
+                  items: { type: string }
+                  description: >
+                    Scope strings (`resource:read`, `resource:write`,
+                    `resource:*`, or `*`). Omitted or empty means `["*"]` —
+                    unrestricted. An empty array does **not** mean "no access";
+                    to restrict a key, name the scopes it should have.
+                  example: ["data:read", "insights:read"]
+                rate_limit_per_minute:
+                  type: integer
+                  description: Per-key request ceiling. Defaults to 60.
+                  example: 60
+      responses:
+        "201":
+          description: Key created. This response is the only time `key` appears.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/ApiKey"
+                      - type: object
+                        properties:
+                          key:
+                            type: string
+                            description: The raw key. Not recoverable later.
+                            example: mcp_3f9a1c0b7e2d4a6f8b1c3d5e7f9a0b2c4d6e8f0a1b3c5d7e
+                  warning:
+                    type: string
+                    example: Save this key now. It cannot be retrieved after this response.
+        "400":
+          description: Missing `name`, or client-scoped with no resolvable location.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: Not an agency key, or the location is not linked to this agency.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /builder/mcp/api-keys/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    patch:
+      summary: Update an MCP API key
+      operationId: updateMcpApiKey
+      description: >
+        Rename, rescope, re-limit, or deactivate a key. Rescoping takes effect on
+        the key's next request. Send at least one field.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, example: Reporting agent (read-only) }
+                scopes:
+                  type: array
+                  items: { type: string }
+                  example: ["data:read"]
+                rate_limit_per_minute: { type: integer, example: 120 }
+                is_active:
+                  type: boolean
+                  description: >
+                    `false` disables the key without deleting it — reversible,
+                    unlike revocation.
+                  example: false
+      responses:
+        "200":
+          description: Updated key.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/ApiKey" }
+        "400": { $ref: "#/components/responses/NoFields" }
+        "404": { $ref: "#/components/responses/NotFoundOrForeign" }
+    delete:
+      summary: Revoke an MCP API key
+      operationId: deleteMcpApiKey
+      description: >
+        Permanently deletes the key. Sessions using it fail on their next
+        request. To pause a key reversibly, PATCH `is_active: false` instead.
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+  /builder/mcp/servers:
+    get:
+      summary: List upstream MCP servers
+      operationId: listMcpServers
+      description: >
+        Servers reachable through the gateway: those your agency registered
+        (`ownership: agency`) plus platform-provided shared servers
+        (`ownership: platform`). Each row carries `tool_count`.
+      responses:
+        "200":
+          description: Servers, newest first within each ownership group.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Server" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+    post:
+      summary: Register an upstream MCP server
+      operationId: createMcpServer
+      description: >
+        Registers a server for the gateway to proxy. The URL is validated
+        against internal and loopback targets, and `default_headers` is checked
+        against a blocklist, so a registration cannot be used to reach inside the
+        network or forge platform headers. Registering does not discover tools —
+        run a probe afterwards.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, url]
+              properties:
+                name: { type: string, example: Internal research server }
+                url:
+                  type: string
+                  format: uri
+                  description: Public HTTPS endpoint of the upstream server.
+                  example: https://mcp.example.com/mcp
+                default_headers:
+                  type: object
+                  additionalProperties: { type: string }
+                  description: Headers sent on every proxied request, e.g. upstream auth.
+                  example: { Authorization: "Bearer upstream-token" }
+                is_enabled: { type: boolean, example: true }
+      responses:
+        "201":
+          description: Server registered.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Server" }
+        "400":
+          description: Missing `name`/`url`, a rejected URL target, or a blocked header.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+  /builder/mcp/servers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    patch:
+      summary: Update an upstream MCP server
+      operationId: updateMcpServer
+      description: >
+        Change `name`, `url`, `default_headers`, or `is_enabled`. A new URL and
+        new headers are validated the same way as on registration. Send at least
+        one field. Platform-shared servers are not editable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                url: { type: string, format: uri }
+                default_headers:
+                  type: object
+                  additionalProperties: { type: string }
+                is_enabled: { type: boolean }
+      responses:
+        "200":
+          description: Updated server.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Server" }
+        "400":
+          description: No fields, a rejected URL target, or a blocked header.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404": { $ref: "#/components/responses/NotFoundOrForeign" }
+    delete:
+      summary: Delete an upstream MCP server
+      operationId: deleteMcpServer
+      description: Removes the server and cascades to its discovered tools.
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+  /builder/mcp/servers/{id}/probe:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      summary: Probe a server and sync its tools
+      operationId: probeMcpServer
+      description: >
+        Connects to the upstream server, lists its tools, and reconciles them
+        into the catalog: tools are matched **by name**, so an existing tool
+        keeps its id and its per-location access records across probes. Tools the
+        server no longer reports are deleted, along with their access records.
+        Stamps `last_probed_at`.
+      responses:
+        "200":
+          description: Probe succeeded and the tool catalog was reconciled.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      server_id: { type: string, format: uuid }
+                      tools_discovered: { type: integer, example: 12 }
+                      tools:
+                        type: array
+                        items: { $ref: "#/components/schemas/Tool" }
+        "404": { $ref: "#/components/responses/NotFoundOrForeign" }
+        "502":
+          description: The upstream server could not be reached or did not answer correctly.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /builder/mcp/tools:
+    get:
+      summary: List upstream tools
+      operationId: listMcpTools
+      description: >
+        Every tool discovered on your agency's servers and on platform-shared
+        servers, sorted by name, each carrying `server_name`. These are gateway
+        upstream tools — for the tools the Mythic server itself provides, see the
+        [Tool Reference](/mcp/tools).
+      responses:
+        "200":
+          description: Tools across all accessible servers.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Tool" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+  /builder/mcp/tools/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    patch:
+      summary: Enable, disable, or rename a tool
+      operationId: updateMcpTool
+      description: >
+        `is_enabled: false` withdraws the tool from every client at once. To
+        control it per client, leave it enabled and set access instead. Send at
+        least one field.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                is_enabled: { type: boolean, example: false }
+                display_name: { type: string, example: Research lookup }
+      responses:
+        "200":
+          description: Updated tool.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Tool" }
+        "400": { $ref: "#/components/responses/NoFields" }
+        "403":
+          description: The tool belongs to another agency's server.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: No such tool, or its server no longer exists.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /builder/mcp/tools/{id}/access:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      summary: Set per-client tool access
+      operationId: setMcpToolAccess
+      description: >
+        Allows or denies one upstream tool for one client. Upserted, so repeating
+        the call updates the existing record. `PUT` is accepted on this path and
+        behaves identically.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ToolAccessRequest" }
+      responses:
+        "200":
+          description: Access record.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/ToolAccess" }
+        "400":
+          description: Missing `location_id` (and none bound to the request) or missing `is_allowed`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403":
+          description: The location is not linked to this agency.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    put:
+      summary: Set per-client tool access
+      operationId: putMcpToolAccess
+      description: Identical to the `POST` form — the same handler serves both verbs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ToolAccessRequest" }
+      responses:
+        "200":
+          description: Access record.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/ToolAccess" }
+        "403":
+          description: The location is not linked to this agency.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: An agency key (`ak_`). Location secret keys are rejected.
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    LocationId:
+      name: location_id
+      in: query
+      required: false
+      description: >
+        Bind the request to one client. The `X-Location-Id` header does the same.
+      schema: { type: string, example: loc_abc123 }
+  responses:
+    Success:
+      description: Deleted.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success: { type: boolean, example: true }
+    AgencyRequired:
+      description: An agency key is required — a location secret key cannot reach these routes.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NoFields:
+      description: No updatable fields were sent.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFoundOrForeign:
+      description: >
+        No such record, or it belongs to another agency — the two are
+        deliberately indistinguishable.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    ApiKey:
+      type: object
+      description: The raw key is absent — it exists only in the create response.
+      properties:
+        id: { type: string, format: uuid }
+        agency_id: { type: string, format: uuid }
+        location_id:
+          type: string
+          nullable: true
+          description: "`null` for an agency-wide key."
+          example: loc_abc123
+        name: { type: string, example: Reporting agent }
+        key_prefix:
+          type: string
+          description: First 12 characters, for identifying a key in a list.
+          example: mcp_3f9a1c0b
+        scopes:
+          type: array
+          items: { type: string }
+          example: ["data:read", "insights:read"]
+        is_active: { type: boolean, example: true }
+        rate_limit_per_minute: { type: integer, example: 60 }
+        last_used_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Server:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: Internal research server }
+        url: { type: string, format: uri, example: https://mcp.example.com/mcp }
+        is_enabled: { type: boolean, example: true }
+        ownership:
+          type: string
+          enum: [agency, platform]
+          description: >
+            `platform` servers are provided by Mythic and shared across
+            agencies; they are readable but not editable.
+        tool_count: { type: integer, example: 12 }
+        last_probed_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Tool:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        server_id: { type: string, format: uuid }
+        server_name: { type: string, nullable: true, example: Internal research server }
+        name: { type: string, example: search_papers }
+        display_name: { type: string, example: Search Papers }
+        description: { type: string }
+        input_schema:
+          type: object
+          nullable: true
+          description: JSON Schema as reported by the upstream server.
+        annotations: { type: object, nullable: true }
+        is_enabled: { type: boolean, example: true }
+        created_at: { type: string, format: date-time }
+    ToolAccessRequest:
+      type: object
+      required: [is_allowed]
+      properties:
+        location_id:
+          type: string
+          description: >
+            Client the rule applies to. Falls back to the location bound to the
+            request; one of the two must be present.
+          example: loc_abc123
+        is_allowed: { type: boolean, example: true }
+    ToolAccess:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        tool_id: { type: string, format: uuid }
+        location_id: { type: string, example: loc_abc123 }
+        is_allowed: { type: boolean, example: true }
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: MCP admin requires an agency key (ak_)
