@@ -832,6 +832,11 @@
                     "title": "Settings Server (agency)",
                     "path": "mcp/settings-server",
                     "icon": "sliders"
+                  },
+                  {
+                    "title": "Tool Reference",
+                    "path": "mcp/tools",
+                    "icon": "list"
                   }
                 ]
               },

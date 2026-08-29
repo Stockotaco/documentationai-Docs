@@ -1,0 +1,320 @@
+---
+title: Tool Reference
+description: >-
+  Every tool the Mythic MCP server exposes — 173 tools across
+  16 scope families — with the scope each one needs and the
+  API route it proxies.
+---
+
+## About this reference
+
+All 173 tools the [Settings Server](/mcp/settings-server) registers, grouped
+by the scope family that grants them. Each tool is a thin proxy over the
+[HTTP API](/api-reference/overview): the **Proxies** column names the route it
+calls, so anything you can do here you can also do over HTTP, and both answer
+from the same implementation.
+
+<Callout kind="info">
+Tools are gated by the scopes on your `mcp_` key. A key sees only the tools its
+scopes grant, so `tools/list` is a smaller list than this page unless the key is
+unrestricted. Write scopes imply read.
+</Callout>
+
+Client-scoped tools operate on the selected client — see
+[the select-a-client flow](/mcp/settings-server#the-select-a-client-flow). The
+agency-grain tools at the end of this page need no scope and appear only for
+agency-wide keys.
+
+## Insights
+
+Saved analytics queries and their results.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_insights`<br /><span style={{opacity: 0.7}}>List Insights</span> | `insights:read` | List insights for the active client. | `GET /builder/insights` |
+| `get_insight`<br /><span style={{opacity: 0.7}}>Get Insight</span> | `insights:read` | Get a single insight by ID, including its full config, generated SQL, and cached result. | `GET /builder/insights/:id` |
+| `run_insight`<br /><span style={{opacity: 0.7}}>Run Insight</span> | `insights:read` | Execute a STORED insight and return its rows. | `POST /builder/insights/:id/query` |
+| `preview_insight`<br /><span style={{opacity: 0.7}}>Preview Insight</span> | `insights:read` | Execute an insight CONFIG without saving it — the same \{ insight_type, config \} shape create_insight stores, run in-memory and never persisted. | `POST /builder/insights/preview` |
+| `create_insight`<br /><span style={{opacity: 0.7}}>Create Insight</span> | `insights:write` | Create a new insight for the active client. | `POST /builder/insights` |
+| `update_insight`<br /><span style={{opacity: 0.7}}>Update Insight</span> | `insights:write` | Update an existing insight. | `PATCH /builder/insights/:id` |
+| `delete_insight`<br /><span style={{opacity: 0.7}}>Delete Insight</span> | `insights:write` | Permanently delete an insight by ID. | `DELETE /builder/insights/:id` |
+
+## Data API
+
+People, identities, merges, event volumes, exceptions, heatmaps, BigQuery export.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_people`<br /><span style={{opacity: 0.7}}>List People</span> | `data:read` | Resolved person profiles for this client, most recently seen first — display name, email, company, session counts, first/last channel and UTMs per row, so rows are labelable without a per-person fetch. | `GET /client/v1/data/people` |
+| `get_person`<br /><span style={{opacity: 0.7}}>Get Person</span> | `data:read` | One full person profile: properties, all linked identities, first/last seen, session and device counts, first-touch geo/browser/OS. | `GET /client/v1/data/people/:personId` |
+| `get_person_summary`<br /><span style={{opacity: 0.7}}>Get Person Summary</span> | `data:read` | Compact profile card for one person: properties, identities, first/last seen, plus a `metrics` block (session/device counts, first-touch landing page, UTMs, referrer, geo). | `GET /client/v1/data/people/:personId/summary` |
+| `get_person_activity`<br /><span style={{opacity: 0.7}}>Get Person Activity</span> | `data:read` | One person's raw event stream, newest first. | `GET /client/v1/data/people/:personId/activity` |
+| `get_person_attribution`<br /><span style={{opacity: 0.7}}>Get Person Attribution</span> | `data:read` | One person's marketing attribution: first-touch and last-touch channel/UTMs/referrer with first/last seen timestamps. | `GET /client/v1/data/people/:personId/attribution` |
+| `list_identities`<br /><span style={{opacity: 0.7}}>List Identities</span> | `data:read` | Bulk identity mappings (identity_value -> canonical person_id) for agencies maintaining their own identity graph. | `GET /client/v1/data/identities` |
+| `list_merges`<br /><span style={{opacity: 0.7}}>List Person Merges</span> | `data:read` | Authoritative person-merge history for this client (source_person_id merged into target_person_id, with reason and timestamp), oldest first. | `GET /client/v1/data/merges` |
+| `get_person_merges`<br /><span style={{opacity: 0.7}}>Get Person Merges</span> | `data:read` | Merge history touching ONE person — every merge where they were the source or the target, oldest first. | `GET /client/v1/data/people/:personId/merges` |
+| `list_merge_warnings`<br /><span style={{opacity: 0.7}}>List Merge Warnings</span> | `data:read` | Merges the identity processor REFUSED or flagged as suspicious — each row names the event, the identity value, and the reason. | `GET /client/v1/data/merge-warnings` |
+| `get_bigquery_export`<br /><span style={{opacity: 0.7}}>Get BigQuery Export</span> | `data:read` | This client's BigQuery export handle: the fully-qualified dataset (`mythic-data.<name>`), its table ids, provisioning status and timestamps. | `GET /client/v1/data/export` |
+| `get_bigquery_export_schema`<br /><span style={{opacity: 0.7}}>Get BigQuery Export Schema</span> | `data:read` | The static semantic catalog of the BigQuery export: every table with its columns, types and descriptions. | `GET /client/v1/data/export/schema` |
+| `list_events`<br /><span style={{opacity: 0.7}}>List Events</span> | `data:read` | Every event name this client actually sends, with volumes, over a date range. | `GET /client/v1/data/events/summary` |
+| `list_event_properties`<br /><span style={{opacity: 0.7}}>List Event Properties</span> | `data:read` | Property catalog for this client: every event-property or person-property key ever observed, with an inferred type, a masked sample value, how often it appears and first/last seen. | `GET /client/v1/data/properties` |
+| `get_event_volume_daily`<br /><span style={{opacity: 0.7}}>Get Daily Event Volume</span> | `data:read` | Event counts per day (optionally for one event name via `event_type`). | `GET /client/v1/data/events/daily` |
+| `get_event_trend`<br /><span style={{opacity: 0.7}}>Get Event Trend</span> | `data:read` | Overall event-volume trend over a window — defaults to the last 14 days (`days`), or pass explicit start_date/end_date. | `GET /client/v1/data/events/trend` |
+| `get_event_breakdown`<br /><span style={{opacity: 0.7}}>Get Event Breakdown</span> | `data:read` | Traffic volume broken down by ONE dimension — top pages, referrers, devices, geo, or UTM values. | `GET /client/v1/data/events/breakdown` |
+| `list_exception_issues`<br /><span style={{opacity: 0.7}}>List Exception Issues</span> | `data:read` | Grouped JavaScript error issues — one row per fingerprinted issue (stable issue_id from error type + normalized message) with occurrence/session/user counts and a volume sparkline. | `GET /client/v1/data/exceptions/issues` |
+| `get_exception_issue`<br /><span style={{opacity: 0.7}}>Get Exception Issue</span> | `data:read` | Detail header for ONE grouped error issue by its stable issue_id (from list_exception_issues): counts, first/last seen and volume series over the window. | `GET /client/v1/data/exceptions/issues/:id` |
+| `list_exception_occurrences`<br /><span style={{opacity: 0.7}}>List Exception Occurrences</span> | `data:read` | Raw occurrences of ONE error issue — individual events with parsed stack frames, page URL and session_id, newest first. | `GET /client/v1/data/exceptions/issues/:id/occurrences` |
+| `get_exception_digest`<br /><span style={{opacity: 0.7}}>Get Exception Digest</span> | `data:read` | Weekly error digest in one call: summary with week-over-week deltas, a daily bar series, the top issues, and issues NEW this week (new = not seen in the preceding `new_lookback_days`, default 90). | `GET /client/v1/data/exceptions/digest` |
+| `get_heatmap`<br /><span style={{opacity: 0.7}}>Get Heatmap</span> | `data:read` | Aggregated click grid for one page. | `GET /client/v1/data/heatmap` |
+| `list_heatmap_pages`<br /><span style={{opacity: 0.7}}>List Heatmap Pages</span> | `data:read` | Pages that actually have heatmap data for this client, busiest first — START HERE before get_heatmap or get_heatmap_scroll. | `GET /client/v1/data/heatmap/pages` |
+| `get_heatmap_facets`<br /><span style={{opacity: 0.7}}>Get Heatmap Facets</span> | `data:read` | Filter values that exist for one page (device_type, utm_source, utm_medium, each with session counts), scoped to sessions that actually left heatmap points there — so every value returned yields a non-empty… | `GET /client/v1/data/heatmap/facets` |
+| `get_heatmap_scroll`<br /><span style={{opacity: 0.7}}>Get Heatmap Scroll Depth</span> | `data:read` | Cumulative scroll-depth curve for one page: bands of `band` px with how many sessions reached at least that depth. | `GET /client/v1/data/heatmap/scroll` |
+| `explain_tracking_coverage`<br /><span style={{opacity: 0.7}}>Explain Tracking Coverage</span> | `data:read` | Can a "why is this page losing people" question be answered from the data we have for it? Run this BEFORE any behavioural analysis of a page and take the verdict at face value — it reports session volume, wh… | `GET /client/v1/data/explain/coverage` |
+
+## Sessions
+
+Session analytics — durations, engagement, breakdowns.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_sessions`<br /><span style={{opacity: 0.7}}>List Sessions</span> | `sessions:read` | One row per website session, most recent first — landing/exit page, duration, pageviews, device/browser/geo, UTMs, engagement and bounce flags, identity link. | `GET /client/v1/data/sessions` |
+| `get_sessions_breakdown`<br /><span style={{opacity: 0.7}}>Get Sessions Breakdown</span> | `sessions:read` | Session aggregates grouped by ONE dimension — sessions, engagement, bounce rate etc. | `GET /client/v1/data/sessions/breakdown` |
+
+## Analysis
+
+Constraint finder, correlation, and geo-holdout incrementality (BigQuery-backed).
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `find_constraint`<br /><span style={{opacity: 0.7}}>Find Funnel Constraint</span> | `analysis:read` | End-to-end paid-funnel analysis (Meta spend → pixel sessions → conversions) per campaign/adset/ad: impressions→clicks (ad), clicks→sessions (tracking), sessions→leads (landing), leads→conversions (sales) — w… | `GET /client/v1/constraints` |
+| `list_constraint_events`<br /><span style={{opacity: 0.7}}>List Constraint-Eligible Events</span> | `analysis:read` | Which events can serve as lead_event / conversion_event for the constraint finder, and — the part no other endpoint reports — what share of each actually carries a session. | `GET /client/v1/constraints/events` |
+| `get_constraint_audit`<br /><span style={{opacity: 0.7}}>Constraint Tracking Audit</span> | `analysis:read` | Tracking hygiene per campaign: WHICH campaigns are measurable at all, and WHERE the ad clicks that reached no campaign went. | `GET /client/v1/constraints/audit` |
+| `get_constraint_options`<br /><span style={{opacity: 0.7}}>Constraint Finder Options</span> | `analysis:read` | The constraint finder vocabulary — valid group_by/attribution values, benchmark steps and their precedence chain, defaults, and usage hints. | `GET /client/v1/constraints/options` |
+| `get_constraint_benchmarks`<br /><span style={{opacity: 0.7}}>Get Stored Constraint Benchmarks</span> | `analysis:read` | The standing benchmark targets on file for this location: the account-wide default plus per-campaign targets, applied automatically to every find_constraint call. | `GET /client/v1/constraints/benchmarks` |
+| `get_correlation`<br /><span style={{opacity: 0.7}}>Correlate Metrics</span> | `analysis:read` | Trend of 2-5 metrics over day/week/month buckets with every pairwise Pearson AND Spearman coefficient, a rolling correlation folded into the series rows (`corr:<x>~<y>`, plottable on the same axis), and a le… | `GET /client/v1/correlation` |
+| `list_correlation_metrics`<br /><span style={{opacity: 0.7}}>List Correlatable Metrics</span> | `analysis:read` | Real discovery of what can be correlated for THIS client, not a static list: event families list the event names actually captured in the window, Meta metrics are marked unavailable when the client has no ad… | `GET /client/v1/correlation/metrics` |
+| `get_correlation_options`<br /><span style={{opacity: 0.7}}>Correlation Options</span> | `analysis:read` | The correlation vocabulary at no query cost: grains, the fixed metric registry, the metric-family grammar (family:<event_name>), and every query param with its bounds and defaults. | `GET /client/v1/correlation/options` |
+| `list_incrementality_markets`<br /><span style={{opacity: 0.7}}>List Incrementality Markets</span> | `analysis:read` | Daily revenue by geographic region over a lookback, with candidate CONTROL markets ranked by Pearson correlation against a proposed test set. | `GET /client/v1/incrementality/markets` |
+| `get_incrementality_eligibility`<br /><span style={{opacity: 0.7}}>Incrementality Eligibility</span> | `analysis:read` | Pre-flight before designing any geo experiment: geo coverage of revenue, history depth, matchable market count, and the daily budget the client's noise floor implies for a conclusive 30-day test. | `GET /client/v1/incrementality/eligibility` |
+| `list_incrementality_experiments`<br /><span style={{opacity: 0.7}}>List Incrementality Experiments</span> | `analysis:read` | Every geo-holdout experiment for this client with definition, design (power analysis), result, and derived lifecycle progress (pending/running/cooldown/complete). | `GET /client/v1/incrementality/experiments` |
+| `get_incrementality_experiment`<br /><span style={{opacity: 0.7}}>Get Incrementality Experiment</span> | `analysis:read` | One experiment by id: definition, design, stored result (normalized on read), and lifecycle progress. | `GET /client/v1/incrementality/experiments/:id` |
+| `get_incrementality_launch_plan`<br /><span style={{opacity: 0.7}}>Incrementality Launch Plan</span> | `analysis:read` | The exact Meta ad-side recipe for conducting the holdout: control regions resolved to Meta targeting keys, apply/revert dates, paste-ready API calls. | `GET /client/v1/incrementality/experiments/:id/launch-plan` |
+| `validate_incrementality_experiment`<br /><span style={{opacity: 0.7}}>Validate Incrementality Experiment</span> | `analysis:read` | Two modes, chosen by phase. | `GET /client/v1/incrementality/experiments/:id/validate` |
+| `get_incrementality_coefficients`<br /><span style={{opacity: 0.7}}>Get Incrementality Coefficients</span> | `analysis:read` | The progressive truth: computed experiments pooled by coefficient series (channel + revenue definition + spend scope — only same-estimand experiments pool) into an inverse-variance weighted median. | `GET /client/v1/incrementality/coefficients` |
+| `get_incrementality_coefficients_history`<br /><span style={{opacity: 0.7}}>Incrementality Coefficient History</span> | `analysis:read` | The progressive truth over time: every computed experiment's coefficient in sequence plus the running weighted median at each point, per coefficient series. | `GET /client/v1/incrementality/coefficients/history` |
+| `set_constraint_benchmarks`<br /><span style={{opacity: 0.7}}>Set Constraint Benchmarks</span> | `analysis:write` | Store standing benchmark targets for ONE scope — a campaign (by id or name) or, with campaign omitted, the account-wide default. | `PUT /client/v1/constraints/benchmarks` |
+| `delete_constraint_benchmarks`<br /><span style={{opacity: 0.7}}>Delete Constraint Benchmarks</span> | `analysis:write` | Clear stored benchmark targets for ONE scope, or one step of it. | `DELETE /client/v1/constraints/benchmarks` |
+| `create_incrementality_experiment`<br /><span style={{opacity: 0.7}}>Create Incrementality Experiment</span> | `analysis:write` | Create a geo-holdout experiment (status draft). | `POST /client/v1/incrementality/experiments` |
+| `delete_incrementality_experiment`<br /><span style={{opacity: 0.7}}>Delete Incrementality Experiment</span> | `analysis:write` | Delete an experiment. | `DELETE /client/v1/incrementality/experiments/:id` |
+| `compute_incrementality`<br /><span style={{opacity: 0.7}}>Compute Incrementality</span> | `analysis:write` | Run the iROAS computation for an experiment: weighted-synthetic-control diff-in-diff over pre vs test+cooldown, folded with the Meta spend row, stored as the experiment result (status becomes computed). | `POST /client/v1/incrementality/experiments/:id/compute` |
+
+## Tracking Settings
+
+Per-location ingestion controls: allowed origins, autocapture, heatmaps, experiments, conversions, contract alerts.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `get_tracking_settings`<br /><span style={{opacity: 0.7}}>Get Tracking Settings</span> | `settings:read` | Read this client's per-location tracking settings. | `GET /client/v1/settings/allowed-origins`<br />`GET /client/v1/settings/autocapture`<br />`GET /client/v1/settings/heatmaps`<br />`GET /client/v1/settings/experiments`<br />`GET /client/v1/settings/conversions`<br />`GET /client/v1/settings/contract-alerts` |
+| `update_tracking_setting`<br /><span style={{opacity: 0.7}}>Update Tracking Setting</span> | `settings:write` | Update ONE tracking setting for this client. | `PUT /client/v1/settings/allowed-origins`<br />`PUT /client/v1/settings/autocapture`<br />`PUT /client/v1/settings/heatmaps`<br />`PUT /client/v1/settings/experiments`<br />`PUT /client/v1/settings/conversions`<br />`PUT /client/v1/settings/contract-alerts` |
+
+## Links & Uptime
+
+Link redirects, click analytics, link webhooks, uptime, Core Web Vitals — plus the tenant ingestion kill switch.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `get_client_status`<br /><span style={{opacity: 0.7}}>Get Client Status</span> | `links:read` | Whether this client (location) is active — an inactive client's events are rejected at ingestion. | `GET /client/v1/status` |
+| `list_links`<br /><span style={{opacity: 0.7}}>List Links</span> | `links:read` | This client's link redirects, newest first, each enriched with its all-time click_count. | `GET /client/v1/links` |
+| `get_link_analytics`<br /><span style={{opacity: 0.7}}>Get Link Analytics</span> | `links:read` | Aggregated click analytics per link (totals by slug), optionally narrowed to one slug, a date range, or specific UTM values. | `GET /client/v1/links/analytics` |
+| `get_link_trend`<br /><span style={{opacity: 0.7}}>Get Link Click Trend</span> | `links:read` | Click counts over time for link redirects — the time-series companion to get_link_analytics. | `GET /client/v1/links/trend` |
+| `get_link_click_stream`<br /><span style={{opacity: 0.7}}>Get Link Click Stream</span> | `links:read` | Individual recent link clicks (real-time stream), newest first — who clicked what, with UTM detail. | `GET /client/v1/links/stream` |
+| `list_link_utm_values`<br /><span style={{opacity: 0.7}}>List Link UTM Values</span> | `links:read` | Distinct UTM values seen on link clicks — use to discover what to pass as UTM filters to the analytics/trend/stream tools. | `GET /client/v1/links/utm-values` |
+| `list_link_webhooks`<br /><span style={{opacity: 0.7}}>List Link Uptime Webhooks</span> | `links:read` | The uptime notification webhooks for this client — each fires on link_down and/or link_up when a monitored link destination goes down or recovers. | `GET /client/v1/links/webhooks` |
+| `get_link_uptime`<br /><span style={{opacity: 0.7}}>Get Link Uptime</span> | `links:read` | Current up/down status of each monitored link destination (or one, with slug). | `GET /client/v1/links/uptime` |
+| `get_link_uptime_history`<br /><span style={{opacity: 0.7}}>Get Link Uptime History</span> | `links:read` | Uptime check time-series for monitored link destinations — status codes and response times over a date range. | `GET /client/v1/links/uptime/history` |
+| `get_core_web_vitals`<br /><span style={{opacity: 0.7}}>Get Core Web Vitals</span> | `links:read` | Core Web Vitals measured on this client's site (lcp, fcp, cls, ttfb, fid, inp). | `GET /client/v1/performance/cwv` |
+| `set_client_status`<br /><span style={{opacity: 0.7}}>Set Client Status</span> | `links:write` | Activate or deactivate this client. | `POST /client/v1/status` |
+| `create_link`<br /><span style={{opacity: 0.7}}>Create Link</span> | `links:write` | Create a link redirect. | `POST /client/v1/links` |
+| `update_link`<br /><span style={{opacity: 0.7}}>Update Link</span> | `links:write` | Update fields on an existing link redirect (partial update — only the fields you pass change). | `PATCH /client/v1/links/:linkId` |
+| `delete_link`<br /><span style={{opacity: 0.7}}>Delete Link</span> | `links:write` | Permanently delete a link redirect. | `DELETE /client/v1/links/:linkId` |
+| `create_link_webhook`<br /><span style={{opacity: 0.7}}>Create Link Uptime Webhook</span> | `links:write` | Create a webhook that is called when a monitored link destination goes down (link_down) or recovers (link_up). | `POST /client/v1/links/webhooks` |
+| `update_link_webhook`<br /><span style={{opacity: 0.7}}>Update Link Uptime Webhook</span> | `links:write` | Update an uptime webhook (partial — only the fields you pass change). | `PATCH /client/v1/links/webhooks/:webhookId` |
+| `delete_link_webhook`<br /><span style={{opacity: 0.7}}>Delete Link Uptime Webhook</span> | `links:write` | Permanently delete an uptime webhook. | `DELETE /client/v1/links/webhooks/:webhookId` |
+
+## Airbyte Sync
+
+Agency-grain sync orchestration: connections, schedules, pipelines, sync history.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_airbyte_platforms`<br /><span style={{opacity: 0.7}}>List Airbyte Platforms</span> | `airbyte:read` | The ad/CRM platforms Mythic can connect through Airbyte (google_ads, meta_ads, bing_ads, tiktok_ads, salesforce, …) with their default streams, sync options and whether they support the OAuth consent flow. | `GET /client/v1/airbyte/platforms` |
+| `get_airbyte_config`<br /><span style={{opacity: 0.7}}>Get Airbyte Config</span> | `airbyte:read` | This agency's Airbyte workspace configuration and provisioning status. | `GET /client/v1/airbyte/config` |
+| `list_airbyte_webhooks`<br /><span style={{opacity: 0.7}}>List Airbyte Webhook Subscriptions</span> | `airbyte:read` | The agency's sync-notification relay subscriptions. | `GET /client/v1/airbyte/webhooks` |
+| `list_airbyte_connections`<br /><span style={{opacity: 0.7}}>List Airbyte Connections</span> | `airbyte:read` | Every Airbyte connection this agency owns, optionally filtered. | `GET /client/v1/airbyte/connections` |
+| `get_airbyte_connection`<br /><span style={{opacity: 0.7}}>Get Airbyte Connection</span> | `airbyte:read` | One connection by its Mythic id — platform, client, enabled streams, schedule, sync_dow, last sync. | `GET /client/v1/airbyte/connections/:id` |
+| `list_airbyte_jobs`<br /><span style={{opacity: 0.7}}>List Airbyte Jobs</span> | `airbyte:read` | A connection's recent sync jobs, fetched live from Airbyte. | `GET /client/v1/airbyte/connections/:id/jobs` |
+| `list_airbyte_sync_events`<br /><span style={{opacity: 0.7}}>List Airbyte Sync Events</span> | `airbyte:read` | Sync history as received from Airbyte's notifications, newest first. | `GET /client/v1/airbyte/sync-events` |
+| `get_airbyte_stats`<br /><span style={{opacity: 0.7}}>Get Airbyte Stats</span> | `airbyte:read` | Aggregate sync statistics across all of this agency’s connections (volumes, success rates). | `GET /client/v1/airbyte/stats` |
+| `get_airbyte_health`<br /><span style={{opacity: 0.7}}>Get Airbyte Health</span> | `airbyte:read` | Per-connection health: latest sync plus the consecutive-failure streak. | `GET /client/v1/airbyte/health` |
+| `get_airbyte_pipeline`<br /><span style={{opacity: 0.7}}>Get Airbyte Pipeline</span> | `airbyte:read` | One client's pipeline config: the connections in scope, enabled flag, run_hour_utc, and completion-webhook settings (the secret is never returned — only has_webhook_secret). | `GET /client/v1/airbyte/pipelines/:clientId` |
+| `list_airbyte_pipeline_candidates`<br /><span style={{opacity: 0.7}}>List Airbyte Pipeline Candidates</span> | `airbyte:read` | This client's connections annotated with in_scope (already in the pipeline) and suggested (currently active — a reasonable default). | `GET /client/v1/airbyte/pipelines/:clientId/candidates` |
+| `list_airbyte_pipeline_runs`<br /><span style={{opacity: 0.7}}>List Airbyte Pipeline Runs</span> | `airbyte:read` | Recent pipeline runs for a client, newest first. | `GET /client/v1/airbyte/pipelines/:clientId/runs` |
+| `get_airbyte_pipeline_run`<br /><span style={{opacity: 0.7}}>Get Airbyte Pipeline Run</span> | `airbyte:read` | One pipeline run with its per-connection steps — what synced, what failed and why, and whether the completion webhook was delivered. | `GET /client/v1/airbyte/pipelines/:clientId/runs/:runId` |
+| `update_airbyte_config`<br /><span style={{opacity: 0.7}}>Update Airbyte Config</span> | `airbyte:write` | Set the origins the OAuth consent flow may redirect the browser back to (replaces the stored list). | `PATCH /client/v1/airbyte/config` |
+| `provision_airbyte`<br /><span style={{opacity: 0.7}}>Provision Airbyte Workspace</span> | `airbyte:write` | Provision (or adopt) this agency's Airbyte workspace. | `POST /client/v1/airbyte/config/provision` |
+| `register_airbyte_notifications`<br /><span style={{opacity: 0.7}}>Register Airbyte Notifications</span> | `airbyte:write` | Point this agency's Airbyte workspace at Mythic's sync-notification receiver. | `POST /client/v1/airbyte/config/notifications` |
+| `create_airbyte_webhook`<br /><span style={{opacity: 0.7}}>Create Airbyte Webhook Subscription</span> | `airbyte:write` | Subscribe an agency URL to relayed sync notifications (Mythic keeps Airbyte's single webhook slot and forwards). | `POST /client/v1/airbyte/webhooks` |
+| `delete_airbyte_webhook`<br /><span style={{opacity: 0.7}}>Delete Airbyte Webhook Subscription</span> | `airbyte:write` | Remove one relay subscription. | `DELETE /client/v1/airbyte/webhooks/:id` |
+| `create_airbyte_connection`<br /><span style={{opacity: 0.7}}>Create Airbyte Connection</span> | `airbyte:write` | Create a source + connection for one client. | `POST /client/v1/airbyte/connections` |
+| `replace_airbyte_connection`<br /><span style={{opacity: 0.7}}>Replace Airbyte Connection Settings</span> | `airbyte:write` | PUT a connection's settings: every field you send replaces what is stored, and `streams` in particular replaces the ENTIRE enabled-stream list — a stream you leave out stops syncing, so send the complete set… | `PUT /client/v1/airbyte/connections/:id` |
+| `delete_airbyte_connection`<br /><span style={{opacity: 0.7}}>Delete Airbyte Connection</span> | `airbyte:write` | Delete a connection (and its Airbyte source). | `DELETE /client/v1/airbyte/connections/:id` |
+| `trigger_airbyte_sync`<br /><span style={{opacity: 0.7}}>Trigger Airbyte Sync</span> | `airbyte:write` | Start a sync job on one connection now, regardless of its schedule. | `POST /client/v1/airbyte/connections/:id/sync` |
+| `set_airbyte_schedule`<br /><span style={{opacity: 0.7}}>Set Airbyte Schedule</span> | `airbyte:write` | Change one connection's own Airbyte schedule. | `PATCH /client/v1/airbyte/connections/:id/schedule` |
+| `initiate_airbyte_oauth`<br /><span style={{opacity: 0.7}}>Initiate Airbyte OAuth</span> | `airbyte:write` | Start the OAuth handoff for an OAuth-capable platform. | `POST /client/v1/airbyte/oauth/initiate` |
+| `set_airbyte_pipeline`<br /><span style={{opacity: 0.7}}>Set Airbyte Pipeline</span> | `airbyte:write` | Create or update a client's pipeline (orchestrated daily sync of a set of connections, driven by Mythic's cron, with a signed completion webhook once the whole set is done). | `PUT /client/v1/airbyte/pipelines/:clientId` |
+| `start_airbyte_pipeline_run`<br /><span style={{opacity: 0.7}}>Start Airbyte Pipeline Run</span> | `airbyte:write` | Start a pipeline run now instead of waiting for run_hour_utc. | `POST /client/v1/airbyte/pipelines/:clientId/runs` |
+| `airbyte_pipeline_run_action`<br /><span style={{opacity: 0.7}}>Airbyte Pipeline Run Action</span> | `airbyte:write` | Act on one pipeline run. | `POST /client/v1/airbyte/pipelines/:clientId/runs/:runId/retry`<br />`POST /client/v1/airbyte/pipelines/:clientId/runs/:runId/force`<br />`POST /client/v1/airbyte/pipelines/:clientId/runs/:runId/redeliver` |
+
+## Segments
+
+Stored person segments — definitions, live counts, membership.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_segments`<br /><span style={{opacity: 0.7}}>List Segments</span> | `segments:read` | Every stored segment for this client — reusable audience definitions over person profiles. | `GET /builder/segments` |
+| `get_segment`<br /><span style={{opacity: 0.7}}>Get Segment</span> | `segments:read` | One segment by id, including its full filter definition. | `GET /builder/segments/:id` |
+| `get_segment_count`<br /><span style={{opacity: 0.7}}>Get Segment Count</span> | `segments:read` | Live person count for a segment — how many people match its definition right now. | `GET /builder/segments/:id/count` |
+| `list_segment_members`<br /><span style={{opacity: 0.7}}>List Segment Members</span> | `segments:read` | The people currently matching a segment, resolved live, with pagination. | `GET /builder/segments/:id/members` |
+| `create_segment`<br /><span style={{opacity: 0.7}}>Create Segment</span> | `segments:write` | Create a segment from a filter definition. | `POST /builder/segments` |
+| `update_segment`<br /><span style={{opacity: 0.7}}>Update Segment</span> | `segments:write` | Update a segment. | `PATCH /builder/segments/:id` |
+| `delete_segment`<br /><span style={{opacity: 0.7}}>Delete Segment</span> | `segments:write` | Permanently delete a segment. | `DELETE /builder/segments/:id` |
+
+## Dashboards
+
+Collections of insights arranged into dashboards.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_dashboards`<br /><span style={{opacity: 0.7}}>List Dashboards</span> | `dashboards:read` | List all dashboards, optionally filtered by location_id. | `GET /builder/dashboards` |
+| `get_dashboard`<br /><span style={{opacity: 0.7}}>Get Dashboard</span> | `dashboards:read` | Get a dashboard by ID, including all its insight items with layout and insight details. | `GET /builder/dashboards/:id` |
+| `create_dashboard`<br /><span style={{opacity: 0.7}}>Create Dashboard</span> | `dashboards:write` | Create a new dashboard for the active client. | `POST /builder/dashboards` |
+| `update_dashboard`<br /><span style={{opacity: 0.7}}>Update Dashboard</span> | `dashboards:write` | Update dashboard metadata. | `PATCH /builder/dashboards/:id` |
+| `delete_dashboard`<br /><span style={{opacity: 0.7}}>Delete Dashboard</span> | `dashboards:write` | Permanently delete a dashboard and all its insight associations. | `DELETE /builder/dashboards/:id` |
+| `add_insight_to_dashboard`<br /><span style={{opacity: 0.7}}>Add Insight to Dashboard</span> | `dashboards:write` | Add an insight to a dashboard with responsive grid layout positions. | `POST /builder/dashboards/:id/insights` |
+| `remove_insight_from_dashboard`<br /><span style={{opacity: 0.7}}>Remove Insight from Dashboard</span> | `dashboards:write` | Remove an insight from a dashboard. | `DELETE /builder/dashboard-insights/:id` |
+
+## Canvases
+
+Freeform node/edge canvases with attached events.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_canvases`<br /><span style={{opacity: 0.7}}>List Canvases</span> | `canvases:read` | List all canvases (visual tag management configurations), optionally filtered by tenant_key. | `GET /builder/canvases` |
+| `get_canvas`<br /><span style={{opacity: 0.7}}>Get Canvas</span> | `canvases:read` | Get a canvas with all its nodes, edges, node URLs, and node events. | `GET /builder/canvases/:id` |
+| `create_canvas`<br /><span style={{opacity: 0.7}}>Create Canvas</span> | `canvases:write` | Create a new canvas for visual tag management for the active client. | `POST /builder/canvases` |
+| `update_canvas`<br /><span style={{opacity: 0.7}}>Update Canvas</span> | `canvases:write` | Update canvas metadata. | `PATCH /builder/canvases/:id` |
+| `delete_canvas`<br /><span style={{opacity: 0.7}}>Delete Canvas</span> | `canvases:write` | Permanently delete a canvas and all its nodes, edges, and events (cascading). | `DELETE /builder/canvases/:id` |
+| `add_canvas_node`<br /><span style={{opacity: 0.7}}>Add Canvas Node</span> | `canvases:write` | Add a node (page, action, decision, or offsite) to a canvas. | — |
+| `update_canvas_node`<br /><span style={{opacity: 0.7}}>Update Canvas Node</span> | `canvases:write` | Update a canvas node's properties. | — |
+| `delete_canvas_node`<br /><span style={{opacity: 0.7}}>Delete Canvas Node</span> | `canvases:write` | Delete a canvas node and its associated URLs, events, and edges (cascading). | — |
+| `add_canvas_edge`<br /><span style={{opacity: 0.7}}>Add Canvas Edge</span> | `canvases:write` | Connect two canvas nodes with an edge (defines flow between pages/actions). | — |
+| `delete_canvas_edge`<br /><span style={{opacity: 0.7}}>Delete Canvas Edge</span> | `canvases:write` | Remove an edge between two canvas nodes. | — |
+| `add_node_event`<br /><span style={{opacity: 0.7}}>Add Node Event</span> | `canvases:write` | Add a tracking event to a canvas node (e.g., fire a Meta Pixel event on page load). | `POST /builder/canvases/:id/nodes/:nodeId/events` |
+| `delete_node_event`<br /><span style={{opacity: 0.7}}>Delete Node Event</span> | `canvases:write` | Remove a tracking event from a canvas node. | `DELETE /builder/canvases/:id/events/:eventId` |
+
+## Session Replays
+
+Compact, LLM-ready timelines of recorded visitor sessions (no PII).
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_replays`<br /><span style={{opacity: 0.7}}>List Replays</span> | `replays:read` | Index of sessions that have a screen recording, with interaction counters merged in where available (duration, clicks, keypresses, console_errors, network_count, last_url). | `GET /client/v1/data/replays` |
+| `get_session_timeline`<br /><span style={{opacity: 0.7}}>Get Session Timeline</span> | `replays:read` | Compact, chronological timeline of one visitor session for the active client — page journey, dwell time, form submissions, field inputs, identify, custom events and errors. | `GET /client/v1/data/replays/:sessionId/timeline` |
+
+## Destinations
+
+Activation destinations events are forwarded to.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_destinations`<br /><span style={{opacity: 0.7}}>List Destinations</span> | `destinations:read` | List activation destinations for the active client (webhook, Meta CAPI, Google Ads). | `GET /client/v1/destinations` |
+| `get_destination`<br /><span style={{opacity: 0.7}}>Get Destination</span> | `destinations:read` | Get a single activation destination by ID, including its full action_config and trigger_rules. | `GET /client/v1/destinations/:id` |
+| `list_destination_deliveries`<br /><span style={{opacity: 0.7}}>List Destination Deliveries</span> | `destinations:read` | Delivery log for this client's destinations, newest first — one row per delivery attempt with status (success\|failed\|retrying\|skipped\|test), response status, error, and timing. | `GET /client/v1/destinations/deliveries`<br />`GET /client/v1/destinations/:id/deliveries` |
+| `get_destination_delivery`<br /><span style={{opacity: 0.7}}>Get Destination Delivery</span> | `destinations:read` | Full detail for ONE delivery (destination + source event uuid from list_destination_deliveries): the request actually sent (body + headers), the destination's response, attempt counts, field warnings/violati… | `GET /client/v1/destinations/:id/deliveries/:eventUuid` |
+| `get_destination_delivery_status`<br /><span style={{opacity: 0.7}}>Get Destination Delivery Status</span> | `destinations:read` | What Google did with a delivery AFTER accepting it — google_ads / google_analytics destinations only. | `GET /client/v1/destinations/:id/deliveries/:eventUuid/status` |
+| `get_destination_health`<br /><span style={{opacity: 0.7}}>Get Destination Health</span> | `destinations:read` | Per-destination delivery health rollup over a recent window: success/failure/skip counts, success rate, latency (avg + p95), queue lag, last error, and a credential_ok flag (false when the most recent failur… | `GET /client/v1/destinations/health` |
+| `verify_destination`<br /><span style={{opacity: 0.7}}>Verify Destination</span> | `destinations:read` | Did deliveries actually COUNT downstream? convert_experiments destinations only. | `GET /client/v1/destinations/:id/verification` |
+| `list_destination_credentials`<br /><span style={{opacity: 0.7}}>List Destination Credentials</span> | `destinations:read` | Which destination credentials are stored for this client — METADATA ONLY (id, destination_type, credential_name, created/updated timestamps). | `GET /client/v1/destinations/credentials` |
+| `get_destination_oauth_client`<br /><span style={{opacity: 0.7}}>Get Destination OAuth Client</span> | `destinations:read` | Which Google OAuth client this agency's consent flows run as: has_client (agency registered its own), source ('agency' or the platform default), the client_id (not a secret — what you check against the Cloud… | `GET /client/v1/destinations/oauth/client` |
+| `create_destination`<br /><span style={{opacity: 0.7}}>Create Destination</span> | `destinations:write` | Create an activation destination for the active client. | `POST /client/v1/destinations` |
+| `update_destination`<br /><span style={{opacity: 0.7}}>Update Destination</span> | `destinations:write` | Update an existing destination. | `PATCH /client/v1/destinations/:id` |
+| `delete_destination`<br /><span style={{opacity: 0.7}}>Delete Destination</span> | `destinations:write` | Permanently delete an activation destination by ID. | `DELETE /client/v1/destinations/:id` |
+| `test_destination`<br /><span style={{opacity: 0.7}}>Test Destination</span> | `destinations:write` | Fire a REAL test delivery through one destination — this sends an actual event to the live ad platform using the stored credential, and the attempt lands in the delivery log (status "test"). | `POST /client/v1/destinations/:id/test` |
+| `set_destination_credential`<br /><span style={{opacity: 0.7}}>Set Destination Credential</span> | `destinations:write` | Store (or rotate — same type+name overwrites) the credential one destination type delivers with. | `PUT /client/v1/destinations/credentials/:type` |
+| `delete_destination_credential`<br /><span style={{opacity: 0.7}}>Delete Destination Credential</span> | `destinations:write` | Delete stored credential(s) for one destination type. | `DELETE /client/v1/destinations/credentials/:type` |
+| `set_destination_oauth_client`<br /><span style={{opacity: 0.7}}>Set Destination OAuth Client</span> | `destinations:write` | Register the agency's OWN Google OAuth client for destination consent flows (their brand on the consent screen, their API quota) instead of the platform default. | `PUT /client/v1/destinations/oauth/client` |
+| `delete_destination_oauth_client`<br /><span style={{opacity: 0.7}}>Delete Destination OAuth Client</span> | `destinations:write` | Remove the agency's registered Google OAuth client; future consent flows fall back to the platform default (Mythic's brand and quota). | `DELETE /client/v1/destinations/oauth/client` |
+| `initiate_destination_oauth`<br /><span style={{opacity: 0.7}}>Initiate Destination OAuth</span> | `destinations:write` | Start the Google consent flow that stores a google_ads / google_analytics credential WITHOUT anyone handling a refresh token. | `POST /client/v1/destinations/oauth/initiate` |
+
+## Tags
+
+GTM-like tags fired by the SDK.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_tags`<br /><span style={{opacity: 0.7}}>List Tags</span> | `tags:read` | List tag assignments (tenant_tags) for the active client. | `GET /client/v1/config/tags` |
+| `create_tag`<br /><span style={{opacity: 0.7}}>Create Tag Assignment</span> | `tags:write` | Assign a tag to the active client (tenant_tags row). | `POST /client/v1/config/tags` |
+| `update_tag`<br /><span style={{opacity: 0.7}}>Update Tag Assignment</span> | `tags:write` | Update a tag assignment for the active client. | `PATCH /client/v1/config/tags/:tagId` |
+| `delete_tag`<br /><span style={{opacity: 0.7}}>Delete Tag Assignment</span> | `tags:write` | Remove a tag assignment from the active client. | `DELETE /client/v1/config/tags/:tagId` |
+
+## Snippets
+
+Custom code snippets injected by the SDK.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_snippets`<br /><span style={{opacity: 0.7}}>List Snippets</span> | `snippets:read` | List custom code snippets (tenant_snippets) for the active client. | `GET /client/v1/config/snippets` |
+| `get_snippet`<br /><span style={{opacity: 0.7}}>Get Snippet</span> | `snippets:read` | Get a single code snippet by ID, including its full code. | `GET /client/v1/config/snippets/:id` |
+| `create_snippet`<br /><span style={{opacity: 0.7}}>Create Snippet</span> | `snippets:write` | Create a custom code snippet for the active client. | `POST /client/v1/config/snippets` |
+| `update_snippet`<br /><span style={{opacity: 0.7}}>Update Snippet</span> | `snippets:write` | Update a code snippet. | `PATCH /client/v1/config/snippets/:id` |
+| `delete_snippet`<br /><span style={{opacity: 0.7}}>Delete Snippet</span> | `snippets:write` | Permanently delete a code snippet by ID. | `DELETE /client/v1/config/snippets/:id` |
+
+## Event Contracts
+
+Declared per-event property schemas and their violation reports.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_event_contracts`<br /><span style={{opacity: 0.7}}>List Event Contracts</span> | `contracts:read` | The event contracts stored for this client — each one an event name plus the properties it is declared to carry, their types, and which are required. | `GET /client/v1/contracts` |
+| `suggest_event_contract`<br /><span style={{opacity: 0.7}}>Suggest Event Contract</span> | `contracts:read` | Infer a contract for one event from its live traffic — the fastest way to author one. | `GET /client/v1/contracts/suggest` |
+| `check_event_contracts`<br /><span style={{opacity: 0.7}}>Check Event Contracts</span> | `contracts:read` | Diff every stored contract (or one, with `event`) against live traffic and report violations, worst first. | `GET /client/v1/contracts/violations` |
+| `get_contract_samples`<br /><span style={{opacity: 0.7}}>Get Contract Violation Samples</span> | `contracts:read` | The actual offending events behind ONE violation from check_event_contracts — up to 50 raw examples with session_id and $current_url, so you can see where the bad data comes from. | `GET /client/v1/contracts/samples` |
+| `set_event_contract`<br /><span style={{opacity: 0.7}}>Set Event Contract</span> | `contracts:write` | Create or replace the contract for ONE event. | `PUT /client/v1/contracts` |
+| `delete_event_contract`<br /><span style={{opacity: 0.7}}>Delete Event Contract</span> | `contracts:write` | Remove one event contract. | `DELETE /client/v1/contracts/:event` |
+
+## Transformers
+
+Event transformers applied during ingestion.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_transformers`<br /><span style={{opacity: 0.7}}>List Transformers</span> | `transformers:read` | List event enrichment transformers for the active client. | `GET /client/v1/config/transformers` |
+| `get_transformer`<br /><span style={{opacity: 0.7}}>Get Transformer</span> | `transformers:read` | Get a single transformer by ID, including its full config. | `GET /client/v1/config/transformers/:id` |
+| `create_transformer`<br /><span style={{opacity: 0.7}}>Create Transformer</span> | `transformers:write` | Create an event enrichment transformer for the active client. | `POST /client/v1/config/transformers` |
+| `update_transformer`<br /><span style={{opacity: 0.7}}>Update Transformer</span> | `transformers:write` | Update a transformer. | `PATCH /client/v1/config/transformers/:id` |
+| `delete_transformer`<br /><span style={{opacity: 0.7}}>Delete Transformer</span> | `transformers:write` | Permanently delete a transformer by ID. | `DELETE /client/v1/config/transformers/:id` |
+
+## Agency rollups
+
+Registered only for agency-wide keys, and ungated by scope: they are read-only
+views of the agency's own footprint across every client it owns. No client
+selection is needed — the agency is the scope.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_clients`<br /><span style={{opacity: 0.7}}>List Clients</span> | — | List the clients (locations) this agency key can operate on. | `GET /builder/locations`<br />`GET /client/v1/agency/locations` |
+| `select_client`<br /><span style={{opacity: 0.7}}>Select Client</span> | — | Set the active client for this session by id (from list_clients). | — |
+| `get_agency_stats`<br /><span style={{opacity: 0.7}}>Get Agency Stats</span> | — | Cross-location rollup for the whole agency: one row per location with event volume, unique users, unique sessions over a date window, plus the all-time live person count. | `GET /client/v1/agency/stats` |
+| `get_agency_destination_health`<br /><span style={{opacity: 0.7}}>Get Agency Destination Health</span> | — | Delivery health of every location's activation destinations over a trailing window — one row per (location, destination) with success rate, failure counts, and the last error. | `GET /client/v1/agency/destinations/health` |
+| `get_agency_contracts_summary`<br /><span style={{opacity: 0.7}}>Get Agency Contracts Summary</span> | — | Per location: how many event contracts are declared, whether the daily contract-alert webhook is configured, and when the last alert fired. | `GET /client/v1/agency/contracts/summary` |
+| `get_agency_usage`<br /><span style={{opacity: 0.7}}>Get Agency API Usage</span> | — | The agency's own API + MCP usage, daily per location/surface/route: request counts, auth failures, rate-limited and error counts, deprecated-auth usage, and latency. | `GET /client/v1/agency/usage` |

@@ -133,24 +133,11 @@ of the REST routes. No `select_client` needed: the agency itself is the scope.
 
 Sixteen scope families gate the remaining 167 client-scoped tools:
 
-| Resource | Tools |
-|----------|-------|
-| `insights` | `list_insights`, `get_insight`, `run_insight`, `preview_insight`, `create_insight`, `update_insight`, `delete_insight` |
-| `data` | Read-only. People & identity: `list_people`, `get_person`, `get_person_summary`, `get_person_activity`, `get_person_attribution`, `list_identities`, `list_merges`, `get_person_merges`, `list_merge_warnings`. Events: `list_events`, `list_event_properties`, `get_event_volume_daily`, `get_event_trend`, `get_event_breakdown`. Export: `get_bigquery_export`, `get_bigquery_export_schema`. Errors: `list_exception_issues`, `get_exception_issue`, `list_exception_occurrences`, `get_exception_digest`. Heatmaps: `get_heatmap`, `list_heatmap_pages`, `get_heatmap_facets`, `get_heatmap_scroll`. Plus `explain_tracking_coverage` |
-| `sessions` | Read-only: `list_sessions`, `get_sessions_breakdown` |
-| `analysis` | Constraint finder (`find_constraint`, `list_constraint_events`, `get_constraint_audit`, `get_constraint_options`, benchmark get/set/delete), correlation (`get_correlation`, `list_correlation_metrics`, `get_correlation_options`), and incrementality (markets, eligibility, experiment CRUD, launch plan, validate, `compute_incrementality`, coefficients + history) |
-| `settings` | `get_tracking_settings`, `update_tracking_setting` — allowed origins, autocapture, heatmaps, experiments, conversions, contract alerts |
-| `links` | `get_client_status`, `set_client_status` (the tenant ingestion kill switch), link CRUD, click analytics/trend/stream, UTM values, uptime webhooks CRUD, uptime status + history, `get_core_web_vitals` |
-| `airbyte` | Agency-grain: config get/update, `provision_airbyte`, `register_airbyte_notifications`, relay webhook CRUD, connection CRUD + `replace_airbyte_connection`, `trigger_airbyte_sync`, `list_airbyte_jobs`, `set_airbyte_schedule`, `initiate_airbyte_oauth`, `list_airbyte_sync_events`, stats/health, and pipeline get/set/candidates/runs/start/action |
-| `segments` | `list_segments`, `get_segment`, `get_segment_count`, `list_segment_members`, `create_segment`, `update_segment`, `delete_segment` |
-| `dashboards` | `list_dashboards`, `get_dashboard`, `create_dashboard`, `update_dashboard`, `delete_dashboard`, `add_insight_to_dashboard`, `remove_insight_from_dashboard` |
-| `canvases` | `list_canvases`, `get_canvas`, `create_canvas`, `update_canvas`, `delete_canvas`, and node/edge/event tools |
-| `replays` | Read-only: `list_replays`, `get_session_timeline` |
-| `destinations` | `list_destinations`, `get_destination`, `create_destination`, `update_destination`, `delete_destination`, plus delivery/health/verification reads (`list_destination_deliveries`, `get_destination_delivery`, `get_destination_delivery_status`, `get_destination_health`, `verify_destination`), `test_destination`, and credential/OAuth management (`list_destination_credentials`, `set_destination_credential`, `delete_destination_credential`, `get_destination_oauth_client`, `set_destination_oauth_client`, `delete_destination_oauth_client`, `initiate_destination_oauth`) |
-| `tags` | `list_tags`, `create_tag`, `update_tag`, `delete_tag` |
-| `snippets` | `list_snippets`, `get_snippet`, `create_snippet`, `update_snippet`, `delete_snippet` |
-| `contracts` | `list_event_contracts`, `suggest_event_contract`, `check_event_contracts`, `get_contract_samples`, `set_event_contract`, `delete_event_contract` |
-| `transformers` | `list_transformers`, `get_transformer`, `create_transformer`, `update_transformer`, `delete_transformer` |
+`insights`, `data`, `sessions`, `analysis`, `settings`, `links`, `airbyte`, `segments`, `dashboards`, `canvases`, `replays`, `destinations`, `tags`, `snippets`, `contracts`, `transformers`.
+
+**[See the Tool Reference](/mcp/tools)** for every tool by name, the scope it
+needs, what it does, and the API route it proxies. That page is generated from
+the server's own registry, so it is never out of step with what the server serves.
 
 For each `read-write` family, the `:read` scope grants the read tools and the
 `:write` scope grants the write tools (write implies read at the gate);
