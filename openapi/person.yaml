@@ -13,8 +13,6 @@ servers:
 security:
   - AgencyKey: []
   - SecretKey: []
-  - AgencyKeyQuery: []
-  - SecretKeyQuery: []
 paths:
   /people:
     get:
@@ -437,16 +435,6 @@ components:
       description: >
         Location secret key as bearer token. Format: `Bearer sk_...`.
         Resolves its own location — no `location_id` needed.
-    AgencyKeyQuery:
-      type: apiKey
-      in: query
-      name: ak
-      description: Agency key as a query parameter. Alternative to the Authorization header.
-    SecretKeyQuery:
-      type: apiKey
-      in: query
-      name: sk
-      description: Location secret key as a query parameter. Alternative to the Authorization header.
   parameters:
     PersonId:
       name: personId

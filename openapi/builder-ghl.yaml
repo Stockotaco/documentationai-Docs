@@ -10,8 +10,6 @@ servers:
   - url: https://mythic-analytics.gulp.workers.dev/builder
 security:
   - BearerAuth: []
-  - AgencyKeyQuery: []
-  - SecretKeyQuery: []
 paths:
   /ghl/funnels:
     get:
@@ -84,16 +82,6 @@ components:
       description: >-
         Builder key as a bearer token. Use an agency key (`Bearer ak_...`) or a
         viewer key (`Bearer sk_...`).
-    AgencyKeyQuery:
-      type: apiKey
-      in: query
-      name: ak
-      description: "Agency key passed as a query parameter. Format: `ak_...`."
-    SecretKeyQuery:
-      type: apiKey
-      in: query
-      name: sk
-      description: "Viewer (secret) key passed as a query parameter. Format: `sk_...`."
   parameters:
     LocationId:
       name: location_id

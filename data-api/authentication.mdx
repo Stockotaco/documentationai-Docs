@@ -7,23 +7,15 @@ description: >-
 
 ## Authentication
 
-The Data API accepts two key types. Both are passed as a bearer token in the `Authorization` header, or — for server-to-server tooling — as a query parameter.
+The Data API accepts two key types, both passed as a bearer token in the `Authorization` header.
 
-| Key type | Prefix | Scope | Query parameter |
-|----------|--------|-------|-----------------|
-| Agency key | `ak_` | All locations linked to the agency | `?ak=` |
-| Location secret key | `sk_` | A single location | `?sk=` |
+| Key type | Prefix | Scope |
+|----------|--------|-------|
+| Agency key | `ak_` | All locations linked to the agency |
+| Location secret key | `sk_` | A single location |
 
 <ParamField header="Authorization" param-type="string" required="true" deprecated="false">
   Bearer token. Format: `Bearer ak_...` for an agency key, or `Bearer sk_...` for a location secret key.
-</ParamField>
-
-<ParamField query="ak" param-type="string" required="false" deprecated="false">
-  Agency key as a query parameter. Alternative to the `Authorization` header.
-</ParamField>
-
-<ParamField query="sk" param-type="string" required="false" deprecated="false">
-  Location secret key as a query parameter. Alternative to the `Authorization` header.
 </ParamField>
 
 <Callout kind="alert">

@@ -18,8 +18,6 @@ servers:
   - url: https://mythic-analytics.gulp.workers.dev
 security:
   - BearerAuth: []
-  - AgencyKeyQuery: []
-  - SecretKeyQuery: []
 paths:
   /client/v1/contracts:
     get:
@@ -461,14 +459,6 @@ components:
       type: http
       scheme: bearer
       description: Agency key (`ak_`) or location secret key (`sk_`).
-    AgencyKeyQuery:
-      type: apiKey
-      in: query
-      name: ak
-    SecretKeyQuery:
-      type: apiKey
-      in: query
-      name: sk
   parameters:
     LocationId:
       name: location_id

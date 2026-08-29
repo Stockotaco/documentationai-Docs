@@ -18,19 +18,15 @@ Write endpoints (`POST`, `PATCH`, `DELETE`) require an agency key and reject vie
 
 ## Passing the key
 
-Send the key as a bearer token, or as a query parameter (convenient for iframe embeds).
+Send the key as a bearer token.
 
 <ParamField header="Authorization" param-type="string" required="false" deprecated="false">
   Bearer token. Format: `Bearer ak_...` or `Bearer sk_...`.
 </ParamField>
 
-<ParamField query="ak" param-type="string" required="false" deprecated="false">
-  Agency key as a query parameter.
-</ParamField>
-
-<ParamField query="sk" param-type="string" required="false" deprecated="false">
-  Viewer key as a query parameter.
-</ParamField>
+<Callout kind="info">
+  The one exception is the embed **page**: `GET /builder?ak=ak_...` takes the key in the query string, because a document request cannot send an `Authorization` header. Adding an agency-linked location key as a second parameter — `GET /builder?ak=ak_...&sk=sk_...` — scopes the embedded workspace to that location. Every JSON endpoint below requires the header.
+</Callout>
 
 ## Location scoping
 
@@ -39,10 +35,6 @@ A viewer key is bound to one location, so requests are automatically scoped. An 
 <ParamField query="location_id" param-type="string" required="false" deprecated="false">
   The client location to scope the request to. **Required with an agency key** on location-scoped endpoints; the location must be linked to that agency. Ignored with a viewer key.
 </ParamField>
-
-<Callout kind="info">
-  With an agency key, an agency-linked location can also be passed to the embed page as a second key: `GET /builder?ak=ak_...&sk=sk_...` scopes the embedded workspace to that location.
-</Callout>
 
 ## Validate a key
 

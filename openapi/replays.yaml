@@ -39,8 +39,6 @@ servers:
   - url: https://mythic-analytics.gulp.workers.dev/client/v1/data
 security:
   - BearerAuth: []
-  - AgencyKeyQuery: []
-  - SecretKeyQuery: []
 paths:
   /replays:
     get:
@@ -222,16 +220,6 @@ components:
       description: >
         Agency key (`ak_`) or location secret key (`sk_`) as a bearer token.
         Format: `Bearer ak_...` or `Bearer sk_...`.
-    AgencyKeyQuery:
-      type: apiKey
-      in: query
-      name: ak
-      description: Agency key passed as a query parameter. Prefer the `Authorization` header.
-    SecretKeyQuery:
-      type: apiKey
-      in: query
-      name: sk
-      description: Location secret key passed as a query parameter. Prefer the `Authorization` header.
   parameters:
     LocationIdHeader:
       name: X-Location-Id

@@ -21,18 +21,10 @@ https://mythic-analytics.gulp.workers.dev/builder
 
 ## Authentication
 
-Pass a Builder key as a bearer token, or as an `ak`/`sk` query parameter (useful for iframe embeds). See [Authentication](/builder-api/authentication) for the full model, roles, and the `location_id` scoping rule.
+Pass a Builder key as a bearer token. See [Authentication](/builder-api/authentication) for the full model, roles, and the `location_id` scoping rule.
 
 <ParamField header="Authorization" param-type="string" required="false" deprecated="false">
   Bearer token. Format: `Bearer ak_...` (agency) or `Bearer sk_...` (viewer).
-</ParamField>
-
-<ParamField query="ak" param-type="string" required="false" deprecated="false">
-  Agency key as a query parameter. Alternative to the `Authorization` header.
-</ParamField>
-
-<ParamField query="sk" param-type="string" required="false" deprecated="false">
-  Viewer key as a query parameter. Alternative to the `Authorization` header.
 </ParamField>
 
 <Callout kind="info">
@@ -63,7 +55,7 @@ The Builder does not use a single fixed envelope. The shape depends on the opera
 
 ## Embedding
 
-`GET /builder?ak=ak_...` (or `?sk=sk_...`) returns an HTML page that loads the admin workspace inside a sandboxed iframe, rather than JSON. It accepts theming parameters (`theme`, `transparent`, `hideHeader`, `branding`, `theme_primary`, `theme_secondary`, `theme_heading_font`, `theme_body_font`, `accent`, `font`, `style`) and an optional `page` (default `insights`). This endpoint is for embedding the UI, not for programmatic API access.
+`GET /builder?ak=ak_...` (or `?sk=sk_...`) returns an HTML page that loads the admin workspace inside a sandboxed iframe, rather than JSON. This is the one place a key travels in the query string: a document request cannot carry an `Authorization` header, and the page is what the iframe loads. It accepts theming parameters (`theme`, `transparent`, `hideHeader`, `branding`, `theme_primary`, `theme_secondary`, `theme_heading_font`, `theme_body_font`, `style`) and an optional `page` (default `insights`). This endpoint is for embedding the UI, not for programmatic API access.
 
 ## Canvas versioning
 

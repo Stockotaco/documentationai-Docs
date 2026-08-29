@@ -14,8 +14,6 @@ servers:
   - url: https://mythic-analytics.gulp.workers.dev
 security:
   - BearerAuth: []
-  - AgencyKeyQuery: []
-  - SecretKeyQuery: []
 paths:
   /client/v1/incrementality/eligibility:
     get:
@@ -537,16 +535,6 @@ components:
         Client key as bearer token. Use an agency key (`Bearer ak_...`) for
         read-write access or a location secret key (`Bearer sk_...`) for
         read-only access.
-    AgencyKeyQuery:
-      type: apiKey
-      in: query
-      name: ak
-      description: Agency key as a query parameter. Prefer the `Authorization` header.
-    SecretKeyQuery:
-      type: apiKey
-      in: query
-      name: sk
-      description: Secret key as a query parameter. Prefer the `Authorization` header.
   parameters:
     ExperimentId:
       name: id

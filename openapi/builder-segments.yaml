@@ -11,8 +11,6 @@ servers:
   - url: https://mythic-analytics.gulp.workers.dev/builder
 security:
   - BearerAuth: []
-  - AgencyKeyQuery: []
-  - SecretKeyQuery: []
 paths:
   /segments:
     get:
@@ -220,16 +218,6 @@ components:
       description: >-
         Builder key as a bearer token. Use an agency key for full CRUD
         (`Bearer ak_...`) or a viewer key for read-only access (`Bearer sk_...`).
-    AgencyKeyQuery:
-      type: apiKey
-      in: query
-      name: ak
-      description: "Agency key passed as a query parameter. Format: `ak_...`."
-    SecretKeyQuery:
-      type: apiKey
-      in: query
-      name: sk
-      description: "Viewer (secret) key passed as a query parameter. Format: `sk_...`."
   parameters:
     SegmentId:
       name: id

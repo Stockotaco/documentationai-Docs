@@ -20,8 +20,6 @@ servers:
   - url: https://mythic-analytics.gulp.workers.dev/client/v1/settings
 security:
   - BearerAuth: []
-  - AgencyKeyQuery: []
-  - SecretKeyQuery: []
 paths:
   /allowed-origins:
     get:
@@ -527,16 +525,6 @@ components:
       description: >-
         Builder/client key as a bearer token. Agency key for read-write
         (`Bearer ak_...`) or viewer key for read-only (`Bearer sk_...`).
-    AgencyKeyQuery:
-      type: apiKey
-      in: query
-      name: ak
-      description: "Agency key as a query parameter. Format: `ak_...`."
-    SecretKeyQuery:
-      type: apiKey
-      in: query
-      name: sk
-      description: "Viewer (secret) key as a query parameter. Format: `sk_...`."
   schemas:
     AllowedOriginsRequest:
       type: object

@@ -2,7 +2,7 @@
 title: Authentication
 description: >-
   Authenticate Client Links API requests with an agency key or a location
-  secret key, passed as a bearer token or query parameter.
+  secret key, passed as a bearer token.
 ---
 
 ## Authentication
@@ -14,21 +14,13 @@ The Client Links API is client-scoped and uses **client keys** — not the admin
 | **Agency key** | `ak_` | Read-write | An agency; must name a specific client (location) per request |
 | **Location secret key** | `sk_` | Read-only | A single client (location), resolved from the key itself |
 
-Pass the key either as a bearer token or as a query parameter.
+Pass the key as a bearer token on every request.
 
 <ParamField header="Authorization" param-type="string" required="false" deprecated="false">
   Bearer token. Format: `Bearer ak_...` or `Bearer sk_...`.
 </ParamField>
 
-<ParamField query="ak" param-type="string" required="false" deprecated="false">
-  Agency key as a query parameter, when the `Authorization` header cannot be used.
-</ParamField>
-
-<ParamField query="sk" param-type="string" required="false" deprecated="false">
-  Location secret key as a query parameter, when the `Authorization` header cannot be used.
-</ParamField>
-
-A key must be supplied through one of the above. Anything that is not prefixed with `ak_` or `sk_` is rejected with `401`.
+A key must be supplied via the `Authorization` header above. Anything that is not prefixed with `ak_` or `sk_` is rejected with `401`.
 
 ## Selecting a client with an agency key
 
@@ -62,10 +54,6 @@ curl "https://mythic-analytics.gulp.workers.dev/client/v1/links" \
 ```bash Secret key (read-only)
 curl "https://mythic-analytics.gulp.workers.dev/client/v1/links" \
   -H "Authorization: Bearer sk_your_location_secret_key"
-```
-
-```bash Query parameter
-curl "https://mythic-analytics.gulp.workers.dev/client/v1/links?sk=sk_your_location_secret_key"
 ```
 </CodeGroup>
 

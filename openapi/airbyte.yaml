@@ -1523,15 +1523,14 @@ components:
       scheme: bearer
       description: >
         Agency key as bearer token, format `Bearer ak_...`. Grants full
-        read-write access scoped to the agency. May also be passed as an `ak`
-        query parameter.
+        read-write access scoped to the agency.
     SecretKey:
       type: http
       scheme: bearer
       description: >
         Location secret key as bearer token, format `Bearer sk_...`. Grants
         read-only access; the agency is resolved from the location. Write
-        endpoints return `403`. May also be passed as an `sk` query parameter.
+        endpoints return `403`.
   parameters:
     PipelineClientId:
       name: clientId
