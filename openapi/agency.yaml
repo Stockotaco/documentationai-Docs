@@ -1,0 +1,375 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Agency API
+  description: >
+    Cross-location rollups on `/client/v1/agency` — the roster, per-location
+    stats, destination delivery health, event-contract coverage, and the
+    agency's own API usage.
+
+
+    **Agency key (`ak_`) only, and no location parameter** — the agency itself
+    is the scope. A location secret key (`sk_`) gets `403 agency_required`.
+    The roster is resolved server-side from the agency's linked locations;
+    `location_ids` narrows it and is validated as a subset (`403
+    location_not_linked` for a foreign id). Rollups are capped at 100
+    locations per request (`422 too_many_locations`) — batch with
+    `location_ids`, using `/locations` (never capped) as the index.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+paths:
+  /client/v1/agency/locations:
+    get:
+      summary: List the agency's locations
+      operationId: listAgencyLocations
+      description: >
+        The roster — every location linked to this agency, oldest first. Never
+        capped, so it is the index for batching `location_ids` on the rollup
+        routes.
+      parameters:
+        - $ref: "#/components/parameters/LocationIds"
+      responses:
+        "200":
+          description: The roster
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Location" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/agency/stats:
+    get:
+      summary: Per-location stats
+      operationId: getAgencyStats
+      description: >
+        One row per location: event volume, unique users, and unique sessions
+        over the date window, plus the all-time live person count. Rows are
+        **zero-filled from the roster** — a location that sent nothing in the
+        window appears as a row of zeros, never an omission.
+      parameters:
+        - $ref: "#/components/parameters/LocationIds"
+        - name: date_from
+          in: query
+          required: false
+          description: "ISO date the window starts at. Default: 30 days ago."
+          schema: { type: string, format: date }
+          example: "2026-08-01"
+        - name: date_to
+          in: query
+          required: false
+          description: ISO date the window ends at (inclusive day).
+          schema: { type: string, format: date }
+          example: "2026-08-28"
+      responses:
+        "200":
+          description: One stats row per roster location
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/StatsRow" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NoLocations" }
+        "422": { $ref: "#/components/responses/TooManyLocations" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/UpstreamFailed" }
+  /client/v1/agency/destinations/health:
+    get:
+      summary: Per-location destination health
+      operationId: getAgencyDestinationHealth
+      description: >
+        Delivery health of every location's activation destinations over a
+        trailing window — one row per (location, destination action) with
+        success rate, failure counts, and the last error. Sorted worst-first
+        (lowest success rate, most failures), so the top rows are which
+        client's activation is bleeding. Test deliveries are excluded, and
+        in-flight retries don't count toward totals.
+      parameters:
+        - $ref: "#/components/parameters/LocationIds"
+        - name: hours_back
+          in: query
+          required: false
+          description: Trailing window in hours (1–720).
+          schema: { type: integer, minimum: 1, maximum: 720, default: 24 }
+      responses:
+        "200":
+          description: Destination health rows, worst first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      hours_back: { type: integer, example: 24 }
+                      destinations:
+                        type: array
+                        items: { $ref: "#/components/schemas/DestinationHealthRow" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NoLocations" }
+        "422": { $ref: "#/components/responses/TooManyLocations" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/UpstreamFailed" }
+  /client/v1/agency/contracts/summary:
+    get:
+      summary: Per-location contract coverage
+      operationId: getAgencyContractsSummary
+      description: >
+        One row per location: how many event contracts are declared, whether
+        the daily contract-alert webhook is configured, and when the last
+        alert fired. A location with zero contracts has no event-shape
+        monitoring at all; one with contracts but no webhook finds out about
+        breakage only when someone runs a check by hand.
+      parameters:
+        - $ref: "#/components/parameters/LocationIds"
+      responses:
+        "200":
+          description: One coverage row per roster location
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ContractsSummaryRow" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NoLocations" }
+        "422": { $ref: "#/components/responses/TooManyLocations" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/agency/usage:
+    get:
+      summary: The agency's own API usage
+      operationId: getAgencyUsage
+      description: >
+        The agency's own API + MCP usage, daily per location/surface/route —
+        request counts, auth failures, rate-limited and error counts,
+        deprecated-auth usage, and latency. This is the same telemetry Mythic
+        meters on. Takes no `location_ids` — usage is already the agency's own
+        slice. Returns at most 1000 rows, newest and busiest first.
+      parameters:
+        - name: days_back
+          in: query
+          required: false
+          description: Trailing window in days (1–90).
+          schema: { type: integer, minimum: 1, maximum: 90, default: 30 }
+      responses:
+        "200":
+          description: Daily usage rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      days_back: { type: integer, example: 30 }
+                      usage:
+                        type: array
+                        items: { $ref: "#/components/schemas/UsageRow" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/UpstreamFailed" }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Agency key (`ak_`) only — a location secret key (`sk_`) gets `403
+        agency_required`. Keys are server-side credentials; this surface
+        serves no CORS headers on purpose.
+  parameters:
+    LocationIds:
+      name: location_ids
+      in: query
+      required: false
+      description: >-
+        Comma-separated location ids to narrow the roster. Every id must
+        belong to this agency — a foreign id is `403 location_not_linked`,
+        never a silent empty result. Required in batches of up to 100 when the
+        agency has more than 100 locations.
+      schema: { type: string }
+      example: "loc_abc123,loc_def456"
+  responses:
+    Unauthorized:
+      description: "`unauthorized` — missing or invalid key."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    AgencyRequired:
+      description: "`agency_required` — this surface requires an agency key (`ak_`); location secret keys are rejected."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: >-
+        `agency_required` (the key is an `sk_`) or `location_not_linked` (a
+        `location_ids` entry is not linked to this agency — the message names
+        the foreign ids).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NoLocations:
+      description: "`no_locations` — no locations are linked to this agency."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    TooManyLocations:
+      description: >-
+        `too_many_locations` — more than 100 locations in scope. Fetch the
+        roster from `/agency/locations` and pass `location_ids` batches of up
+        to 100.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: "`rate_limited` — 60 requests/min per agency. Retry after the `Retry-After` header."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    UpstreamFailed:
+      description: "`stats_failed`, `health_failed`, or `usage_failed` — the upstream analytics query failed. Retry."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Location:
+      type: object
+      properties:
+        id: { type: string, example: loc_abc123 }
+        name: { type: string, example: Acme Dental }
+        active:
+          type: boolean
+          example: true
+          description: Whether the location is currently active for ingestion.
+        created_at: { type: string, format: date-time }
+    StatsRow:
+      type: object
+      description: >-
+        Zero-filled from the roster — a silent location is a row of zeros,
+        never an omission.
+      properties:
+        location_id: { type: string, example: loc_abc123 }
+        name: { type: string, example: Acme Dental }
+        active: { type: boolean, example: true }
+        total_events:
+          type: integer
+          example: 48210
+          description: Events in the date window.
+        unique_users:
+          type: integer
+          example: 6120
+          description: Unique users in the date window.
+        unique_sessions:
+          type: integer
+          example: 9344
+          description: Unique sessions in the date window.
+        people:
+          type: integer
+          example: 12873
+          description: All-time live person count (merge tombstones excluded).
+    DestinationHealthRow:
+      type: object
+      properties:
+        location_id: { type: string, example: loc_abc123 }
+        action_id: { type: string, example: meta-capi-purchase }
+        action_name: { type: string, example: Meta CAPI Purchase }
+        destination_type: { type: string, example: meta_capi }
+        total:
+          type: integer
+          example: 1180
+          description: Deliveries in the window (in-flight retries excluded).
+        successes: { type: integer, example: 1102 }
+        failures: { type: integer, example: 78 }
+        success_rate:
+          type: number
+          format: float
+          example: 0.9339
+          description: "successes / (successes + failures), rounded to 4 decimals."
+        last_delivery_at: { type: string, format: date-time }
+        last_error:
+          type: string
+          example: "401 Invalid OAuth access token"
+          description: The most recent failure's error, empty if none.
+    ContractsSummaryRow:
+      type: object
+      properties:
+        location_id: { type: string, example: loc_abc123 }
+        name: { type: string, example: Acme Dental }
+        contracts_declared:
+          type: integer
+          example: 7
+          description: Event contracts declared for this location.
+        alert_webhook_configured:
+          type: boolean
+          example: true
+          description: Whether the daily contract-alert webhook is set.
+        last_alert_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the last contract alert fired, or null if never.
+    UsageRow:
+      type: object
+      properties:
+        day: { type: string, format: date, example: "2026-08-27" }
+        agency_id: { type: string, example: ag_xyz789 }
+        location_id:
+          type: string
+          example: loc_abc123
+          description: Empty for agency-grain requests with no location bound.
+        surface:
+          type: string
+          example: data
+          description: "Which API surface served the request (e.g. `data`, `agency`, `mcp`)."
+        route: { type: string, example: /client/v1/data/events }
+        requests: { type: integer, example: 412 }
+        auth_failures:
+          type: integer
+          example: 3
+          description: Requests that returned 401 or 403.
+        rate_limited:
+          type: integer
+          example: 0
+          description: Requests that returned 429.
+        errors:
+          type: integer
+          example: 1
+          description: Requests that returned 5xx.
+        deprecated_auth:
+          type: integer
+          example: 0
+          description: Requests still authenticating via a deprecated path.
+        avg_duration_ms: { type: integer, example: 84 }
+        p95_duration_ms: { type: integer, example: 310 }
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string, example: too_many_locations }
+            message: { type: string }

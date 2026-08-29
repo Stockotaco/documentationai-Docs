@@ -1,16 +1,16 @@
 ---
 title: Settings Server (agency)
 description: >-
-  A hosted MCP server exposing the full agency product surface — 169 tools
+  A hosted MCP server exposing the full agency product surface — 173 tools
   across data, sessions, replays, analysis, settings, links, Airbyte,
-  segments, insights, dashboards, canvases, destinations, contracts, and
-  tenant config — with a select-a-client session flow.
+  segments, insights, dashboards, canvases, destinations, contracts, tenant
+  config, and agency-grain rollups — with a select-a-client session flow.
 ---
 
 ## Overview
 
 The Settings Server is a hosted MCP server exposing the **full agency product
-surface** — 169 tools across 16 scope families — from any MCP-compatible AI
+surface** — 173 tools across 16 scope families — from any MCP-compatible AI
 client. It is separate from the
 [Gateway](/mcp/gateway) (which proxies upstream tools) but authenticates with
 the **same `mcp_` API keys** and scopes.
@@ -28,7 +28,8 @@ for what each tool does — see the [Data API](/data-api/overview),
 [Heatmaps](/heatmaps-api/overview),
 [Incrementality](/incrementality-api/overview),
 [Airbyte Sync](/airbyte-api/overview),
-[Client Config](/config-api/overview), and
+[Client Config](/config-api/overview),
+[Agency API](/agency-api/overview), and
 [Builder](/builder-api/overview) sections.
 
 Its defining feature: an agency connects once with an agency-wide key, calls
@@ -122,7 +123,15 @@ Every tool is gated by a scope on the key (`resource:read` / `resource:write`,
 is the explicit `["*"]`. `list_clients` and `select_client` need no scope —
 agency-wide keys get them automatically.
 
-Sixteen scope families gate the 169 tools:
+The four **agency rollup tools** work the same way: `get_agency_stats`,
+`get_agency_destination_health`, `get_agency_contracts_summary`, and
+`get_agency_usage` are registered only for agency-wide keys and need no scope
+— they are read-only views of the agency's own footprint, and thin proxies of
+the [Agency API](/agency-api/overview) (`/client/v1/agency`), so parameters,
+semantics, error codes, and the 100-location `location_ids` batching are those
+of the REST routes. No `select_client` needed: the agency itself is the scope.
+
+Sixteen scope families gate the remaining 167 client-scoped tools:
 
 | Resource | Tools |
 |----------|-------|

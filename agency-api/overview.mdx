@@ -1,0 +1,137 @@
+---
+title: Agency API
+description: >-
+  Cross-location rollups for the whole agency — the roster, per-client
+  event/user/person stats, destination delivery health, event-contract
+  coverage, and the agency's own API usage — on /client/v1/agency, with an
+  agency key only.
+---
+
+## Overview
+
+Every other `/client/v1` surface answers questions about **one client**. The
+Agency API answers the agency-grain question — "how are *all* my clients
+doing?" — in one call, without iterating a location list yourself:
+
+| Route | One row per | Answers |
+| --- | --- | --- |
+| `GET /agency/locations` | location | The roster — every client linked to this agency |
+| `GET /agency/stats` | location | Event volume, unique users, unique sessions over a date window, plus the all-time live person count |
+| `GET /agency/destinations/health` | location × destination | Delivery success rate, failure counts, and the last error over a trailing window — sorted worst-first |
+| `GET /agency/contracts/summary` | location | Declared event contracts, whether the daily alert webhook is wired, and when the last alert fired |
+| `GET /agency/usage` | day × location × surface × route | The agency's own API + MCP request telemetry — the same data Mythic meters on |
+
+The same rollups exist as MCP tools on the
+[Settings Server](/mcp/settings-server) (`get_agency_stats`,
+`get_agency_destination_health`, `get_agency_contracts_summary`,
+`get_agency_usage`); this is their headless REST form.
+
+## Base URL
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/agency
+```
+
+## Authentication
+
+**Agency key (`ak_`) only, and no location parameter** — the agency itself is
+the scope. Unlike the rest of `/client/v1`, a location secret key (`sk_`) is
+rejected with `403 agency_required`: an `sk_` belongs to one location, and
+this surface reads across all of them.
+
+```bash
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/agency/stats" \
+  -H "Authorization: Bearer $AK"
+```
+
+<Callout kind="alert">
+  This surface deliberately serves **no CORS headers**. `ak_` keys are
+  server-side credentials — never call it from browser JavaScript.
+</Callout>
+
+## The roster and `location_ids`
+
+Tenancy is resolved server-side: the roster is every location whose
+`agency_id` is the key's agency, and every query runs against exactly that
+set. The pipes never decide tenancy.
+
+`?location_ids=a,b,c` narrows a request to a subset — and the subset is
+**validated against the roster**. Requesting a location that is not linked to
+your agency is a hard `403 location_not_linked` naming the foreign ids, never
+a silent empty result, so a typo can't read as "no data".
+
+### The 100-location cap
+
+Rollups are capped at **100 locations per request**. An agency with more gets
+`422 too_many_locations`:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "too_many_locations",
+    "message": "This agency has 240 locations; rollups are capped at 100 per request. Pass ?location_ids= with batches of up to 100."
+  }
+}
+```
+
+Batch it: fetch the full roster from `GET /agency/locations` (which is never
+capped), then call the rollup routes with `?location_ids=` chunks of up to
+100.
+
+## Zero-filled stats
+
+<Callout kind="info">
+  `GET /agency/stats` **zero-fills from the roster**: a location that sent
+  nothing in the window still appears, as a row of zeros. A silent client is
+  a visible zero row, never an omission — which is exactly the client an
+  agency-wide sweep exists to catch.
+</Callout>
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "location_id": "loc_abc123",
+      "name": "Acme Dental",
+      "active": true,
+      "total_events": 48210,
+      "unique_users": 6120,
+      "unique_sessions": 9344,
+      "people": 12873
+    },
+    {
+      "location_id": "loc_def456",
+      "name": "Quiet Client Co",
+      "active": true,
+      "total_events": 0,
+      "unique_users": 0,
+      "unique_sessions": 0,
+      "people": 0
+    }
+  ]
+}
+```
+
+`total_events`, `unique_users`, and `unique_sessions` cover the date window
+(`date_from` defaults to 30 days ago; `date_to` is an inclusive day);
+`people` is the all-time live person count (merge tombstones excluded).
+
+## Errors and limits
+
+Errors are always `{ "success": false, "error": { "code", "message" } }`.
+
+| Status | Code | Meaning |
+| --- | --- | --- |
+| `401` | `unauthorized` | Missing or invalid key |
+| `403` | `agency_required` | The key is an `sk_` — this surface takes agency keys only |
+| `403` | `location_not_linked` | A `location_ids` entry is not linked to this agency (the message names it) |
+| `404` | `no_locations` | No locations are linked to this agency |
+| `422` | `too_many_locations` | More than 100 locations in scope — batch with `location_ids` |
+| `429` | `rate_limited` | 60 requests/min per agency — retry after `Retry-After` |
+| `502` | `stats_failed`, `health_failed`, `usage_failed` | The upstream analytics query failed — retry |
+
+`GET /agency/locations` is exempt from the cap (it *is* the batching tool)
+and `GET /agency/usage` takes no `location_ids` at all — usage is already the
+agency's own slice, filtered by day window (`days_back`, default 30, max 90).

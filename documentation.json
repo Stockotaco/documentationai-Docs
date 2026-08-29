@@ -80,6 +80,28 @@
             ]
           },
           {
+            "tab": "Agency API",
+            "icon": "building-2",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "agency-api/overview",
+                    "icon": "file-text"
+                  }
+                ]
+              },
+              {
+                "group": "Agency Rollups",
+                "icon": "building-2",
+                "openapi": "openapi/agency.yaml"
+              }
+            ]
+          },
+          {
             "tab": "Client Links",
             "icon": "link-2",
             "groups": [
