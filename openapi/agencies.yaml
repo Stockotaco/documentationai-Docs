@@ -6,8 +6,7 @@ info:
 servers:
   - url: https://mythic-analytics.gulp.workers.dev/api/v1
 security:
-  - BearerAuth: []
-  - AdminKeyQuery: []
+  - AdminSessionAuth: []
 paths:
   /agencies:
     get:
@@ -24,7 +23,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AgencyListResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -68,7 +67,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -102,7 +101,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AgencyDetailResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -148,7 +147,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -182,7 +181,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -265,7 +264,7 @@ paths:
                         type: string
                         format: date-time
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -297,7 +296,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RotateKeyResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -350,7 +349,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -393,7 +392,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -418,15 +417,11 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 components:
   securitySchemes:
-    BearerAuth:
+    AdminSessionAuth:
       type: http
       scheme: bearer
-      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
-    AdminKeyQuery:
-      type: apiKey
-      in: query
-      name: admin_key
-      description: Alternative to the Authorization header for server-to-server scenarios.
+      bearerFormat: JWT
+      description: "Supabase session JWT for an allowlisted admin account. Format: `Bearer <access_token>`."
   parameters:
     AgencyId:
       name: id

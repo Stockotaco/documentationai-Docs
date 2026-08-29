@@ -7,7 +7,7 @@ description: >-
 
 ## Publishable key
 
-The AI Proxy (`/ai/chat`, `/ai/action`) authenticates with a client **publishable key** — not the admin key. The worker resolves the key to a location, requires the location to be active, and blocks HIPAA-enabled locations.
+The AI Proxy (`/ai/chat`, `/ai/action`) authenticates with a client **publishable key** — not an admin session. The worker resolves the key to a location, requires the location to be active, and blocks HIPAA-enabled locations.
 
 <ParamField header="x-mythic-key" param-type="string" required="true" deprecated="false">
   Client publishable key (`pk_...`). Safe to use from the browser.
@@ -15,6 +15,6 @@ The AI Proxy (`/ai/chat`, `/ai/action`) authenticates with a client **publishabl
 
 <Callout kind="info">
   This is the same publishable key the browser SDK uses to send events. It is
-  client-safe — unlike the admin key, it does not need to be hidden from the
-  browser.
+  client-safe — unlike an admin session token, it does not need to be hidden
+  from the browser.
 </Callout>

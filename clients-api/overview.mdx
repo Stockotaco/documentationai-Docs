@@ -69,7 +69,7 @@ The API enforces the following formats:
 | Status | Meaning |
 |--------|---------|
 | `400` | Invalid JSON, missing required fields, or validation error |
-| `401` | Admin key missing or invalid |
+| `401` | Session token missing, invalid, or not on the admin allowlist |
 | `404` | Client not found |
 | `409` | Conflict — a resource with the same unique key already exists (e.g. duplicate client `id` or link `slug`) |
 | `500` | Internal server error |

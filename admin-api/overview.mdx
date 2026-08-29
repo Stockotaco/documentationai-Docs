@@ -7,7 +7,7 @@ description: >-
 
 ## Overview
 
-The Admin API groups the operational surfaces of the Mythic Analytics platform: Cloudflare KV inspection and cleanup, Google Cloud Pub/Sub subscription management, and admin management of destinations, Airbyte connections, and BigQuery exports. All of these are true admin routes protected by the admin key.
+The Admin API groups the operational surfaces of the Mythic Analytics platform: Cloudflare KV inspection and cleanup, Google Cloud Pub/Sub subscription management, and admin management of destinations, Airbyte connections, and BigQuery exports. All of these are true admin routes protected by a Supabase session JWT for an allowlisted admin account.
 
 ## Base URL
 
@@ -40,7 +40,7 @@ Unlike the versioned `/api/v1` resource APIs, these endpoints return endpoint-sp
 | Status | Meaning |
 |--------|---------|
 | `400` | Invalid namespace, missing required field, or validation error |
-| `401` | Admin key missing or invalid |
+| `401` | Session token missing, invalid, or not on the admin allowlist |
 | `404` | Key not found (KV `get`) |
 | `500` | Upstream/GCP error or internal error |
 

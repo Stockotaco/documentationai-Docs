@@ -6,12 +6,12 @@ info:
     Operator-facing Airbyte management across all agencies and clients. Provision
     workspaces, manage connections and sources, trigger and schedule syncs,
     backfill sync history, and review cross-agency status, statistics, and health.
-    All endpoints require the platform admin key.
+    All endpoints require a Supabase session JWT for an allowlisted admin
+    account.
 servers:
   - url: https://mythic-analytics.gulp.workers.dev
 security:
-  - BearerAuth: []
-  - AdminKeyQuery: []
+  - AdminSessionAuth: []
 tags:
   - name: Global
     description: Cross-agency management under `/admin/airbyte`.
@@ -1147,15 +1147,11 @@ paths:
           $ref: "#/components/responses/Unauthorized"
 components:
   securitySchemes:
-    BearerAuth:
+    AdminSessionAuth:
       type: http
       scheme: bearer
-      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
-    AdminKeyQuery:
-      type: apiKey
-      in: query
-      name: admin_key
-      description: Alternative to the Authorization header for server-to-server scenarios.
+      bearerFormat: JWT
+      description: "Supabase session JWT for an allowlisted admin account. Format: `Bearer <access_token>`."
   parameters:
     AgencyId:
       name: agencyId
@@ -1188,7 +1184,7 @@ components:
         type: string
   responses:
     Unauthorized:
-      description: Admin key missing or invalid
+      description: Session token missing, invalid, or not on the admin allowlist
       content:
         application/json:
           schema:

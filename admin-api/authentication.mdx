@@ -1,22 +1,18 @@
 ---
 title: Authentication
 description: >-
-  Authenticate requests to the Admin API using an admin API key passed
-  as a bearer token or query parameter.
+  Authenticate requests to the Admin API using a Supabase session JWT for an
+  allowlisted admin account.
 ---
 
-## Admin key
+## Admin session
 
-Every Admin API endpoint requires an admin API key. Pass it as a bearer token or query parameter — either satisfies the check.
+Every Admin API endpoint requires a Supabase session JWT for an allowlisted admin account, passed as a bearer token.
 
 <ParamField header="Authorization" param-type="string" required="true" deprecated="false">
-  Bearer token. Format: `Bearer YOUR_ADMIN_KEY`.
-</ParamField>
-
-<ParamField query="admin_key" param-type="string" required="false" deprecated="false">
-  Alternative to the header for server-to-server or tooling scenarios. Do not expose in client-side code.
+  Supabase session JWT for an allowlisted admin account. Format: `Bearer <access_token>`.
 </ParamField>
 
 <Callout kind="alert">
-  Never expose the admin key in client-side JavaScript, public repositories, or logs. Admin key access should be restricted to trusted backend services and operations staff only.
+  Admin session tokens must never be exposed in client-side JavaScript, public repositories, or logs. Only accounts on the admin allowlist can obtain a session that passes this check.
 </Callout>

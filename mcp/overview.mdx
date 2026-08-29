@@ -10,7 +10,7 @@ description: >-
 
 The MCP Platform has three surfaces:
 
-- A **management API** under `/admin/mcp` for registering upstream MCP servers, probing them for tools, controlling which agencies may use each server and tool, and provisioning gateway API keys. It is authenticated with the platform `ADMIN_KEY`.
+- A **management API** under `/admin/mcp` for registering upstream MCP servers, probing them for tools, controlling which agencies may use each server and tool, and provisioning gateway API keys. It is authenticated with a Supabase session JWT for an allowlisted admin account.
 - A **gateway** at `/mcp` that speaks JSON-RPC 2.0. External MCP clients call it with an `mcp_` API key to list and execute tools. See [MCP Gateway](/mcp/gateway).
 - A hosted **Settings Server** for agencies to manage a client's analytics settings (insights, dashboards, canvases, destinations, tenant config) with a select-a-client session flow. It uses the same `mcp_` keys and scopes. See [Settings Server](/mcp/settings-server).
 
@@ -67,7 +67,7 @@ Management endpoints control access at the **agency** level (`mcp_server_agency_
 | Status | Meaning |
 |--------|---------|
 | `400` | Missing required field, invalid URL, blocked header, invalid `scope_prefix`, or nothing to update |
-| `401` | Admin key missing or invalid |
+| `401` | Session token missing, invalid, or not on the admin allowlist |
 | `404` | Server or tool not found |
 | `502` | Upstream MCP server unreachable or probe failed |
 | `500` | Internal error |

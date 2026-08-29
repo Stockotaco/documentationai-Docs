@@ -4,14 +4,13 @@ info:
   title: MCP Tools
   description: >-
     Platform-level management of discovered MCP tools and per-agency tool
-    access. Mounted under /admin/mcp and authenticated with the platform
-    ADMIN_KEY. Tools are created by probing a server (see MCP Servers), not by
-    direct creation.
+    access. Mounted under /admin/mcp and authenticated with a Supabase
+    session JWT for an allowlisted admin account. Tools are created by
+    probing a server (see MCP Servers), not by direct creation.
 servers:
   - url: https://mythic-analytics.gulp.workers.dev
 security:
-  - BearerAuth: []
-  - AdminKeyQuery: []
+  - AdminSessionAuth: []
 paths:
   /admin/mcp/tools:
     get:
@@ -36,7 +35,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ToolListResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -76,7 +75,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -104,7 +103,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AgencyAccessListResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -143,7 +142,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -187,7 +186,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -200,15 +199,11 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 components:
   securitySchemes:
-    BearerAuth:
+    AdminSessionAuth:
       type: http
       scheme: bearer
-      description: "Platform admin key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
-    AdminKeyQuery:
-      type: apiKey
-      in: query
-      name: admin_key
-      description: Alternative to the Authorization header for server-to-server scenarios.
+      bearerFormat: JWT
+      description: "Supabase session JWT for an allowlisted admin account. Format: `Bearer <access_token>`."
   parameters:
     ToolId:
       name: id

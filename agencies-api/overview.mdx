@@ -69,10 +69,9 @@ Example error response:
 | Status | Meaning |
 |--------|---------|
 | `400` | Missing required field or no updatable fields provided |
-| `401` | Admin key missing or invalid |
+| `401` | Session token missing, invalid, or not on the admin allowlist |
 | `404` | Agency or location not found |
 | `500` | Internal server error |
-| `503` | Admin API not configured (no admin key set on the server) |
 
 <Callout kind="info">
   Check both the HTTP status code and the `error` field in the response body for programmatic error handling.

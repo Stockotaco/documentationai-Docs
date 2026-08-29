@@ -1,23 +1,19 @@
 ---
 title: Authentication
 description: >-
-  Authenticate management requests with the platform admin key, and gateway
+  Authenticate management requests with a Supabase admin session, and gateway
   tool calls with a scoped mcp_ API key.
 ---
 
 ## Management API authentication
 
-Every endpoint under `/admin/mcp` (servers, tools, agency access, API keys) requires the platform `ADMIN_KEY`. Provide it either as a bearer token or as a query parameter.
+Every endpoint under `/admin/mcp` (servers, tools, agency access, API keys) requires a Supabase session JWT for an allowlisted admin account. Provide it as a bearer token.
 
-<ParamField header="Authorization" param-type="string" required="false" deprecated="false">
-  Bearer token. Format: `Bearer YOUR_ADMIN_KEY`.
+<ParamField header="Authorization" param-type="string" required="true" deprecated="false">
+  Supabase session JWT for an allowlisted admin account. Format: `Bearer <access_token>`.
 </ParamField>
 
-<ParamField query="admin_key" param-type="string" required="false" deprecated="false">
-  Alternative to the header for server-to-server or tooling scenarios. Do not expose in client-side code.
-</ParamField>
-
-One of the two must be present and match `ADMIN_KEY`; otherwise the request returns `401` with `{ "error": "Unauthorized" }`.
+A missing token, an invalid/expired token, or a token for an account not on the admin allowlist returns `401` with `{ "error": "Unauthorized" }`.
 
 ## Gateway authentication
 
@@ -62,5 +58,5 @@ Gateway (upstream) tools require `<scope_prefix>:call`, where `<scope_prefix>` i
 Settings Server tools use `<resource>:read` for `list_*`/`get_*` tools and `<resource>:write` for mutations; each tool's required scope is listed on the [Settings Server](/mcp/settings-server) page.
 
 <Callout kind="alert">
-  Never expose the admin key or `mcp_` API keys in client-side JavaScript, public repositories, or logs. Both are server-side credentials. The raw `mcp_` key is shown only once, at creation.
+  Never expose admin session tokens or `mcp_` API keys in client-side JavaScript, public repositories, or logs. Both are server-side credentials. The raw `mcp_` key is shown only once, at creation.
 </Callout>

@@ -5,12 +5,12 @@ info:
   description: >-
     Platform-level provisioning of `mcp_` API keys used to authenticate
     against the MCP gateway. Mounted under /admin/mcp and authenticated with
-    the platform ADMIN_KEY. Each key is scoped to one agency and one location.
+    a Supabase session JWT for an allowlisted admin account. Each key is
+    scoped to one agency and one location.
 servers:
   - url: https://mythic-analytics.gulp.workers.dev
 security:
-  - BearerAuth: []
-  - AdminKeyQuery: []
+  - AdminSessionAuth: []
 paths:
   /admin/mcp/api-keys:
     get:
@@ -35,7 +35,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiKeyListResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -73,7 +73,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -99,7 +99,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -112,15 +112,11 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 components:
   securitySchemes:
-    BearerAuth:
+    AdminSessionAuth:
       type: http
       scheme: bearer
-      description: "Platform admin key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
-    AdminKeyQuery:
-      type: apiKey
-      in: query
-      name: admin_key
-      description: Alternative to the Authorization header for server-to-server scenarios.
+      bearerFormat: JWT
+      description: "Supabase session JWT for an allowlisted admin account. Format: `Bearer <access_token>`."
   parameters:
     ApiKeyId:
       name: id

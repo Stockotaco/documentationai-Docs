@@ -5,12 +5,12 @@ info:
   description: >
     Platform-admin management of destination credentials and destination
     testing. Operates on any location by explicit `location_id`. Authenticated
-    with the platform admin key, not a client key.
+    with a Supabase session JWT for an allowlisted admin account, not a
+    client key.
 servers:
   - url: https://mythic-analytics.gulp.workers.dev
 security:
-  - BearerAuth: []
-  - AdminKeyQuery: []
+  - AdminSessionAuth: []
 paths:
   /admin/destinations/credentials:
     post:
@@ -41,7 +41,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminErrorResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -69,7 +69,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminCredentialListResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -109,7 +109,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminSuccessResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -150,7 +150,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminErrorResponse"
         "401":
-          description: Admin key missing or invalid
+          description: Session token missing, invalid, or not on the admin allowlist
           content:
             application/json:
               schema:
@@ -169,15 +169,11 @@ paths:
                 $ref: "#/components/schemas/AdminErrorResponse"
 components:
   securitySchemes:
-    BearerAuth:
+    AdminSessionAuth:
       type: http
       scheme: bearer
-      description: "Admin API key as bearer token. Format: `Bearer YOUR_ADMIN_KEY`"
-    AdminKeyQuery:
-      type: apiKey
-      in: query
-      name: admin_key
-      description: Alternative to the Authorization header for server-to-server scenarios.
+      bearerFormat: JWT
+      description: "Supabase session JWT for an allowlisted admin account. Format: `Bearer <access_token>`."
   parameters:
     LocationId:
       name: locationId

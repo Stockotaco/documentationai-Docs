@@ -97,7 +97,7 @@ The query proxy returns query results directly alongside `success` (see the Quer
 | Status | Meaning |
 |--------|---------|
 | `400` | Invalid JSON, missing `sql` field, a BigQuery query error, or reconcile failed |
-| `401` | Admin key missing or invalid |
+| `401` | Session token missing, invalid, or not on the admin allowlist |
 | `404` | Agency not found, or no export provisioned |
 | `500` | Provisioning or query execution failed |
 | `503` | BigQuery not configured on the server |
