@@ -20,11 +20,12 @@ doing?" — in one call, without iterating a location list yourself:
 | `GET /agency/destinations/health` | location × destination | Delivery success rate, failure counts, and the last error over a trailing window — sorted worst-first |
 | `GET /agency/contracts/summary` | location | Declared event contracts, whether the daily alert webhook is wired, and when the last alert fired |
 | `GET /agency/usage` | day × location × surface × route | The agency's own API + MCP request telemetry — the same data Mythic meters on |
+| `GET /agency/quota` | quota in force | The plan, the features it includes, and month-to-date ingested events against the quota |
 
 The same rollups exist as MCP tools on the
 [Settings Server](/mcp/settings-server) (`get_agency_stats`,
 `get_agency_destination_health`, `get_agency_contracts_summary`,
-`get_agency_usage`); this is their headless REST form.
+`get_agency_usage`, `get_agency_quota`); this is their headless REST form.
 
 ## Base URL
 
@@ -118,6 +119,74 @@ capped), then call the rollup routes with `?location_ids=` chunks of up to
 (`date_from` defaults to 30 days ago; `date_to` is an inclusive day);
 `people` is the all-time live person count (merge tombstones excluded).
 
+## Plan and event quota
+
+`GET /agency/quota` reports the tier this account is on, the features it
+includes, and how many events have been ingested this calendar month against
+what was bought.
+
+```bash
+curl -H "Authorization: Bearer ak_..." \
+  "https://mythic-analytics.gulp.workers.dev/client/v1/agency/quota"
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "month_offset": 0,
+    "plan": {
+      "id": "growth",
+      "name": "Growth",
+      "features": ["autocapture", "error_tracking", "data_api", "session_replay", "heatmaps", "experiments", "contracts", "destinations"],
+      "unlimited": false,
+      "monthly_event_quota": 10000000
+    },
+    "buckets": [
+      { "scope": "agency", "plan_id": "growth", "locations": 12, "metered": true, "used": 8412663, "quota": 10000000, "ratio": 0.841, "over": false, "threshold": 0.8 }
+    ],
+    "locations": 12,
+    "soft_cap": true
+  }
+}
+```
+
+<Callout kind="info">
+The quota is a **soft cap**. Going over it is a billing signal, not a stop:
+ingestion continues, no events are dropped, and no endpoint starts failing.
+Analytics you lose at your busiest moment cannot be recovered later, so the
+cap alerts and bills rather than blocking.
+</Callout>
+
+### Why `buckets` is a list
+
+The tier normally lives on the agency and every location draws from one pooled
+quota — that is the single `scope: "agency"` bucket above.
+
+A location can be put on its own plan, and then it is metered **separately**:
+it gets its own `scope: "location"` bucket against its own quota, and its
+events leave the agency pool. Without that exclusion the same events would
+count against two quotas at once. A location override **replaces** the agency
+plan rather than adding to it, so a location on a smaller plan than its agency
+really does get the smaller quota and the smaller feature set.
+
+`month_offset` selects the period: `0` is the current calendar month (the
+default), `1` the previous one, up to `12`. Numbers are measured live at
+request time, so a check right after a traffic spike reflects the spike.
+
+### Features and your plan
+
+`plan.features` is the authoritative list of what this account can turn on.
+Enabling a feature outside it through `/client/v1/settings` returns **402
+`feature_not_in_plan`** — the key is valid and authorized, the tier is what is
+missing. Turning a feature **off** and reading its current state work on every
+tier, so an account that changes plan can always see and disable what it no
+longer pays for.
+
+A feature that is not in the plan is also switched off in the configuration
+served to the browser, so a plan change takes effect on the next page load
+rather than waiting for someone to toggle it.
+
 ## Errors and limits
 
 Errors are always `{ "success": false, "error": { "code", "message" } }`.
@@ -130,7 +199,8 @@ Errors are always `{ "success": false, "error": { "code", "message" } }`.
 | `404` | `no_locations` | No locations are linked to this agency |
 | `422` | `too_many_locations` | More than 100 locations in scope — batch with `location_ids` |
 | `429` | `rate_limited` | 60 requests/min per agency — retry after `Retry-After` |
-| `502` | `stats_failed`, `health_failed`, `usage_failed` | The upstream analytics query failed — retry |
+| `402` | `feature_not_in_plan` | The feature is not included in this account's plan (returned by `/client/v1/settings`, not this surface) |
+| `502` | `stats_failed`, `health_failed`, `usage_failed`, `quota_failed`, `plan_failed` | The upstream analytics query failed — retry |
 
 `GET /agency/locations` is exempt from the cap (it *is* the batching tool)
 and `GET /agency/usage` takes no `location_ids` at all — usage is already the

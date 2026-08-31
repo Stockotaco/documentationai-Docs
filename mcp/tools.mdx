@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 173 tools across
+  Every tool the Mythic MCP server exposes — 174 tools across
   16 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 173 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 174 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -318,3 +318,4 @@ selection is needed — the agency is the scope.
 | `get_agency_destination_health`<br /><span style={{opacity: 0.7}}>Get Agency Destination Health</span> | — | Delivery health of every location's activation destinations over a trailing window — one row per (location, destination) with success rate, failure counts, and the last error. | `GET /client/v1/agency/destinations/health` |
 | `get_agency_contracts_summary`<br /><span style={{opacity: 0.7}}>Get Agency Contracts Summary</span> | — | Per location: how many event contracts are declared, whether the daily contract-alert webhook is configured, and when the last alert fired. | `GET /client/v1/agency/contracts/summary` |
 | `get_agency_usage`<br /><span style={{opacity: 0.7}}>Get Agency API Usage</span> | — | The agency's own API + MCP usage, daily per location/surface/route: request counts, auth failures, rate-limited and error counts, and latency. | `GET /client/v1/agency/usage` |
+| `get_agency_quota`<br /><span style={{opacity: 0.7}}>Get Agency Plan & Event Quota</span> | — | The agency's plan, the features it includes, and month-to-date ingested events against the quota. | `GET /client/v1/agency/quota` |

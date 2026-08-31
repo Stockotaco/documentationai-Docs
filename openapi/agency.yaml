@@ -162,7 +162,7 @@ paths:
       description: >
         The agency's own API + MCP usage, daily per location/surface/route —
         request counts, auth failures, rate-limited and error counts,
-        deprecated-auth usage, and latency. This is the same telemetry Mythic
+        and latency. This is the same telemetry Mythic
         meters on. Takes no `location_ids` — usage is already the agency's own
         slice. Returns at most 1000 rows, newest and busiest first.
       parameters:
@@ -191,6 +191,71 @@ paths:
         "403": { $ref: "#/components/responses/AgencyRequired" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "502": { $ref: "#/components/responses/UpstreamFailed" }
+  /client/v1/agency/quota:
+    get:
+      summary: Plan, entitlements, and month-to-date event volume
+      operationId: getAgencyQuota
+      description: >
+        The tier this account is on, the features it includes, and how many
+        events have been ingested this calendar month against the quota that was
+        bought. Measured live at request time rather than served from a cached
+        daily sweep, so a check straight after a traffic spike reflects it.
+
+
+        The quota is a SOFT cap. Being over it is a billing signal, never a
+        stop: ingestion continues, no events are dropped, and no endpoint starts
+        failing.
+
+
+        `buckets` holds one entry per quota in force. Normally that is a single
+        `agency` bucket that every location draws from. A location placed on its
+        own plan is metered separately in its own `location` bucket and its
+        events leave the agency pool, so the same events are never counted
+        against two quotas.
+      parameters:
+        - name: month_offset
+          in: query
+          required: false
+          description: 0 = current calendar month (default), 1 = previous, up to 12.
+          schema: { type: integer, minimum: 0, maximum: 12, default: 0 }
+      responses:
+        "200":
+          description: Plan and quota state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      month_offset: { type: integer, example: 0 }
+                      plan:
+                        type: object
+                        nullable: true
+                        properties:
+                          id: { type: string, example: growth }
+                          name: { type: string, example: Growth }
+                          features:
+                            type: array
+                            items: { type: string }
+                            description: Feature keys this plan grants. Enabling anything outside this list returns 402 feature_not_in_plan.
+                          unlimited: { type: boolean, example: false }
+                          monthly_event_quota:
+                            type: integer
+                            nullable: true
+                            example: 10000000
+                            description: Null means unmetered. Distinct from 0, which is a real quota of zero.
+                      buckets:
+                        type: array
+                        items: { $ref: "#/components/schemas/QuotaBucket" }
+                      locations: { type: integer, example: 12 }
+                      soft_cap: { type: boolean, example: true }
+        "401": { description: Missing or invalid key, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "403": { description: Not an agency key, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "502": { description: Plan or quota lookup failed, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
 components:
   securitySchemes:
     BearerAuth:
@@ -358,12 +423,42 @@ components:
           type: integer
           example: 1
           description: Requests that returned 5xx.
-        deprecated_auth:
-          type: integer
-          example: 0
-          description: Requests still authenticating via a deprecated path.
         avg_duration_ms: { type: integer, example: 84 }
         p95_duration_ms: { type: integer, example: 310 }
+    QuotaBucket:
+      type: object
+      description: One quota in force. scope=agency is the pooled quota; scope=location is a per-location override, metered separately.
+      properties:
+        scope:
+          type: string
+          enum: [agency, location]
+        plan_id: { type: string, nullable: true, example: growth }
+        location_id:
+          type: string
+          nullable: true
+          description: Present only when scope is location.
+        locations:
+          type: integer
+          nullable: true
+          description: Present only when scope is agency — how many locations draw from the pooled quota.
+        unresolved_plan_id:
+          type: string
+          nullable: true
+          description: Present only when a location declared a plan that could not be resolved. The bucket then fails closed with a zero quota rather than inheriting the agency plan.
+        metered: { type: boolean, example: true }
+        used: { type: integer, example: 8412663 }
+        quota: { type: integer, nullable: true, example: 10000000 }
+        ratio:
+          type: number
+          nullable: true
+          example: 0.841
+          description: used / quota, rounded to 3 decimals. Null when unmetered or when quota is 0.
+        over: { type: boolean, example: false }
+        threshold:
+          type: number
+          nullable: true
+          example: 0.8
+          description: The highest alert threshold crossed (0.8 or 1.0), or null.
     Error:
       type: object
       properties:
