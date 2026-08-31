@@ -35,6 +35,8 @@ https://mythic-analytics.gulp.workers.dev/client/v1/correlation
 
 The usual `/client/v1` key system: an **agency key** (`ak_`, bind a location with `?location_id=` or the `X-Location-Id` header) or a **location secret key** (`sk_`, auto-scoped). Read-only — there is nothing here to write. 20 requests/min per location, because every call is a BigQuery scan.
 
+Correlation is sold by tier. If your plan does not include it the whole surface answers **402 `feature_not_in_plan`** — the key is valid, the tier is what is missing. `GET /client/v1/agency/quota` lists what your plan includes.
+
 ## Quickstart
 
 ```bash

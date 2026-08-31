@@ -40,6 +40,8 @@ https://mythic-analytics.gulp.workers.dev/client/v1/contracts
 
 The same key system as the rest of `/client/v1`: an **agency key** (`ak_`, bind a location with `?location_id=` or the `X-Location-Id` header) or a **location secret key** (`sk_`, auto-scoped to its own location). Reads accept either. **Writes require an agency key** — same rule as Settings, Destinations, and constraint benchmarks.
 
+Event contracts are sold by tier. If your plan does not include them the whole surface answers **402 `feature_not_in_plan`** — the key is valid, the tier is what is missing. `GET /client/v1/agency/quota` lists what your plan includes.
+
 ## Quickstart
 
 <Steps>

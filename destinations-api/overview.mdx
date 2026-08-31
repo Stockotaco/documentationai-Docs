@@ -557,6 +557,7 @@ All endpoints return a JSON envelope.
 |--------|---------|
 | `400` | Invalid body, unsupported destination type, or configuration/validation error |
 | `401` | Key missing or invalid |
+| `402` | Destinations is not included in this account's plan (`feature_not_in_plan`) |
 | `403` | Write attempted with a read-only secret (`sk_`) key |
 | `404` | Destination not found for this location |
 | `429` | Rate limit exceeded (120 requests per 10s per location) |

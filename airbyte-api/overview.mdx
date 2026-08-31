@@ -436,6 +436,7 @@ Exactly **one run per client per day**, enforced in the database. A run already 
 |--------|---------|
 | `400` | Missing required fields, unsupported platform, incomplete GCS staging config, or workspace not provisioned |
 | `401` | Authorization missing or invalid |
+| `402` | Airbyte pipelines is not included in this account's plan (`feature_not_in_plan`) |
 | `403` | Write attempted with a read-only `sk_` key, or client not linked to the agency |
 | `404` | Config or connection not found (or not owned by the calling agency) |
 | `502` | `airbyte_unavailable` — Airbyte returned something that is not a valid response. Distinct from an empty result, which is a real answer |

@@ -216,6 +216,7 @@ Requests are limited to **120 per 10 seconds per location**. When you exceed the
 |--------|------|---------|
 | `400` | `location_required` | An agency key called an event route without binding a location |
 | `401` | `unauthorized` | Missing, malformed, or invalid key |
+| `402` | `feature_not_in_plan` | the Data API is not included in this account's plan |
 | `403` | `location_not_linked` | The requested location is not linked to the agency |
 | `403` | `hipaa_restricted` | The location has HIPAA mode enabled; the Data API is unavailable |
 | `403` | `agency_required` | `/export` was called without an agency (`ak_`) key |

@@ -306,6 +306,7 @@ All endpoints return a JSON envelope.
 |--------|---------|
 | `400` | Invalid body, or an uncomputable `definition` (bad regions, windows, enums, or identifiers); `unsupported_channel` for non-`meta` channels |
 | `401` | Key missing or invalid |
+| `402` | Incrementality is not included in this account's plan (`feature_not_in_plan`) |
 | `403` | Write attempted with a read-only secret (`sk_`) key, or HIPAA-restricted location |
 | `404` | Experiment not found for this location |
 | `409` | `window_not_complete` (compute before the measured window closes — see `allow_partial`) or `stale_spend_data` (Meta sync hasn't caught up) |

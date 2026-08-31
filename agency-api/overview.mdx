@@ -176,16 +176,41 @@ request time, so a check right after a traffic spike reflects the spike.
 
 ### Features and your plan
 
-`plan.features` is the authoritative list of what this account can turn on.
-Enabling a feature outside it through `/client/v1/settings` returns **402
-`feature_not_in_plan`** — the key is valid and authorized, the tier is what is
-missing. Turning a feature **off** and reading its current state work on every
-tier, so an account that changes plan can always see and disable what it no
-longer pays for.
+`plan.features` is the authoritative list of what this account can use. A
+feature outside it is refused in three places, and the same **402
+`feature_not_in_plan`** comes back from all of them — the key is valid and
+authorized, the tier is what is missing.
 
-A feature that is not in the plan is also switched off in the configuration
-served to the browser, so a plan change takes effect on the next page load
-rather than waiting for someone to toggle it.
+**Turning one on.** `PUT /client/v1/settings/...` refuses to *enable* a feature
+the plan excludes. Turning a feature **off** and reading its current state work
+on every tier, so an account that changes plan can always see and disable what
+it no longer pays for.
+
+**Calling one.** Whole API surfaces are sold by tier, and a request to one the
+plan excludes is refused before any query runs:
+
+| Feature key | Surface |
+| --- | --- |
+| `data_api` | `/client/v1/data` |
+| `bigquery_export` | `/client/v1/data/export` |
+| `contracts` | `/client/v1/contracts` |
+| `destinations` | `/client/v1/destinations` |
+| `constraints` | `/client/v1/constraints` |
+| `correlation` | `/client/v1/correlation` |
+| `incrementality` | `/client/v1/incrementality` |
+| `airbyte` | `/client/v1/airbyte` |
+| `mcp` | the MCP server |
+
+Reads are refused as well as writes. A settings toggle is a switch you own, so
+turning it off stays open on every tier; an API surface is the product itself,
+and there is no equivalent of "off" to leave open.
+
+**Serving one to the browser.** A feature outside the plan is switched off in
+the configuration served to the SDK, so a plan change reaches live pages on
+their next config fetch rather than waiting for someone to toggle it.
+
+A plan change takes up to a minute to apply everywhere — entitlements are
+cached briefly on each edge node.
 
 ## Errors and limits
 
@@ -199,7 +224,7 @@ Errors are always `{ "success": false, "error": { "code", "message" } }`.
 | `404` | `no_locations` | No locations are linked to this agency |
 | `422` | `too_many_locations` | More than 100 locations in scope — batch with `location_ids` |
 | `429` | `rate_limited` | 60 requests/min per agency — retry after `Retry-After` |
-| `402` | `feature_not_in_plan` | The feature is not included in this account's plan (returned by `/client/v1/settings`, not this surface) |
+| `402` | `feature_not_in_plan` | The feature is not included in this account's plan (returned by the surface you called, and by `/client/v1/settings`; never by this one) |
 | `502` | `stats_failed`, `health_failed`, `usage_failed`, `quota_failed`, `plan_failed` | The upstream analytics query failed — retry |
 
 `GET /agency/locations` is exempt from the cap (it *is* the batching tool)

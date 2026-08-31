@@ -47,6 +47,7 @@ curl "https://mythic-analytics.gulp.workers.dev/client/v1/destinations" \
 |--------|--------|---------|
 | `400` | `location_required` | Agency key did not name a `location_id` |
 | `401` | `unauthorized` | Key missing, malformed, or not recognized |
+| `402` | `feature_not_in_plan` | Destinations is not included in this account's plan |
 | `403` | `location_not_linked` | Location is not linked to the agency |
 | `403` | `agency_required` | Write attempted with a read-only secret key |
 
