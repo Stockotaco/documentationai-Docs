@@ -96,7 +96,9 @@ One `series[]` entry per spec series × breakdown value. `data[]` is aligned to
 </ParamField>
 <ParamField body="interval" type="'hour' | 'day' | 'week' | 'month'">
   Trend only. Omit for one number per series. `hour` needs a range of 31 days
-  or less. Weeks start on Sunday. All buckets are UTC.
+  or less. Weeks start on Sunday. All buckets are UTC. A `week` or `month`
+  bucket is labelled by its calendar start, so the first one can begin before
+  `date_range.from` and hold only the days inside the range.
 </ParamField>
 <ParamField body="series" type="Series[]">
   Trend only, 1 to 5. Each: `event` (a name, or `null` for any event), `math`
@@ -237,7 +239,8 @@ planned follow-up.
 ## Property values
 
 `GET /query/values?property=utm_source&days=30&limit=20` returns
-`{ property, days, values: [{ value, count }], cached }` — the picker behind
+`{ success, data: { property, days, values: [{ value, count }], cached } }` —
+the picker behind
 filter and breakdown inputs. Accepts the same property names as `/query`, an
 optional `event` to narrow, and a case-insensitive `search`.
 
