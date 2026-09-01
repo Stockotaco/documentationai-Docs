@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 174 tools across
+  Every tool the Mythic MCP server exposes — 176 tools across
   16 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 174 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 176 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -61,6 +61,8 @@ People, identities, merges, event volumes, exceptions, heatmaps, BigQuery export
 | `get_event_volume_daily`<br /><span style={{opacity: 0.7}}>Get Daily Event Volume</span> | `data:read` | Event counts per day (optionally for one event name via `event_type`). | `GET /client/v1/data/events/daily` |
 | `get_event_trend`<br /><span style={{opacity: 0.7}}>Get Event Trend</span> | `data:read` | Overall event-volume trend over a window — defaults to the last 14 days (`days`), or pass explicit start_date/end_date. | `GET /client/v1/data/events/trend` |
 | `get_event_breakdown`<br /><span style={{opacity: 0.7}}>Get Event Breakdown</span> | `data:read` | Traffic volume broken down by ONE dimension — top pages, referrers, devices, geo, or UTM values. | `GET /client/v1/data/events/breakdown` |
+| `query_events`<br /><span style={{opacity: 0.7}}>Query Events (trend / funnel)</span> | `data:read` | Self-serve analytics over the event stream in ONE call, sub-second: a TREND (1–5 series, each an event × math such as total/dau/unique_sessions/sum/p95, bucketed by hour/day/week/month or as a single number,… | `POST /client/v1/data/query` |
+| `list_property_values`<br /><span style={{opacity: 0.7}}>List Property Values</span> | `data:read` | Top values of ONE event property over the last N days (default 30), with counts — the picker behind query_events filters and breakdowns. | `GET /client/v1/data/query/values` |
 | `list_exception_issues`<br /><span style={{opacity: 0.7}}>List Exception Issues</span> | `data:read` | Grouped JavaScript error issues — one row per fingerprinted issue (stable issue_id from error type + normalized message) with occurrence/session/user counts and a volume sparkline. | `GET /client/v1/data/exceptions/issues` |
 | `get_exception_issue`<br /><span style={{opacity: 0.7}}>Get Exception Issue</span> | `data:read` | Detail header for ONE grouped error issue by its stable issue_id (from list_exception_issues): counts, first/last seen and volume series over the window. | `GET /client/v1/data/exceptions/issues/:id` |
 | `list_exception_occurrences`<br /><span style={{opacity: 0.7}}>List Exception Occurrences</span> | `data:read` | Raw occurrences of ONE error issue — individual events with parsed stack frames, page URL and session_id, newest first. | `GET /client/v1/data/exceptions/issues/:id/occurrences` |

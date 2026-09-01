@@ -365,6 +365,234 @@ paths:
           $ref: "#/components/responses/UpstreamError"
         "503":
           $ref: "#/components/responses/NotConfigured"
+  /query:
+    post:
+      summary: Explore query (trend or funnel)
+      operationId: exploreQuery
+      description: >
+        Self-serve analytics over the event stream in one call. A typed spec —
+        no raw SQL — is validated, compiled server-side to ClickHouse SQL over
+        a wide, typed events table, and scoped to your location by the
+        compiler. Sub-second at current scale: a 30-day trend broken down by a
+        property reads tens of megabytes where the same question over raw JSON
+        properties did not finish.
+
+
+        **Trend** (`kind: trend`): 1–5 `series`, each an `event` (or `null` for
+        any event) × `math` (`total`, `dau`, `unique_sessions`, `sum`, `avg`,
+        `min`, `max`, `median`, `p90`, `p95`, `p99`; numeric maths need
+        `math_property`), bucketed by `interval` (`hour|day|week|month`) or
+        returned as one number per series when `interval` is omitted. Optional
+        `breakdown` by any property (top-N by the first series; the rest fold
+        into `"$$other"`) and `compare: previous_period` (the immediately
+        preceding window of equal length, aligned by bucket index).
+
+
+        **Funnel** (`kind: funnel`): 2–10 ordered `steps`, a conversion
+        `window` (default 7 days, capped at the range), optional `breakdown`
+        taken from the first step. Sequential: other events may occur between
+        steps. Per-step `users`, `conversion_from_first`,
+        `conversion_from_previous`.
+
+
+        **Properties**: typed names resolve to columns — `$current_url`,
+        `$pathname`, `$referring_domain`, `utm_source`, `utm_medium`,
+        `utm_campaign`, `$device_type`, `$browser`, `$os`, `$geo_country`,
+        `$geo_city`, `$experiment_arm`, plus `event`, `distinct_id`,
+        `session_id`, `user_id`. Any other name is a custom event property
+        (scalar, ≤200 chars; nested objects and `meta_*` blobs are not
+        queryable). `utm_*` and `$referring_domain` are session-entry values
+        with an event-level fallback. Discover keys with `GET /properties` and
+        values with `GET /query/values`.
+
+
+        **Semantics**: buckets are UTC and zero-filled; presets resolve to
+        `[today-N, today]` inclusive; unique counts are `uniq()` (approximate)
+        on `distinct_id`, not resolved persons. Excluded events:
+        `$replay_summary`, `$replay_started`, `$heatmap`, `$web_vital_*`,
+        `$set`, `$set_once`, `$identify` (each has its own surface).
+
+
+        **Limits** (`400 invalid_spec`, every problem listed in
+        `error.details`): unknown keys rejected, ≤5 series, 2–10 steps, ≤20
+        filters in total, range ≤366 days, `hour` only for ranges ≤31 days,
+        `in` lists ≤100 values, breakdown limit ≤50. Rate limit 30 requests /
+        10 s per location. Cached 120 s when the range touches today, 6 h
+        otherwise (`meta.cached`).
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - name: debug
+          in: query
+          required: false
+          description: "`1` adds the compiled SQL to `meta.sql` (agency keys only)."
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExploreSpec"
+            examples:
+              trend:
+                summary: Daily pageview users by source, mobile only, vs previous month
+                value:
+                  kind: trend
+                  date_range: { preset: "30d" }
+                  interval: day
+                  series:
+                    - { event: "$pageview", math: dau }
+                  breakdown: { property: utm_source, limit: 5 }
+                  compare: previous_period
+                  filters:
+                    - { property: "$device_type", op: eq, value: mobile }
+              revenue:
+                summary: Weekly revenue and orders as two series
+                value:
+                  kind: trend
+                  date_range: { from: "2026-07-01", to: "2026-08-31" }
+                  interval: week
+                  series:
+                    - { event: transaction_completed, math: sum, math_property: amount, label: Revenue }
+                    - { event: transaction_completed, math: total, label: Orders }
+              funnel:
+                summary: Pricing page → signup → purchase within 3 days, by experiment arm
+                value:
+                  kind: funnel
+                  date_range: { preset: "14d" }
+                  steps:
+                    - { event: "$pageview", filters: [{ property: "$pathname", op: contains, value: "/pricing" }] }
+                    - { event: signup }
+                    - { event: order_completed }
+                  window: { value: 3, unit: day }
+                  breakdown: { property: "$experiment_arm" }
+      responses:
+        "200":
+          description: Shaped result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    description: >
+                      Trend: `buckets[]` (ISO, UTC), `previous_buckets[]` with
+                      compare, `breakdown_values[]` with breakdown, and
+                      `series[]` — one entry per spec series × breakdown value
+                      with `label`, `math`, `event`, `breakdown_value?`,
+                      `data[]` + `total` (or `value` without interval) and
+                      `previous[]` / `previous_value` with compare. Funnel:
+                      `steps[]` and `breakdown[] { value, steps[] }`. Always
+                      `meta { from, to, interval?, previous?, window_seconds?,
+                      sql_ms, rows_read, bytes_read, cached, sql? }`.
+              examples:
+                trend:
+                  value:
+                    success: true
+                    data:
+                      kind: trend
+                      buckets: ["2026-08-30", "2026-08-31", "2026-09-01"]
+                      breakdown_values: ["google", "", "$$other"]
+                      series:
+                        - { label: "$pageview · dau", math: dau, event: "$pageview", breakdown_value: google, data: [412, 388, 97], total: 897, previous: [390, 401, 120] }
+                      meta: { from: "2026-08-30", to: "2026-09-01", interval: day, previous: { from: "2026-08-27", to: "2026-08-29" }, sql_ms: 212, rows_read: 778534, bytes_read: 36060000, cached: false }
+                funnel:
+                  value:
+                    success: true
+                    data:
+                      kind: funnel
+                      steps:
+                        - { step: 1, label: "$pageview", event: "$pageview", users: 1180, conversion_from_first: 1, conversion_from_previous: 1 }
+                        - { step: 2, label: signup, event: signup, users: 143, conversion_from_first: 0.1212, conversion_from_previous: 0.1212 }
+                        - { step: 3, label: order_completed, event: order_completed, users: 31, conversion_from_first: 0.0263, conversion_from_previous: 0.2168 }
+                      meta: { from: "2026-08-18", to: "2026-09-01", window_seconds: 259200, sql_ms: 340, rows_read: 51200, bytes_read: 2100000, cached: false }
+        "400":
+          description: "`invalid_spec` — `error.details` lists every problem; `invalid_json`; `payload_too_large` (>64 KB)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limited (30 / 10 s per location).
+        "502":
+          description: Upstream query failed (message from the query engine).
+
+  /query/values:
+    get:
+      summary: Property values (picker)
+      operationId: explorePropertyValues
+      description: >
+        Top values of one event property with counts over the last `days`
+        (default 30), for filter and breakdown pickers. Accepts the same
+        property names as `/query` — typed (`utm_source`, `$device_type`,
+        `$geo_country`, `$pathname`, …) or any custom event property key.
+        Optional `event` narrowing and case-insensitive `search`. Cached
+        5 minutes.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - name: property
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+        - name: event
+          in: query
+          required: false
+          description: Only values seen on this event.
+          schema:
+            type: string
+        - name: search
+          in: query
+          required: false
+          description: Case-insensitive substring match.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: "Default `20`, max `100`."
+          schema:
+            type: integer
+        - name: days
+          in: query
+          required: false
+          description: "Default `30`, max `366`."
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Values with counts.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      property: { type: string }
+                      days: { type: integer }
+                      cached: { type: boolean }
+                      values:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            value: { type: string }
+                            count: { type: integer }
+        "400":
+          description: "`property_required` or `invalid_property` (unsafe name)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /sessions:
     get:
       summary: Session list
@@ -1420,6 +1648,137 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
   schemas:
+    ExploreFilter:
+      type: object
+      required: [property, op]
+      properties:
+        property:
+          type: string
+          maxLength: 64
+          description: "Typed name (`$current_url`, `utm_source`, `$device_type`, …), core column (`event`, `distinct_id`, `session_id`, `user_id`) or any custom event property key."
+        op:
+          type: string
+          enum: [eq, neq, in, not_in, contains, not_contains, regex, is_set, is_not_set, gt, gte, lt, lte]
+        value:
+          description: "string for eq/neq/contains/not_contains/regex; string[] (≤100) for in/not_in; number for gt/gte/lt/lte; omitted for is_set/is_not_set."
+          oneOf:
+            - type: string
+              maxLength: 500
+            - type: number
+            - type: array
+              items:
+                type: string
+              maxItems: 100
+    ExploreSpec:
+      type: object
+      required: [kind, date_range]
+      description: >
+        Typed query grammar. Unknown keys are rejected (fail closed). At most 20
+        filters in total across the spec; date range ≤366 days; `hour` interval
+        only for ranges ≤31 days. Presets resolve to `[today-N, today]` UTC
+        inclusive.
+      properties:
+        kind:
+          type: string
+          enum: [trend, funnel]
+        date_range:
+          oneOf:
+            - type: object
+              required: [preset]
+              properties:
+                preset:
+                  type: string
+                  enum: [24h, 7d, 14d, 30d, 90d, 365d]
+            - type: object
+              required: [from, to]
+              properties:
+                from:
+                  type: string
+                  format: date
+                to:
+                  type: string
+                  format: date
+                  description: Inclusive.
+        interval:
+          type: string
+          enum: [hour, day, week, month]
+          description: "Trend only. Omit for one number per series."
+        series:
+          type: array
+          minItems: 1
+          maxItems: 5
+          description: Trend only.
+          items:
+            type: object
+            required: [event, math]
+            properties:
+              event:
+                type: string
+                nullable: true
+                description: "Event name, or `null` for any event."
+              math:
+                type: string
+                enum: [total, dau, unique_sessions, sum, avg, min, max, median, p90, p95, p99]
+              math_property:
+                type: string
+                description: "Required for sum/avg/min/max/median/pNN — the numeric property to aggregate."
+              filters:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExploreFilter"
+              label:
+                type: string
+                maxLength: 100
+        breakdown:
+          type: object
+          required: [property]
+          properties:
+            property:
+              type: string
+              maxLength: 64
+            limit:
+              type: integer
+              minimum: 1
+              maximum: 50
+              default: 10
+              description: "Remaining values fold into `$$other`."
+        compare:
+          type: string
+          enum: [previous_period]
+          description: Trend only.
+        steps:
+          type: array
+          minItems: 2
+          maxItems: 10
+          description: "Funnel only. Ordered; other events may occur between steps."
+          items:
+            type: object
+            required: [event]
+            properties:
+              event:
+                type: string
+              filters:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExploreFilter"
+              label:
+                type: string
+                maxLength: 100
+        window:
+          type: object
+          description: "Funnel only. Default 7 days, capped at the range length."
+          properties:
+            value:
+              type: integer
+              minimum: 1
+            unit:
+              type: string
+              enum: [minute, hour, day]
+        filters:
+          type: array
+          description: Applied to every series / step.
+          items:
+            $ref: "#/components/schemas/ExploreFilter"
     RowsResponse:
       type: object
       description: Generic Tinybird result envelope for analytics rows.

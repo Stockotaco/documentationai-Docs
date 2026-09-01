@@ -417,6 +417,37 @@ For the classic shape and `tableId: "events"` series, these are the built-in `ev
 - Honored by `funnel`, and by any `number`/`table`/`bar`/`pie` metric or series that counts distinct users (`COUNT_DISTINCT` on `distinct_id` / `unique_users`).
 - Resolution reads a **daily** identity snapshot, so merges are reflected up to ~24 hours later.
 
+## Explore-engine insights (`config.query`)
+
+A second, faster engine: store a Data API **explore spec** as `config.query` and the insight runs on Tinybird instead of BigQuery — sub-second trends and funnels over any event and property, no SQL anywhere in the config. The full grammar lives on the [Explore queries](/data-api/explore) page; the same object you would `POST /client/v1/data/query` goes here verbatim.
+
+```json
+{
+  "name": "Mobile pageview users by source",
+  "insight_type": "line",
+  "config": {
+    "query": {
+      "kind": "trend",
+      "date_range": { "preset": "30d" },
+      "interval": "day",
+      "series": [{ "event": "$pageview", "math": "dau" }],
+      "breakdown": { "property": "utm_source", "limit": 5 },
+      "filters": [{ "property": "$device_type", "op": "eq", "value": "mobile" }]
+    }
+  }
+}
+```
+
+- `insight_type` stays the visualization: `line`, `bar` or `number` for a trend, `funnel` for a funnel. No other config keys are read when `query` is present.
+- **Validated at write time.** `POST /insights` returns `400 { "error": "invalid config.query", "details": [...] }` for a bad spec — the first config shape the API rejects on save. `POST /insights/validate` answers `{ "ok": true, "engine": "tinybird" }` for these.
+- `POST /insights/{id}/query` and `/insights/preview` accept the usual `dateRange` and `granularity` overrides; they are mapped onto `query.date_range` and `query.interval` (`1h` becomes `24h`; a funnel never gains an interval).
+- The result payload is the Explore response (`buckets`, `series[]` or `steps[]`, `meta`) plus `engine: "tinybird"`, `config` and the compiled `sql` — not the BigQuery `data`/`comparisonData`/`trendData` triple.
+- `resolveIdentities` does not apply: counts are on `distinct_id`.
+
+<Callout kind="note">
+  Excluded from this engine: `$replay_summary`, `$replay_started`, `$heatmap`, `$web_vital_*`, `$set`, `$set_once`, `$identify`, and custom properties that are nested objects, arrays or longer than 200 characters. CRM/ads tables are BigQuery-only — use the classic shapes for those.
+</Callout>
+
 ## Validating before you POST
 
 Because the API stores config unchecked, run this checklist before writing:

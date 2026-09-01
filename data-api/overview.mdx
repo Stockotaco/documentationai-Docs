@@ -9,7 +9,7 @@ description: >-
 
 The Data API is a read-only surface for agencies that want to pull Mythic Analytics event data into their own systems. It serves aggregated event analytics — summaries, daily counts, and volume trends — plus the provisioning status of a BigQuery export.
 
-Every endpoint is a `GET`. The API deliberately sends no CORS headers: keys are server-side credentials and must never be embedded in a browser.
+Every endpoint is a `GET` except `POST /query`, whose body is a query spec. The API deliberately sends no CORS headers: keys are server-side credentials and must never be embedded in a browser.
 
 <Callout kind="info">
   Resolved person profiles and the identity graph are documented in the **People & Identity** section of this tab, which shares this base URL and authentication.
@@ -37,6 +37,9 @@ The event routes are location-scoped. The `/export` route is agency-wide and req
 ## Endpoints
 
 <Columns cols="2">
+  <Card title="Explore queries" icon="search">
+    Trends and funnels over any event × property in one call — a typed spec, compiled server-side, sub-second. See the Explore page.
+  </Card>
   <Card title="Event summary" icon="bar-chart-2">
     Aggregated event counts by type over an optional date range.
   </Card>

@@ -58,6 +58,11 @@
                     "title": "Authentication",
                     "path": "data-api/authentication",
                     "icon": "lock"
+                  },
+                  {
+                    "title": "Explore queries",
+                    "path": "data-api/explore",
+                    "icon": "search"
                   }
                 ]
               },

@@ -1,0 +1,255 @@
+---
+title: Explore queries
+description: >-
+  Build trends and funnels over any event and property in one call with a
+  typed query spec — no SQL, tenant-scoped by construction, sub-second.
+---
+
+## What it is
+
+`POST /client/v1/data/query` is the self-serve half of the Data API. The fixed
+reports (`/events/summary`, `/events/breakdown`, `/sessions/breakdown`) answer
+the questions we anticipated. This route answers the ones you compose: any
+event, any property, filters, several series, a breakdown, a previous-period
+compare, or an ordered funnel with a conversion window.
+
+You send a **spec**, not SQL. The spec is validated (unknown keys are rejected),
+compiled on the server to ClickHouse SQL over a wide, typed events table, and
+scoped to your location by the compiler itself. There is no field in the spec
+that can name a tenant, a table, or raw SQL.
+
+<Callout kind="tip">
+  Measured on the largest tenant (3.1M events over 30 days): a daily trend broken
+  down by `utm_source` reads about 36 MB and returns in well under a second. The
+  same question over raw JSON properties did not finish inside the 20 s cap. That
+  gap is why this route exists.
+</Callout>
+
+## A first trend
+
+<Request>
+```bash
+curl -X POST "https://mythic-analytics.gulp.workers.dev/client/v1/data/query?location_id=LOC" \
+  -H "Authorization: Bearer ak_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "kind": "trend",
+    "date_range": { "preset": "30d" },
+    "interval": "day",
+    "series": [{ "event": "$pageview", "math": "dau" }],
+    "breakdown": { "property": "utm_source", "limit": 5 },
+    "compare": "previous_period",
+    "filters": [{ "property": "$device_type", "op": "eq", "value": "mobile" }]
+  }'
+```
+</Request>
+
+<Response>
+```json
+{
+  "success": true,
+  "data": {
+    "kind": "trend",
+    "buckets": ["2026-08-02", "2026-08-03", "…", "2026-09-01"],
+    "previous_buckets": ["2026-07-02", "…", "2026-08-01"],
+    "breakdown_values": ["google", "", "adwords", "homepage", "incubator", "$$other"],
+    "series": [
+      {
+        "label": "$pageview · dau",
+        "math": "dau",
+        "event": "$pageview",
+        "breakdown_value": "google",
+        "data": [18, 22, 0, 31],
+        "total": 71,
+        "previous": [15, 19, 12, 27]
+      }
+    ],
+    "meta": {
+      "from": "2026-08-02",
+      "to": "2026-09-01",
+      "interval": "day",
+      "previous": { "from": "2026-07-02", "to": "2026-08-01" },
+      "sql_ms": 212,
+      "rows_read": 778534,
+      "bytes_read": 36060000,
+      "cached": false
+    }
+  }
+}
+```
+</Response>
+
+One `series[]` entry per spec series × breakdown value. `data[]` is aligned to
+`buckets[]` and zero-filled; `previous[]` is aligned by index to
+`previous_buckets[]`. Omit `interval` and each entry carries a single `value`
+(and `previous_value`) instead.
+
+## The spec
+
+<ParamField body="kind" type="'trend' | 'funnel'" required>
+  What to compute.
+</ParamField>
+<ParamField body="date_range" type="object" required>
+  `{ "preset": "24h" | "7d" | "14d" | "30d" | "90d" | "365d" }` or
+  `{ "from": "YYYY-MM-DD", "to": "YYYY-MM-DD" }` (UTC, `to` inclusive). Presets
+  resolve to `[today-N, today]`. Max 366 days.
+</ParamField>
+<ParamField body="interval" type="'hour' | 'day' | 'week' | 'month'">
+  Trend only. Omit for one number per series. `hour` needs a range of 31 days
+  or less. Weeks start on Sunday. All buckets are UTC.
+</ParamField>
+<ParamField body="series" type="Series[]">
+  Trend only, 1 to 5. Each: `event` (a name, or `null` for any event), `math`
+  (`total`, `dau`, `unique_sessions`, `sum`, `avg`, `min`, `max`, `median`,
+  `p90`, `p95`, `p99`), `math_property` (required for the numeric maths),
+  optional `filters[]` and `label`.
+</ParamField>
+<ParamField body="breakdown" type="{ property, limit? }">
+  Split every series by one property. Top `limit` values (default 10, max 50)
+  ranked by the first series; everything else folds into `"$$other"`. For a
+  funnel the value is taken from the first step's event.
+</ParamField>
+<ParamField body="compare" type="'previous_period'">
+  Trend only. Also returns the immediately preceding window of equal length.
+</ParamField>
+<ParamField body="steps" type="Step[]">
+  Funnel only, 2 to 10, in order. Each: `event`, optional `filters[]` and
+  `label`. Sequential semantics: a user must reach the steps in this order
+  within the window, and other events may occur between them.
+</ParamField>
+<ParamField body="window" type="{ value, unit }">
+  Funnel only. Conversion window, `unit` one of `minute`, `hour`, `day`.
+  Default 7 days, capped at the length of the date range.
+</ParamField>
+<ParamField body="filters" type="Filter[]">
+  Applied to every series or step. At most 20 filters in total across the spec.
+</ParamField>
+
+### Filters
+
+`{ "property": "...", "op": "...", "value": ... }`
+
+| op | value | compiles to |
+|----|-------|-------------|
+| `eq`, `neq` | string | exact match |
+| `in`, `not_in` | string[] (≤100) | set membership |
+| `contains`, `not_contains` | string | case-insensitive substring |
+| `regex` | string (≤200 chars) | RE2 match |
+| `is_set`, `is_not_set` | none | non-empty / empty |
+| `gt`, `gte`, `lt`, `lte` | number | numeric compare (non-numeric values are excluded) |
+
+### Properties
+
+Typed names resolve to indexed columns. Anything else is looked up as a custom
+event property.
+
+| Name | Meaning |
+|------|---------|
+| `$current_url`, `$pathname` | page of the event |
+| `$referring_domain` | session-entry referrer domain, event-level fallback |
+| `utm_source`, `utm_medium`, `utm_campaign` | session-entry UTMs, event-level fallback |
+| `$device_type`, `$browser`, `$os` | device |
+| `$geo_country`, `$geo_city` | geo |
+| `$experiment_arm` | first A/B arm on the event |
+| `event`, `distinct_id`, `session_id`, `user_id` | core columns |
+| anything else | custom event property (scalar, ≤200 chars) |
+
+Discover keys with `GET /properties` and values with `GET /query/values`.
+
+<Callout kind="note">
+  Not queryable here: nested objects, arrays, values longer than 200 characters,
+  and `meta_*` blobs from CRM events. Other `$`-prefixed SDK properties beyond the
+  table above are not exposed either — use the typed name. The events
+  `$replay_summary`, `$replay_started`, `$heatmap`, `$web_vital_*`, `$set`,
+  `$set_once` and `$identify` are excluded from this table; each has its own
+  surface (replays, heatmaps, web vitals, people).
+</Callout>
+
+## A funnel
+
+<Request>
+```json
+{
+  "kind": "funnel",
+  "date_range": { "preset": "14d" },
+  "steps": [
+    { "event": "$pageview", "filters": [{ "property": "$pathname", "op": "contains", "value": "/pricing" }] },
+    { "event": "signup" },
+    { "event": "order_completed" }
+  ],
+  "window": { "value": 3, "unit": "day" },
+  "breakdown": { "property": "$experiment_arm" }
+}
+```
+</Request>
+
+<Response>
+```json
+{
+  "success": true,
+  "data": {
+    "kind": "funnel",
+    "steps": [
+      { "step": 1, "label": "$pageview", "event": "$pageview", "users": 1180, "conversion_from_first": 1, "conversion_from_previous": 1 },
+      { "step": 2, "label": "signup", "event": "signup", "users": 143, "conversion_from_first": 0.1212, "conversion_from_previous": 0.1212 },
+      { "step": 3, "label": "order_completed", "event": "order_completed", "users": 31, "conversion_from_first": 0.0263, "conversion_from_previous": 0.2168 }
+    ],
+    "breakdown": [
+      { "value": "B", "steps": [ { "step": 1, "users": 602, "…": "…" } ] },
+      { "value": "A", "steps": [ { "step": 1, "users": 578, "…": "…" } ] }
+    ],
+    "meta": { "from": "2026-08-18", "to": "2026-09-01", "window_seconds": 259200, "sql_ms": 340, "rows_read": 51200, "bytes_read": 2100000, "cached": false }
+  }
+}
+```
+</Response>
+
+Step *k* counts users who reached steps 1 through *k* in order within the
+window. Users are `distinct_id`s: an anonymous visitor who identifies between
+two steps is two ids, and the funnel breaks there. Person-level resolution is a
+planned follow-up.
+
+## Semantics worth knowing
+
+- **Unique counts are approximate.** `dau` and `unique_sessions` use
+  ClickHouse `uniq()`, accurate to about 1–2%.
+- **Buckets are UTC** and every bucket in the range is present, zero where
+  nothing happened.
+- **Compare aligns by index.** `previous[i]` is the bucket *i* of the previous
+  window, so week-over-week lines overlay directly.
+- **`$$other`** is a real value in `breakdown_values` and `series[]`, never a
+  separate field.
+- **Caching.** A range that ends before today is served from cache for six
+  hours; one touching today for two minutes. `meta.cached` tells you which.
+- **Rate limit.** 30 requests per 10 seconds per location, separate from the
+  rest of the Data API.
+
+## Errors
+
+| status | code | meaning |
+|--------|------|---------|
+| 400 | `invalid_spec` | `error.details[]` lists every problem found |
+| 400 | `invalid_json` | body is not a JSON object |
+| 413 | `payload_too_large` | body over 64 KB |
+| 429 | `rate_limited` | see `Retry-After` |
+| 502 | `upstream_error` | the query engine rejected or timed out the statement |
+
+## Property values
+
+`GET /query/values?property=utm_source&days=30&limit=20` returns
+`{ property, days, values: [{ value, count }], cached }` — the picker behind
+filter and breakdown inputs. Accepts the same property names as `/query`, an
+optional `event` to narrow, and a case-insensitive `search`.
+
+## Saving one as an insight
+
+The same spec can be stored on an insight as `config.query` through the
+Builder API (`POST /builder/insights`) and run with
+`POST /builder/insights/:id/query`. It is validated at write time, executes on
+the same engine, and the response carries `engine: "tinybird"`. See
+[Insight config](/builder-api/insight-config).
+
+## From MCP
+
+The `query_events` and `list_property_values` tools are thin proxies over these
+two routes with the same spec as their input schema.
