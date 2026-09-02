@@ -74,13 +74,13 @@ https://mythic-analytics.gulp.workers.dev
         "publishable_key": "pk_example000000000000000000000000",
         "embed_url": "https://api.adberserk.com/embed/loader/pk_example000000000000000000000000",
         "iframe_snippet": "<iframe src=\"https://api.adberserk.com/embed/loader/pk_example000000000000000000000000\" width=\"100%\" height=\"800\" frameborder=\"0\"></iframe>",
-        "script_snippet": "<script>!function(){var e=[];window.mythic={init:function(t,n){return e.push([\"init\",t,n]),window.mythic},q:e};[\"capture\",\"pageview\",\"identify\",\"alias\",\"reset\",\"opt_in\",\"opt_out\"].forEach(function(t){window.mythic[t]=function(){return e.push([t].concat(Array.prototype.slice.call(arguments))),window.mythic}});var t=document.createElement(\"script\");t.async=!0;t.src=\"https://api.adberserk.com/cdn/m.js\";(document.head||document.body).appendChild(t)}();\nmythic.init(\"pk_example000000000000000000000000\");</script>"
+        "script_snippet": "<script>!function(){var b=window.__mythicErr=window.__mythicErr||{q:[],sink:null};if(!b.on){b.on=1;var p=function(x){b.sink?b.sink(x):b.q.length<50&&b.q.push(x)};window.addEventListener(\"error\",function(v){p({k:0,m:v.message,f:v.filename,l:v.lineno,c:v.colno,e:v.error})},!0);window.addEventListener(\"unhandledrejection\",function(v){p({k:1,r:v.reason})},!0)}var e=[];window.mythic={init:function(t,n){return e.push([\"init\",t,n]),window.mythic},q:e};[\"capture\",\"pageview\",\"identify\",\"alias\",\"reset\",\"opt_in\",\"opt_out\",\"flush\",\"debug\",\"getDistinctId\",\"getSessionId\",\"getDeviceId\",\"isBot\",\"getConfig\",\"set\",\"set_once\",\"unset\",\"get_property\",\"get_super_properties\",\"clear_super_properties\",\"getPageContext\",\"getExperimentAssignments\",\"refreshConfig\",\"grantConsent\",\"revokeConsent\"].forEach(function(t){window.mythic[t]=function(){return e.push([t].concat(Array.prototype.slice.call(arguments))),window.mythic}});var t=document.createElement(\"script\");t.type=\"text/javascript\";t.async=!0;t.src=\"https://api.adberserk.com/cdn/m.js\";(document.head||document.body).appendChild(t)}();\nmythic.init(\"pk_example000000000000000000000000\", {api_host: \"https://api.adberserk.com\"});</script>"
       }
     }
     ```
 
     <ResponseField name="script_snippet" field-type="string">
-      A self-contained `<script>` tag. It stubs `window.mythic`, loads the CDN loader asynchronously, and calls `init` with the client's key. Queues any calls made before the SDK finishes loading. **This is the one to give the client.**
+      A self-contained `<script>` tag. It installs the early error listeners, stubs `window.mythic` (or the client's `global_name`), loads the CDN loader asynchronously, and calls `init` with the client's key and API host. Queues any calls made before the SDK finishes loading. **This is the one to give the client.**
     </ResponseField>
     <ResponseField name="embed_url" field-type="string">
       A hosted, no-auth snippet builder for this key. Open it to preview and customize the install, or hand the link to a non-technical client.
@@ -91,21 +91,16 @@ https://mythic-analytics.gulp.workers.dev
   </Step>
 
   <Step title="Install the pixel on the client's site" icon="clipboard-paste" titleType="h3">
-    Paste the `script_snippet` into the client's site, just before the closing `</head>` tag. That's it — page views auto-capture immediately.
+    Paste the `script_snippet` into the client's site, high in `<head>`. That's it — page views auto-capture immediately.
 
     ```html
     <script>!function(){/* ...from script_snippet... */}();
-    mythic.init("pk_example000000000000000000000000");</script>
+    mythic.init("pk_example000000000000000000000000", {api_host: "https://api.adberserk.com"});</script>
     ```
 
-    Prefer a minimal manual install? The snippet is equivalent to the standard CDN loader:
-
-    ```html
-    <script src="https://api.adberserk.com/cdn/m.js"></script>
-    <script>
-      window.mythic.init("pk_example000000000000000000000000");
-    </script>
-    ```
+    <Callout kind="warning">
+      Paste it as high in `<head>` as possible, above any tag manager — the snippet installs the error listeners synchronously, so anything thrown before it runs isn't captured.
+    </Callout>
 
     <Callout kind="success">
       Verify install: load the client's site and confirm events arrive via <a href="/data-api/overview">the Data API</a> event summary, or watch the network tab for a request to `/e?key=pk_...`.

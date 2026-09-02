@@ -27,32 +27,31 @@ Key capabilities:
 ## Install or load the SDK
 
 <Steps>
-  <Step title="Add the CDN loader" icon="download" titleType="p">
-    Add the CDN loader (~1.4KB) to your site. It sets up `window.mythic` immediately and asynchronously imports the SDK core:
+  <Step title="Paste the loader snippet" icon="download" titleType="p">
+    Drop this into `<head>`, as high as possible. It installs the error listeners, stubs `window.mythic`, asynchronously loads the CDN loader (~1.4KB) and the SDK core, and calls `init` — one tag, nothing else to add.
 
     ```html
-    <script src="https://api.adberserk.com/cdn/m.js"></script>
+    <script>!function(){var b=window.__mythicErr=window.__mythicErr||{q:[],sink:null};if(!b.on){b.on=1;var p=function(x){b.sink?b.sink(x):b.q.length<50&&b.q.push(x)};window.addEventListener("error",function(v){p({k:0,m:v.message,f:v.filename,l:v.lineno,c:v.colno,e:v.error})},!0);window.addEventListener("unhandledrejection",function(v){p({k:1,r:v.reason})},!0)}var e=[];window.mythic={init:function(t,n){return e.push(["init",t,n]),window.mythic},q:e};["capture","pageview","identify","alias","reset","opt_in","opt_out","flush","debug","getDistinctId","getSessionId","getDeviceId","isBot","getConfig","set","set_once","unset","get_property","get_super_properties","clear_super_properties","getPageContext","getExperimentAssignments","refreshConfig","grantConsent","revokeConsent"].forEach(function(t){window.mythic[t]=function(){return e.push([t].concat(Array.prototype.slice.call(arguments))),window.mythic}});var t=document.createElement("script");t.type="text/javascript";t.async=!0;t.src="https://api.adberserk.com/cdn/m.js";(document.head||document.body).appendChild(t)}();
+    mythic.init("pk_your_publishable_key", {api_host: "https://api.adberserk.com"});</script>
     ```
 
+    <Callout kind="info">
+      `GET /api/v1/clients/{id}/loader` returns this exact snippet with the client's key, custom domain, and [global name](#white-label-the-global-object) already filled in. Copy it from there rather than editing by hand.
+    </Callout>
+
     <Callout kind="warning">
-      **Place the loader high in `<head>`, before any tag manager.** The loader
-      installs its uncaught-error / unhandled-rejection listeners synchronously
-      the moment it runs, so errors thrown *before* it executes can't be
-      captured. If you inject the loader **through** Google Tag Manager (or load
-      it after GTM), GTM's own initialization errors fire before the loader
-      exists and won't appear in error tracking. Load it directly in `<head>`
-      above the GTM container — the loader snippet from
-      `GET /api/v1/clients/{id}/loader` already includes the early error-capture
-      stub for exactly this reason.
+      **Place the snippet high in `<head>`, before any tag manager.** It installs
+      its uncaught-error / unhandled-rejection listeners synchronously the moment
+      it runs, so errors thrown *before* it executes can't be captured. If you
+      inject it **through** Google Tag Manager (or load it after GTM), GTM's own
+      initialization errors fire before the listeners exist and won't appear in
+      error tracking.
     </Callout>
   </Step>
 
-  <Step title="Initialize" icon="code" titleType="p">
+  <Step title="Track events" icon="code" titleType="p">
     ```html
-    <script src="https://api.adberserk.com/cdn/m.js"></script>
     <script>
-      window.mythic.init("pk_your_publishable_key");
-
       // Methods can be called on window.mythic right away — calls made
       // before the core finishes loading are queued and replayed.
       window.mythic.capture("Signup started", { plan: "pro" });
@@ -63,6 +62,10 @@ Key capabilities:
 
 <Callout kind="info">
   With the CDN loader, the global is `window.mythic` (lowercase). It exposes pre-init stubs for every public method, so you can call `window.mythic.capture(...)`, `window.mythic.identify(...)`, etc. before initialization completes — those calls are queued and replayed once the core loads.
+</Callout>
+
+<Callout kind="tip">
+  A bare `<script src="https://api.adberserk.com/cdn/m.js"></script>` followed by `window.mythic.init(...)` also works, but it can't capture errors thrown before the core finishes loading. Use the snippet above unless you have a reason not to.
 </Callout>
 
 ## Initialize the SDK
@@ -80,17 +83,15 @@ Initialize Mythic. The CDN global exposes `window.mythic.init(...)`, which loads
 </ParamField>
 
 ```html
-<script src="https://api.adberserk.com/cdn/m.js"></script>
-<script>
-  window.mythic.init("pk_your_publishable_key", {
+<script>!function(){/* ...loader snippet... */}();
+mythic.init("pk_your_publishable_key", {
     api_host: "https://analytics.yourdomain.com",
     debug: true,
     batch_size: 20,
     autocapture: true,
     capture_pageview: true,
-    hipaa: false,
-  });
-</script>
+    hipaa: false
+});</script>
 ```
 
 <Callout kind="tip">
@@ -116,16 +117,19 @@ There are two ways to set it:
   </Tab>
 
   <Tab title="Inline on the page" icon="code">
-    Set `window.__mythic_global_name` **before** the loader script runs. The loader reads it and attaches to that name (falling back to `mythic` if it isn't a valid identifier).
+    Set `window.__mythic_global_name` **before** the loader runs — the first statement in the snippet. The loader reads it and attaches to that name (falling back to `mythic` if it isn't a valid identifier).
 
     ```html
-    <script>window.__mythic_global_name = "acme";</script>
-    <script src="https://api.adberserk.com/cdn/m.js"></script>
+    <script>window.__mythic_global_name="acme";!function(){/* ...loader snippet... */}();
+    acme.init("pk_your_publishable_key");</script>
     <script>
-      window.acme.init("pk_your_publishable_key");
       window.acme.capture("Signup started", { plan: "pro" });
     </script>
     ```
+
+    The loader snippet from `GET /api/v1/clients/{id}/loader` puts that
+    assignment inside the snippet itself when the client has a `global_name`,
+    and stubs `window.acme` rather than `window.mythic`.
   </Tab>
 </Tabs>
 
