@@ -35,10 +35,12 @@ https://mythic-analytics.gulp.workers.dev/client/v1/agency
 
 ## Authentication
 
-**Agency key (`ak_`) only, and no location parameter** — the agency itself is
-the scope. Unlike the rest of `/client/v1`, a location secret key (`sk_`) is
-rejected with `403 agency_required`: an `sk_` belongs to one location, and
-this surface reads across all of them.
+**Agency key (`ak_`), or an agency-wide scoped key (`mcp_`) holding
+`agency:read` — and no location parameter** — the agency itself is the scope.
+Unlike the rest of `/client/v1`, a location secret key (`sk_`) is rejected with
+`403 agency_required`, and a client-scoped `mcp_` key with
+`403 agency_key_required`: both belong to one location, and this surface reads
+across all of them.
 
 ```bash
 curl "https://mythic-analytics.gulp.workers.dev/client/v1/agency/stats" \

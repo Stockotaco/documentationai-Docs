@@ -1,8 +1,8 @@
 ---
 title: Authentication
 description: >-
-  Authenticate management requests with a Supabase admin session, and gateway
-  tool calls with a scoped mcp_ API key.
+  Authenticate management requests with a Supabase admin session, and MCP tool
+  calls or HTTP API requests with a scoped mcp_ API key.
 ---
 
 ## Management API authentication
@@ -31,31 +31,76 @@ The key must begin with `mcp_`. A missing, malformed, or deactivated key returns
 
 ## Scopes
 
-An `mcp_` key carries a `scopes` array that gates which tools it can list and call. Scopes use `resource:action` form, with `*` wildcards:
+An `mcp_` key carries a `scopes` array that gates which tools it can list and call — and, when the key is sent as a Bearer to the HTTP API, which routes it may call. Scopes use `<family>:<action>` form, with `*` wildcards:
 
 | Form | Example | Meaning |
 |------|---------|---------|
-| `resource:action` | `insights:read` | One action on one resource |
-| `resource:*` | `dashboards:*` | Any action on one resource |
-| `*` | `*` | Any tool |
+| `family:read` | `people:read` | Read operations in one family |
+| `family:write` | `insights:write` | Write operations in one family — **implies `family:read`** |
+| `family:*` | `dashboards:*` | Any action on one family |
+| `*` | `*` | Everything |
 
 <Callout kind="warning">
-  An **empty** `scopes` array grants **nothing**. Unrestricted access is the explicit `["*"]`. (Keys created while an empty array still meant "unrestricted" were backfilled to `["*"]`, so no existing key lost access. Keys created without a `scopes` field default to `["*"]`.)
+  An **empty** `scopes` array grants **nothing**. Unrestricted access is the explicit `["*"]`. Keys created without a `scopes` field default to `["*"]`.
 </Callout>
+
+### Families
+
+Families follow the plan features they belong to, so a plan and a key describe access in the same words. Twenty-three families:
+
+| Family | Grants | Actions |
+|--------|--------|---------|
+| `people` | Person profiles, identities, merges, merge warnings | read |
+| `events` | Event volumes, trends, breakdowns, property discovery, Explore queries, tracking coverage, Core Web Vitals | read |
+| `sessions` | Session analytics | read |
+| `replays` | Session replay timelines | read |
+| `exceptions` | Error tracking | read |
+| `heatmaps` | Click and scroll heatmaps | read |
+| `bigquery_export` | Export status and schema | read |
+| `insights` | Saved insights, run and preview | read, write |
+| `dashboards` | Dashboards | read, write |
+| `canvases` | Canvases | read, write |
+| `segments` | Segments, counts, membership | read, write |
+| `constraints` | Constraint finder and its benchmarks | read, write |
+| `correlation` | Correlation | read |
+| `incrementality` | Incrementality experiments and coefficients | read, write |
+| `contracts` | Event contracts and violation reports | read, write |
+| `destinations` | Destinations, credentials, deliveries | read, write |
+| `settings` | Tracking settings **and the ingestion on/off switch** | read, write |
+| `links` | Link redirects, click analytics, link webhooks, uptime | read, write |
+| `tags` / `snippets` / `transformers` | SDK configuration | read, write |
+| `airbyte` | Airbyte sync orchestration — agency-wide keys only | read, write |
+| `agency` | Client roster and cross-location rollups — agency-wide keys only | read |
+
+Every tool's exact scope is in the [Tool Reference](/mcp/tools), which is generated from the server's registry. `list_clients` and `select_client` need no scope on an agency-wide key.
+
+Key issuance (`POST`/`PATCH /builder/mcp/api-keys`) validates every scope string against this catalog and answers `400 invalid_scope` — listing the offending strings and every valid one — rather than storing a typo that silently grants nothing. The retired `data:*` and `analysis:*` families are rejected the same way; existing keys that held them were expanded to the new families.
 
 <Callout kind="info">
-  The same `mcp_` keys authenticate the [Settings Server](/mcp/settings-server),
-  which adds the `destinations`, `tags`, `snippets`, and `transformers` resources
-  and supports **agency-wide keys** (no fixed location — they select a client per
-  session). A key with a `null` location is agency-wide; one bound to a location
-  is client-scoped.
+  A key with a `null` location is **agency-wide** (it selects a client per session, or names one per HTTP request); one bound to a location is **client-scoped** and can never reach an agency-grain operation, whatever its scopes say.
 </Callout>
 
-### How tool names map to scopes
+### Gateway tools
 
-Gateway (upstream) tools require `<scope_prefix>:call`, where `<scope_prefix>` is the owning server's configured prefix. If the server has no scope prefix, the required scope is `upstream:call`.
+Gateway (upstream) tools at `POST /mcp` require `<scope_prefix>:call`, where `<scope_prefix>` is the owning server's configured prefix. If the server has no scope prefix, the required scope is `upstream:call`.
 
-Settings Server tools use `<resource>:read` for `list_*`/`get_*` tools and `<resource>:write` for mutations; each tool's required scope is listed on the [Settings Server](/mcp/settings-server) page.
+## Using an mcp_ key over HTTP
+
+The same `mcp_` key is accepted as a Bearer on every `/client/v1` and `/builder` route. It is the scoped credential of the HTTP API: an agency key (`ak_`) is read-write across the whole agency and a location secret (`sk_`) is read-only for one location, so an `mcp_` key is how you hand an integration exactly one capability.
+
+```bash
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/data/people?location_id=loc_abc" \
+  -H "Authorization: Bearer mcp_..."
+```
+
+Each route requires the scope of the tool that proxies it — the **Proxies** column of the [Tool Reference](/mcp/tools) is the mapping. Rules:
+
+- **Location binding works as for `ak_`/`sk_`.** A client-scoped key carries its own location; an agency-wide key names one with `location_id` or `X-Location-Id` on location-grain routes (`400 location_required` otherwise).
+- **Writes need the `:write` scope**, whichever key shape holds it — unlike `sk_`, a client-scoped `mcp_` key can write.
+- **Agency-grain routes** (`/client/v1/agency/*`, `/client/v1/airbyte/*`, `GET /builder/locations`) refuse client-scoped keys with `403 agency_key_required`.
+- **Routes with no tool are closed to `mcp_` keys**, including an unrestricted one: the OAuth browser legs, the embed SPA's internals, and above all key issuance under `/builder/mcp` answer `403 not_available_to_scoped_keys`. Minting or rescoping a key is the privilege boundary and stays with `ak_`.
+- A missing scope answers `403 insufficient_scope` with the `required` scope named.
+- Plan entitlements and per-key rate limits apply as on any other key (`rate_limit_per_minute`, default 60).
 
 <Callout kind="alert">
   Never expose admin session tokens or `mcp_` API keys in client-side JavaScript, public repositories, or logs. Both are server-side credentials. The raw `mcp_` key is shown only once, at creation.

@@ -1,18 +1,19 @@
 ---
 title: Authentication
 description: >-
-  Authenticate Data API requests with an agency key or a location secret key,
-  and bind a location to scope the data you receive.
+  Authenticate Data API requests with an agency key, a location secret key or
+  a scoped key, and bind a location to scope the data you receive.
 ---
 
 ## Authentication
 
-The Data API accepts two key types, both passed as a bearer token in the `Authorization` header.
+The Data API accepts three key types, all passed as a bearer token in the `Authorization` header.
 
 | Key type | Prefix | Scope |
 |----------|--------|-------|
 | Agency key | `ak_` | All locations linked to the agency |
 | Location secret key | `sk_` | A single location |
+| Scoped key | `mcp_` | Only the routes its [scopes](/mcp/authentication#using-an-mcp_-key-over-http) grant — `people:read`, `events:read`, `sessions:read`, `replays:read`, `exceptions:read`, `heatmaps:read`, `bigquery_export:read` here |
 
 <ParamField header="Authorization" param-type="string" required="true" deprecated="false">
   Bearer token. Format: `Bearer ak_...` for an agency key, or `Bearer sk_...` for a location secret key.

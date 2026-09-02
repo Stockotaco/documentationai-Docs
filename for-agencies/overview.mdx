@@ -20,10 +20,11 @@ https://mythic-analytics.gulp.workers.dev
 |-----------|--------|-------|-----------|
 | Agency key (`ak_`) | `Authorization: Bearer ak_...` | Read-write across **all** your linked locations | Your server-side integrations only |
 | Location secret (`sk_`) | `Authorization: Bearer sk_...` | Read-only, **one** location | A client, or a read-only dashboard |
+| Scoped key (`mcp_`) | `Authorization: Bearer mcp_...` | Exactly the [scopes](/mcp/authentication#scopes) you grant — one location or agency-wide, read or write per family | An integration or AI agent that needs one capability; also the MCP credential |
 | Publishable key (`pk_`) | `x-mythic-key: pk_...` | Event ingestion + AI proxy | A client's website (browser-safe) |
 
 <Callout kind="alert">
-  The agency key and location secrets are server-side credentials — never expose them in browser JavaScript, public repos, or logs. Only the publishable key (`pk_`) is safe client-side.
+  The agency key, location secrets and scoped keys are server-side credentials — never expose them in browser JavaScript, public repos, or logs. Only the publishable key (`pk_`) is safe client-side.
 </Callout>
 
 ## Scope a call to one client

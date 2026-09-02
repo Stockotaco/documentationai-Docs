@@ -10,7 +10,7 @@ description: >-
 ## Overview
 
 The Settings Server is a hosted MCP server exposing the **full agency product
-surface** — 173 tools across 16 scope families — from any MCP-compatible AI
+surface** — 176 tools across 23 scope families — from any MCP-compatible AI
 client. It is separate from the
 [Gateway](/mcp/gateway) (which proxies upstream tools) but authenticates with
 the **same `mcp_` API keys** and scopes.
@@ -118,30 +118,33 @@ client for that one call — so passing it always is the portable choice.
 
 ## Tool families & scopes
 
-Every tool is gated by a scope on the key (`resource:read` / `resource:write`,
-`resource:*`, or `*`). An empty `scopes` array grants **nothing** — unrestricted
-is the explicit `["*"]`. `list_clients` and `select_client` need no scope —
-agency-wide keys get them automatically.
+Every tool is gated by a scope on the key (`family:read` / `family:write`,
+`family:*`, or `*`). An empty `scopes` array grants **nothing** — unrestricted
+is the explicit `["*"]`. A `:write` scope implies the matching `:read`.
+`list_clients` and `select_client` need no scope — agency-wide keys get them
+automatically.
 
-The four **agency rollup tools** work the same way: `get_agency_stats`,
-`get_agency_destination_health`, `get_agency_contracts_summary`, and
-`get_agency_usage` are registered only for agency-wide keys and need no scope
-— they are read-only views of the agency's own footprint, and thin proxies of
-the [Agency API](/agency-api/overview) (`/client/v1/agency`), so parameters,
-semantics, error codes, and the 100-location `location_ids` batching are those
-of the REST routes. No `select_client` needed: the agency itself is the scope.
+The **agency rollup tools** (`get_agency_stats`, `get_agency_destination_health`,
+`get_agency_contracts_summary`, `get_agency_usage`, `get_agency_quota`) are
+registered only for agency-wide keys and take `agency:read`. They are thin
+proxies of the [Agency API](/agency-api/overview) (`/client/v1/agency`), so
+parameters, semantics, error codes, and the 100-location `location_ids` batching
+are those of the REST routes. No `select_client` needed: the agency itself is the
+scope.
 
-Sixteen scope families gate the remaining 167 client-scoped tools:
+Twenty-three scope families gate the tools — the full table, with what each one
+grants, is on the [Authentication](/mcp/authentication#families) page:
 
-`insights`, `data`, `sessions`, `analysis`, `settings`, `links`, `airbyte`, `segments`, `dashboards`, `canvases`, `replays`, `destinations`, `tags`, `snippets`, `contracts`, `transformers`.
+`people`, `events`, `sessions`, `replays`, `exceptions`, `heatmaps`,
+`bigquery_export`, `insights`, `dashboards`, `canvases`, `segments`,
+`constraints`, `correlation`, `incrementality`, `contracts`, `destinations`,
+`settings`, `links`, `tags`, `snippets`, `transformers`, `airbyte`, `agency`.
 
 **[See the Tool Reference](/mcp/tools)** for every tool by name, the scope it
 needs, what it does, and the API route it proxies. That page is generated from
 the server's own registry, so it is never out of step with what the server serves.
-
-For each `read-write` family, the `:read` scope grants the read tools and the
-`:write` scope grants the write tools (write implies read at the gate);
-`data`, `sessions`, and `replays` are read-only families.
+The same scope authorizes the proxied route when the key is
+[used directly over HTTP](/mcp/authentication#using-an-mcp_-key-over-http).
 
 Destination writes are validated per type (`webhook`, `meta_capi`, `google_ads`);
 runtime secrets are never exposed. Tag/snippet/transformer writes sync to the
