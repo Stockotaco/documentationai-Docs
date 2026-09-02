@@ -406,33 +406,6 @@
             ]
           },
           {
-            "tab": "AI Proxy",
-            "icon": "bot",
-            "groups": [
-              {
-                "group": "Overview",
-                "icon": "file-text",
-                "pages": [
-                  {
-                    "title": "Introduction",
-                    "path": "ai-api/overview",
-                    "icon": "file-text"
-                  },
-                  {
-                    "title": "Authentication",
-                    "path": "ai-api/authentication",
-                    "icon": "lock"
-                  }
-                ]
-              },
-              {
-                "group": "AI",
-                "icon": "bot",
-                "openapi": "openapi/ai-proxy.yaml"
-              }
-            ]
-          },
-          {
             "tab": "MCP",
             "icon": "cpu",
             "groups": [
@@ -962,33 +935,6 @@
                 "group": "BigQuery Export",
                 "icon": "database",
                 "openapi": "openapi/bigquery.yaml"
-              }
-            ]
-          },
-          {
-            "tab": "AI Proxy",
-            "icon": "bot",
-            "groups": [
-              {
-                "group": "Overview",
-                "icon": "file-text",
-                "pages": [
-                  {
-                    "title": "Introduction",
-                    "path": "ai-api/overview",
-                    "icon": "file-text"
-                  },
-                  {
-                    "title": "Authentication",
-                    "path": "ai-api/authentication",
-                    "icon": "lock"
-                  }
-                ]
-              },
-              {
-                "group": "AI",
-                "icon": "bot",
-                "openapi": "openapi/ai-proxy.yaml"
               }
             ]
           },

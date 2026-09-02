@@ -22,7 +22,7 @@ Mythic exposes three credential types. Pick the one that matches the surface you
 | Admin session (Supabase JWT) | `Authorization: Bearer <access_token>` | `/api/v1/*`, `/admin/*` | Full platform access — allowlisted admin accounts only |
 | Agency key (`ak_`) | `Authorization: Bearer ak_...` | `/client/v1/*`, `/builder` | Read-write across an agency's linked locations |
 | Location secret (`sk_`) | `Authorization: Bearer sk_...` | `/client/v1/*`, `/builder` | Read-only, single location |
-| Publishable key (`pk_`) | `x-mythic-key: pk_...` | `/ai/*`, event ingestion | Browser-safe |
+| Publishable key (`pk_`) | `x-mythic-key: pk_...` | Event ingestion | Browser-safe |
 
 <Callout kind="alert">
   The admin session token, `ak_`, and `sk_` keys are server-side credentials. Never expose them in browser JavaScript, public repos, or logs. Only the publishable key (`pk_`) is safe client-side.
