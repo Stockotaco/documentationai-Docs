@@ -100,6 +100,20 @@ GET /client/v1/destinations/integrations
 
 Disconnecting (`DELETE /integrations/{platform}`) detaches the browser tag and removes the managed destination — and the stored credential too, when no other destination of that type remains.
 
+## Identity matching
+
+Match rate decides how many conversions a platform can attribute, so both halves send every identifier Mythic knows about — no configuration.
+
+**Server half.** The Conversions API / Data Manager payload carries SHA-256 hashes of email, phone, first name, last name, external id, city, region, postal code and country, taken from the resolved person — including every email and phone stitched onto that person by identity resolution, so a contact known by a work address in your CRM still matches on a personal address captured by the pixel. It also sends `fbp`, `fbc` (restored from the click vault when the click predates the conversion), the client IP and the user agent.
+
+**Browser half.** The SDK collects identity from `identify()` traits, person properties (`$set`), super properties and the properties of the events you capture — form fills included — normalizes it the way each platform expects, and declares it as Meta [Advanced Matching](https://developers.facebook.com/docs/meta-pixel/advanced/advanced-matching) / Google [Enhanced Conversions](https://support.google.com/google-ads/answer/9888656) before the event it applies to. Learning an email mid-visit re-declares matching so that conversion benefits, and nothing is re-sent while the identity is unchanged.
+
+Values leave the browser hashed by `fbevents.js` / `gtag.js`, which is why the SDK hands them over normalized but unhashed — pre-hashing would double-hash and match nothing. Values that cannot match are dropped rather than forwarded: an address with no TLD, a phone under 7 digits, a spelled-out country name.
+
+<Callout kind="alert">
+  **HIPAA mode sends no identity data to either platform.** The browser store is never populated and the matching call is never made; under the SDK's local HIPAA flag the remote config is not fetched at all, so managed tags never load. Server-side, the CAPI payload drops IP and geo for HIPAA tenants. `reset()` clears collected identity so a new person cannot inherit the previous one's match keys.
+</Callout>
+
 ## Consent and existing pixels
 
 <Callout kind="alert">
