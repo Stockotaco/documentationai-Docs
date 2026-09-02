@@ -31,13 +31,14 @@ POST /client/v1/destinations/integrations/meta
   "pixel_id": "123456789012345",
   "capi_token": "EAAx…system-user-token…",
   "event_mapping": { "purchase": "Purchase" },
-  "test_event_code": "TEST123"
+  "test_event_code": "TEST123",
+  "credential_name": "live"
 }
 ```
 
 The `event_mapping` merges over sensible defaults (`page_view` → `PageView`, `view_item` → `ViewContent`, `add_to_cart` → `AddToCart`, `begin_checkout` → `InitiateCheckout`, `purchase` → `Purchase`, `lead` → `Lead`, and more). Any Mythic event not in the mapping is not sent to Meta.
 
-If a `meta_capi` credential is already stored you can omit `capi_token`; the token is write-only and never returned. `browser_tag: false` skips the managed pixel for sites that already run their own — Mythic then only sends CAPI.
+If a `meta_capi` credential is already stored you can omit `capi_token`; the token is write-only and never returned. Deliveries use the credential named `credential_name` (default `default`) — pass e.g. `"live"` when the working token is stored under another name. `browser_tag: false` skips the managed pixel for sites that already run their own — Mythic then only sends CAPI.
 
 ## Connect Google Ads
 
