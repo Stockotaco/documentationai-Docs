@@ -563,7 +563,7 @@
             ]
           },
           {
-            "tab": "Clients API",
+            "tab": "Clients API (retired)",
             "icon": "building-2",
             "groups": [
               {
@@ -571,56 +571,16 @@
                 "icon": "file-text",
                 "pages": [
                   {
-                    "title": "Introduction",
+                    "title": "Where these routes went",
                     "path": "clients-api/overview",
                     "icon": "file-text"
-                  },
-                  {
-                    "title": "Authentication",
-                    "path": "clients-api/authentication",
-                    "icon": "lock"
                   }
                 ]
-              },
-              {
-                "group": "Clients",
-                "icon": "users",
-                "openapi": "openapi/clients.yaml"
-              },
-              {
-                "group": "Tags",
-                "icon": "tag",
-                "openapi": "openapi/tags.yaml"
-              },
-              {
-                "group": "Snippets",
-                "icon": "code",
-                "openapi": "openapi/snippets.yaml"
-              },
-              {
-                "group": "Hostnames",
-                "icon": "globe",
-                "openapi": "openapi/hostnames.yaml"
-              },
-              {
-                "group": "Links",
-                "icon": "link",
-                "openapi": "openapi/client-links.yaml"
-              },
-              {
-                "group": "Logs & Trends",
-                "icon": "activity",
-                "openapi": "openapi/logs-trends.yaml"
-              },
-              {
-                "group": "Tag Templates",
-                "icon": "bookmark",
-                "openapi": "openapi/tag-templates.yaml"
               }
             ]
           },
           {
-            "tab": "Agencies API",
+            "tab": "Agencies (staff)",
             "icon": "briefcase",
             "groups": [
               {

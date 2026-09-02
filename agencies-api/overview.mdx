@@ -1,13 +1,32 @@
 ---
-title: Agencies Management API
+title: Agencies (staff)
 description: >-
-  Create, list, update, and delete agencies, rotate agency keys, and link
-  Mythic Analytics client tenants (locations) to an agency.
+  Staff-only routes for creating agencies, rotating agency keys, and linking
+  client tenants to an agency. Not callable with an agency key.
 ---
+
+<Callout kind="alert">
+  **Staff credential required.** These routes need an allowlisted Supabase
+  admin session and are not callable with an agency key (`ak_`), a location
+  secret key (`sk_`), or a scoped key (`mcp_`). They are documented here for
+  operators and for server-to-server callers Mythic has issued a service
+  account to — not as part of the agency-facing product.
+
+  Creating an agency has no agency-scoped form by definition: an `ak_` key *is*
+  one agency, so it cannot create or enumerate others.
+</Callout>
 
 ## Overview
 
-Use the Agencies Management API to manage agency entities in Mythic Analytics. Agencies group multiple client tenants under a single management entity, enabling multi-tenant operations for resellers and white-label partners. Each agency is issued an `agency_key` (`ak_` credential) that client-facing APIs use to identify it.
+Agency administration: create agencies, rotate their keys, and link or unlink
+client tenants (locations). Agencies group multiple client tenants under a
+single management entity for resellers and white-label partners, and each is
+issued an `agency_key` (`ak_`) that the client-facing APIs authenticate with.
+
+What an agency does for **itself** is elsewhere and needs no staff credential:
+[cross-location rollups](/agency-api/overview) on `/client/v1/agency`, and
+[provisioning its own clients](/locations-api/overview) on
+`/client/v1/locations`.
 
 ## Base URL
 

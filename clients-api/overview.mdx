@@ -1,79 +1,59 @@
 ---
-title: Clients Management API
+title: Clients API (retired)
 description: >-
-  Create, list, update, and delete Mythic Analytics client tenants, manage tags
-  and snippets, and retrieve loader embed code via the Clients Management API.
+  The /api/v1 client-management routes are staff-only and no longer documented
+  here. Everything an agency does for its own clients now lives on
+  /client/v1 behind the agency key.
 ---
 
-## Overview
+## This surface is retired
 
-Use the Clients Management API to manage Mythic Analytics client tenants. You can create tenants with auto-generated credentials, configure tags and snippets for remote injection, and retrieve loader snippets for embedding the SDK.
+The `/api/v1` client-management routes still exist, but they are **internal to
+Mythic operators** and require a staff credential. They were published here as
+though they were part of the product, which they never were, and that mistake
+had consequences: an integration authenticating with the old static admin key
+broke when that key was retired, with no deprecation window, because nothing
+recorded who was calling.
 
-## Base URL
+Everything an agency needs is on `/client/v1`, behind the agency key (`ak_`)
+you already hold.
 
-All endpoints share the same base URL and version prefix.
+## Where each route went
 
-```text
-https://mythic-analytics.gulp.workers.dev/api/v1
-```
+| Retired route | Use instead |
+| --- | --- |
+| `POST /api/v1/clients` | [`POST /client/v1/locations`](/locations-api/overview) |
+| `GET`/`PATCH /api/v1/clients/{id}` | [`GET`/`PATCH /client/v1/locations/details`](/locations-api/overview) |
+| `GET /api/v1/clients/{id}/loader` | [`GET /client/v1/locations/loader`](/locations-api/overview) |
+| `GET`/`POST`/`DELETE /api/v1/clients/{id}/hostname` | [`GET`/`PUT`/`DELETE /client/v1/locations/hostname`](/locations-api/overview) |
+| `GET /api/v1/clients/{id}/logs` | [`GET /client/v1/locations/events`](/locations-api/overview) |
+| `GET /api/v1/clients/{id}/last-event` | [`GET /client/v1/locations/last-event`](/locations-api/overview) |
+| `GET /api/v1/clients/{id}/trend`, `/events/summary`, `/events/daily` | [Data API](/data-api/overview) — `/client/v1/data/events/*` |
+| `PUT /api/v1/clients/{id}/tags`, `GET /api/v1/tags` | [Client Config](/config-api/overview) — `/client/v1/config/tags` |
+| `PUT /api/v1/clients/{id}/snippets` | [Client Config](/config-api/overview) — `/client/v1/config/snippets` |
+| `GET`/`POST`/`PATCH`/`DELETE /api/v1/clients/{id}/links` | [Client Links](/client-links-api/overview) — `/client/v1/links` |
+| `GET /api/v1/clients/{id}/people…` | [Data API](/data-api/overview) — `/client/v1/data/people` |
+| `POST /api/v1/clients/{id}/rotate-secret` | Contact support |
+| `DELETE /api/v1/clients/{id}` | Contact support — deletion has data-retention consequences |
 
-<Callout kind="info">
-  The host is deployment-specific. `mythic-analytics.gulp.workers.dev` is the canonical worker host used throughout these docs, but a provisioned deployment may reach the same API through a branded custom domain (for example `api.adberserk.com`) that routes to the identical worker — paths, auth, and response shapes are the same on either host. Use whichever host your integration was provisioned with.
-</Callout>
+## Why the replacements are not identical
 
-## Response envelope
+Two differences will show up immediately if you are porting a caller.
 
-All endpoints return a JSON envelope.
+**The client id is server-generated.** `POST /client/v1/locations` rejects
+`id`, `agency_id`, and `plan_id` rather than accepting them — the first because
+a caller-chosen id lets one agency squat another's id namespace, the second
+because it is what enforces tenant isolation, the third because it is a billing
+decision. Store the id the response returns.
 
-<ResponseField name="success" field-type="boolean" required="true" deprecated="false">
-  Whether the request succeeded.
-</ResponseField>
+**Scoping is a parameter, not a path segment.** `/client/v1` routes name the
+client with `?location_id=` or the `X-Location-Id` header, and a location that
+is not linked to your agency is refused. See
+[Authentication](/get-started/authentication).
 
-<ResponseField name="data" field-type="object|array|null" required="false" deprecated="false">
-  Resource payload. Shape depends on the endpoint.
-</ResponseField>
-
-<ResponseField name="count" field-type="integer" required="false" deprecated="false">
-  Total number of matching resources. Present on list endpoints.
-</ResponseField>
-
-<ResponseField name="error" field-type="string|null" required="false" deprecated="false">
-  Error message on failed requests.
-</ResponseField>
-
-Example error response:
-
-```json
-{
-  "success": false,
-  "data": null,
-  "error": "Unauthorized",
-  "count": 0
-}
-```
-
-## Validation rules
-
-The API enforces the following formats:
-
-| Field | Pattern | Description |
-|-------|---------|-------------|
-| `id` | `^[a-zA-Z0-9_-]{1,255}$` | Alphanumeric, hyphens, underscores |
-| `name` | 1-255 characters | Required display name |
-| `domain` | Valid domain format | e.g., `acme-retail.com` |
-| `email` | Standard email format | e.g., `ops@acme.com` |
-| `global_name` | Valid JS identifier | e.g., `acmeRetail`, `_myApp` |
-
-## Error handling
-
-| Status | Meaning |
-|--------|---------|
-| `400` | Invalid JSON, missing required fields, or validation error |
-| `401` | Session token missing, invalid, or not on the admin allowlist |
-| `404` | Client not found |
-| `409` | Conflict — a resource with the same unique key already exists (e.g. duplicate client `id` or link `slug`) |
-| `500` | Internal server error |
-
-<Callout kind="info">
-  Check both the HTTP status code and the `error` field in the response body for programmatic error handling.
+<Callout kind="note">
+  Agency and location *administration* — creating agencies, linking locations
+  to them — has no agency-scoped form, because an agency key is scoped to one
+  agency. Those routes remain staff-only under
+  [Agencies (staff)](/agencies-api/overview).
 </Callout>

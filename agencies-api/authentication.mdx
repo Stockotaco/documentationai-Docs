@@ -9,6 +9,18 @@ description: >-
 
 Every endpoint requires a Supabase session JWT for an allowlisted admin account, passed as a bearer token.
 
+<Callout kind="alert">
+  This is a **staff** credential, not an agency one. An agency key (`ak_`), a
+  location secret key (`sk_`), or a scoped key (`mcp_`) is refused with `401`
+  on every route in this section. There is no static admin key and no
+  `?admin_key=` query parameter — a shared secret was retired precisely
+  because it was unattributable and could not be revoked for one caller.
+
+  A server-to-server caller that needs these routes is issued its own service
+  account and exchanges it for a session token, so its calls are attributable
+  and individually revocable. Contact Mythic to have one issued.
+</Callout>
+
 <ParamField header="Authorization" param-type="string" required="true" deprecated="false">
   Supabase session JWT for an allowlisted admin account. Format: `Bearer <access_token>`.
 </ParamField>
