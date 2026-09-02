@@ -434,6 +434,88 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /ip-geo-enrichment:
+    get:
+      summary: Get edge IP/geo enrichment
+      operationId: getIpGeoEnrichment
+      description: >
+        Whether the ingest edge stamps `$ip` and `$geo_*` onto every event for
+        this location. Readable with an agency key (`ak_`, pass `?location_id=`)
+        or a viewer key (`sk_`).
+
+
+        `effective.blocked_by_hipaa` is true when the flag is on but the
+        location is a HIPAA tenant, which the ingest gate refuses regardless —
+        so a caller is never left believing geo is arriving when it is not.
+      responses:
+        "200":
+          description: The current setting
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpGeoEnrichmentResponse"
+        "401":
+          description: Authorization key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Set edge IP/geo enrichment
+      operationId: putIpGeoEnrichment
+      description: >
+        Turn edge IP/geo stamping on or off. Requires an agency key (`ak_`) and
+        `?location_id=`; viewer keys get `403 agency_required`.
+
+
+        When on, the ingest worker adds `$ip`, `$geo_country`, `$geo_region`,
+        `$geo_region_code`, `$geo_city` and `$geo_postal` from Cloudflare's
+        edge data for the request. Three reasons to prefer it over the
+        browser's own lookup: it cannot be spoofed by the client, it costs the
+        visitor no round trip, and it is present on the **first** event of a
+        visit — the SDK's own lookup never blocks a capture, so an early event
+        would otherwise carry no geo.
+
+
+        Properties already on the event win, so an SDK-supplied `$geo_*` or an
+        explicit `$ip` is never overwritten. Cloudflare's unknown/Tor sentinels
+        (`XX`, `T1`) are skipped rather than stored, because they cannot match a
+        real person and only degrade Meta's match quality.
+
+
+        This is also where match rate comes from for server-side conversions:
+        the values feed Meta CAPI `client_ip_address` and the hashed
+        `ct`/`st`/`zp`/`country` keys.
+
+
+        Off by default, and never applied to HIPAA tenants — IP and geo are
+        identifying.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IpGeoEnrichmentRequest"
+      responses:
+        "200":
+          description: The updated setting
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpGeoEnrichmentResponse"
+        "400":
+          description: Body must include a boolean ip_geo_enrichment field
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Agency key required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /contract-alerts:
     get:
       summary: Get the event-contract alert webhook
@@ -825,6 +907,32 @@ components:
             Shared secret for `X-Mythic-Signature`. Omit to leave the current
             secret untouched; pass `null` to send unsigned. Never returned by a
             GET.
+    IpGeoEnrichmentRequest:
+      type: object
+      required: [ip_geo_enrichment]
+      properties:
+        ip_geo_enrichment:
+          type: boolean
+          description: Whether the ingest edge stamps $ip and $geo_* on every event.
+    IpGeoEnrichmentResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            ip_geo_enrichment:
+              type: boolean
+            effective:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  description: Whether stamping actually happens (false for HIPAA tenants).
+                blocked_by_hipaa:
+                  type: boolean
+                  description: True when the flag is on but HIPAA mode overrides it.
     ContractAlertsResponse:
       type: object
       properties:

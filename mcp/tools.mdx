@@ -270,9 +270,9 @@ Per-location ingestion controls: allowed origins, autocapture, heatmaps, experim
 
 | Tool | Scope | What it does | Proxies |
 | --- | --- | --- | --- |
-| `get_tracking_settings`<br /><span style={{opacity: 0.7}}>Get Tracking Settings</span> | `settings:read` | Read this client's per-location tracking settings. | `GET /client/v1/settings/allowed-origins`<br />`GET /client/v1/settings/autocapture`<br />`GET /client/v1/settings/heatmaps`<br />`GET /client/v1/settings/experiments`<br />`GET /client/v1/settings/conversions`<br />`GET /client/v1/settings/contract-alerts` |
+| `get_tracking_settings`<br /><span style={{opacity: 0.7}}>Get Tracking Settings</span> | `settings:read` | Read this client's per-location tracking settings. | `GET /client/v1/settings/allowed-origins`<br />`GET /client/v1/settings/autocapture`<br />`GET /client/v1/settings/ip-geo-enrichment`<br />`GET /client/v1/settings/heatmaps`<br />`GET /client/v1/settings/experiments`<br />`GET /client/v1/settings/conversions`<br />`GET /client/v1/settings/contract-alerts` |
 | `get_client_status`<br /><span style={{opacity: 0.7}}>Get Client Status</span> | `settings:read` | Whether this client (location) is active — an inactive client's events are rejected at ingestion. | `GET /client/v1/status` |
-| `update_tracking_setting`<br /><span style={{opacity: 0.7}}>Update Tracking Setting</span> | `settings:write` | Update ONE tracking setting for this client. | `PUT /client/v1/settings/allowed-origins`<br />`PUT /client/v1/settings/autocapture`<br />`PUT /client/v1/settings/heatmaps`<br />`PUT /client/v1/settings/experiments`<br />`PUT /client/v1/settings/conversions`<br />`PUT /client/v1/settings/contract-alerts` |
+| `update_tracking_setting`<br /><span style={{opacity: 0.7}}>Update Tracking Setting</span> | `settings:write` | Update ONE tracking setting for this client. | `PUT /client/v1/settings/allowed-origins`<br />`PUT /client/v1/settings/autocapture`<br />`PUT /client/v1/settings/ip-geo-enrichment`<br />`PUT /client/v1/settings/heatmaps`<br />`PUT /client/v1/settings/experiments`<br />`PUT /client/v1/settings/conversions`<br />`PUT /client/v1/settings/contract-alerts` |
 | `set_client_status`<br /><span style={{opacity: 0.7}}>Set Client Status</span> | `settings:write` | Activate or deactivate this client. | `POST /client/v1/status` |
 
 ## Links & Uptime
