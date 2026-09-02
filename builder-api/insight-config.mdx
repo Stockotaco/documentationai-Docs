@@ -38,14 +38,14 @@ An insight is a saved [explore query](/data-api/explore) plus a visualization. I
 
 | `insight_type` | `query.kind` | Typical spec | Renders |
 |----------------|--------------|--------------|---------|
-| `number`  | `trend`  | no `interval`, one series, optional `compare` | one big number, delta vs previous period |
+| `number`  | `trend`  | `interval`, 1–5 series, optional `compare` | a scorecard per series (total + delta vs previous period) over one shared trend chart |
 | `line`    | `trend`  | `interval`, 1–5 series, optional `breakdown` | one line per series × breakdown value |
 | `bar`     | `trend`  | no `interval`, `breakdown` **or** several series | one bar per breakdown value or series |
 | `pie`     | `trend`  | no `interval`, `breakdown` | share per breakdown value |
 | `table`   | `trend`  | with or without `interval` | series × buckets, or one row per series |
 | `funnel`  | `funnel` | 2–10 `steps`, optional `window`, `grain`, `breakdown` | step bars with conversion rates |
 
-The one hard rule: `funnel` ⇔ `kind: "funnel"`. Every other type must carry a `kind: "trend"` spec. A trend without `interval` returns one `value` per series; with `interval` it returns `data[]` per bucket. `number`, `bar` and `pie` read the totals either way, so leaving `interval` off is cheaper.
+The one hard rule: `funnel` ⇔ `kind: "funnel"`. Every other type must carry a `kind: "trend"` spec. A trend without `interval` returns one `value` per series; with `interval` it returns `data[]` per bucket **and** a `total`. `bar` and `pie` read the totals either way, so leaving `interval` off is cheaper for those. `number` renders either way too, but without an `interval` it has no buckets to draw and shows the scorecards alone.
 
 ## Examples
 
@@ -188,7 +188,7 @@ The run payload is the explore response with the insight attached — see the Qu
 | `meta` | resolved window, interval, breakdown settings, `sql_ms`, `rows_read` | same, plus `grain` |
 | `config`, `cached`, `sql` | stored config, cache hit flag, compiled query (`sql` is omitted on `/public/query`) | same |
 
-For a `number`, read `series[0].total` (with `interval`) or `series[0].value`, and the `previous*` counterpart for the delta. For a `line`, plot `buckets` against each entry's `data`. For `bar`/`pie`, one slice per `series[]` entry using `total`/`value`.
+For a `number`, read each entry's `total` (with `interval`) or `value` for the scorecard, the `previous*` counterpart for the delta, and `buckets` against `data` for the chart beneath them. For a `line`, plot `buckets` against each entry's `data`. For `bar`/`pie`, one slice per `series[]` entry using `total`/`value`.
 
 ## Dashboards: filters and theme
 
