@@ -1,11 +1,13 @@
 openapi: "3.0.0"
 info:
-  version: 1.0.0
+  version: 2.0.0
   title: Insights
   description: >-
     Create, list, retrieve, update, and delete saved insights. An insight is a
-    named analytics query with visualization settings, scoped to a single
-    client location.
+    saved **explore spec** (`config.query` — the same object `POST
+    /client/v1/data/query` takes) plus a visualization type, scoped to a single
+    client location. It runs on the Tinybird explore engine; there is no SQL
+    anywhere in an insight.
 servers:
   - url: https://mythic-analytics.gulp.workers.dev/builder
 security:
@@ -48,6 +50,12 @@ paths:
         included in the body. Requires an agency key (`ak_`) and
         `?location_id=`. On update, the insight must belong to the resolved
         location. Returns the saved row.
+
+
+        The body is **validated on write**: `config.query` must be a valid
+        explore spec and its `kind` must match `insight_type` (`funnel` ⇔
+        `funnel`; every other type draws a `trend`). A bad config is a `400`
+        here, never a `500` on the first run.
       parameters:
         - $ref: "#/components/parameters/LocationId"
       requestBody:
@@ -64,19 +72,15 @@ paths:
               schema:
                 $ref: "#/components/schemas/InsightResponse"
         "400":
-          description: Missing `?location_id=` or invalid body
+          description: >-
+            Missing `?location_id=`, or the config is invalid — `error` is
+            `invalid config` and `details[]` lists what failed.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "#/components/schemas/ValidationErrorResponse"
         "403":
           description: Write access requires an agency key (`ak_`)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "500":
-          description: Database error
           content:
             application/json:
               schema:
@@ -88,10 +92,10 @@ paths:
       description: >
         Run an insight `config` in-memory and return the same payload as the
         saved-insight runner — **without persisting anything**. Use it for a
-        builder's live "Run" on a draft config. Requires an agency key (`ak_`)
-        and `?location_id=`. Charges the query rate-limit allowance (not the
-        write allowance). Compile and query errors return `400` with the error
-        message so a builder can render it in the preview pane.
+        builder's live "Run" on a draft. Requires an agency key (`ak_`) and
+        `?location_id=`. Charges the query rate-limit allowance. Identical
+        drafts are served from a 120-second cache so keystroke-driven previews
+        are free to repeat.
       parameters:
         - $ref: "#/components/parameters/LocationId"
       requestBody:
@@ -102,15 +106,19 @@ paths:
               $ref: "#/components/schemas/PreviewInsightRequest"
       responses:
         "200":
-          description: Query result for the draft config
+          description: >-
+            Query result for the draft — the explore response (`series` +
+            `buckets` for a trend, `steps` for a funnel) with `meta`, the echoed
+            `config`, the compiled `sql`, and `cached`. Documented under the
+            Queries group (`POST /insights/{id}/query`).
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PreviewInsightResponse"
+                type: object
         "400":
           description: >-
-            Missing `insight_type`/`config`, or the config failed to compile or
-            query. The `error` field carries the message.
+            Missing `insight_type`/`config`, an invalid spec, or a query error.
+            The `error` field carries the message.
           content:
             application/json:
               schema:
@@ -132,13 +140,12 @@ paths:
       summary: Validate a config (no query)
       operationId: validateInsight
       description: >
-        Cheap shape check for an insight `config` — **no BigQuery runs**.
-        Catches the footguns the SQL generators fail silently on (empty
-        `series`, `useSeriesBuilder` on a funnel, a classic `line`/`scorecard`
-        that compiles to broken SQL, missing required arrays) plus anything the
-        generator throws on. Requires an agency key (`ak_`) and `?location_id=`.
-        Use it to validate on every edit without a billed query; run
-        `/insights/preview` when you also need result data.
+        Shape check for an insight `config` — **no query runs**. Applies the
+        same rules as the write path: `config.query` must be a valid explore
+        spec (unknown keys, limits, date ranges, maths, filters) and its
+        `kind` must match `insight_type`. Requires an agency key (`ak_`) and
+        `?location_id=`. Use it on every edit; run `/insights/preview` when you
+        also need data.
       parameters:
         - $ref: "#/components/parameters/LocationId"
       requestBody:
@@ -149,14 +156,14 @@ paths:
               $ref: "#/components/schemas/ValidateInsightRequest"
       responses:
         "200":
-          description: 'The config is well-formed (`{ "ok": true }`)'
+          description: 'The config is valid (`{ "ok": true }`)'
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ValidateInsightResponse"
         "400":
           description: >-
-            The config is invalid (`{ "ok": false, "error": "..." }`), or
+            The config is invalid (`{ "ok": false, "errors": [...] }`), or
             `insight_type`/`config` was missing.
           content:
             application/json:
@@ -170,12 +177,11 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
   /insights/{id}:
     get:
-      summary: Retrieve insight
+      summary: Get insight
       operationId: getInsight
       description: >
-        Fetch a single insight by ID. The insight must belong to the resolved
-        location. Returns the full row including `config`, `generated_sql`, and
-        embed settings.
+        Fetch a single insight by id. The insight must belong to the resolved
+        location. Returns the full row including `config`.
       parameters:
         - $ref: "#/components/parameters/InsightId"
         - $ref: "#/components/parameters/LocationId"
@@ -193,12 +199,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
     patch:
-      summary: Update insight metadata
+      summary: Patch insight metadata
       operationId: patchInsight
       description: >
-        Partially update an insight. Only `name`, `description`, `tags`, and
-        `is_favorite` may be patched here — use `POST /insights` with an `id`
-        to change the query `config`. Requires an agency key (`ak_`).
+        Update `tags`, `is_favorite`, `name`, or `description` without
+        touching the config. Requires an agency key (`ak_`). Use `POST
+        /insights` with an `id` to change the config itself.
       parameters:
         - $ref: "#/components/parameters/InsightId"
         - $ref: "#/components/parameters/LocationId"
@@ -210,13 +216,13 @@ paths:
               $ref: "#/components/schemas/PatchInsightRequest"
       responses:
         "200":
-          description: Insight updated
+          description: Updated
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
         "400":
-          description: No valid fields to update
+          description: No patchable field in the body
           content:
             application/json:
               schema:
@@ -231,14 +237,14 @@ paths:
       summary: Delete insight
       operationId: deleteInsight
       description: >
-        Permanently delete an insight scoped to the resolved location. Requires
-        an agency key (`ak_`).
+        Delete an insight. Also removes it from every dashboard it is on.
+        Requires an agency key (`ak_`).
       parameters:
         - $ref: "#/components/parameters/InsightId"
         - $ref: "#/components/parameters/LocationId"
       responses:
         "200":
-          description: Insight deleted
+          description: Deleted
           content:
             application/json:
               schema:
@@ -249,28 +255,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "500":
-          description: Database error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 components:
   securitySchemes:
     BearerAuth:
       type: http
       scheme: bearer
       description: >-
-        Builder key as a bearer token. Use an agency key for full CRUD
-        (`Bearer ak_...`) or a viewer key for read-only access
-        (`Bearer sk_...`).
-        Scoped keys (`mcp_`) are accepted too and need `insights:read` or `insights:write`. See [Using an mcp_ key over HTTP](/mcp/authentication).
+        Builder key as a bearer token. Use an agency key (`Bearer ak_...`) for
+        writes, or a viewer key (`Bearer sk_...`) for reads. Scoped keys
+        (`mcp_`) with `insights:read`/`insights:write` are accepted too.
   parameters:
     InsightId:
       name: id
       in: path
       required: true
-      description: Insight UUID.
+      description: Insight UUID
       schema:
         type: string
         format: uuid
@@ -280,13 +279,44 @@ components:
       required: false
       description: >-
         Client location to scope the request to. Required when authenticating
-        with an agency key (`ak_`) and must be a location linked to that agency.
-        Ignored for viewer keys (`sk_`), which are already bound to a single
-        location.
+        with an agency key (`ak_`). Ignored for viewer keys (`sk_`).
       schema:
         type: string
         example: acme-retail
   schemas:
+    InsightType:
+      type: string
+      description: >-
+        Visualization only. `funnel` draws a `kind: funnel` spec; the others
+        draw a `kind: trend` spec (`line`/`table` want an `interval`,
+        `number`/`bar`/`pie` usually don't).
+      enum: [number, line, bar, pie, table, funnel]
+    InsightConfig:
+      type: object
+      required:
+        - query
+      description: >-
+        `query` is an explore spec — the same object `POST /client/v1/data/query`
+        takes; the full grammar is on the [Explore queries](/data-api/explore)
+        page and a per-type walkthrough on the
+        [Insight config reference](/builder-api/insight-config). Any other key
+        is stored verbatim as display settings and never read by the runner.
+      properties:
+        query:
+          type: object
+          description: Explore spec (`kind`, `date_range`, `series`/`steps`, `interval`, `breakdown`, `compare`, `filters`, `window`).
+      additionalProperties: true
+      example:
+        query:
+          kind: trend
+          date_range:
+            preset: 30d
+          interval: day
+          series:
+            - event: $pageview
+              math: dau
+              label: Visitors
+          compare: previous_period
     Insight:
       type: object
       properties:
@@ -306,50 +336,16 @@ components:
           nullable: true
         name:
           type: string
-          example: Pageviews by day
+          example: Daily visitors
         description:
           type: string
           nullable: true
         insight_type:
-          type: string
-          enum: [number, table, funnel, scorecard, bar, pie, line]
-          example: number
+          $ref: "#/components/schemas/InsightType"
         config:
-          type: object
-          description: >-
-            Visualization + query definition (metrics, dimensions, filters,
-            date range, layout). Shape depends on `insight_type`. See the
-            [Insight config reference](/builder-api/insight-config) for
-            copy-pasteable examples per type, the full field list, and the
-            required-vs-optional rules.
-
-
-            **`config.resolveIdentities`** (boolean, optional, default `false`):
-            when `true`, funnels and distinct-user counts are computed on the
-            canonical **resolved person** instead of the raw per-event
-            `distinct_id`, so a visitor merged across devices or from anonymous
-            to identified counts once and a funnel doesn't break across the
-            merge. BigQuery-backed insights on the events table only; other
-            insight types and aggregates ignore it. Resolution uses a daily
-            identity snapshot, so merges are reflected up to ~24h later.
-
-
-            **`config.query`** (object, optional): an Explore spec (see the Data
-            API Explore page). When present the insight runs on the Tinybird
-            engine instead of BigQuery, no other config key is read, and the
-            shape IS validated on write (`400 invalid config.query`).
-        generated_sql:
-          type: string
-          nullable: true
-          description: SQL compiled from `config`, if any.
+          $ref: "#/components/schemas/InsightConfig"
         visualization:
           type: object
-        cached_result:
-          type: object
-          nullable: true
-        cache_ttl_seconds:
-          type: integer
-          example: 300
         is_embeddable:
           type: boolean
           example: false
@@ -389,8 +385,7 @@ components:
           type: string
           nullable: true
         insight_type:
-          type: string
-          enum: [number, table, funnel, scorecard, bar, pie, line]
+          $ref: "#/components/schemas/InsightType"
         tags:
           type: array
           items:
@@ -420,47 +415,14 @@ components:
           description: Include to update an existing insight; omit to create.
         name:
           type: string
-          example: Pageviews by day
+          example: Daily visitors
         description:
           type: string
-          example: Daily pageview trend for the last 30 days
+          example: Unique visitors per day, last 30 days vs the 30 before
         insight_type:
-          type: string
-          enum: [number, table, funnel, scorecard, bar, pie, line]
-          example: line
+          $ref: "#/components/schemas/InsightType"
         config:
-          type: object
-          description: >-
-            Query + visualization definition. Shape depends on `insight_type` —
-            see the [Insight config reference](/builder-api/insight-config) for
-            a filled example per type and the field list. The server does **not**
-            validate this object on write; an invalid config saves fine and only
-            fails when the insight is queried. Set `config.resolveIdentities:
-            true` to count funnels and distinct users on the canonical resolved
-            person rather than the raw `distinct_id` (BigQuery events insights
-            only; ~24h snapshot lag).
-          example:
-            metrics:
-              - label: Unique Users
-                metric: unique_users
-                aggregate: COUNT_DISTINCT
-                format: number
-            dateRange:
-              preset: 7d
-            filters: []
-            compareWith: previous_period
-            showTrend: true
-        generated_sql:
-          type: string
-          description: Optional pre-compiled SQL.
-        cache_ttl_seconds:
-          type: integer
-          description: >-
-            How long (seconds) the worker reuses a query result before
-            re-running BigQuery, for embed/dashboard renders. Defaults to `300`.
-            The KV cache floor is 60s, so `0` (or any value below 60) disables
-            caching and forces a fresh query every render.
-          example: 300
+          $ref: "#/components/schemas/InsightConfig"
     PreviewInsightRequest:
       type: object
       required:
@@ -468,57 +430,20 @@ components:
         - config
       properties:
         insight_type:
-          type: string
-          enum: [number, table, funnel, scorecard, bar, pie, line]
-          example: line
+          $ref: "#/components/schemas/InsightType"
         config:
-          type: object
-          description: >-
-            The draft config to run. Same shape as a saved insight's `config` —
-            see the [Insight config reference](/builder-api/insight-config).
+          $ref: "#/components/schemas/InsightConfig"
         dateRange:
           type: object
           description: >-
-            Optional override of the config's date range, e.g.
-            `{ "preset": "7d" }` or `{ "preset": "custom", "from": "...",
-            "to": "..." }`.
+            Optional override of `config.query.date_range`, e.g.
+            `{ "preset": "7d" }` or `{ "preset": "custom", "from": "2026-08-01",
+            "to": "2026-08-31" }`. Presets: `24h`, `7d`, `14d`, `30d`, `90d`,
+            `365d`, `custom`.
         granularity:
           type: string
-          enum: [day, week, month]
-          description: Optional trend/line bucket override.
-    PreviewInsightResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
-        insight_type:
-          type: string
-          example: line
-        data:
-          type: array
-          items:
-            type: object
-          description: Main result rows.
-        comparisonData:
-          type: array
-          items:
-            type: object
-          description: Previous-period rows when `config.compareWith` is set.
-        trendData:
-          type: array
-          items:
-            type: object
-          description: Time-bucketed sparkline/line rows when applicable.
-        rows:
-          type: integer
-          description: Row count of the main result.
-        config:
-          type: object
-          description: Chart-ready config (series label/breakdown mapping baked in).
-        sql:
-          type: string
-          description: The generated SQL for the main query.
+          enum: [hour, day, week, month]
+          description: Optional override of `config.query.interval` (trends only).
     ValidateInsightRequest:
       type: object
       required:
@@ -526,21 +451,34 @@ components:
         - config
       properties:
         insight_type:
-          type: string
-          enum: [number, table, funnel, scorecard, bar, pie, line]
+          $ref: "#/components/schemas/InsightType"
         config:
-          type: object
+          $ref: "#/components/schemas/InsightConfig"
     ValidateInsightResponse:
       type: object
       properties:
         ok:
           type: boolean
           example: false
+        errors:
+          type: array
+          description: Present only when `ok` is `false`.
+          items:
+            type: string
+          example:
+            - 'insight_type "line" cannot draw a "funnel" query'
+    ValidationErrorResponse:
+      type: object
+      properties:
         error:
           type: string
-          description: Present only when `ok` is `false`.
-          example: >-
-            line insights require useSeriesBuilder: true with a series array
+          example: invalid config
+        details:
+          type: array
+          items:
+            type: string
+          example:
+            - config.query (explore spec) is required
     PatchInsightRequest:
       type: object
       description: >-

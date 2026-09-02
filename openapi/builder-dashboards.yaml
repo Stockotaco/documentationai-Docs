@@ -417,7 +417,7 @@ components:
               type: string
             insight_type:
               type: string
-              enum: [number, table, funnel, scorecard, bar, pie, line]
+              enum: [number, line, bar, pie, table, funnel]
     ResponsiveLayout:
       type: object
       description: >-

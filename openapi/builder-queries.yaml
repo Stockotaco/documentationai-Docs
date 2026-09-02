@@ -1,102 +1,28 @@
 openapi: "3.0.0"
 info:
-  version: 2.0.0
+  version: 3.0.0
   title: Queries
   description: >-
-    Execute queries against a client's BigQuery data using the Builder's
-    server-side credentials. Saved insights are executed **by id** — the
-    server regenerates the SQL from the stored config with the tenant's
-    dataset baked in, caches results, and rate-limits per location. Raw SQL
-    is only accepted on the authenticated `/query` endpoint (builder live
-    preview) and is validated server-side so it can only touch the
-    authorized location's datasets.
+    Run saved insights. An insight is executed **by id** (or by share token) —
+    the server validates the stored explore spec, compiles it with the
+    tenant's `location_id` injected, runs it on Tinybird, caches the result,
+    and rate-limits per location. No endpoint here accepts SQL. The response is
+    the same shape as `POST /client/v1/data/query`.
 servers:
   - url: https://mythic-analytics.gulp.workers.dev/builder
 security:
   - BearerAuth: []
 paths:
-  /query:
-    post:
-      summary: Execute raw SQL (builder preview)
-      operationId: executeQuery
-      description: >
-        Run a read-only BigQuery SQL query against the resolved location's
-        datasets. Credentials are held server-side and never exposed.
-
-
-        **Scoping**: every table referenced in the SQL must live in one of the
-        location's datasets — its underscore-normalized location ID or its
-        configured `client_project_id` (normalized). References to any other
-        dataset or project, write statements, and dynamic SQL are rejected
-        with `403`. Comments and string literals cannot be used to bypass the
-        check.
-
-
-        BigQuery is the only supported engine; `engine: "tinybird"` /
-        `"clickhouse"` are rejected with `400`. Queries are capped by a
-        server-side `maximumBytesBilled` limit and rate-limited per location.
-
-
-        Readable with an agency key (`ak_`, requires `?location_id=`) or a
-        viewer key (`sk_`). For saved insights, prefer
-        `POST /insights/{id}/query`.
-      parameters:
-        - $ref: "#/components/parameters/LocationId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/QueryRequest"
-      responses:
-        "200":
-          description: Query results
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/QueryResponse"
-        "400":
-          description: >-
-            Missing `?location_id=`, invalid JSON, missing `sql`, or an
-            unsupported engine
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "403":
-          description: SQL references datasets outside the authorized location
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "429":
-          description: Rate limit exceeded for this location
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "500":
-          description: Query execution error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/QueryErrorResponse"
-        "503":
-          description: BigQuery is not configured on the server
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
   /insights/{id}/query:
     post:
       summary: Run a saved insight
       operationId: runInsight
       description: >
-        Execute a saved insight. The server regenerates the SQL from the
-        stored config (applying optional `dateRange`/`granularity` overrides),
-        runs the main, comparison, and trend queries in parallel, and returns
-        all three datasets. Results are cached server-side for the insight's
-        `cache_ttl_seconds` (default 300) and rate-limited per location.
+        Execute a saved insight, optionally overriding its date range and
+        interval for this run. Results are cached server-side — a window that
+        ends before today is reused for hours, one touching today for two
+        minutes — and rate-limited per location (120/min across the authed
+        Builder paths).
 
 
         Readable with an agency key (`ak_`, requires `?location_id=`) or a
@@ -158,13 +84,11 @@ paths:
           insight on that dashboard.
 
 
-        Raw SQL is **not accepted** — the server generates the SQL from the
-        saved insight config, so a share token can only ever run its own
-        insight against its own location. Results are cached server-side for
-        the insight's `cache_ttl_seconds`. Public traffic is rate-limited on a
-        separate, higher per-location allowance than the authenticated
-        endpoints, so a busy public dashboard can't exhaust a tenant's own
-        Builder calls.
+        A share token can only ever run its own insight against its own
+        location. Same cache as the authed runner; public traffic is
+        rate-limited on a separate, higher per-location allowance (600/min) so
+        a busy public dashboard can't exhaust a tenant's own Builder calls. The
+        compiled `sql` is never returned on this endpoint.
       security: []
       parameters:
         - $ref: "#/components/parameters/DashboardToken"
@@ -184,8 +108,8 @@ paths:
                 $ref: "#/components/schemas/InsightRunResponse"
         "400":
           description: >-
-            Invalid JSON, missing `insight_id` (dashboard tokens), or a legacy
-            `sql` field was supplied
+            Invalid JSON, missing `insight_id` (dashboard tokens), or a `sql`
+            field was supplied
           content:
             application/json:
               schema:
@@ -223,8 +147,8 @@ components:
       scheme: bearer
       description: >-
         Builder key as a bearer token. Use an agency key (`Bearer ak_...`) or a
-        viewer key (`Bearer sk_...`).
-        Scoped keys (`mcp_`) are not accepted here (`403 not_available_to_scoped_keys`).
+        viewer key (`Bearer sk_...`). Scoped keys (`mcp_`) with `insights:read`
+        are accepted too.
   parameters:
     LocationId:
       name: location_id
@@ -255,39 +179,23 @@ components:
       schema:
         type: string
   schemas:
-    QueryRequest:
-      type: object
-      required:
-        - sql
-      properties:
-        sql:
-          type: string
-          description: >-
-            Read-only BigQuery SQL. Every table reference must live in one of
-            the authorized location's datasets.
-          example: >-
-            SELECT event_name, COUNT(*) AS c FROM
-            `hello-conversions.acme_retail.events` GROUP BY event_name ORDER
-            BY c DESC
-        maxResults:
-          type: integer
-          description: Maximum rows to return (capped at 1000).
-          default: 1000
     DateRange:
       type: object
-      description: Date range override.
+      description: >-
+        Date range override, applied onto `config.query.date_range` for this
+        run only. An unknown preset leaves the stored range in place.
       properties:
         preset:
           type: string
-          enum: ["1h", "24h", "7d", "14d", "30d", "90d", "365d", "custom"]
+          enum: ["24h", "7d", "14d", "30d", "90d", "365d", "custom"]
         from:
           type: string
           format: date
-          description: 'ISO date (with `preset: "custom"`).'
+          description: 'YYYY-MM-DD (UTC), with `preset: "custom"`.'
         to:
           type: string
           format: date
-          description: 'ISO date (with `preset: "custom"`).'
+          description: 'YYYY-MM-DD inclusive (UTC), with `preset: "custom"`.'
     InsightRunRequest:
       type: object
       properties:
@@ -295,8 +203,10 @@ components:
           $ref: "#/components/schemas/DateRange"
         granularity:
           type: string
-          enum: [day, week, month]
-          description: Trend granularity override.
+          enum: [hour, day, week, month]
+          description: >-
+            Bucket interval override, applied onto `config.query.interval`.
+            Trends only — a funnel never gains an interval.
     PublicInsightRunRequest:
       allOf:
         - $ref: "#/components/schemas/InsightRunRequest"
@@ -308,8 +218,60 @@ components:
               description: >-
                 Insight to run. Required with `X-Dashboard-Token`; ignored
                 with `X-Embed-Token`.
+    TrendSeries:
+      type: object
+      description: >-
+        One entry per (spec series × breakdown value). With an `interval`,
+        `data` holds one number per bucket and `total` their sum; without one,
+        `value` is the single number. `previous`/`previous_value` are present
+        with `compare`, aligned by index to `previous_buckets`.
+      properties:
+        label:
+          type: string
+        math:
+          type: string
+        event:
+          type: string
+          nullable: true
+        breakdown_value:
+          type: string
+        data:
+          type: array
+          items:
+            type: number
+        total:
+          type: number
+        value:
+          type: number
+        previous:
+          type: array
+          items:
+            type: number
+        previous_value:
+          type: number
+    FunnelStep:
+      type: object
+      properties:
+        step:
+          type: integer
+        label:
+          type: string
+        event:
+          type: string
+        users:
+          type: integer
+        conversion_from_first:
+          type: number
+          description: 0..1
+        conversion_from_previous:
+          type: number
+          description: 0..1 (1 for the first step)
     InsightRunResponse:
       type: object
+      description: >-
+        The explore response for the stored spec: trend fields for a `trend`
+        spec, funnel fields for a `funnel` spec. Same shape as `POST
+        /client/v1/data/query`.
       properties:
         success:
           type: boolean
@@ -325,65 +287,70 @@ components:
               type: string
             insight_type:
               type: string
-              enum: [number, table, funnel, scorecard, bar, pie, line]
+              enum: [number, line, bar, pie, table, funnel]
             config:
               type: object
-        data:
+        engine:
+          type: string
+          enum: [tinybird]
+        kind:
+          type: string
+          enum: [trend, funnel]
+        buckets:
           type: array
-          description: Main query rows as objects keyed by column name.
+          description: Trend with `interval` — ISO bucket labels (UTC).
+          items:
+            type: string
+        previous_buckets:
+          type: array
+          description: Trend with `interval` and `compare`.
+          items:
+            type: string
+        series:
+          type: array
+          description: Trend only.
+          items:
+            $ref: "#/components/schemas/TrendSeries"
+        breakdown_values:
+          type: array
+          description: Trend with `breakdown` — values in rank order, `$$other` last.
+          items:
+            type: string
+        steps:
+          type: array
+          description: Funnel only.
+          items:
+            $ref: "#/components/schemas/FunnelStep"
+        breakdown:
+          type: array
+          description: Funnel with `breakdown` — per-value step rows.
           items:
             type: object
-        comparisonData:
-          type: array
-          description: Previous-period rows (empty when not configured).
-          items:
-            type: object
-        trendData:
-          type: array
-          description: Time-series rows (empty when not configured).
-          items:
-            type: object
-        rows:
-          type: integer
-          description: Number of rows in `data`.
+            properties:
+              value:
+                type: string
+              steps:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FunnelStep"
+        meta:
+          type: object
+          description: >-
+            Resolved `from`/`to`, `previous` window, `interval`,
+            `window_seconds`, `breakdown` settings, and query statistics
+            (`sql_ms`, `rows_read`, `bytes_read`).
+        config:
+          type: object
+          description: The stored config, echoed.
         cached:
           type: boolean
           description: True when served from the server-side cache.
         sql:
           type: string
           description: >-
-            The generated BigQuery SQL. Returned on the key-authed
-            `POST /insights/{id}/query` runner (so builder UIs can show the
-            query), but NOT on the anonymous `POST /public/query` endpoint,
-            which never exposes SQL.
-    QueryResponse:
-      type: object
-      description: Successful raw-SQL result.
-      properties:
-        success:
-          type: boolean
-          example: true
-        data:
-          type: array
-          description: Result rows as objects keyed by column name.
-          items:
-            type: object
-          example:
-            - { event_name: pageview, c: 1420 }
-            - { event_name: click, c: 385 }
-        rows:
-          type: integer
-          description: Number of rows returned.
-          example: 2
-        schema:
-          type: object
-          description: BigQuery result schema.
-        totalBytesProcessed:
-          type: string
-          description: Bytes scanned by the BigQuery job.
-        jobId:
-          type: string
-          description: BigQuery job ID.
+            The compiled query. Returned on the key-authed
+            `POST /insights/{id}/query` runner and `/insights/preview`, but NOT
+            on the anonymous `POST /public/query` endpoint.
     QueryErrorResponse:
       type: object
       properties:
@@ -392,10 +359,10 @@ components:
           example: false
         error:
           type: string
-          example: "BigQuery error: ..."
+          example: "explore query failed (500): upstream error"
     ErrorResponse:
       type: object
       properties:
         error:
           type: string
-          example: "Query must be scoped to your location: dataset \"other_tenant\" not allowed"
+          example: "Insight is not part of this dashboard"

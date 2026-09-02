@@ -342,11 +342,6 @@
                 "openapi": "openapi/builder-insights.yaml"
               },
               {
-                "group": "Schema",
-                "icon": "table-2",
-                "openapi": "openapi/builder-schema.yaml"
-              },
-              {
                 "group": "Segments",
                 "icon": "users",
                 "openapi": "openapi/builder-segments.yaml"
@@ -658,11 +653,6 @@
                 "group": "Insights",
                 "icon": "bar-chart-2",
                 "openapi": "openapi/builder-insights.yaml"
-              },
-              {
-                "group": "Schema",
-                "icon": "table-2",
-                "openapi": "openapi/builder-schema.yaml"
               },
               {
                 "group": "Segments",

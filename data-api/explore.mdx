@@ -246,10 +246,10 @@ optional `event` to narrow, and a case-insensitive `search`.
 
 ## Saving one as an insight
 
-The same spec can be stored on an insight as `config.query` through the
-Builder API (`POST /builder/insights`) and run with
-`POST /builder/insights/:id/query`. It is validated at write time, executes on
-the same engine, and the response carries `engine: "tinybird"`. See
+An insight is exactly this spec stored as `config.query` through the Builder
+API (`POST /builder/insights`) plus an `insight_type` that picks the
+visualization; run it with `POST /builder/insights/:id/query`. It is validated
+at write time, executes on this engine, and returns this response shape. See
 [Insight config](/builder-api/insight-config).
 
 ## From MCP
