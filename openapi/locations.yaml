@@ -1,0 +1,514 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Client Provisioning
+  description: >
+    Create and set up your own clients on `/client/v1/locations` — provision a
+    location, fetch its install snippet, attach a first-party tracking
+    hostname, and confirm events are arriving.
+
+
+    Creating a client needs an **agency-wide** key; the rest act on one client
+    and accept an agency key with a bound location or that location's secret
+    key. Reads accept either; writes require an agency key.
+
+
+    The id, agency, tier and keys of a new client are all server-generated.
+    Sending any of them is a `forbidden_field` error rather than a silent
+    no-op, so a caller that believes it set a tier is told that it did not.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+paths:
+  /client/v1/locations:
+    post:
+      summary: Create a client
+      operationId: createLocation
+      description: >-
+        Provision a new client under your agency. Returns its generated id,
+        publishable key and secret key, plus `kv_sync` — check that reads
+        `synced` before handing the snippet to the client's site, because a
+        client that exists in the database but not at the edge rejects every
+        event.
+
+
+        Requires an agency-wide key. No `location_id` — the client does not
+        exist yet and the agency comes from the key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/LocationWritable"
+                - type: object
+                  required: [name]
+      responses:
+        "201":
+          description: Client created and synced to the edge
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Location" }
+                  kv_sync: { $ref: "#/components/schemas/KvSync" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "422": { $ref: "#/components/responses/LocationCeiling" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/locations/details:
+    get:
+      summary: Get a client
+      operationId: getLocation
+      description: One client's provisioning details, including its keys.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: The client
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Location" }
+        "400": { $ref: "#/components/responses/LocationRequired" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    patch:
+      summary: Update a client
+      operationId: updateLocation
+      description: >-
+        Change any of the settable fields. Send only what you want changed; a
+        `null` clears an optional field. Turning tracking on or off is
+        `POST /client/v1/status`, not this.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LocationWritable" }
+      responses:
+        "200":
+          description: Updated client
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Location" }
+                  kv_sync: { $ref: "#/components/schemas/KvSync" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/locations/loader:
+    get:
+      summary: Get the install snippet
+      operationId: getLocationLoader
+      description: >-
+        The tracking snippet to paste into the client's site, plus the
+        publishable key, API host and SDK global name it uses. The host is the
+        location's active custom hostname when it has one, so the snippet is
+        first-party from the start rather than something to swap later.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Install snippet
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      publishable_key: { type: string, example: pk_0f1e2d3c4b5a69788796a5b4c3d2e1f0 }
+                      api_host: { type: string, example: "https://analytics.example.com" }
+                      global_name: { type: string, example: mythic }
+                      script_snippet:
+                        type: string
+                        description: The full `<script>` block to install.
+        "400": { $ref: "#/components/responses/LocationRequired" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/locations/hostname:
+    get:
+      summary: Get the custom tracking hostname
+      operationId: getLocationHostname
+      description: >-
+        The client's custom tracking hostname and its validation state, or
+        `null` when none is attached.
+
+
+        Polling this is what advances a pending hostname: the status is
+        refreshed from Cloudflare, and the moment it reads `active` the
+        hostname starts routing events.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Hostname state, or null
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    oneOf:
+                      - $ref: "#/components/schemas/Hostname"
+                      - type: "null"
+        "400": { $ref: "#/components/responses/LocationRequired" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    put:
+      summary: Attach a custom tracking hostname
+      operationId: setLocationHostname
+      description: >-
+        Claim a first-party tracking hostname for this client. Returns the
+        CNAME target to configure in DNS.
+
+
+        The hostname does **not** route events until Cloudflare confirms that
+        CNAME — `kv_sync` reads `pending_validation` until then. Poll
+        `GET /client/v1/locations/hostname` until the status is `active`. A
+        hostname already attached to another location is refused with
+        `hostname_taken`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hostname]
+              properties:
+                hostname:
+                  type: string
+                  description: Fully-qualified hostname.
+                  example: analytics.example.com
+      responses:
+        "201":
+          description: Hostname claimed, pending DNS validation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      hostname: { type: string, example: analytics.example.com }
+                      status: { type: string, example: pending_validation }
+                      cname_target: { type: string, nullable: true }
+                      dns_instructions: { type: string }
+                      kv_sync: { $ref: "#/components/schemas/KvSync" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "409": { $ref: "#/components/responses/HostnameTaken" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      summary: Remove the custom tracking hostname
+      operationId: deleteLocationHostname
+      description: >-
+        Detach the hostname and stop routing events for it. Any site still
+        sending to that hostname stops being tracked, so switch its snippet
+        back to the default host first.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Hostname removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      hostname: { type: string, example: analytics.example.com }
+                      deleted: { type: boolean, example: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/locations/last-event:
+    get:
+      summary: Check tracking is live
+      operationId: getLocationLastEvent
+      description: >-
+        Event count and the most recent event timestamp for this client — the
+        cheap answer to "is the snippet installed and working". One aggregate,
+        no event rows, safe to poll during onboarding.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/HoursBack"
+      responses:
+        "200":
+          description: Heartbeat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      events: { type: integer, example: 1284 }
+                      last_event_at:
+                        type: string
+                        nullable: true
+                        description: Null when nothing arrived in the window.
+                        example: "2026-09-02T18:41:07Z"
+                      hours_back: { type: integer, example: 24 }
+        "400": { $ref: "#/components/responses/LocationRequired" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/locations/events:
+    get:
+      summary: List raw events
+      operationId: listLocationEvents
+      description: >-
+        Individual events for this client, newest first — the debugging view
+        for confirming an install or chasing a missing property. For counts and
+        trends use the [Data API](/data-api/overview) instead.
+
+
+        `exclude_event_type` is applied before the limit, so high-volume
+        telemetry such as `$replay_summary` cannot crowd real events off the
+        page.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/HoursBack"
+        - name: limit
+          in: query
+          required: false
+          description: Rows to return. Default 100, maximum 1000.
+          schema: { type: integer, minimum: 1, maximum: 1000 }
+        - name: event_type
+          in: query
+          required: false
+          description: Only this event name.
+          schema: { type: string }
+        - name: exclude_event_type
+          in: query
+          required: false
+          description: "Comma-separated event names to omit, e.g. `$replay_summary`."
+          schema: { type: string }
+        - name: distinct_id
+          in: query
+          required: false
+          description: Only events for this distinct id.
+          schema: { type: string }
+        - name: session_id
+          in: query
+          required: false
+          description: Only events in this session.
+          schema: { type: string }
+        - name: uuid
+          in: query
+          required: false
+          description: Resolve one event by its `event_uuid`.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Event rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+                  rows: { type: integer, example: 100 }
+        "400": { $ref: "#/components/responses/LocationRequired" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Agency key (`ak_`) or location secret key (`sk_`). Writes require an
+        agency key; creating a client requires an agency-wide key. Keys are
+        server-side credentials — this surface serves no CORS headers on
+        purpose.
+        Scoped keys (`mcp_`) are accepted too: `locations:read`/`locations:write` for one client's setup, and `provisioning:write` to create a client. See [Using an mcp_ key over HTTP](/mcp/authentication).
+  parameters:
+    LocationId:
+      name: location_id
+      in: query
+      required: false
+      description: >-
+        Location to scope to. Required for `ak_` keys (or send the
+        `X-Location-Id` header); ignored for `sk_`. Not used when creating a
+        client.
+      schema: { type: string }
+    HoursBack:
+      name: hours_back
+      in: query
+      required: false
+      description: Lookback window in hours. Default 24, maximum 720.
+      schema: { type: integer, minimum: 1, maximum: 720 }
+  schemas:
+    LocationWritable:
+      type: object
+      description: >-
+        Everything an agency may set on its own client. Any other field is
+        rejected — see `forbidden_field` and `unknown_field` under 400.
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: Display name for the client.
+          example: Acme Home Services
+        domain:
+          type: string
+          nullable: true
+          description: Primary site domain.
+          example: acme.com
+        email: { type: string, nullable: true, description: Contact email. }
+        phone: { type: string, nullable: true, maxLength: 64 }
+        website: { type: string, nullable: true, maxLength: 512 }
+        timezone:
+          type: string
+          nullable: true
+          maxLength: 64
+          description: IANA timezone.
+          example: America/Denver
+        global_name:
+          type: string
+          nullable: true
+          description: >-
+            JavaScript global the SDK installs as, default `mythic`. Must be a
+            valid identifier or the snippet throws on the client's site.
+          example: acme_analytics
+    Location:
+      type: object
+      properties:
+        id: { type: string, format: uuid, description: Server-generated. }
+        name: { type: string, example: Acme Home Services }
+        active:
+          type: boolean
+          description: Whether ingestion is currently enabled.
+        publishable_key:
+          type: string
+          description: The `pk_` key the browser snippet uses. Safe to expose publicly.
+          example: pk_0f1e2d3c4b5a69788796a5b4c3d2e1f0
+        secret_key:
+          type: string
+          nullable: true
+          description: This location's read-only server-side key. Never expose it in a browser.
+        domain: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        website: { type: string, nullable: true }
+        timezone: { type: string, nullable: true }
+        global_name: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Hostname:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        hostname: { type: string, example: analytics.example.com }
+        cf_status:
+          type: string
+          description: "Cloudflare hostname state. Events route only once this is `active`."
+          example: pending_validation
+        cf_ssl_status: { type: string, nullable: true, example: pending_validation }
+        created_at: { type: string, format: date-time }
+        verified_at: { type: string, format: date-time, nullable: true }
+        kv_sync: { $ref: "#/components/schemas/KvSync" }
+    KvSync:
+      type: string
+      description: >-
+        Outcome of the edge sync this write triggered. `synced` means the edge
+        agrees with the database. `pending_validation` means a hostname is
+        waiting on DNS. Anything starting `failed:` means the database was
+        written but the edge was not, and the write should be retried.
+      example: synced
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string, example: forbidden_field }
+            message: { type: string }
+  responses:
+    BadRequest:
+      description: >-
+        `forbidden_field` (a field only staff may set, such as `plan_id` or
+        `agency_id` — the message names it and why), `unknown_field` (a typo;
+        the message lists what is settable), `invalid_field` (a settable field
+        failed validation), `missing_field` (`name` absent on create),
+        `invalid_body` (not a JSON object), `invalid_hostname`, or
+        `empty_update` (a PATCH with nothing in it).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    LocationRequired:
+      description: "`location_required` — an `ak_` key with no location bound. Pass `location_id` or the `X-Location-Id` header."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing or invalid key.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    AgencyRequired:
+      description: "`agency_required` — writes need an agency key (`ak_`), not a location secret key."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: "`not_found` — no such client, or no hostname attached to it."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    HostnameTaken:
+      description: "`hostname_taken` — that hostname is already attached to another location."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    LocationCeiling:
+      description: "`location_ceiling` — the agency is at its client ceiling. Contact support to raise it."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: "`rate_limited` — 60 requests per minute per location. Retry after the `Retry-After` header."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unavailable:
+      description: "`unavailable` — the analytics backend is not configured for this deployment."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

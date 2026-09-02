@@ -180,6 +180,28 @@
             ]
           },
           {
+            "tab": "Client Provisioning",
+            "icon": "plus-circle",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "locations-api/overview",
+                    "icon": "file-text"
+                  }
+                ]
+              },
+              {
+                "group": "Provisioning",
+                "icon": "plus-circle",
+                "openapi": "openapi/locations.yaml"
+              }
+            ]
+          },
+          {
             "tab": "Client Config",
             "icon": "settings",
             "groups": [

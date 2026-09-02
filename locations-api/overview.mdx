@@ -1,0 +1,176 @@
+---
+title: Client Provisioning
+description: >-
+  Create your own clients, get their install snippet, attach a first-party
+  tracking hostname, and confirm events are arriving — end to end on your
+  agency key, with no request to Mythic in the middle.
+---
+
+## Overview
+
+Onboarding a client has four steps, and this surface covers all of them:
+
+<Steps>
+  <Step title="Create the client">
+    `POST /client/v1/locations` returns the client's id and its publishable
+    key. Needs an agency-wide key.
+  </Step>
+  <Step title="Install tracking">
+    `GET /client/v1/locations/loader` returns the exact `<script>` block to
+    paste into the client's site.
+  </Step>
+  <Step title="Optionally go first-party">
+    `PUT /client/v1/locations/hostname` claims a tracking hostname on the
+    client's own domain and returns the CNAME to configure.
+  </Step>
+  <Step title="Confirm it works">
+    `GET /client/v1/locations/last-event` says whether events are arriving;
+    `GET /client/v1/locations/events` shows the individual events when they
+    are not.
+  </Step>
+</Steps>
+
+Everything after step one is per-client. Step one is agency-wide, because the
+client does not exist yet and the agency comes from the key.
+
+## Base URL
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/locations
+```
+
+## Authentication
+
+The same key system as the rest of `/client/v1`: an **agency key** (`ak_`,
+bind a location with `?location_id=` or the `X-Location-Id` header) or a
+**location secret key** (`sk_`, auto-scoped to its own location). Reads accept
+either. **Writes require an agency key** — same rule as Client Config,
+Settings, and Destinations.
+
+Creating a client needs an **agency-wide** key specifically. A key bound to one
+client cannot create siblings.
+
+<Callout kind="alert">
+  This surface deliberately serves **no CORS headers**. `ak_` and `sk_` keys
+  are server-side credentials — never call it from browser JavaScript.
+</Callout>
+
+## What you may set, and what you may not
+
+A client row carries fields that are yours and fields that are ours. The
+settable set is:
+
+`name`, `domain`, `email`, `phone`, `website`, `timezone`, `global_name`
+
+Everything else is rejected rather than ignored:
+
+| Field | Why not |
+| --- | --- |
+| `id` | Server-generated. A caller-chosen id would let one agency squat another's id namespace, and the resulting conflict would leak that the id exists. |
+| `agency_id` | Taken from your key. This is what stops one agency writing into another's clients. |
+| `plan_id` | A billing decision. Contact support to change tier. |
+| `status` | Use `POST /client/v1/status` — enabling and disabling tracking is its own operation. |
+| `publishable_key`, `secret_key` | Server-generated. |
+| `gcp_project_id`, `gcp_credentials` | Staff-managed export credentials. |
+| `access_token`, `refresh_token`, `proxy_api_key`, `company_id`, `api_metadata`, `ghl_location_id` | Not settable through this API. |
+
+<Callout kind="note">
+  Rejecting beats ignoring here. A caller that sends `plan_id: "unlimited"` and
+  gets a `200` would reasonably believe it had changed the client's tier. It
+  gets a `400` naming the field instead.
+</Callout>
+
+A typo in a settable field name is a separate error — `unknown_field`, whose
+message lists what *is* settable — so a mistyped `tiemzone` is findable rather
+than silently dropped.
+
+## `kv_sync` — why writes report their edge sync
+
+The SDK does not read the database. It runs from the client's edge config, and
+ingestion routes by edge entries too. A client that exists in the database but
+not at the edge rejects every event, and nothing about the database row would
+tell you.
+
+So writes on this surface sync the edge inline and report the outcome:
+
+```json
+{
+  "success": true,
+  "data": { "id": "…", "publishable_key": "pk_…" },
+  "kv_sync": "synced"
+}
+```
+
+`synced` means the edge agrees with the database. Anything starting `failed:`
+means the row was written but the edge was not — retry the write. **Check this
+before handing the snippet to the client's site.**
+
+## Custom tracking hostnames
+
+A custom hostname makes tracking first-party: the client's site sends events to
+`analytics.theirdomain.com` instead of the shared host, which survives
+third-party cookie and script blocking.
+
+Claiming one is a two-phase operation, and the phases matter:
+
+<Steps>
+  <Step title="Claim">
+    `PUT /client/v1/locations/hostname` registers the hostname and returns a
+    CNAME target. `kv_sync` reads `pending_validation` — the hostname is
+    reserved but routes nothing yet.
+  </Step>
+  <Step title="Validate">
+    Configure the CNAME in DNS, then poll
+    `GET /client/v1/locations/hostname` until `cf_status` is `active`. That
+    poll is what activates the hostname: events start routing on the first read
+    that sees Cloudflare confirm the CNAME.
+  </Step>
+</Steps>
+
+<Callout kind="warning">
+  A hostname starts routing events only once Cloudflare confirms its CNAME,
+  which is proof you control the DNS. Until then it is reserved and inert. This
+  is deliberate: a hostname that routed on the claim alone would let one agency
+  bind a domain another operates, and the real owner's events would land in the
+  wrong client the moment their DNS pointed here.
+</Callout>
+
+A hostname already attached to another location is refused with
+`hostname_taken`.
+
+## Confirming an install
+
+Two operations, for two different questions.
+
+`GET /client/v1/locations/last-event` answers "is it working" — one event count
+and one timestamp, cheap enough to poll on an onboarding screen. A null
+`last_event_at` means nothing arrived in the window.
+
+`GET /client/v1/locations/events` answers "why isn't it working" — the
+individual events, newest first, filterable by event name, session, or distinct
+id. This is a debugging view, not an analytics one; for counts, trends, and
+breakdowns use the [Data API](/data-api/overview).
+
+<Callout kind="tip">
+  Pass `exclude_event_type=$replay_summary` when a client has session replay
+  enabled. The exclusion is applied before the row limit, so replay telemetry
+  cannot crowd the events you are looking for off the page.
+</Callout>
+
+## Limits
+
+Requests are limited to 60 per minute per location. An agency has a ceiling on
+how many clients it may create; hitting it returns `location_ceiling`, and
+support can raise it.
+
+## The same operations as MCP tools
+
+Every route here has an MCP tool on the [Settings
+Server](/mcp/settings-server): `create_location`, `get_location`,
+`update_location`, `get_location_loader`, `get_location_hostname`,
+`set_location_hostname`, `delete_location_hostname`,
+`get_location_last_event`, and `list_location_events`.
+
+Scopes split along the grain boundary. `locations:read` and `locations:write`
+cover one client's own setup. `provisioning:write` is what creates a new client,
+and it is agency-wide only — a key bound to a single client can never hold it.
