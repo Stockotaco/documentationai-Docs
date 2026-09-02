@@ -36,7 +36,15 @@ POST /client/v1/destinations/integrations/meta
 }
 ```
 
-The `event_mapping` merges over sensible defaults (`page_view` → `PageView`, `view_item` → `ViewContent`, `add_to_cart` → `AddToCart`, `begin_checkout` → `InitiateCheckout`, `purchase` → `Purchase`, `lead` → `Lead`, and more). Any Mythic event not in the mapping is not sent to Meta.
+The `event_mapping` merges over sensible defaults (`$pageview` → `PageView`, `view_item` → `ViewContent`, `add_to_cart` → `AddToCart`, `begin_checkout` → `InitiateCheckout`, `purchase` → `Purchase`, `lead` → `Lead`, and more). Any Mythic event not in the mapping is not sent to Meta.
+
+<Callout kind="info">
+  Keys are the event names you capture. The SDK's automatic pageview is
+  `$pageview` (all SDK-generated events are `$`-prefixed) — the rest are your
+  own `capture()` names. By default `$pageview` fires the **browser pixel
+  only**: server-side pageviews multiply Conversions API calls without adding
+  conversion data. Map `$pageview` explicitly to send it both ways.
+</Callout>
 
 If a `meta_capi` credential is already stored you can omit `capi_token`; the token is write-only and never returned. Deliveries use the credential named `credential_name` (default `default`) — pass e.g. `"live"` when the working token is stored under another name. `browser_tag: false` skips the managed pixel for sites that already run their own — Mythic then only sends CAPI.
 
