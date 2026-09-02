@@ -31,7 +31,7 @@ The key must begin with `mcp_`. A missing, malformed, or deactivated key returns
 
 ## Scopes
 
-An `mcp_` key carries a `scopes` array that gates which tools it can call (every tool is listed; a call outside the scopes answers `insufficient_scope` naming the scope to add) — and, when the key is sent as a Bearer to the HTTP API, which routes it may call. Scopes use `<family>:<action>` form, with `*` wildcards:
+An `mcp_` key carries a `scopes` array that gates which tools it can call (only tools within the scopes are listed; calling any other tool by name answers `insufficient_scope` naming the scope to add) — and, when the key is sent as a Bearer to the HTTP API, which routes it may call. Scopes use `<family>:<action>` form, with `*` wildcards:
 
 | Form | Example | Meaning |
 |------|---------|---------|

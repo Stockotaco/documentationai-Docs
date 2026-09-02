@@ -149,10 +149,11 @@ Every tool is gated by a scope on the key (`family:read` / `family:write`,
 is the explicit `["*"]`. A `:write` scope implies the matching `:read`.
 `list_clients`, `select_client`, `whoami` and `search_docs` need no scope.
 
-Every tool is **listed** whatever the key's scopes. Calling one the scopes do not
-cover answers a tool error with `code: "insufficient_scope"`, the `required`
-scope and the scopes `held`, so the assistant can tell you exactly what to add
-instead of reporting an unknown tool.
+Only the tools the key's scopes cover are **listed**, so a narrow key gives the
+assistant a short tool list. Calling any other Mythic tool by name answers a tool
+error with `code: "insufficient_scope"`, the `required` scope and the scopes
+`held`, so the assistant can tell you exactly what to add instead of reporting
+an unknown tool.
 
 The **agency rollup tools** (`get_agency_stats`, `get_agency_destination_health`,
 `get_agency_contracts_summary`, `get_agency_usage`, `get_agency_quota`) are

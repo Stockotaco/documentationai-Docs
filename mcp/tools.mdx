@@ -15,9 +15,9 @@ calls, so anything you can do here you can also do over HTTP, and both answer
 from the same implementation.
 
 <Callout kind="info">
-Tools are gated by the scopes on your `mcp_` key. Every tool is listed whatever
-the key's scopes; calling one outside them answers `insufficient_scope` with the
-scope to request, so an agent can tell you exactly what to add. A `:write` scope
+Tools are gated by the scopes on your `mcp_` key. Only tools within the key's
+scopes are listed; calling any other tool by name answers `insufficient_scope`
+with the scope to request, so an agent can tell you exactly what to add. A `:write` scope
 implies the matching `:read`. The same scope authorizes the **Proxies** route
 when the key is used [directly over HTTP](/mcp/authentication#using-an-mcp_-key-over-http).
 </Callout>
