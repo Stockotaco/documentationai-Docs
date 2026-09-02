@@ -516,6 +516,91 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /session-replay:
+    get:
+      summary: Get the session-replay capture config
+      operationId: getSessionReplay
+      description: >
+        The rrweb capture configuration for this location, or `null` when replay
+        is off. Readable with an agency key (`ak_`, pass `?location_id=`) or a
+        viewer key (`sk_`).
+
+
+        `effective.enabled` is the one to read: a config object can exist with
+        `enabled: false`, which is off. `valid_keys` lists every tunable, so the
+        available knobs are discoverable rather than guessed at.
+      responses:
+        "200":
+          description: The current capture configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionReplayResponse"
+        "401":
+          description: Authorization key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Set the session-replay capture config
+      operationId: putSessionReplay
+      description: >
+        Turn session replay on or off for a location and tune how it captures.
+        Requires an agency key (`ak_`) and `?location_id=`; viewer keys get
+        `403 agency_required`. Replay is opt-in — unset means off.
+
+
+        **Keys are merged, not replaced.** Send only what you are changing.
+        This is deliberate rather than convenient: `maskAllInputs` and
+        `maskTextSelector` are what keep personal data out of a recording, and a
+        body that replaced the whole object would silently un-mask them the
+        first time someone sent `{"enabled": true}` on its own. Send
+        `{"session_replay": null}` to clear the configuration entirely.
+
+
+        Turning replay **on** requires a plan that includes it and returns
+        `402 feature_not_in_plan` otherwise. Turning it off, or lowering
+        `sampleRate`, works on any plan — you can always reduce what you
+        capture.
+
+
+        Changes reach browsers on their next config fetch, not retroactively:
+        sessions already recording continue under the previous settings.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionReplayRequest"
+      responses:
+        "200":
+          description: Updated — returns the merged configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionReplayResponse"
+        "400":
+          description: >
+            `invalid_session_replay` — an unknown key, a value of the wrong
+            type, a negative number, or a `sampleRate` above 1. The message
+            names the offending key.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "402":
+          description: "`feature_not_in_plan` — enabling replay needs a plan that includes it."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Write access requires an agency key (`ak_`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /contract-alerts:
     get:
       summary: Get the event-contract alert webhook
@@ -609,6 +694,69 @@ components:
         (`Bearer ak_...`) or viewer key for read-only (`Bearer sk_...`).
         Scoped keys (`mcp_`) are accepted too and need `settings:read` or `settings:write`. See [Using an mcp_ key over HTTP](/mcp/authentication).
   schemas:
+    SessionReplayConfig:
+      type: object
+      description: >-
+        Capture tunables. Every key is optional; omitted keys keep their stored
+        value on a PUT.
+      properties:
+        enabled: { type: boolean, description: Whether to record at all. }
+        sampleRate:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Fraction of sessions recorded, 0-1.
+        minDurationMs:
+          type: number
+          minimum: 0
+          description: >-
+            Discard recordings shorter than this, measured against session age
+            rather than buffer length, so a bounce is dropped but a slow page is
+            not.
+        maskAllInputs:
+          type: boolean
+          description: Replace the value of every input. Leave on unless you are certain no field carries personal data.
+        maskTextSelector:
+          type: string
+          description: CSS selector whose text content is masked.
+        blockSelector:
+          type: string
+          description: CSS selector for elements omitted from the recording entirely.
+        captureConsole: { type: boolean, description: Record console output. }
+        captureNetwork: { type: boolean, description: Record network requests. }
+        recordNetworkHeaders: { type: boolean, description: Include request/response headers. Off unless you need them. }
+        recordNetworkBody: { type: boolean, description: Include request/response bodies. Off unless you need them — bodies frequently carry personal data. }
+        flushEventThreshold: { type: number, minimum: 0, description: Buffered events before an upload. }
+        flushIntervalMs: { type: number, minimum: 0, description: Milliseconds between uploads. }
+    SessionReplayRequest:
+      type: object
+      required: [session_replay]
+      properties:
+        session_replay:
+          oneOf:
+            - $ref: "#/components/schemas/SessionReplayConfig"
+            - type: "null"
+          description: Keys to merge into the stored config, or null to clear it.
+    SessionReplayResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            session_replay:
+              oneOf:
+                - $ref: "#/components/schemas/SessionReplayConfig"
+                - type: "null"
+            effective:
+              type: object
+              description: What the location actually does, since null means off.
+              properties:
+                enabled: { type: boolean }
+            valid_keys:
+              type: array
+              items: { type: string }
+              description: Every tunable this endpoint accepts.
     AllowedOriginsRequest:
       type: object
       required:

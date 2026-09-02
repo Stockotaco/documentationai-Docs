@@ -58,6 +58,7 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/AgencyRequired" }
+        "409": { $ref: "#/components/responses/GhlLocationTaken" }
         "422": { $ref: "#/components/responses/LocationCeiling" }
         "429": { $ref: "#/components/responses/RateLimited" }
   /client/v1/locations/details:
@@ -109,6 +110,7 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/AgencyRequired" }
+        "409": { $ref: "#/components/responses/GhlLocationTaken" }
         "429": { $ref: "#/components/responses/RateLimited" }
   /client/v1/locations/loader:
     get:
@@ -406,6 +408,31 @@ components:
             JavaScript global the SDK installs as, default `mythic`. Must be a
             valid identifier or the snippet throws on the client's site.
           example: acme_analytics
+        ghl_location_id:
+          type: string
+          nullable: true
+          description: >-
+            The GoHighLevel sub-account this client maps to. Alphanumeric, 8-64
+            characters; null to unmap.
+
+
+            This is a lookup key, not a label: one GoHighLevel location maps to
+            exactly one client, and claiming one already mapped elsewhere
+            returns 409 `ghl_location_taken`. Clear it on the other client
+            first.
+          example: vr4lpqi0w0anVy8r7qU1
+        proxy_api_key:
+          type: string
+          nullable: true
+          description: >-
+            Your GoHighLevel API key, forwarded as `X-API-Key` when Mythic
+            proxies to GoHighLevel for this client. 8-512 characters; null to
+            clear.
+
+
+            **Write-only.** It is never returned by any endpoint —
+            `proxy_api_key_set` reports whether one is stored. Rotating it means
+            sending the new value; there is no read-back.
     Location:
       type: object
       properties:
@@ -428,6 +455,15 @@ components:
         website: { type: string, nullable: true }
         timezone: { type: string, nullable: true }
         global_name: { type: string, nullable: true }
+        ghl_location_id:
+          type: string
+          nullable: true
+          description: The mapped GoHighLevel sub-account, or null.
+        proxy_api_key_set:
+          type: boolean
+          description: >-
+            Whether a GoHighLevel API key is stored for this client. The key
+            itself is write-only and never returned.
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     Hostname:
@@ -489,6 +525,11 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
     NotFound:
       description: "`not_found` — no such client, or no hostname attached to it."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    GhlLocationTaken:
+      description: "`ghl_location_taken` — that GoHighLevel location is already mapped to another client."
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

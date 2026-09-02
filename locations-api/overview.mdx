@@ -60,8 +60,10 @@ client cannot create siblings.
 A client row carries fields that are yours and fields that are ours. The
 settable set is:
 
-`name`, `domain`, `email`, `phone`, `website`, `timezone`, `global_name`
+`name`, `domain`, `email`, `phone`, `website`, `timezone`, `global_name`,
+`ghl_location_id`, `proxy_api_key`
 
+The last two behave unusually and are covered [below](#two-fields-that-behave-unusually).
 Everything else is rejected rather than ignored:
 
 | Field | Why not |
@@ -72,7 +74,7 @@ Everything else is rejected rather than ignored:
 | `status` | Use `POST /client/v1/status` — enabling and disabling tracking is its own operation. |
 | `publishable_key`, `secret_key` | Server-generated. |
 | `gcp_project_id`, `gcp_credentials` | Staff-managed export credentials. |
-| `access_token`, `refresh_token`, `proxy_api_key`, `company_id`, `api_metadata`, `ghl_location_id` | Not settable through this API. |
+| `access_token`, `refresh_token`, `company_id`, `api_metadata` | Not settable through this API. |
 
 <Callout kind="note">
   Rejecting beats ignoring here. A caller that sends `plan_id: "unlimited"` and
@@ -83,6 +85,27 @@ Everything else is rejected rather than ignored:
 A typo in a settable field name is a separate error — `unknown_field`, whose
 message lists what *is* settable — so a mistyped `tiemzone` is findable rather
 than silently dropped.
+
+## Two fields that behave unusually
+
+**`proxy_api_key` is write-only.** It is your GoHighLevel API key, which Mythic
+forwards as `X-API-Key` when proxying to GoHighLevel for this client. You set
+it; no endpoint ever returns it. Reads carry `proxy_api_key_set: true|false`
+instead, so rotating means sending the new value — there is no read-back to
+compare against.
+
+**`ghl_location_id` is a lookup key, not a label.** One GoHighLevel sub-account
+maps to exactly one client, because Mythic resolves a client *from* that id
+when proxying. Claiming one already mapped elsewhere returns
+`409 ghl_location_taken` — clear it on the other client first.
+
+<Callout kind="warning">
+  Before this was enforced, six GoHighLevel ids were shared across fourteen
+  clients, and the GoHighLevel proxy failed for **all fourteen** — the lookup
+  became ambiguous, and the error reported a missing `proxy_api_key` for
+  clients that had one set. If you manage the same GoHighLevel account across
+  several Mythic clients, map it to one and leave the others unmapped.
+</Callout>
 
 ## `kv_sync` — why writes report their edge sync
 
@@ -162,6 +185,15 @@ breakdowns use the [Data API](/data-api/overview).
 Requests are limited to 60 per minute per location. An agency has a ceiling on
 how many clients it may create; hitting it returns `location_ceiling`, and
 support can raise it.
+
+## Session replay
+
+Replay capture is configured through `GET`/`PUT
+/client/v1/settings/session-replay` (under **Settings** in the
+[Data API](/data-api/overview)), not here — it is a tracking setting rather than
+a provisioning field. Keys are merged rather than
+replaced on write, so a partial body cannot silently un-mask the fields that
+keep personal data out of a recording.
 
 ## The same operations as MCP tools
 
