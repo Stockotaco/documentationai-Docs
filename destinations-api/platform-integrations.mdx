@@ -99,3 +99,7 @@ Disconnecting (`DELETE /integrations/{platform}`) detaches the browser tag and r
 <Callout kind="warning">
   If the site already runs its own Meta pixel, connecting with a managed browser pixel double-fires browser events. Set `browser_tag: false` so Mythic only sends CAPI, or remove the existing pixel.
 </Callout>
+
+<Callout kind="info">
+  The managed pixel is isolated from any other pixel on the page: it disables Meta's automatic PageView and automatic config **for our pixel only** (`autoConfig: false`), and sends every conversion with `trackSingle`, so a pre-existing pixel never receives our events — and we never receive theirs.
+</Callout>

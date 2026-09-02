@@ -15,7 +15,7 @@ location:
 | --- | --- | --- |
 | **Tags** | GTM-like tag assignments (a template id plus `params`) fired by the SDK | `tenant_tags` |
 | **Snippets** | Custom JavaScript (`code`) injected by the SDK | `tenant_snippets` |
-| **Transformers** | Event transforms (`map` field mappings or `code`) applied during ingestion, in `priority` order | `transformers` |
+| **Transformers** | Event transforms (`map` field mappings or `code`) applied by the SDK to every captured event before it is sent, in `priority` order | `transformers` |
 
 The Client Config API is CRUD over those three on `/client/v1/config` — 14
 routes. The same operations exist as MCP tools on the
@@ -104,16 +104,29 @@ the SDK, it hasn't.
     curl -X POST "$BASE/client/v1/config/transformers?location_id=$LOC" \
       -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
       -d '{
-        "name": "Normalize order value",
+        "name": "Add page title",
         "type": "map",
-        "config": { "mappings": [{ "from": "order_total", "to": "value" }] },
+        "config": { "from": "document.title", "as": "page_title" },
         "priority": 50
       }'
     ```
 
-    `type` is `map` (declared field mappings) or `code` (a JS transform);
-    `config` is required and type-specific. Transformers run at ingestion in
-    `priority` order, lowest first. Like snippets, the list omits `config`.
+    `type` is `map` (evaluate `config.from`, a JS expression, and store the
+    result at `config.as` in the event properties) or `code` (run
+    `config.code` with `(data, mythic)` — mutate `data` and return it, or
+    `return null` to drop the event). The `config` must be complete for the
+    type — an incomplete one is rejected with `400 bad_config` instead of
+    silently no-oping at capture time. Transformers run on every captured
+    event in `priority` order, lowest first; they are unconditional (there are
+    no trigger rules — gate inside `code` when you need conditions). Like
+    snippets, the list omits `config`.
+
+    <Callout kind="warning">
+      Transformers execute arbitrary JavaScript in the browser, exactly like
+      snippets — `transformers:write` on a key is code-execution trust. They
+      are not loaded at all when the SDK runs in HIPAA mode or with
+      `disable_decide`.
+    </Callout>
   </Step>
 
   <Step title="Update and verify">
@@ -147,7 +160,7 @@ the SDK, it hasn't.
 
 | Status | Code | Meaning |
 | --- | --- | --- |
-| `400` | `bad_json`, `missing_field`, `bad_type`, `nothing_to_update` | Malformed body, a required field missing, transformer `type` not `map`/`code`, or an empty PATCH |
+| `400` | `bad_json`, `missing_field`, `bad_type`, `bad_config`, `bad_priority`, `nothing_to_update` | Malformed body, a required field missing, transformer `type` not `map`/`code`, an incomplete type-specific transformer `config`, a `priority` outside 1–100, or an empty PATCH |
 | `401` | `unauthorized` | Missing/invalid key, or an `ak_` with no location bound |
 | `403` | `agency_required` | Write attempted with an `sk_` key |
 | `404` | `not_found` | No such tag assignment, snippet, or transformer for this location |
@@ -156,3 +169,55 @@ the SDK, it hasn't.
 Deletes are idempotent for tags (removing an absent assignment succeeds);
 snippet and transformer deletes verify ownership first and return `404` for a
 row that is not this location's.
+
+## Snippet execution context
+
+Snippets run in a function scope with two arguments:
+
+- `mythic` — the SDK instance (same object as the page global), so a snippet
+  can call `mythic.capture(...)`, read config, etc.
+- `event` — **only for event-triggered snippets** (a snippet whose
+  `trigger_rules` contain a `mythic_event` rule): `{ name, properties, uuid }`
+  for the event that fired it.
+
+```js
+// Event-triggered snippet: forward a custom conversion with the same
+// event id the server destinations use, for platform-side dedup.
+fbq('trackSingle', PIXEL_ID, 'Purchase', event.properties, { eventID: event.uuid });
+```
+
+`event.uuid` is the Mythic event id (UUIDv7) that the SDK generated for that
+event — it is the **same value the server-side destinations send** as Meta's
+`event_id` and Google's `transaction_id`. Use it as your dedup key whenever a
+snippet sends a conversion to a platform that also receives the server-side
+delivery.
+
+Two execution rules to know:
+
+- An event-triggered snippet fires **once** — on the first matching event. It
+  does not re-run for later matches; use a platform destination for per-event
+  forwarding.
+- A snippet with no trigger rules runs at load time with `event` undefined.
+
+<Callout kind="warning">
+  Snippets execute arbitrary JavaScript in the browser — `snippets:write` on a
+  key is code-execution trust, exactly like transformers. Nothing server-defined
+  (tags, snippets, transformers) loads at all in HIPAA mode or with
+  `disable_decide`.
+</Callout>
+
+## Managed platform tags
+
+Two tag types are provisioned by the [Platform Integrations API](/destinations-api/platform-integrations)
+rather than this CRUD surface: `meta_pixel` and `google_tag`. They carry **no
+code** — the behaviour lives in the SDK (loaded as an on-demand chunk, so sites
+without them never download it), and the per-location config (pixel id,
+event mapping) lives in `tenant_tags.params`.
+
+They are listed here because you will see them through these endpoints and the
+`tags` scope: each platform has one global template row (named
+`Mythic · Meta Pixel` / `Mythic · Google Tag`), and a location's assignment
+carries its config. Don't hand-edit those rows — reconnect through the
+integrations API (or the `connect_meta_integration` / `connect_google_ads_integration`
+MCP tools), which keeps the browser tag and the server destination in sync and
+preserves the shared-id dedup between them.
