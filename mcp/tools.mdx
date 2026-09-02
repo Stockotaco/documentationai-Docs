@@ -1,39 +1,42 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 176 tools across
+  Every tool the Mythic MCP server exposes — 178 tools across
   23 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 176 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 178 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
 from the same implementation.
 
 <Callout kind="info">
-Tools are gated by the scopes on your `mcp_` key. A key sees only the tools its
-scopes grant, so `tools/list` is a smaller list than this page unless the key is
-unrestricted. A `:write` scope implies the matching `:read`. The same scope
-authorizes the **Proxies** route when the key is used
-[directly over HTTP](/mcp/authentication#using-an-mcp_-key-over-http).
+Tools are gated by the scopes on your `mcp_` key. Every tool is listed whatever
+the key's scopes; calling one outside them answers `insufficient_scope` with the
+scope to request, so an agent can tell you exactly what to add. A `:write` scope
+implies the matching `:read`. The same scope authorizes the **Proxies** route
+when the key is used [directly over HTTP](/mcp/authentication#using-an-mcp_-key-over-http).
 </Callout>
 
 Client-scoped tools operate on the selected client — see
 [the select-a-client flow](/mcp/settings-server#the-select-a-client-flow).
 
-## Navigation
+## Session
 
-Registered for every agency-wide key, no scope needed. `list_clients` also fronts
-the roster route over HTTP, where it takes `agency:read`.
+No scope needed. `list_clients` and `select_client` register for every
+agency-wide key (`list_clients` also fronts the roster route over HTTP, where it
+takes `agency:read`); `whoami` and `search_docs` register for every key.
 
 | Tool | Scope | What it does | Proxies |
 | --- | --- | --- | --- |
 | `list_clients`<br /><span style={{opacity: 0.7}}>List Clients</span> | — | List the clients (locations) this agency key can operate on. | `GET /builder/locations`<br />`GET /client/v1/agency/locations` |
 | `select_client`<br /><span style={{opacity: 0.7}}>Select Client</span> | — | Set the active client for this session by id (from list_clients). | — |
+| `whoami`<br /><span style={{opacity: 0.7}}>Who Am I</span> | — | Describe this connection: key type (agency-wide or bound to one client), the pinned client if any, the scopes held, and per family whether this key can read, write, or nothing. | — |
+| `search_docs`<br /><span style={{opacity: 0.7}}>Search Documentation</span> | — | Search the public Mythic Analytics documentation (docs.mythicdata.io): API routes, tool behaviour, scopes, error codes, SDK setup. | — |
 
 ## People
 

@@ -53,6 +53,19 @@ on the same endpoint:
 Requests are routed by what they carry, not by a setting — you do not have to
 opt in to either era.
 
+### Pinning a client in the URL
+
+```text
+https://mythic-mcp-server-production.up.railway.app/mcp/c/<location_id>
+```
+
+An agency-wide key connected to `/mcp/c/<location_id>` behaves exactly like a
+key bound to that client: every tool operates on it, `select_client` is not
+needed, and stateless connections need no per-call `location_id`. Agents cannot
+change a header or URL mid-session, so this is the right place for a choice that
+should never change. A location outside the key's agency answers `403`. Configure
+one server entry per client you want the assistant to work on.
+
 ## Connect
 
 ```bash
@@ -77,9 +90,13 @@ error (`code -32600`).
 | Key type | `location_id` | Behavior |
 |----------|:---:|----------|
 | **Client-scoped** | set | Fixed to one client. Tools operate on it; navigation tools are hidden. |
-| **Agency-wide** | `null` | Not bound to a client. Gets `list_clients` / `select_client`; a client must be selected before client-scoped tools work. |
+| **Agency-wide** | `null` | Not bound to a client. Gets `list_clients` / `select_client`; a client must be selected before client-scoped tools work — or connect to [`/mcp/c/<location_id>`](#pinning-a-client-in-the-url). |
 
-Mint keys of either type in the agency Builder or the platform admin UI.
+Mint keys of either type in the agency Builder or the platform admin UI. Every
+key also gets `whoami` (key type, pinned client, scopes, and per family whether
+it can read, write or nothing) and `search_docs` (this documentation, searchable
+in-session). The server's `instructions` at connect time say the same, so the
+assistant knows what the key can do before its first call.
 
 ## The select-a-client flow
 
@@ -114,15 +131,28 @@ pass the one you want on each call — every client-scoped tool takes it as
 ```
 
 The argument works on handshake connections too, where it overrides the pinned
-client for that one call — so passing it always is the portable choice.
+client for that one call — so passing it always is the portable choice. Or pin
+the client [in the URL](#pinning-a-client-in-the-url) and never pass it.
+
+### Several clients in one call
+
+`get_event_volume_daily`, `get_event_trend`, `get_event_breakdown` and
+`get_sessions_breakdown` accept `location_ids` (up to 25) on agency-wide keys and
+answer `{ "results": [{ "location_id": …, … }] }`, one entry per client, a failing
+client reported as `{ "location_id", "error" }` instead of failing the call. For
+whole-agency rollups use the `get_agency_*` tools.
 
 ## Tool families & scopes
 
 Every tool is gated by a scope on the key (`family:read` / `family:write`,
 `family:*`, or `*`). An empty `scopes` array grants **nothing** — unrestricted
 is the explicit `["*"]`. A `:write` scope implies the matching `:read`.
-`list_clients` and `select_client` need no scope — agency-wide keys get them
-automatically.
+`list_clients`, `select_client`, `whoami` and `search_docs` need no scope.
+
+Every tool is **listed** whatever the key's scopes. Calling one the scopes do not
+cover answers a tool error with `code: "insufficient_scope"`, the `required`
+scope and the scopes `held`, so the assistant can tell you exactly what to add
+instead of reporting an unknown tool.
 
 The **agency rollup tools** (`get_agency_stats`, `get_agency_destination_health`,
 `get_agency_contracts_summary`, `get_agency_usage`, `get_agency_quota`) are
@@ -202,6 +232,17 @@ timeline tool. A typical agent flow: pick sessions from `list_replays` (e.g.
 high `console_errors` or long duration), call `get_session_timeline` for each,
 and summarize behavior, drop-off, and friction.
 
+## Prompts
+
+Three prompts encode the tool sequences agencies run most, so the assistant does
+not rediscover them each session:
+
+| Prompt | Arguments | What it drives |
+|---|---|---|
+| `weekly-client-report` | `client?`, `days?` (7) | Trend, channels, top pages, conversion events, errors, coverage, contracts — with the prior window for comparison. |
+| `tracking-health-check` | `client?` | PASS / WARN / FAIL per area: ingestion, volume, coverage, contracts, web vitals, errors, settings. |
+| `compare-clients` | `clients?`, `days?` (30) | Agency-wide side-by-side from the rollups plus a one-call `location_ids` channel comparison. |
+
 ## Rate limiting
 
 Each key's `rate_limit_per_minute` (default 60) is enforced with a shared
@@ -212,10 +253,13 @@ fixed-window counter. Over the limit returns a JSON-RPC `429`.
 | Status | Meaning |
 |--------|---------|
 | `401` | Missing or invalid `mcp_` key |
-| `403` | Session doesn't belong to this key |
+| `402` | The plan does not include MCP access |
+| `403` | Session doesn't belong to this key, or `/mcp/c/<location_id>` names a location outside the key's agency |
 | `429` | Rate limit exceeded |
 
 Tool-level failures return `{ "isError": true, "content": [...] }` in the result.
+A call outside the key's scopes is one of them: the text is JSON with
+`error.code = "insufficient_scope"`, `error.required` and `error.held`.
 
 <Callout kind="alert">
   Never expose `mcp_` API keys in client-side JavaScript, public repositories, or
