@@ -170,6 +170,40 @@ Deletes are idempotent for tags (removing an absent assignment succeeds);
 snippet and transformer deletes verify ownership first and return `404` for a
 row that is not this location's.
 
+## The install snippet prefetches this endpoint
+
+The published install snippet calls `/decide` itself, during HTML parse, before
+the loader script is even requested — then parks the in-flight promise on
+`window.__mythicCfgPrefetch` and the SDK **adopts** it instead of issuing its
+own request:
+
+```js
+var u = "https://api.adberserk.com/decide?key=pk_xxx&v=2",
+    r = fetch(u, { cache: "default" });
+r.catch(function() {});
+window.__mythicCfgPrefetch = { url: u, response: r };
+```
+
+Measured on a cold visit, this starts config at **~12ms instead of ~300-500ms**,
+because it no longer waits for the loader to download and execute. Config is
+what gates tags, snippets and platform pixels, so the whole server-defined layer
+lands earlier on the page.
+
+Three things matter if you hand-roll the snippet rather than using the one from
+the API or the builder:
+
+- **The URL must match exactly**, including `&v=2`. The SDK adopts the parked
+  response only when the URL equals the one it was going to request; anything
+  else and it fetches again, giving you two `/decide` calls per page.
+- **The handle is single-use**, and it lives on its own window key rather than
+  on `window.mythic` — the core replaces that global, which would drop it.
+- **Keep the `.catch()`.** Without it a failed prefetch is an unhandled
+  rejection on the customer's page. The SDK handles the failure when it adopts.
+
+Omit the prefetch entirely for HIPAA-mode and `disable_remote_config` tenants.
+Their SDK makes no config request at all, so prefetching would send the exact
+request those modes exist to prevent.
+
 ## Snippet execution context
 
 Snippets run in a function scope with two arguments:
