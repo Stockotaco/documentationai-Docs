@@ -421,7 +421,17 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: "Supabase session JWT for an allowlisted admin account. Format: `Bearer <access_token>`."
+      description: >-
+        Staff credential, one of two forms. A human operator sends the Supabase
+        session JWT of an allowlisted admin account. A server-to-server caller
+        sends a service key Mythic issues to it, allowlisted to these routes per
+        method — no token exchange, no refresh.
+
+
+        Agency keys (`ak_`), location secret keys (`sk_`) and scoped keys
+        (`mcp_`) are refused with 401 on every route here. There is no static
+        admin key and no `admin_key` query parameter. Client management is not
+        on this surface at all — see `/client/v1/locations`.
   parameters:
     AgencyId:
       name: id

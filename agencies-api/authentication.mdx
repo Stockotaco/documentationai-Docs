@@ -15,11 +15,33 @@ Every endpoint requires a Supabase session JWT for an allowlisted admin account,
   on every route in this section. There is no static admin key and no
   `?admin_key=` query parameter — a shared secret was retired precisely
   because it was unattributable and could not be revoked for one caller.
-
-  A server-to-server caller that needs these routes is issued its own service
-  account and exchanges it for a session token, so its calls are attributable
-  and individually revocable. Contact Mythic to have one issued.
 </Callout>
+
+## Server-to-server callers
+
+A backend that needs agency administration — creating agencies, linking
+locations to them — is issued its own **service key** by Mythic, scoped to
+exactly those routes:
+
+```text
+Authorization: Bearer <service key>
+```
+
+No token exchange and no refresh: the key is the credential. It is allowlisted
+per route *and per method*, so a key that may read and update an agency cannot
+delete one or rotate its key, and it is refused on every other `/api/v1` route.
+Each key is separate, so its calls are attributable to it alone and it can be
+revoked without affecting anyone else.
+
+<Callout kind="note">
+  A service key does **not** cover client management. Creating clients, install
+  snippets, hostnames, and install verification are agency-grain and live on
+  [`/client/v1/locations`](/locations-api/overview) behind the agency's own
+  `ak_` key. If you are reaching for a service key to provision a client, that
+  is the surface you want instead.
+</Callout>
+
+Contact Mythic to have one issued.
 
 <ParamField header="Authorization" param-type="string" required="true" deprecated="false">
   Supabase session JWT for an allowlisted admin account. Format: `Bearer <access_token>`.
