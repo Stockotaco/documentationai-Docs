@@ -385,7 +385,9 @@ paths:
         returned as one number per series when `interval` is omitted. Optional
         `breakdown` by any property (top-N by the first series; the rest fold
         into `"$$other"`) and `compare: previous_period` (the immediately
-        preceding window of equal length, aligned by bucket index).
+        preceding window of equal length, aligned by bucket index, and
+        truncated at the same time of day so today-so-far is not compared
+        against a whole day).
 
 
         **Funnel** (`kind: funnel`): 2–10 ordered `steps`, a conversion

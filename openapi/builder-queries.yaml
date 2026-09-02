@@ -336,7 +336,9 @@ components:
         meta:
           type: object
           description: >-
-            Resolved `from`/`to`, `previous` window, `interval`,
+            Resolved `from`/`to`, `to_exclusive` (where a window that
+            includes today actually stopped), the `previous` window (truncated
+            to the same time of day), `interval`,
             `window_seconds`, `grain` (funnels: what a step counted),
             `breakdown` settings, and query statistics
             (`sql_ms`, `rows_read`, `bytes_read`).

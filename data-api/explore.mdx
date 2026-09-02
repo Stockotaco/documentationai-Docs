@@ -67,8 +67,9 @@ curl -X POST "https://mythic-analytics.gulp.workers.dev/client/v1/data/query?loc
     "meta": {
       "from": "2026-08-02",
       "to": "2026-09-01",
+      "to_exclusive": "2026-09-01 17:55:00",
       "interval": "day",
-      "previous": { "from": "2026-07-02", "to": "2026-08-01" },
+      "previous": { "from": "2026-07-02", "to": "2026-08-01", "to_exclusive": "2026-08-01 17:55:00" },
       "sql_ms": 212,
       "rows_read": 778534,
       "bytes_read": 36060000,
@@ -92,7 +93,11 @@ One `series[]` entry per spec series × breakdown value. `data[]` is aligned to
 <ParamField body="date_range" type="object" required>
   `{ "preset": "24h" | "7d" | "14d" | "30d" | "90d" | "365d" }` or
   `{ "from": "YYYY-MM-DD", "to": "YYYY-MM-DD" }` (UTC, `to` inclusive). Presets
-  resolve to `[today-N, today]`. Max 366 days.
+  resolve to `[today-N, today]`, so `7d` returns eight daily buckets: seven
+  whole days plus today so far. A window that includes today ends at the moment
+  of the request, not at midnight — `meta.to_exclusive` reports where it
+  actually stopped, and an event dated in the future is never counted. Max 366
+  days.
 </ParamField>
 <ParamField body="interval" type="'hour' | 'day' | 'week' | 'month'">
   Trend only. Omit for one number per series. `hour` needs a range of 31 days
@@ -112,7 +117,12 @@ One `series[]` entry per spec series × breakdown value. `data[]` is aligned to
   funnel the value is taken from the first step's event.
 </ParamField>
 <ParamField body="compare" type="'previous_period'">
-  Trend only. Also returns the immediately preceding window of equal length.
+  Trend only. Also returns the immediately preceding window of equal length, in
+  each series' `previous[]`. When the current window includes today it is
+  truncated at the time of the request, and the preceding one is truncated at
+  the same time of day on its last day (see `meta.previous.to_exclusive`) —
+  otherwise today-so-far would be compared against a whole day and every metric
+  would look like it had fallen.
 </ParamField>
 <ParamField body="steps" type="Step[]">
   Funnel only, 2 to 10, in order. Each: `event`, optional `filters[]` and
