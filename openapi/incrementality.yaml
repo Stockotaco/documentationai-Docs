@@ -535,6 +535,7 @@ components:
         Client key as bearer token. Use an agency key (`Bearer ak_...`) for
         read-write access or a location secret key (`Bearer sk_...`) for
         read-only access.
+        Scoped keys (`mcp_`) are accepted too and need `incrementality:read` or `incrementality:write`. See [Using an mcp_ key over HTTP](/mcp/authentication).
   parameters:
     ExperimentId:
       name: id

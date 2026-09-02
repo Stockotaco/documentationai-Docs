@@ -525,6 +525,7 @@ components:
       description: >-
         Builder/client key as a bearer token. Agency key for read-write
         (`Bearer ak_...`) or viewer key for read-only (`Bearer sk_...`).
+        Scoped keys (`mcp_`) are accepted too and need `settings:read` or `settings:write`. See [Using an mcp_ key over HTTP](/mcp/authentication).
   schemas:
     AllowedOriginsRequest:
       type: object

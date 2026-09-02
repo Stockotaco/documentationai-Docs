@@ -1405,6 +1405,7 @@ components:
       description: >
         Agency key (`ak_`) or location secret key (`sk_`) as a bearer token.
         Format: `Bearer ak_...` or `Bearer sk_...`.
+        Scoped keys (`mcp_`) are accepted too and need the read scope of the family the route belongs to (`people`, `events`, `sessions`, `replays`, `exceptions`, `heatmaps` or `bigquery_export`). See [Using an mcp_ key over HTTP](/mcp/authentication).
   parameters:
     LocationIdHeader:
       name: X-Location-Id

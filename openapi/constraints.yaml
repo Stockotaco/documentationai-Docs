@@ -1324,7 +1324,9 @@ components:
     BearerAuth:
       type: http
       scheme: bearer
-      description: Agency key (`ak_`) or location secret key (`sk_`).
+      description: >-
+        Agency key (`ak_`) or location secret key (`sk_`).
+        Scoped keys (`mcp_`) are accepted too and need `constraints:read` or `constraints:write`. See [Using an mcp_ key over HTTP](/mcp/authentication).
   schemas:
     BenchmarkState:
       type: object

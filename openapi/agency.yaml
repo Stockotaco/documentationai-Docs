@@ -265,6 +265,7 @@ components:
         Agency key (`ak_`) only — a location secret key (`sk_`) gets `403
         agency_required`. Keys are server-side credentials; this surface
         serves no CORS headers on purpose.
+        Agency-wide scoped keys (`mcp_` with no fixed location) are accepted too and need `agency:read`; a client-bound `mcp_` key gets `403 agency_key_required`. See [Using an mcp_ key over HTTP](/mcp/authentication).
   parameters:
     LocationIds:
       name: location_ids

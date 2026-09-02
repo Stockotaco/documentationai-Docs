@@ -224,6 +224,7 @@ components:
       description: >-
         Builder key as a bearer token. Use an agency key (`Bearer ak_...`) or a
         viewer key (`Bearer sk_...`).
+        Scoped keys (`mcp_`) are not accepted here (`403 not_available_to_scoped_keys`).
   parameters:
     LocationId:
       name: location_id

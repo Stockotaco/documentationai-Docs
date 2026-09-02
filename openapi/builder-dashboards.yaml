@@ -291,6 +291,7 @@ components:
         Builder key as a bearer token. Use an agency key for full CRUD
         (`Bearer ak_...`) or a viewer key for read-only access
         (`Bearer sk_...`).
+        Scoped keys (`mcp_`) are accepted too and need `dashboards:read` or `dashboards:write`. See [Using an mcp_ key over HTTP](/mcp/authentication).
   parameters:
     DashboardId:
       name: id

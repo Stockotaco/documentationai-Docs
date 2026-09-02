@@ -163,7 +163,9 @@ components:
     BearerAuth:
       type: http
       scheme: bearer
-      description: Agency key (`ak_`) or location secret key (`sk_`).
+      description: >-
+        Agency key (`ak_`) or location secret key (`sk_`).
+        Scoped keys (`mcp_`) are accepted too and need `correlation:read`. See [Using an mcp_ key over HTTP](/mcp/authentication).
   parameters:
     LocationId:
       name: location_id

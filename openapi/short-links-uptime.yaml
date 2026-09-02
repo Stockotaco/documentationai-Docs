@@ -76,6 +76,7 @@ components:
         Client API key as a bearer token. Use an agency key (`ak_...`,
         read-write) or a location secret key (`sk_...`, read-only). Format:
         `Bearer ak_...` or `Bearer sk_...`.
+        Scoped keys (`mcp_`) are accepted too and need `links:read`. See [Using an mcp_ key over HTTP](/mcp/authentication).
   parameters:
     LocationIdQuery:
       name: location_id

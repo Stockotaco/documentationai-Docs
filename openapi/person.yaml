@@ -429,6 +429,7 @@ components:
         Agency key as bearer token. Format: `Bearer ak_...`. Must name a
         location via the `location_id` query parameter or `X-Location-Id`
         header.
+        Scoped keys (`mcp_`) are accepted too and need `people:read`. See [Using an mcp_ key over HTTP](/mcp/authentication).
     SecretKey:
       type: http
       scheme: bearer

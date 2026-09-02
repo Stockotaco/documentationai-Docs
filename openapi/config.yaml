@@ -457,6 +457,7 @@ components:
         Agency key (`ak_`) or location secret key (`sk_`). Writes require an
         agency key. Keys are server-side credentials — this surface serves no
         CORS headers on purpose.
+        Scoped keys (`mcp_`) are accepted too and need the `tags`, `snippets` or `transformers` family the route belongs to. See [Using an mcp_ key over HTTP](/mcp/authentication).
   parameters:
     LocationId:
       name: location_id

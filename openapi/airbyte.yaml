@@ -1524,6 +1524,7 @@ components:
       description: >
         Agency key as bearer token, format `Bearer ak_...`. Grants full
         read-write access scoped to the agency.
+        Agency-wide scoped keys (`mcp_` with no fixed location) are accepted too and need `airbyte:read` or `airbyte:write`; a client-bound `mcp_` key gets `403 agency_key_required`. See [Using an mcp_ key over HTTP](/mcp/authentication).
     SecretKey:
       type: http
       scheme: bearer

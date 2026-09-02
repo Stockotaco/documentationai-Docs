@@ -94,7 +94,10 @@ paths:
                     `resource:*`, or `*`). Omitted or empty means `["*"]` —
                     unrestricted. An empty array does **not** mean "no access";
                     to restrict a key, name the scopes it should have.
-                  example: ["data:read", "insights:read"]
+                    Every string must be a scope from the catalog on the
+                    authentication page; a misspelled or retired scope answers
+                    `400 invalid_scope` naming it, and is never stored.
+                  example: ["people:read", "insights:read"]
                 rate_limit_per_minute:
                   type: integer
                   description: Per-key request ceiling. Defaults to 60.
@@ -149,7 +152,7 @@ paths:
                 scopes:
                   type: array
                   items: { type: string }
-                  example: ["data:read"]
+                  example: ["people:read"]
                 rate_limit_per_minute: { type: integer, example: 120 }
                 is_active:
                   type: boolean
@@ -443,7 +446,9 @@ components:
     BearerAuth:
       type: http
       scheme: bearer
-      description: An agency key (`ak_`). Location secret keys are rejected.
+      description: >-
+        An agency key (`ak_`). Location secret keys are rejected.
+        Scoped keys (`mcp_`) are not accepted here (`403 not_available_to_scoped_keys`).
   parameters:
     Id:
       name: id
@@ -503,7 +508,7 @@ components:
         scopes:
           type: array
           items: { type: string }
-          example: ["data:read", "insights:read"]
+          example: ["people:read", "insights:read"]
         is_active: { type: boolean, example: true }
         rate_limit_per_minute: { type: integer, example: 60 }
         last_used_at: { type: string, format: date-time, nullable: true }
