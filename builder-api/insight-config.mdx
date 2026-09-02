@@ -43,7 +43,7 @@ An insight is a saved [explore query](/data-api/explore) plus a visualization. I
 | `bar`     | `trend`  | no `interval`, `breakdown` **or** several series | one bar per breakdown value or series |
 | `pie`     | `trend`  | no `interval`, `breakdown` | share per breakdown value |
 | `table`   | `trend`  | with or without `interval` | series × buckets, or one row per series |
-| `funnel`  | `funnel` | 2–10 `steps`, optional `window`, `breakdown` | step bars with conversion rates |
+| `funnel`  | `funnel` | 2–10 `steps`, optional `window`, `grain`, `breakdown` | step bars with conversion rates |
 
 The one hard rule: `funnel` ⇔ `kind: "funnel"`. Every other type must carry a `kind: "trend"` spec. A trend without `interval` returns one `value` per series; with `interval` it returns `data[]` per bucket. `number`, `bar` and `pie` read the totals either way, so leaving `interval` off is cheaper.
 
@@ -137,6 +137,11 @@ The one hard rule: `funnel` ⇔ `kind: "funnel"`. Every other type must carry a 
 }
 ```
 
+Set `"grain": "person"` on a funnel whose steps cross from the browser into
+server-side or CRM events — those arrive under a contact id, not the visitor's
+`distinct_id`, so the default device grain cannot link them. See
+[Explore queries](/data-api/explore) for the cost.
+
 ## Discovering events and properties
 
 Don't hardcode names. The Data API answers, with the same key:
@@ -180,7 +185,7 @@ The run payload is the explore response with the insight attached — see the Qu
 | `breakdown_values[]` | values in rank order, `$$other` last | — |
 | `steps[]` | — | `{ step, label, event, users, conversion_from_first, conversion_from_previous }` |
 | `breakdown[]` | — | `{ value, steps[] }` per breakdown value |
-| `meta` | resolved window, interval, breakdown settings, `sql_ms`, `rows_read` | same |
+| `meta` | resolved window, interval, breakdown settings, `sql_ms`, `rows_read` | same, plus `grain` |
 | `config`, `cached`, `sql` | stored config, cache hit flag, compiled query (`sql` is omitted on `/public/query`) | same |
 
 For a `number`, read `series[0].total` (with `interval`) or `series[0].value`, and the `previous*` counterpart for the delta. For a `line`, plot `buckets` against each entry's `data`. For `bar`/`pie`, one slice per `series[]` entry using `total`/`value`.

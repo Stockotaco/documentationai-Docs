@@ -123,6 +123,16 @@ One `series[]` entry per spec series × breakdown value. `data[]` is aligned to
   Funnel only. Conversion window, `unit` one of `minute`, `hour`, `day`.
   Default 7 days, capped at the length of the date range.
 </ParamField>
+<ParamField body="grain" type="'device' | 'person'" default="device">
+  Funnel only. Who a step counts. `device` counts the raw `distinct_id`;
+  `person` resolves each id to its canonical person first, so a journey that
+  crosses devices — or a step that is a server/CRM event keyed by a contact id
+  rather than a browser id — links into one funnel instead of breaking. It
+  joins the whole identity map for the window, so it is slower: measured on a
+  30-day two-step funnel, 0.04s to 0.19s on a web+CRM tenant and 0.27s to 1.2s
+  on the largest. Trends have no `grain` — person resolution moves a unique-user
+  count by under 1% on most tenants, so it is not worth the scan there.
+</ParamField>
 <ParamField body="filters" type="Filter[]">
   Applied to every series or step. At most 20 filters in total across the spec.
 </ParamField>
@@ -200,16 +210,24 @@ Discover keys with `GET /properties` and values with `GET /query/values`.
       { "value": "B", "steps": [ { "step": 1, "users": 602, "…": "…" } ] },
       { "value": "A", "steps": [ { "step": 1, "users": 578, "…": "…" } ] }
     ],
-    "meta": { "from": "2026-08-18", "to": "2026-09-01", "window_seconds": 259200, "sql_ms": 340, "rows_read": 51200, "bytes_read": 2100000, "cached": false }
+    "meta": { "from": "2026-08-18", "to": "2026-09-01", "window_seconds": 259200, "grain": "device", "sql_ms": 340, "rows_read": 51200, "bytes_read": 2100000, "cached": false }
   }
 }
 ```
 </Response>
 
 Step *k* counts users who reached steps 1 through *k* in order within the
-window. Users are `distinct_id`s: an anonymous visitor who identifies between
-two steps is two ids, and the funnel breaks there. Person-level resolution is a
-planned follow-up.
+window. By default users are `distinct_id`s, so an anonymous visitor who
+identifies between two steps is two ids and the funnel breaks there. Add
+`"grain": "person"` to resolve ids to people first and keep the journey
+whole — `meta.grain` echoes what was counted.
+
+That matters most when a step is not a browser event. A CRM or server-side
+conversion arrives under a contact id, never the visitor's `distinct_id`, so at
+device grain the funnel structurally cannot link it: on a live web+CRM tenant a
+`$pageview → opportunity_created` funnel found 637 conversions by device and
+914 by person, a rate of 3.4% against 5.2%. On a web-only funnel the two agree
+to within 0.1%, and person grain only costs you time.
 
 ## Semantics worth knowing
 

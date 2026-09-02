@@ -337,7 +337,8 @@ components:
           type: object
           description: >-
             Resolved `from`/`to`, `previous` window, `interval`,
-            `window_seconds`, `breakdown` settings, and query statistics
+            `window_seconds`, `grain` (funnels: what a step counted),
+            `breakdown` settings, and query statistics
             (`sql_ms`, `rows_read`, `bytes_read`).
         config:
           type: object

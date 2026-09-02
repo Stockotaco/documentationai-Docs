@@ -1775,6 +1775,16 @@ components:
             unit:
               type: string
               enum: [minute, hour, day]
+        grain:
+          type: string
+          enum: [device, person]
+          default: device
+          description: >-
+            Funnel only. `device` counts the raw distinct_id; `person` resolves
+            each id to its canonical person first, so a journey across devices —
+            or a step that is a server/CRM event keyed by a contact id — links
+            instead of breaking. Slower (it joins the identity map for the
+            window); trends have no grain.
         filters:
           type: array
           description: Applied to every series / step.
