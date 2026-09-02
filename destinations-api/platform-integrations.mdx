@@ -1,0 +1,101 @@
+---
+title: Platform Integrations
+description: >-
+  One-click Meta and Google Ads tracking: a managed browser pixel plus a server
+  destination, deduplicated on a shared event id with no code on your side.
+---
+
+## Overview
+
+A platform integration is a **paired** setup created in one call:
+
+1. **A managed browser tag** — the SDK loads the Meta Pixel (or Google Ads gtag) and fires it for every tracked event, passing each event's Mythic-generated `event uuid` as Meta's `eventID` (or Google's `transaction_id`).
+2. **A server destination** — the matching `meta_capi` or `google_ads` destination sends the same events server-side with the same `event uuid`.
+
+Because both halves carry the same id, the ad platform collapses each browser + server pair into a single conversion. Dedup is guaranteed by construction — you never handle event ids yourself.
+
+<Callout kind="info">
+  Managed browser tags carry no editable code. Their behaviour lives in the SDK, so platform format changes are fixed centrally and every connected client picks them up on the next page load. Your config (pixel id, event mapping) is stored per client in `tenant_tags.params`.
+</Callout>
+
+## Connect Meta
+
+One endpoint creates both halves. Send the pixel id and (on first connect) a Conversions API system-user token:
+
+```text
+POST /client/v1/destinations/integrations/meta
+```
+
+```json
+{
+  "pixel_id": "123456789012345",
+  "capi_token": "EAAx…system-user-token…",
+  "event_mapping": { "purchase": "Purchase" },
+  "test_event_code": "TEST123"
+}
+```
+
+The `event_mapping` merges over sensible defaults (`page_view` → `PageView`, `view_item` → `ViewContent`, `add_to_cart` → `AddToCart`, `begin_checkout` → `InitiateCheckout`, `purchase` → `Purchase`, `lead` → `Lead`, and more). Any Mythic event not in the mapping is not sent to Meta.
+
+If a `meta_capi` credential is already stored you can omit `capi_token`; the token is write-only and never returned. `browser_tag: false` skips the managed pixel for sites that already run their own — Mythic then only sends CAPI.
+
+## Connect Google Ads
+
+Google Ads uses the Data Manager API for the server half, so the OAuth credential must exist first (store it with `PUT /credentials/google_ads`, or run the OAuth flow via `POST /oauth/initiate`):
+
+```text
+POST /client/v1/destinations/integrations/google_ads
+```
+
+```json
+{
+  "customer_id": "1234567890",
+  "event_mapping": {
+    "purchase": {
+      "conversion_action": "customers/1234567890/conversionActions/987",
+      "conversion_label": "AbC-D_efGh",
+      "default_value": 100,
+      "currency": "USD"
+    }
+  }
+}
+```
+
+Each event needs a `conversion_action` (server half). A `conversion_label` additionally turns on the managed gtag browser tag for that event, with `transaction_id` defaulted to the event uuid so browser and server sends dedupe. Events without a label are server-only.
+
+## Status and disconnect
+
+`GET /integrations` reports, per platform, which halves are connected and whether the delivery credential is stored:
+
+```text
+GET /client/v1/destinations/integrations
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "meta": {
+      "platform": "meta",
+      "label": "Meta (Facebook)",
+      "connected": true,
+      "browser_tag": { "tag_id": "…", "enabled": true, "config": { "pixel_id": "123456789012345", "event_mapping": { "purchase": "Purchase" } } },
+      "destination": { "id": "…", "action_type": "meta_capi", "enabled": true },
+      "has_credential": true
+    },
+    "google_ads": { "platform": "google_ads", "connected": false, "browser_tag": null, "destination": null, "has_credential": false }
+  }
+}
+```
+
+Disconnecting (`DELETE /integrations/{platform}`) detaches the browser tag and removes the managed destination — and the stored credential too, when no other destination of that type remains.
+
+## Consent and existing pixels
+
+<Callout kind="alert">
+  Both halves fire for every tracked event. If the site must honour a consent banner, gate the managed tag with trigger rules (cookie rules work well — a rule that fails blocks the tag's initial load), and gate consent-dependent server traffic the same way.
+</Callout>
+
+<Callout kind="warning">
+  If the site already runs its own Meta pixel, connecting with a managed browser pixel double-fires browser events. Set `browser_tag: false` so Mythic only sends CAPI, or remove the existing pixel.
+</Callout>

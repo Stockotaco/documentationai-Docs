@@ -975,6 +975,285 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /client/v1/destinations/integrations:
+    get:
+      summary: List platform integrations
+      operationId: listPlatformIntegrations
+      description: >
+        Status of the managed platform integrations for the calling location:
+        for each platform, which halves are connected (managed browser tag,
+        server destination) and whether the delivery credential is stored.
+        Credential values are never returned.
+      responses:
+        "200":
+          description: Per-platform integration status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      meta:
+                        $ref: "#/components/schemas/PlatformIntegrationStatus"
+                      google_ads:
+                        $ref: "#/components/schemas/PlatformIntegrationStatus"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /client/v1/destinations/integrations/meta:
+    post:
+      summary: Connect Meta
+      operationId: connectMetaIntegration
+      description: >
+        One-click Meta tracking — creates (or updates) BOTH halves of a
+        deduplicated setup: the managed Meta Pixel browser tag (fired by the
+        SDK with the event uuid as Meta's eventID) and a meta_capi server
+        destination sending the same uuid as its CAPI event_id. Idempotent:
+        reconnecting updates the stored config.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pixel_id
+              properties:
+                pixel_id:
+                  type: string
+                  description: Meta pixel id (15-16 digits).
+                  pattern: '^\d{15,16}$'
+                capi_token:
+                  type: string
+                  description: >
+                    Conversions API system-user token. Required unless a
+                    meta_capi credential is already stored. Write-only — never
+                    returned.
+                event_mapping:
+                  type: object
+                  description: >
+                    Mythic event name -> Meta event name overrides, merged over
+                    the built-in standard-event defaults. Unmapped Mythic
+                    events are not sent to Meta.
+                  additionalProperties:
+                    type: string
+                test_event_code:
+                  type: string
+                  description: Meta test event code for CAPI verification.
+                browser_tag:
+                  type: boolean
+                  description: >
+                    Set false when the site already runs its own Meta pixel —
+                    Mythic then only sends CAPI. Default true.
+      responses:
+        "201":
+          description: Connected (browser tag and destination ids included)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      platform:
+                        type: string
+                      destination_id:
+                        type: string
+                      tag_id:
+                        type: string
+                        nullable: true
+                      browser_tag:
+                        type: boolean
+                      dedup:
+                        type: object
+        "400":
+          description: Invalid config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Requires an agency key (ak_)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: A CAPI token is required and none is stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /client/v1/destinations/integrations/google_ads:
+    post:
+      summary: Connect Google Ads
+      operationId: connectGoogleAdsIntegration
+      description: >
+        One-click Google Ads tracking — creates (or updates) the google_ads
+        Data Manager server destination, plus a managed gtag browser tag when
+        any event carries a conversion_label. Browser conversions carry
+        transaction_id = event uuid so browser and server sends dedupe.
+        Requires the google_ads Data Manager OAuth credential to be stored
+        first (PUT /credentials/google_ads or POST /oauth/initiate).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - customer_id
+                - event_mapping
+              properties:
+                customer_id:
+                  type: string
+                  description: Google Ads customer id (10 digits, no dashes).
+                  pattern: '^\d{10}$'
+                event_mapping:
+                  type: object
+                  description: Mythic event name -> conversion spec.
+                  additionalProperties:
+                    type: object
+                    required:
+                      - conversion_action
+                    properties:
+                      conversion_action:
+                        type: string
+                        description: Conversion action resource name (server destination).
+                      conversion_label:
+                        type: string
+                        description: >
+                          gtag send_to label. When present on any event, the
+                          managed gtag browser tag is provisioned for it.
+                      value_property:
+                        type: string
+                        description: Event property read as the conversion value (default "value").
+                      currency:
+                        type: string
+                        description: 3-letter currency code fallback.
+                      default_value:
+                        type: number
+                        description: Value fallback when the event carries none.
+      responses:
+        "201":
+          description: Connected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      platform:
+                        type: string
+                      destination_id:
+                        type: string
+                      tag_id:
+                        type: string
+                        nullable: true
+                      browser_tag:
+                        type: boolean
+        "400":
+          description: Invalid config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Requires an agency key (ak_)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Data Manager OAuth credential not stored yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /client/v1/destinations/integrations/{platform}:
+    delete:
+      summary: Disconnect platform integration
+      operationId: deletePlatformIntegration
+      description: >
+        Detach the managed browser tag and remove the managed destination for
+        the platform (meta or google_ads). The stored credential is deleted
+        too, unless another destination of the same type still uses it.
+      parameters:
+        - name: platform
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [meta, google_ads]
+      responses:
+        "200":
+          description: Disconnected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      platform:
+                        type: string
+                      disconnected:
+                        type: boolean
+        "400":
+          description: Unknown platform
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Requires an agency key (ak_)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 components:
   securitySchemes:
     BearerAuth:
@@ -1093,6 +1372,40 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
   schemas:
+    PlatformIntegrationStatus:
+      type: object
+      properties:
+        platform:
+          type: string
+          enum: [meta, google_ads]
+        label:
+          type: string
+        connected:
+          type: boolean
+          description: True when either half (browser tag or destination) exists.
+        browser_tag:
+          type: object
+          nullable: true
+          properties:
+            tag_id:
+              type: string
+            enabled:
+              type: boolean
+            config:
+              type: object
+              description: Per-tenant config (pixel_id / conversion_id, event_mapping). No secrets.
+        destination:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+            enabled:
+              type: boolean
+            action_config:
+              type: object
+        has_credential:
+          type: boolean
     TriggerRules:
       type: object
       description: >

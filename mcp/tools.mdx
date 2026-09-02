@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 178 tools across
+  Every tool the Mythic MCP server exposes — 182 tools across
   23 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 178 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 182 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -126,10 +126,10 @@ Saved analytics queries and their results.
 | Tool | Scope | What it does | Proxies |
 | --- | --- | --- | --- |
 | `list_insights`<br /><span style={{opacity: 0.7}}>List Insights</span> | `insights:read` | List insights for the active client. | `GET /builder/insights` |
-| `get_insight`<br /><span style={{opacity: 0.7}}>Get Insight</span> | `insights:read` | Get a single insight by ID, including its full config, generated SQL, and cached result. | `GET /builder/insights/:id` |
-| `run_insight`<br /><span style={{opacity: 0.7}}>Run Insight</span> | `insights:read` | Execute a STORED insight and return its rows. | `POST /builder/insights/:id/query` |
+| `get_insight`<br /><span style={{opacity: 0.7}}>Get Insight</span> | `insights:read` | Get a single insight by ID, including its full config (config.query is the explore spec it runs). | `GET /builder/insights/:id` |
+| `run_insight`<br /><span style={{opacity: 0.7}}>Run Insight</span> | `insights:read` | Execute a STORED insight and return its series/buckets (trend) or steps (funnel) — the same shape query_events returns. | `POST /builder/insights/:id/query` |
 | `preview_insight`<br /><span style={{opacity: 0.7}}>Preview Insight</span> | `insights:read` | Execute an insight CONFIG without saving it — the same &#123; insight_type, config &#125; shape create_insight stores, run in-memory and never persisted. | `POST /builder/insights/preview` |
-| `create_insight`<br /><span style={{opacity: 0.7}}>Create Insight</span> | `insights:write` | Create a new insight for the active client. | `POST /builder/insights` |
+| `create_insight`<br /><span style={{opacity: 0.7}}>Create Insight</span> | `insights:write` | Create a new insight for the active client: a saved explore spec (config.query) drawn as insight_type. | `POST /builder/insights` |
 | `update_insight`<br /><span style={{opacity: 0.7}}>Update Insight</span> | `insights:write` | Update an existing insight. | `PATCH /builder/insights/:id` |
 | `delete_insight`<br /><span style={{opacity: 0.7}}>Delete Insight</span> | `insights:write` | Permanently delete an insight by ID. | `DELETE /builder/insights/:id` |
 
@@ -250,6 +250,7 @@ Activation destinations events are forwarded to, their credentials and deliverie
 | `get_destination_delivery_status`<br /><span style={{opacity: 0.7}}>Get Destination Delivery Status</span> | `destinations:read` | What Google did with a delivery AFTER accepting it — google_ads / google_analytics destinations only. | `GET /client/v1/destinations/:id/deliveries/:eventUuid/status` |
 | `get_destination_health`<br /><span style={{opacity: 0.7}}>Get Destination Health</span> | `destinations:read` | Per-destination delivery health rollup over a recent window: success/failure/skip counts, success rate, latency (avg + p95), queue lag, last error, and a credential_ok flag (false when the most recent failur… | `GET /client/v1/destinations/health` |
 | `verify_destination`<br /><span style={{opacity: 0.7}}>Verify Destination</span> | `destinations:read` | Did deliveries actually COUNT downstream? convert_experiments destinations only. | `GET /client/v1/destinations/:id/verification` |
+| `list_platform_integrations`<br /><span style={{opacity: 0.7}}>List Platform Integrations</span> | `destinations:read` | Show the managed Meta / Google Ads integrations for the active client: which halves are connected (browser pixel tag, server destination) and whether the delivery credential is stored. | `GET /client/v1/destinations/integrations` |
 | `create_destination`<br /><span style={{opacity: 0.7}}>Create Destination</span> | `destinations:write` | Create an activation destination for the active client. | `POST /client/v1/destinations` |
 | `update_destination`<br /><span style={{opacity: 0.7}}>Update Destination</span> | `destinations:write` | Update an existing destination. | `PATCH /client/v1/destinations/:id` |
 | `delete_destination`<br /><span style={{opacity: 0.7}}>Delete Destination</span> | `destinations:write` | Permanently delete an activation destination by ID. | `DELETE /client/v1/destinations/:id` |
@@ -259,6 +260,9 @@ Activation destinations events are forwarded to, their credentials and deliverie
 | `delete_destination_oauth_client`<br /><span style={{opacity: 0.7}}>Delete Destination OAuth Client</span> | `destinations:write` | Remove the agency's registered Google OAuth client; future consent flows fall back to the platform default (Mythic's brand and quota). | `DELETE /client/v1/destinations/oauth/client` |
 | `initiate_destination_oauth`<br /><span style={{opacity: 0.7}}>Initiate Destination OAuth</span> | `destinations:write` | Start the Google consent flow that stores a google_ads / google_analytics credential WITHOUT anyone handling a refresh token. | `POST /client/v1/destinations/oauth/initiate` |
 | `test_destination`<br /><span style={{opacity: 0.7}}>Test Destination</span> | `destinations:write` | Fire a REAL test delivery through one destination — this sends an actual event to the live ad platform using the stored credential, and the attempt lands in the delivery log (status "test"). | `POST /client/v1/destinations/:id/test` |
+| `connect_meta_integration`<br /><span style={{opacity: 0.7}}>Connect Meta Integration</span> | `destinations:write` | One-click Meta tracking: creates the managed Meta Pixel browser tag AND the Meta CAPI server destination. | `POST /client/v1/destinations/integrations/meta` |
+| `connect_google_ads_integration`<br /><span style={{opacity: 0.7}}>Connect Google Ads Integration</span> | `destinations:write` | One-click Google Ads tracking: creates the Google Ads (Data Manager) server destination, plus a managed gtag browser tag when any event has a conversion_label. | `POST /client/v1/destinations/integrations/google_ads` |
+| `delete_platform_integration`<br /><span style={{opacity: 0.7}}>Delete Platform Integration</span> | `destinations:write` | Disconnect a managed Meta or Google Ads integration: detaches the managed browser tag and removes the managed destination (and its stored credential when nothing else uses it). | `DELETE /client/v1/destinations/integrations/:platform` |
 
 ## Tracking Settings
 

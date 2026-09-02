@@ -164,6 +164,11 @@
                     "title": "Authentication",
                     "path": "destinations-api/authentication",
                     "icon": "lock"
+                  },
+                  {
+                    "title": "Platform Integrations",
+                    "path": "destinations-api/platform-integrations",
+                    "icon": "zap"
                   }
                 ]
               },
@@ -792,6 +797,11 @@
                     "title": "Authentication",
                     "path": "destinations-api/authentication",
                     "icon": "lock"
+                  },
+                  {
+                    "title": "Platform Integrations",
+                    "path": "destinations-api/platform-integrations",
+                    "icon": "zap"
                   }
                 ]
               },
