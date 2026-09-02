@@ -9,7 +9,7 @@ description: >-
 
 The Data API is a read-only surface for agencies that want to pull Mythic Analytics event data into their own systems. It serves aggregated event analytics — summaries, daily counts, and volume trends — plus the provisioning status of a BigQuery export.
 
-Every endpoint is a `GET` except `POST /query`, whose body is a query spec. The API deliberately sends no CORS headers: keys are server-side credentials and must never be embedded in a browser.
+Every endpoint is a `GET` except `POST /query`, whose body is a query spec. CORS is open for `GET`, `POST` and `OPTIONS`, which is what lets the Builder embed's own pickers read events and property values — but keys remain server-side credentials: treat one that reaches a browser you don't control as compromised.
 
 <Callout kind="info">
   Resolved person profiles and the identity graph are documented in the **People & Identity** section of this tab, which shares this base URL and authentication.

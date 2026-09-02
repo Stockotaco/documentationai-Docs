@@ -20,7 +20,7 @@ The Data API accepts three key types, all passed as a bearer token in the `Autho
 </ParamField>
 
 <Callout kind="alert">
-  These are server-side credentials. The Data API sends no CORS headers by design — never embed a key in browser-side JavaScript, public repositories, or logs.
+  These are server-side credentials — never embed a key in browser-side JavaScript, public repositories, or logs. The API does send CORS headers (so first-party surfaces like the Builder embed, which is handed a key deliberately, can read it from a browser), but that is a compatibility measure: anything holding your key can call this API from anywhere, with or without a browser.
 </Callout>
 
 ## Binding a location
