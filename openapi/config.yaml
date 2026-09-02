@@ -319,10 +319,12 @@ paths:
       summary: Create a transformer
       operationId: createConfigTransformer
       description: >
-        Create an event transformer applied during ingestion. `name`, a valid
-        `type` (`map` or `code`), and a `config` object are required;
-        `priority` defaults to `50` and `enabled` to `true`. Agency key
-        (`ak_`) required. Rebuilds the edge config — check `kv_sync`.
+        Create an event transformer applied by the SDK to every captured event
+        before it is sent. `name`, a valid `type` (`map` or `code`), and a
+        complete `config` for that type are required (`map` needs `from` and
+        `as`; `code` needs a non-empty `code`); `priority` defaults to `50` and
+        `enabled` to `true`. Agency key (`ak_`) required. Rebuilds the edge
+        config — check `kv_sync`.
       parameters:
         - $ref: "#/components/parameters/LocationId"
       requestBody:
@@ -335,15 +337,19 @@ paths:
               properties:
                 name:
                   type: string
-                  example: Normalize order value
+                  example: Add page title
                 type:
                   type: string
                   enum: [map, code]
-                  description: "`map` declares field mappings; `code` runs a JS transform."
+                  description: >-
+                    `map` evaluates `config.from` (a JavaScript expression) and
+                    stores the result at `config.as` in the event properties;
+                    `code` runs `config.code` with `(data, mythic)` — mutate
+                    `data` and return it, or `return null` to drop the event.
                 config:
                   type: object
                   description: Type-specific transformer configuration.
-                  example: { mappings: [{ from: order_total, to: value }] }
+                  example: { from: "document.title", as: "page_title" }
                 priority:
                   type: integer
                   default: 50
@@ -390,8 +396,10 @@ paths:
       operationId: updateConfigTransformer
       description: >
         Partial update — only the fields you pass change. Accepts `name`,
-        `type` (`map` or `code`), `config`, `priority`, `enabled`. Agency key
-        (`ak_`) required. Rebuilds the edge config — check `kv_sync`.
+        `type` (`map` or `code`), `config`, `priority`, `enabled`. A `config`
+        you pass replaces the stored one wholesale and must be complete for the
+        resulting type. Agency key (`ak_`) required. Rebuilds the edge config —
+        check `kv_sync`.
       parameters:
         - $ref: "#/components/parameters/TransformerId"
         - $ref: "#/components/parameters/LocationId"
@@ -429,7 +437,7 @@ paths:
       summary: Delete a transformer
       operationId: deleteConfigTransformer
       description: >
-        Permanently delete a transformer. Ingestion stops applying it once the
+        Permanently delete a transformer. The SDK stops applying it once the
         edge config rebuilds. Agency key (`ak_`) required.
       parameters:
         - $ref: "#/components/parameters/TransformerId"
@@ -490,7 +498,9 @@ components:
     BadRequest:
       description: >-
         `bad_json` (body is not JSON), `missing_field` (a required field is
-        absent), `bad_type` (transformer `type` is not `map` or `code`), or
+        absent), `bad_type` (transformer `type` is not `map` or `code`),
+        `bad_config` (an incomplete type-specific transformer config),
+        `bad_priority` (priority outside 1–100 or not an integer), or
         `nothing_to_update` (a PATCH with no recognized fields).
       content:
         application/json:
@@ -591,7 +601,12 @@ components:
           properties:
             config:
               type: object
-              example: { mappings: [{ from: order_total, to: value }] }
+              description: >-
+                `map`: `{ from, as }` — a JS expression and the event property
+                its result is stored as. `code`: `{ code }` — JS run with
+                `(data, mythic)` per event; mutate `data` and return it, or
+                `return null` to drop the event.
+              example: { from: "document.title", as: "page_title" }
     Error:
       type: object
       properties:
