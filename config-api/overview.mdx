@@ -125,7 +125,7 @@ the SDK, it hasn't.
       Transformers execute arbitrary JavaScript in the browser, exactly like
       snippets — `transformers:write` on a key is code-execution trust. They
       are not loaded at all when the SDK runs in HIPAA mode or with
-      `disable_decide`.
+      `disable_remote_config`.
     </Callout>
   </Step>
 
@@ -204,6 +204,23 @@ Omit the prefetch entirely for HIPAA-mode and `disable_remote_config` tenants.
 Their SDK makes no config request at all, so prefetching would send the exact
 request those modes exist to prevent.
 
+`respect_dnt` is the same rule with a runtime condition. The SDK checks Do Not
+Track and Global Privacy Control during `init` and disables itself *before* it
+requests config, so on those tenants a DNT visitor generates no requests at all
+— and the snippet, which runs earlier than any of that, has to repeat the test:
+
+```js
+if (!(window.doNotTrack === "1" || navigator.doNotTrack === "1"
+      || navigator.doNotTrack === "yes" || window.msDoNotTrack === "1"
+      || navigator.globalPrivacyControl)) {
+  /* prefetch */
+}
+```
+
+The generated snippet emits this automatically when `respect_dnt: true` is in
+the init config. Match the signal list exactly if you hand-roll it: a gate that
+misses one lets the request through for a visitor the SDK would have honoured.
+
 ## Snippet execution context
 
 Snippets run in a function scope with two arguments:
@@ -237,7 +254,7 @@ Two execution rules to know:
   Snippets execute arbitrary JavaScript in the browser — `snippets:write` on a
   key is code-execution trust, exactly like transformers. Nothing server-defined
   (tags, snippets, transformers) loads at all in HIPAA mode or with
-  `disable_decide`.
+  `disable_remote_config`.
 </Callout>
 
 ## Managed platform tags
