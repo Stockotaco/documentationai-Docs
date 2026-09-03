@@ -1196,6 +1196,229 @@ paths:
         "429":
           $ref: "#/components/responses/RateLimited"
 
+  /commerce/summary:
+    get:
+      summary: Daily ecommerce totals
+      operationId: getCommerceSummary
+      description: >
+        Orders, revenue, average order value, units and buyers per day, for
+        clients emitting the [Mythic ecommerce
+        spec](/javascript-sdk/ecommerce-spec). Shopify emits it automatically.
+
+
+        **Two revenue figures, and the difference is not rounding.** `revenue`
+        here is the sum of ORDER totals — the spec's `value`, which includes
+        shipping and tax. `item_revenue` alongside it is
+        `sum(unit price x quantity)` across line items. The gap between them is
+        shipping, tax and rounding. `GET /commerce/items` reports the
+        line-item figure, so the two endpoints will not agree, and each labels
+        which basis it used in `revenue_basis`.
+
+
+        **Currencies are never summed together.** Rows are one per
+        (day, currency), because adding USD to EUR gives a number that is wrong
+        in both. `totals` is therefore `null` on a multi-currency store unless
+        you pass `currency`.
+
+
+        `buyers` is a per-day unique count and deliberately absent from
+        `totals` — summing daily uniques double-counts anyone who bought on two
+        days.
+      parameters:
+        - name: event
+          in: query
+          required: false
+          description: "Commerce event name. Default `purchase`."
+          schema: { type: string, default: purchase }
+        - name: date_from
+          in: query
+          required: false
+          description: ISO date (YYYY-MM-DD) or timestamp. Default 30 days ago.
+          schema: { type: string }
+        - name: date_to
+          in: query
+          required: false
+          description: ISO date or timestamp, inclusive.
+          schema: { type: string }
+        - name: currency
+          in: query
+          required: false
+          description: ISO 4217 code. Pin one to get window totals on a multi-currency store.
+          schema: { type: string, minLength: 3, maxLength: 3 }
+      responses:
+        "200":
+          description: Daily totals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      event: { type: string, example: purchase }
+                      currencies:
+                        type: array
+                        items: { type: string }
+                        example: [USD]
+                      revenue_basis: { type: string, example: order_totals }
+                      daily:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            event_date: { type: string, format: date }
+                            currency: { type: string, example: USD }
+                            orders: { type: integer, example: 8 }
+                            buyers: { type: integer, example: 7 }
+                            revenue: { type: number, example: 1000 }
+                            item_revenue: { type: number, example: 940 }
+                            units: { type: number, example: 20 }
+                            average_order_value: { type: number, example: 125 }
+                            units_per_order: { type: number, example: 2.5 }
+                      totals:
+                        type: object
+                        nullable: true
+                        description: Window totals. Null when the response spans more than one currency.
+                        properties:
+                          currency: { type: string, example: USD }
+                          orders: { type: integer, example: 10 }
+                          revenue: { type: number, example: 1200 }
+                          item_revenue: { type: number, example: 1120 }
+                          units: { type: number, example: 24 }
+                          average_order_value: { type: number, example: 120 }
+                          units_per_order: { type: number, example: 2.4 }
+                      note_on_revenue: { type: string }
+        "400":
+          description: "`invalid_window`, `invalid_currency`, `invalid_event`, or `window_too_large`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503":
+          description: "`analytics_unavailable`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /commerce/items:
+    get:
+      summary: Revenue and units per product
+      operationId: getCommerceItems
+      description: >
+        Top products by revenue, units or orders, grouped by product id, SKU,
+        variant, name, category or brand. Reads one row per line item, expanded
+        from the [ecommerce spec's](/javascript-sdk/ecommerce-spec) `items`
+        array at ingest — which is why this is a separate endpoint rather than
+        an [explore query](/data-api/explore): `items` is an array, and the
+        typed events table the explore engine reads holds only scalars.
+
+
+        `revenue` is `sum(unit price x quantity)` across line items. It excludes
+        shipping and tax, so it will NOT equal `GET /commerce/summary` revenue.
+        Both are correct for their own question; `revenue_basis` says which you
+        got.
+
+
+        Set `event` to `add_to_cart` or `view_item` to get the same rollup at an
+        earlier funnel stage — which products get looked at versus bought.
+
+
+        Labels (`item_name`, `item_brand`, `item_category`) are reported as the
+        most recent value seen rather than grouped on, so a product renamed
+        mid-window stays one row instead of splitting its revenue in two.
+
+
+        Rows come back ordered by `order_by` descending and truncated at
+        `limit`; `truncated: true` means the catalogue's tail was dropped, never
+        its top sellers. Currencies are never summed together.
+      parameters:
+        - name: event
+          in: query
+          required: false
+          description: "Commerce event name. Default `purchase`."
+          schema: { type: string, default: purchase }
+        - name: group_by
+          in: query
+          required: false
+          description: Product dimension to group on.
+          schema:
+            type: string
+            default: item_id
+            enum: [item_id, sku, item_variant_id, item_name, item_category, item_brand]
+        - name: order_by
+          in: query
+          required: false
+          schema:
+            type: string
+            default: revenue
+            enum: [revenue, units, orders]
+        - name: date_from
+          in: query
+          required: false
+          description: ISO date (YYYY-MM-DD) or timestamp. Default 30 days ago.
+          schema: { type: string }
+        - name: date_to
+          in: query
+          required: false
+          description: ISO date or timestamp, inclusive.
+          schema: { type: string }
+        - name: currency
+          in: query
+          required: false
+          description: ISO 4217 code.
+          schema: { type: string, minLength: 3, maxLength: 3 }
+        - name: limit
+          in: query
+          required: false
+          description: "Max rows, 1-1000. Default 100."
+          schema: { type: integer, default: 100, minimum: 1, maximum: 1000 }
+      responses:
+        "200":
+          description: Item rollup
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      event: { type: string, example: purchase }
+                      group_by: { type: string, example: item_id }
+                      order_by: { type: string, example: revenue }
+                      revenue_basis: { type: string, example: line_items }
+                      truncated: { type: boolean, example: false }
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            item_key: { type: string, example: "7734115" }
+                            currency: { type: string, example: USD }
+                            item_name: { type: string, example: The Collection Snowboard }
+                            item_brand: { type: string, example: Hydrogen }
+                            item_category: { type: string, example: Snowboards }
+                            sku: { type: string, example: SNOW-01 }
+                            revenue: { type: number, example: 2700 }
+                            units: { type: number, example: 90 }
+                            orders: { type: integer, example: 61 }
+                            buyers: { type: integer, example: 58 }
+                            average_unit_price: { type: number, example: 30 }
+                            discount_total: { type: number, example: 145 }
+                      note_on_revenue: { type: string }
+        "400":
+          description: "`invalid_group_by`, `invalid_order_by`, `invalid_window`, `invalid_currency`, or `window_too_large`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503":
+          description: "`analytics_unavailable`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /explain/coverage:
     get:
       summary: Explainability coverage gate

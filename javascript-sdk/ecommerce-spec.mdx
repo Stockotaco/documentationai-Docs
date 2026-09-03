@@ -1,0 +1,172 @@
+---
+title: Ecommerce Spec
+description: >-
+  One canonical shape for every ecommerce event — GA4-style names, an items[]
+  array, value and currency — so Meta, Google Ads, GA4 and OpenAI activation is
+  entering an id rather than mapping fields.
+---
+
+## Why there is a spec
+
+Ad platforms do not fail loudly. Meta accepts a `Purchase` with no `value` and reports a conversion worth nothing. Google accepts a conversion whose `cart_data` has no items and reports it with no Shopping signal. Both look healthy in a delivery log.
+
+They also disagree about names for the same facts. Meta wants `contents[].item_price`, Google wants `items[].unitPrice`, GA4 wants `items[].price`. Every one of those means the **unit** price. So the only thing that makes activation cheap is a single input shape they can all be projected from.
+
+That shape is the Mythic ecommerce spec. Send it, and connecting a platform is entering your pixel id — the browser tag and the server destination are both already mapped.
+
+<Callout kind="info">
+On Shopify this is automatic. The Web Pixel and the order webhook both emit this spec, so the only thing left is the platform id. This page is for everyone sending events through the SDK or the [server-side ingestion API](/get-started/ingestion) directly.
+</Callout>
+
+## Event names
+
+Snake_case, matching GA4. Not a style preference: the managed Meta pixel's default mapping, the Google Ads and GA4 destinations, and the OpenAI event taxonomy all key on these names already.
+
+| Event | When | Carries `value` |
+| --- | --- | --- |
+| `view_item_list` | A collection, category or recommendation list was seen | No |
+| `view_item` | One product page | Yes |
+| `add_to_cart` | A line was added | Yes |
+| `remove_from_cart` | A line was removed | Yes |
+| `view_cart` | The cart was seen | Yes |
+| `begin_checkout` | Checkout started | Yes |
+| `checkout_step_completed` | A checkout step with no GA4 equivalent (contact info, address) | Yes |
+| `add_shipping_info` | Shipping selected | Yes |
+| `add_payment_info` | Payment entered | Yes |
+| `purchase` | The order was placed | Yes |
+| `refund` | The order was refunded | Yes |
+| `order_cancelled` | The order was cancelled | Yes |
+| `search` | A search was run | No |
+
+`view_item_list` and `search` deliberately carry **no** `value`. Their `items[]` is a catalogue, not a basket — deriving a value from it would report the sum of everything on the page as revenue. A 24-product collection view would reach Meta as a conversion worth the whole collection.
+
+## Event properties
+
+`items` and `item_count` are always present, even when empty. Everything else is omitted when unknown rather than sent as `null`.
+
+| Property | Type | Meaning |
+| --- | --- | --- |
+| `items` | array | Line items. **Always present.** See [the item shape](#the-item-shape). |
+| `item_count` | number | Sum of `quantity` across items. Present because an array cannot be aggregated in a trend — this can. |
+| `value` | number | The monetary value of **this** event. See [what value means](#what-value-means-per-event). |
+| `currency` | string | ISO 4217, upper case. |
+| `transaction_id` | string | The order id. Google's dedup key and Meta's `order_id`. Only on `purchase`, `refund` and `order_cancelled`. |
+| `checkout_id` | string | The checkout token. Never the order id. |
+| `cart_id` | string | The cart id. |
+| `affiliation` | string | The store the transaction happened in. |
+| `coupon` | string | Order-level discount code(s). |
+| `subtotal` | number | Item total before shipping and tax. |
+| `shipping` | number | Shipping cost. |
+| `tax` | number | Total tax. |
+| `discount` | number | Total discount. |
+| `search_term` | string | The query, on `search`. A plain string — never buried in a filters array, because no destination mapping can reach into one. |
+| `list_id` / `list_name` | string | The list, on `view_item_list`. |
+| `payment_method` | string | Payment method chosen. |
+| `shipping_method` | string | Shipping method chosen. |
+| `checkout_step` | number | 1-based step index within checkout. |
+
+### `transaction_id` and `checkout_id` are different things
+
+`checkout_id` is the checkout session. `transaction_id` is the order, and it does not exist until the order does — so `begin_checkout` has a `checkout_id` and **no** `transaction_id`.
+
+Keeping them apart is what lets `transaction_id` be a dedup key. It is the value Google matches browser and server conversions on, and both halves of a Mythic purchase send the same one.
+
+## The item shape
+
+Key names are GA4's, so the GA4 projection is nearly an identity and every other platform is a rename.
+
+| Property | Type | Meaning |
+| --- | --- | --- |
+| `item_id` | string | Product id. |
+| `item_variant_id` | string | Variant id, when it differs from the product. |
+| `sku` | string | SKU. Preferred as the catalogue key when projecting to Meta. |
+| `item_name` | string | Product name. |
+| `item_brand` | string | Brand / vendor. |
+| `item_category` | string | Category / product type. |
+| `item_variant` | string | Variant **label** ("Large / Blue"), not the variant id. |
+| `price` | number | **Unit price. Never a line total.** |
+| `quantity` | number | Units on this line. A missing quantity is `1`, never `0`. |
+| `discount` | number | Per-unit discount, GA4 semantics. |
+| `coupon` | string | Line-level discount code. |
+| `index` | number | 1-based position in the list this item was seen in. |
+| `item_url` / `item_image_url` | string | Product page and image. |
+
+<Callout kind="warning">
+`price` is the **unit** price on every event. This is the single rule most worth getting right: Meta's `item_price` and Google's `unitPrice` both mean unit, and a line total sent here multiplies the reported item value by the quantity with nothing rejecting it. If your platform gives you a line total, divide it by `quantity` before sending.
+</Callout>
+
+## What `value` means per event
+
+| Event | `value` |
+| --- | --- |
+| `view_item` | Unit price of the product |
+| `add_to_cart` / `remove_from_cart` | Unit price × quantity of the **line**, not the cart |
+| `view_cart` | Cart total |
+| `begin_checkout`, `checkout_step_completed`, `add_shipping_info`, `add_payment_info` | Checkout total |
+| `purchase` | The **total charged**, including shipping and tax. `subtotal` is the pre-shipping figure. |
+| `refund` | Amount refunded, **positive** |
+| `order_cancelled` | Cancelled order total, **positive** |
+
+`refund` and `order_cancelled` are positive on purpose. The event name carries the direction; a negative `value` subtracts from a platform's conversion value in some integrations and adds to it in others.
+
+When `value` is omitted on an event that should have one, Mythic derives it as `sum(price × quantity)` — so a single-item `view_item` or `add_to_cart` carries revenue without you computing it.
+
+## Example
+
+```javascript
+mythic.capture('purchase', {
+  transaction_id: '4581201',
+  checkout_id: 'chk_9f2a1c',
+  affiliation: 'shop.example.com',
+  currency: 'USD',
+  value: 107.5,        // total charged
+  subtotal: 95,
+  shipping: 5,
+  tax: 7.5,
+  discount: 10,
+  coupon: 'SUMMER',
+  item_count: 3,
+  items: [
+    {
+      item_id: '7734115',
+      item_variant_id: '42901337',
+      sku: 'SNOW-01',
+      item_name: 'The Collection Snowboard',
+      item_brand: 'Hydrogen',
+      item_category: 'Snowboards',
+      item_variant: 'Large',
+      price: 30,        // UNIT price
+      quantity: 3,
+      index: 1
+    }
+  ]
+});
+```
+
+## What each platform receives
+
+You send the spec once. Mythic projects it per platform, in both the browser and the server half.
+
+| Platform | Where the projection runs | What it gets |
+| --- | --- | --- |
+| Meta Pixel | Browser, inside the managed tag | `value`, `currency`, `contents[{id, quantity, item_price}]`, `content_ids`, `content_type`, `num_items`, `content_category`, `order_id`, `search_string` |
+| Meta CAPI | Server destination | The same fields, with the same `event_id`, so Meta collapses the pair into one conversion |
+| Google Ads | Server destination (Data Manager) | `conversionValue`, `currency`, `transaction_id`, and `cartData.items[{itemId, merchantProductId, quantity, unitPrice}]` |
+| Google Ads | Browser, when a conversion label is set | `value`, `currency`, `transaction_id` |
+| GA4 | Server destination (Measurement Protocol) | Event params plus `items[]` — the key names are already GA4's |
+| OpenAI Ads | Server destination | `amount` in the currency's minor unit, plus `contents` |
+
+Meta's `contents[].id` prefers your `sku`, then `item_variant_id`, then `item_id` — a Shopify catalogue feed keys on the SKU. An item with none of the three is dropped rather than sent with an empty id, because an unmatched content counts against the pixel's match rate.
+
+## Checking that you actually send it
+
+The spec ships as an [Event Contracts](/contracts-api/overview) pack. Applying it makes drift visible instead of silent:
+
+```bash
+curl -X POST "https://mythic-analytics.gulp.workers.dev/client/v1/contracts/presets/commerce?location_id=YOUR_LOCATION_ID" \
+  -H "Authorization: Bearer ak_YOUR_AGENCY_KEY"
+```
+
+A producer that stops sending `value`, or starts sending `items` as an object, shows up in the violation report the next day rather than reaching your ad platforms as a conversion worth zero. Add `?dry_run=true` first to see exactly what would be stored.
+
+Contracts stay read-only: nothing is rejected, quarantined or dropped at ingestion because of one.

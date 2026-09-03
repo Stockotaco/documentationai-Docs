@@ -486,6 +486,11 @@
                     "title": "Tracking Methods",
                     "path": "javascript-sdk/tracking-methods",
                     "icon": "activity"
+                  },
+                  {
+                    "title": "Ecommerce Spec",
+                    "path": "javascript-sdk/ecommerce-spec",
+                    "icon": "shopping-cart"
                   }
                 ]
               },
@@ -937,6 +942,11 @@
                     "title": "Tracking Methods",
                     "path": "javascript-sdk/tracking-methods",
                     "icon": "activity"
+                  },
+                  {
+                    "title": "Ecommerce Spec",
+                    "path": "javascript-sdk/ecommerce-spec",
+                    "icon": "shopping-cart"
                   }
                 ]
               },

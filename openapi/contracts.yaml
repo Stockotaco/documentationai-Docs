@@ -453,6 +453,114 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/contracts/presets:
+    get:
+      summary: List the built-in contract packs
+      operationId: listContractPresets
+      description: >
+        The contract packs Mythic ships, and every contract inside them. Read
+        this to see what `POST /presets/{preset}` would store, or to copy one
+        event out of a pack into a hand-written `PUT`.
+
+
+        `commerce` is the **Mythic commerce spec** — the GA4-style ecommerce
+        events (`view_item`, `add_to_cart`, `begin_checkout`, `purchase`,
+        `refund`, `search`, ...) that the Shopify Web Pixel, the Shopify order
+        webhook, and the JavaScript SDK all emit. Its contracts declare
+        `items` (array), `item_count`, `value` and `currency` as required on
+        every event that has money, which is exactly the drift that reaches an
+        ad platform as a conversion worth zero.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: The available packs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      presets:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id: { type: string, example: commerce }
+                            events:
+                              type: array
+                              items: { $ref: "#/components/schemas/PresetContract" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /client/v1/contracts/presets/{preset}:
+    post:
+      summary: Apply a contract pack
+      operationId: applyContractPreset
+      description: >
+        Stores every contract in the pack for this location in one call.
+
+
+        Same **replace** rule as `PUT`, applied per event: each event in the
+        pack replaces that event's property set. Events NOT in the pack are
+        left alone — this adds and overwrites, it never deletes, so a
+        hand-written contract for one of your own events survives.
+
+
+        Read-only enforcement, unchanged: applying a pack turns on the
+        violation report for those events. Nothing is rejected, quarantined or
+        dropped at ingestion.
+
+
+        Pass `dry_run=true` to see exactly what would be stored without storing
+        it. Agency key (`ak_`) required.
+      parameters:
+        - name: preset
+          in: path
+          required: true
+          description: "Pack id. Currently: `commerce`."
+          schema: { type: string, example: commerce }
+        - name: dry_run
+          in: query
+          required: false
+          description: Return what would be written without writing it.
+          schema: { type: boolean }
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Pack applied (or, with `dry_run`, the contracts that would be stored)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      preset: { type: string, example: commerce }
+                      applied:
+                        type: integer
+                        description: Number of contracts stored. Absent on a dry run.
+                        example: 13
+                      dry_run: { type: boolean }
+                      events:
+                        type: array
+                        items: { type: string }
+                        example: [view_item, add_to_cart, begin_checkout, purchase]
+                      contracts:
+                        type: array
+                        description: Only on a dry run — exactly what would be stored.
+                        items: { $ref: "#/components/schemas/PresetContract" }
+                      note_on_semantics: { type: string }
+        "400":
+          description: "`unknown_preset` — the response lists the available pack ids."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
 components:
   securitySchemes:
     BearerAuth:
@@ -507,6 +615,17 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
   schemas:
+    PresetContract:
+      type: object
+      description: One contract inside a pack, in the shape `PUT /contracts` accepts.
+      properties:
+        event: { type: string, example: purchase }
+        properties:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/PropertySpec" }
+        note:
+          type: string
+          description: What the pack means by this event, e.g. which total `value` is.
     PropertySpec:
       type: object
       required: [type]

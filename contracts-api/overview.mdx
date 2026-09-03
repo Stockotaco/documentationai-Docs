@@ -85,6 +85,24 @@ Event contracts are sold by tier. If your plan does not include them the whole s
   </Step>
 </Steps>
 
+## Starting from a preset
+
+If you track ecommerce, do not write these by hand. `POST /presets/commerce` stores the whole [Mythic ecommerce spec](/javascript-sdk/ecommerce-spec) as contracts in one call — thirteen events, with `items` (array), `item_count`, `value` and `currency` declared required wherever the spec says there is money.
+
+```bash
+# see exactly what would be stored
+curl -X POST "$BASE/client/v1/contracts/presets/commerce?location_id=$LOC&dry_run=true" \
+  -H "Authorization: Bearer $AK"
+
+# store it
+curl -X POST "$BASE/client/v1/contracts/presets/commerce?location_id=$LOC" \
+  -H "Authorization: Bearer $AK"
+```
+
+This is worth doing specifically because ad platforms accept broken commerce events. A `purchase` with no `value` reaches Meta as a conversion worth zero and reports as delivered; a `purchase` whose `items` went missing reaches Google Ads with no Shopping signal and reports as delivered. The violation report is the only place either shows up.
+
+Each event in a pack follows the same **replace** rule as `PUT`. Events outside the pack are untouched, so hand-written contracts for your own events survive. `GET /presets` lists the packs and every contract in them, if you would rather copy one event out and adjust it.
+
 ## Reading a violation
 
 ```json

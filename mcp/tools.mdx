@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 191 tools across
+  Every tool the Mythic MCP server exposes — 195 tools across
   25 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 191 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 195 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -67,6 +67,8 @@ Event volumes, trends, breakdowns, property discovery, self-serve trend/funnel q
 | `list_event_properties`<br /><span style={{opacity: 0.7}}>List Event Properties</span> | `events:read` | Property catalog for this client: every event-property or person-property key ever observed, with an inferred type, a masked sample value, how often it appears and first/last seen. | `GET /client/v1/data/properties` |
 | `query_events`<br /><span style={{opacity: 0.7}}>Query Events (trend / funnel)</span> | `events:read` | Self-serve analytics over the event stream in ONE call, sub-second: a TREND (1–5 series, each an event × math such as total/dau/unique_sessions/sum/p95, bucketed by hour/day/week/month or as a single number,… | `POST /client/v1/data/query` |
 | `list_property_values`<br /><span style={{opacity: 0.7}}>List Property Values</span> | `events:read` | Top values of ONE event property over the last N days (default 30), with counts — the picker behind query_events filters and breakdowns. | `GET /client/v1/data/query/values` |
+| `get_commerce_summary`<br /><span style={{opacity: 0.7}}>Get Commerce Summary</span> | `events:read` | Daily ecommerce totals — orders, revenue, average order value, units, buyers — for clients emitting the Mythic commerce spec (Shopify does automatically). | `GET /client/v1/data/commerce/summary` |
+| `get_commerce_items`<br /><span style={{opacity: 0.7}}>Get Commerce Items</span> | `events:read` | Top products by revenue, units or orders — grouped by product id, SKU, variant, name, category or brand. | `GET /client/v1/data/commerce/items` |
 | `explain_tracking_coverage`<br /><span style={{opacity: 0.7}}>Explain Tracking Coverage</span> | `events:read` | Can a "why is this page losing people" question be answered from the data we have for it? Run this BEFORE any behavioural analysis of a page and take the verdict at face value — it reports session volume, wh… | `GET /client/v1/data/explain/coverage` |
 | `get_core_web_vitals`<br /><span style={{opacity: 0.7}}>Get Core Web Vitals</span> | `events:read` | Core Web Vitals measured on this client's site (lcp, fcp, cls, ttfb, fid, inp). | `GET /client/v1/performance/cwv` |
 
@@ -232,8 +234,10 @@ Declared per-event property schemas and their violation reports.
 | `check_event_contracts`<br /><span style={{opacity: 0.7}}>Check Event Contracts</span> | `contracts:read` | Diff every stored contract (or one, with `event`) against live traffic and report violations, worst first. | `GET /client/v1/contracts/violations` |
 | `get_contract_samples`<br /><span style={{opacity: 0.7}}>Get Contract Violation Samples</span> | `contracts:read` | The actual offending events behind ONE violation from check_event_contracts — up to 50 raw examples with session_id and $current_url, so you can see where the bad data comes from. | `GET /client/v1/contracts/samples` |
 | `suggest_event_contract`<br /><span style={{opacity: 0.7}}>Suggest Event Contract</span> | `contracts:read` | Infer a contract for one event from its live traffic — the fastest way to author one. | `GET /client/v1/contracts/suggest` |
+| `list_contract_presets`<br /><span style={{opacity: 0.7}}>List Contract Presets</span> | `contracts:read` | The built-in contract packs and every contract in them. | `GET /client/v1/contracts/presets` |
 | `set_event_contract`<br /><span style={{opacity: 0.7}}>Set Event Contract</span> | `contracts:write` | Create or replace the contract for ONE event. | `PUT /client/v1/contracts` |
 | `delete_event_contract`<br /><span style={{opacity: 0.7}}>Delete Event Contract</span> | `contracts:write` | Remove one event contract. | `DELETE /client/v1/contracts/:event` |
+| `apply_contract_preset`<br /><span style={{opacity: 0.7}}>Apply Contract Preset</span> | `contracts:write` | Apply a built-in contract pack to a client in one call. | `POST /client/v1/contracts/presets/:preset` |
 
 ## Destinations
 
