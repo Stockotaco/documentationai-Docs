@@ -169,9 +169,12 @@ paths:
                 properties:
                   success: { type: boolean, example: true }
                   data:
-                    oneOf:
+                    # `allOf` + `nullable: true`: a `type: "null"` oneOf branch is
+                    # OpenAPI 3.1 and this document is 3.0.0, and a `nullable`
+                    # sibling of `$ref` is ignored.
+                    allOf:
                       - $ref: "#/components/schemas/Hostname"
-                      - type: "null"
+                    nullable: true
         "400": { $ref: "#/components/responses/LocationRequired" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }

@@ -733,9 +733,14 @@ components:
       required: [session_replay]
       properties:
         session_replay:
-          oneOf:
+          # `allOf` + `nullable: true`, not a `type: "null"` oneOf branch — that
+          # is OpenAPI 3.1 syntax and this document is 3.0.0, where the only
+          # allowed `type` values are the six JSON types. `nullable` is IGNORED
+          # as a sibling of `$ref`, so the ref must be wrapped in `allOf` for
+          # both to apply. See the `autocapture` schema below.
+          allOf:
             - $ref: "#/components/schemas/SessionReplayConfig"
-            - type: "null"
+          nullable: true
           description: Keys to merge into the stored config, or null to clear it.
     SessionReplayResponse:
       type: object
@@ -745,9 +750,10 @@ components:
           type: object
           properties:
             session_replay:
-              oneOf:
+              # See SessionReplayRequest — 3.0.0 has no `null` type.
+              allOf:
                 - $ref: "#/components/schemas/SessionReplayConfig"
-                - type: "null"
+              nullable: true
             effective:
               type: object
               description: What the location actually does, since null means off.
