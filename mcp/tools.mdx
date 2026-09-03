@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 195 tools across
+  Every tool the Mythic MCP server exposes — 197 tools across
   25 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 195 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 197 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -266,7 +266,9 @@ Activation destinations events are forwarded to, their credentials and deliverie
 | `test_destination`<br /><span style={{opacity: 0.7}}>Test Destination</span> | `destinations:write` | Fire a REAL test delivery through one destination — this sends an actual event to the live ad platform using the stored credential, and the attempt lands in the delivery log (status "test"). | `POST /client/v1/destinations/:id/test` |
 | `connect_meta_integration`<br /><span style={{opacity: 0.7}}>Connect Meta Integration</span> | `destinations:write` | One-click Meta tracking: creates the managed Meta Pixel browser tag AND the Meta CAPI server destination. | `POST /client/v1/destinations/integrations/meta` |
 | `connect_google_ads_integration`<br /><span style={{opacity: 0.7}}>Connect Google Ads Integration</span> | `destinations:write` | One-click Google Ads tracking: creates the Google Ads (Data Manager) server destination, plus a managed gtag browser tag when any event has a conversion_label. | `POST /client/v1/destinations/integrations/google_ads` |
-| `delete_platform_integration`<br /><span style={{opacity: 0.7}}>Delete Platform Integration</span> | `destinations:write` | Disconnect a managed Meta or Google Ads integration: detaches the managed browser tag and removes the managed destination (and its stored credential when nothing else uses it). | `DELETE /client/v1/destinations/integrations/:platform` |
+| `connect_google_analytics_integration`<br /><span style={{opacity: 0.7}}>Connect GA4 Integration</span> | `destinations:write` | One-click GA4 measurement with NO page tag: creates the GA4 (Data Manager) server destination mapped to the commerce spec. | `POST /client/v1/destinations/integrations/google_analytics` |
+| `connect_openai_ads_integration`<br /><span style={{opacity: 0.7}}>Connect OpenAI Ads Integration</span> | `destinations:write` | One-click OpenAI Ads conversions: creates the OpenAI Ads server destination mapped from the commerce spec to OpenAIu2019s event taxonomy. | `POST /client/v1/destinations/integrations/openai_ads` |
+| `delete_platform_integration`<br /><span style={{opacity: 0.7}}>Delete Platform Integration</span> | `destinations:write` | Disconnect a managed integration (Meta, Google Ads, GA4, OpenAI Ads): detaches the managed browser tag where there is one and removes the managed destination (and its stored credential when nothing else uses… | `DELETE /client/v1/destinations/integrations/:platform` |
 
 ## Tracking Settings
 

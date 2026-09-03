@@ -150,13 +150,34 @@ You send the spec once. Mythic projects it per platform, in both the browser and
 | Platform | Where the projection runs | What it gets |
 | --- | --- | --- |
 | Meta Pixel | Browser, inside the managed tag | `value`, `currency`, `contents[{id, quantity, item_price}]`, `content_ids`, `content_type`, `num_items`, `content_category`, `order_id`, `search_string` |
-| Meta CAPI | Server destination | The same fields, with the same `event_id`, so Meta collapses the pair into one conversion |
+| Meta CAPI | Server destination | The same fields, built by the same projection, with the same `event_id` — so Meta collapses the pair into one conversion |
 | Google Ads | Server destination (Data Manager) | `conversionValue`, `currency`, `transaction_id`, and `cartData.items[{itemId, merchantProductId, quantity, unitPrice}]` |
-| Google Ads | Browser, when a conversion label is set | `value`, `currency`, `transaction_id` |
-| GA4 | Server destination (Measurement Protocol) | Event params plus `items[]` — the key names are already GA4's |
-| OpenAI Ads | Server destination | `amount` in the currency's minor unit, plus `contents` |
+| Google Ads | Browser, when a conversion label is set | `value`, `currency`, `transaction_id`, `items[]` |
+| GA4 | Server destination (Data Manager, tagless) | Event params, `conversionValue`, `currency`, `transactionId`, and the same `cartData` as Google Ads |
+| OpenAI Ads | Server destination | The event translated to their taxonomy, with the amount in the currency's minor unit |
 
 Meta's `contents[].id` prefers your `sku`, then `item_variant_id`, then `item_id` — a Shopify catalogue feed keys on the SKU. An item with none of the three is dropped rather than sent with an empty id, because an unmatched content counts against the pixel's match rate.
+
+<Callout kind="info">
+The Meta projection runs **twice**, once per half, from one shared implementation. That matters because Meta keeps only one of the pair: if the browser sent line items and the server did not, which payload survived would depend on which arrived first.
+</Callout>
+
+### Connecting a platform
+
+Each managed platform is one call, and the commerce mapping is filled in for you:
+
+- `POST /client/v1/destinations/integrations/meta` — pixel id
+- `POST /client/v1/destinations/integrations/google_ads` — customer id + conversion actions
+- `POST /client/v1/destinations/integrations/google_analytics` — measurement id + property id
+- `POST /client/v1/destinations/integrations/openai_ads` — pixel id
+
+GA4 and OpenAI Ads are **server-only**: there is no browser tag to install, which is the point — every event arrives with resolved identity and full line items even when the visitor blocks scripts.
+
+Where you pass your own `event_mapping`, it is **merged over** the commerce default, so renaming one event never stops the others being delivered. `cart_data` is the opposite: passing it **replaces** the default outright, because a partial cart config is a deliberate statement about where your items live.
+
+<Callout kind="warning">
+OpenAI Ads has a closed event taxonomy. Events with no counterpart there — `view_item_list`, `view_cart`, `remove_from_cart`, `add_shipping_info`, `add_payment_info`, `checkout_step_completed`, `refund`, `order_cancelled` — are deliberately left unmapped, and an unmapped event is skipped rather than rejected. Everything else still reaches Meta, Google Ads and GA4.
+</Callout>
 
 ## Checking that you actually send it
 

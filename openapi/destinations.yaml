@@ -1202,6 +1202,206 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
           $ref: "#/components/responses/RateLimited"
+  /client/v1/destinations/integrations/google_analytics:
+    post:
+      summary: Connect GA4 (tagless)
+      operationId: connectGoogleAnalyticsIntegration
+      description: >
+        One-click GA4 measurement with no page tag — creates (or updates) the
+        google_analytics Data Manager server destination, mapped to the Mythic
+        commerce spec. Server-only by design: Mythic is the single source, so
+        every event arrives with resolved identity and full line items
+        (cart_data), which a browser tag cannot supply once an ad blocker is in
+        play. There is no browser half, so the response always has
+        browser_tag false and tag_id null.
+
+
+        event_mapping defaults to the whole commerce spec — identity names,
+        since the spec uses GA4's own — and anything you pass is MERGED over
+        that default. cart_data is the opposite: an explicit object REPLACES the
+        default wholesale. Requires the google_analytics Data Manager OAuth
+        credential to be stored first.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - measurement_id
+                - property_id
+              properties:
+                measurement_id:
+                  type: string
+                  description: GA4 measurement id.
+                  pattern: '^G-[A-Z0-9]{4,20}$'
+                  example: G-TWL9RRGMYF
+                property_id:
+                  type: string
+                  description: >
+                    Numeric GA4 property id. The Data Manager API addresses the
+                    property by this, not by the measurement id.
+                  pattern: '^\d{6,20}$'
+                  example: "426621937"
+                event_mapping:
+                  type: object
+                  description: >
+                    Mythic event name -> GA4 event name. Merged OVER the
+                    commerce-spec default, so omit it unless renaming.
+                  additionalProperties:
+                    type: string
+                cart_data:
+                  type: object
+                  description: >
+                    Google CartData config. REPLACES the commerce default
+                    wholesale — pass it only if your items live somewhere other
+                    than "items".
+                client_id_strategy:
+                  type: string
+                  description: How to derive the GA4 client id without a page tag.
+                  default: mythic_device_id
+                debug_mode:
+                  type: boolean
+                  description: >
+                    Route events into GA4 DebugView. Debug events are EXCLUDED
+                    from reports — leave off in production.
+                  default: false
+      responses:
+        "201":
+          description: Connected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      platform:
+                        type: string
+                      destination_id:
+                        type: string
+                      tag_id:
+                        type: string
+                        nullable: true
+                      browser_tag:
+                        type: boolean
+        "400":
+          description: Invalid config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Requires an agency key (ak_)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Data Manager OAuth credential not stored yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /client/v1/destinations/integrations/openai_ads:
+    post:
+      summary: Connect OpenAI Ads
+      operationId: connectOpenAiAdsIntegration
+      description: >
+        One-click OpenAI Ads conversions — creates (or updates) the openai_ads
+        server destination, mapped from the Mythic commerce spec to OpenAI's
+        event taxonomy. Server-only: there is no browser half.
+
+
+        That taxonomy is CLOSED (order_created, checkout_started, items_added,
+        contents_viewed, page_viewed, lead_created, appointment_scheduled,
+        registration_completed) and each type is paired with a required
+        data.type, so this is a translation and not a passthrough. An event with
+        no mapping entry is silently skipped by the destination. Commerce events
+        with no OpenAI counterpart — view_item_list, view_cart,
+        remove_from_cart, add_shipping_info, add_payment_info,
+        checkout_step_completed, refund, order_cancelled — are deliberately
+        unmapped rather than sent as custom names no campaign can optimise
+        against. event_mapping is MERGED over the default.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pixel_id
+              properties:
+                pixel_id:
+                  type: string
+                  description: OpenAI Ads pixel id.
+                  minLength: 1
+                event_mapping:
+                  type: object
+                  description: >
+                    Mythic event name -> OpenAI event type, or "custom:<name>".
+                    Merged OVER the commerce-spec default.
+                  additionalProperties:
+                    type: string
+      responses:
+        "201":
+          description: Connected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      platform:
+                        type: string
+                      destination_id:
+                        type: string
+                      tag_id:
+                        type: string
+                        nullable: true
+                      browser_tag:
+                        type: boolean
+        "400":
+          description: Invalid config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Requires an agency key (ak_)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: OpenAI Ads credential not stored yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /client/v1/destinations/integrations/{platform}:
     delete:
       summary: Disconnect platform integration
