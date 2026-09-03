@@ -1294,13 +1294,13 @@ paths:
           description: "`invalid_window`, `invalid_currency`, `invalid_event`, or `window_too_large`."
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Error" }
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "503":
           description: "`analytics_unavailable`."
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Error" }
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
   /commerce/items:
     get:
       summary: Revenue and units per product
@@ -1412,13 +1412,13 @@ paths:
           description: "`invalid_group_by`, `invalid_order_by`, `invalid_window`, `invalid_currency`, or `window_too_large`."
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Error" }
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "503":
           description: "`analytics_unavailable`."
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Error" }
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
   /explain/coverage:
     get:
       summary: Explainability coverage gate
