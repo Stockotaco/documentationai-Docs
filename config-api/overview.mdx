@@ -218,8 +218,9 @@ if (!(window.doNotTrack === "1" || navigator.doNotTrack === "1"
 ```
 
 The generated snippet emits this automatically when `respect_dnt: true` is in
-the init config. Match the signal list exactly if you hand-roll it: a gate that
-misses one lets the request through for a visitor the SDK would have honoured.
+the init config, and the loader applies the same test before starting its own
+prefetch. Match the signal list exactly if you hand-roll it: a gate that misses
+one lets the request through for a visitor the SDK would have honoured.
 
 ## Snippet execution context
 
