@@ -61,9 +61,36 @@ Snake_case, matching GA4. Not a style preference: the managed Meta pixel's defau
 | `discount` | number | Total discount. |
 | `search_term` | string | The query, on `search`. A plain string — never buried in a filters array, because no destination mapping can reach into one. |
 | `list_id` / `list_name` | string | The list, on `view_item_list`. |
-| `payment_method` | string | Payment method chosen. |
-| `shipping_method` | string | Shipping method chosen. |
+| `payment_method` | string | Payment gateway used. Only known once payment is taken, so it appears on `purchase`. |
+| `shipping_method` | string | Shipping tier chosen. |
 | `checkout_step` | number | 1-based step index within checkout. |
+| `new_customer` | boolean | First-ever order for this customer. Absent when the producer cannot tell — never guessed. `purchase` only. |
+| `customer_order_number` | number | 1-based lifetime order count **including this order**, so a first order is `1`. `purchase` only. |
+| `customer_lifetime_value` | number | Lifetime spend **including this order**, in `currency`. `purchase` only. |
+| `purchase_type` | string | `one_time` or `subscription`. A mixed cart is `subscription`. `purchase` only. |
+
+### Customer lifecycle properties
+
+The last four are how you segment new versus returning buyers, bid differently on a second order than a fifth, and separate subscription revenue from one-off revenue.
+
+Two things to know before you build on them.
+
+**Absent means unknown, not `false`.** `new_customer` is only sent when the producer actually knows. A guest checkout has no customer record, so the property is absent rather than `false` — because `false` asserts "this is a returning buyer", and a value-based bidding strategy will act on that assertion.
+
+**Availability depends on the producer.** For Shopify specifically:
+
+| property | Web Pixel (browser) | Order webhook (server) |
+| --- | --- | --- |
+| `new_customer` | yes — `isFirstOrder` | yes |
+| `customer_order_number` | logged-in customers only | yes |
+| `customer_lifetime_value` | **no source** | yes |
+| `purchase_type` | yes | yes |
+
+One sale reaches Mythic from both producers and purchase dedupe keeps one copy — usually the browser's, because it arrives first. So `customer_lifetime_value` is the one to check for before you depend on it. `orders_count` and `total_spent` are also written to the **person profile**, which is independent of dedupe — filter there when you need them to always be present.
+
+<Callout kind="info">
+These reach **GA4 automatically** as event parameters — it forwards every non-`$`-prefixed property. **Meta needs them listed** in `custom_data_mapping`, which the managed integration and migration 98 do for you. If you configured a Meta destination by hand, add them there.
+</Callout>
 
 ### `transaction_id` and `checkout_id` are different things
 
