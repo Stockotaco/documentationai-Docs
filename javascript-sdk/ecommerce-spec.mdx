@@ -86,7 +86,12 @@ Two things to know before you build on them.
 | `customer_lifetime_value` | **no source** | yes |
 | `purchase_type` | yes | yes |
 
-One sale reaches Mythic from both producers and purchase dedupe keeps one copy — usually the browser's, because it arrives first. So `customer_lifetime_value` is the one to check for before you depend on it. `orders_count` and `total_spent` are also written to the **person profile**, which is independent of dedupe — filter there when you need them to always be present.
+One sale reaches Mythic from both producers and purchase dedupe keeps one copy — usually the browser's, because it arrives first. Measured on a live order, that surviving copy carried `new_customer` and `purchase_type` and **neither counter**.
+
+So the counters are also written to the **person profile** as `orders_count` and `total_spent`, from a path that is never deduped. Two consequences worth knowing:
+
+- **Filtering and segmenting** on the profile always works, whichever purchase copy survived.
+- **Activation** works too: when the purchase event lacks them, Mythic recovers them from the profile before sending to Meta and GA4. A value the producer did send always wins — the profile is only a fallback.
 
 <Callout kind="info">
 These reach **GA4 automatically** as event parameters — it forwards every non-`$`-prefixed property. **Meta needs them listed** in `custom_data_mapping`, which the managed integration and migration 98 do for you. If you configured a Meta destination by hand, add them there.
