@@ -89,7 +89,7 @@ Key names are GA4's, so the GA4 projection is nearly an identity and every other
 | `discount` | number | Per-unit discount, GA4 semantics. |
 | `coupon` | string | Line-level discount code. |
 | `index` | number | 1-based position in the list this item was seen in. |
-| `item_url` / `item_image_url` | string | Product page and image. |
+| `item_url` / `item_image_url` | string | Product page and image, as **absolute** `https://` URLs. |
 
 <Callout kind="warning">
 `price` is the **unit** price on every event. This is the single rule most worth getting right: Meta's `item_price` and Google's `unitPrice` both mean unit, and a line total sent here multiplies the reported item value by the quantity with nothing rejecting it. If your platform gives you a line total, divide it by `quantity` before sending.
