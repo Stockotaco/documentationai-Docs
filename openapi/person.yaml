@@ -717,9 +717,12 @@ components:
     Attribution:
       type: object
       description: >
-        Attribution dimensions for the person. Always includes
-        `first_seen_at` and `last_seen_at`; remaining fields are
-        first-/last-touch attribution dimensions.
+        Attribution dimensions for the person, read from the resolved person
+        profile. Always includes `first_seen_at` and `last_seen_at`; remaining
+        fields are the first-/last-touch dimensions (`first_channel`,
+        `first_utm_*`, `first_referring_domain`, `first_landing_page`,
+        `last_*` equivalents), session counts, and `click_ids` /
+        `first_click_ids` maps of ad-platform click identifiers.
       properties:
         first_seen_at:
           type: string
