@@ -92,16 +92,32 @@ One `series[]` entry per spec series × breakdown value. `data[]` is aligned to
 </ParamField>
 <ParamField body="date_range" type="object" required>
   `{ "preset": "24h" | "7d" | "14d" | "30d" | "90d" | "365d" }` or
-  `{ "from": "YYYY-MM-DD", "to": "YYYY-MM-DD" }` (UTC, `to` inclusive). Presets
+  `{ "from": "YYYY-MM-DD", "to": "YYYY-MM-DD" }` (in `timezone`, `to`
+  inclusive). Presets
   resolve to `[today-N, today]`, so `7d` returns eight daily buckets: seven
   whole days plus today so far. A window that includes today ends at the moment
   of the request, not at midnight — `meta.to_exclusive` reports where it
   actually stopped, and an event dated in the future is never counted. Max 366
   days.
 </ParamField>
+<ParamField body="timezone" type="string">
+  IANA zone the calendar is cut in — the day/week/month buckets, what a preset
+  counts as "today", and where a window that includes today stops. Defaults to
+  `UTC`. Pass the end user's zone (`"America/Denver"`) when the numbers are
+  about their business days: in UTC their day starts mid-evening, so the newest
+  bucket is a fragment and "yesterday" is not the day they mean. Echoed back as
+  `meta.timezone`, and bucket labels come back as wall-clock times in that zone.
+  An unknown or malformed name is rejected with `invalid_spec`.
+
+  <Callout kind="note">
+    Buckets are cut from hourly data, so whole-hour and half-hour zones
+    (`Asia/Kolkata`) are exact; a 45-minute zone (`Asia/Kathmandu`) is rounded
+    to the hour.
+  </Callout>
+</ParamField>
 <ParamField body="interval" type="'hour' | 'day' | 'week' | 'month'">
   Trend only. Omit for one number per series. `hour` needs a range of 31 days
-  or less. Weeks start on Sunday. All buckets are UTC. A `week` or `month`
+  or less. Weeks start on Sunday. Buckets follow `timezone` (UTC by default). A `week` or `month`
   bucket is labelled by its calendar start, so the first one can begin before
   `date_range.from` and hold only the days inside the range.
 </ParamField>

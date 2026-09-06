@@ -225,7 +225,7 @@ paths:
       description: >
         Event volume trend for the location. Provide an explicit
         `start_date`/`end_date`, or use `days` to derive a rolling window
-        ending today.
+        ending today. Day buckets are cut in UTC unless you pass `tz`.
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
@@ -252,6 +252,18 @@ paths:
             default: 14
             minimum: 1
             maximum: 365
+        - name: tz
+          in: query
+          description: >
+            IANA timezone the day buckets are cut in, e.g. `America/Denver`.
+            Defaults to `UTC`. Pass the end user's zone when the numbers are
+            about their business days — in UTC, a viewer in the Americas gets a
+            day that starts mid-evening and a newest bucket that is a fragment.
+            An unknown or malformed name is rejected with `400`.
+          required: false
+          schema:
+            type: string
+            example: America/Denver
       responses:
         "200":
           description: Event trend rows
