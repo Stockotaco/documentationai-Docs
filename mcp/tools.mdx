@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 197 tools across
+  Every tool the Mythic MCP server exposes — 199 tools across
   25 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 197 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 199 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -298,11 +298,13 @@ One client’s own setup — details, install snippet, custom tracking hostname 
 | Tool | Scope | What it does | Proxies |
 | --- | --- | --- | --- |
 | `get_location`<br /><span style={{opacity: 0.7}}>Get Location</span> | `locations:read` | This client's provisioning details: id, name, publishable key, secret key, domain, contact fields, timezone, SDK global name, and whether tracking is currently enabled. | `GET /client/v1/locations/details` |
+| `get_location_plan`<br /><span style={{opacity: 0.7}}>Get Client Tier</span> | `locations:read` | Which billing tier this client is on, and the tiers it can be moved to. | `GET /client/v1/locations/plan` |
 | `get_location_loader`<br /><span style={{opacity: 0.7}}>Get Install Snippet</span> | `locations:read` | The tracking snippet to paste into this client's site, plus the publishable key, API host and SDK global name it uses. | `GET /client/v1/locations/loader` |
 | `get_location_hostname`<br /><span style={{opacity: 0.7}}>Get Custom Tracking Hostname</span> | `locations:read` | This client's custom tracking hostname and its validation state (Cloudflare hostname status and SSL status), or null when none is attached. | `GET /client/v1/locations/hostname` |
 | `get_location_last_event`<br /><span style={{opacity: 0.7}}>Check Tracking Is Live</span> | `locations:read` | Event count and the most recent event timestamp for this client. | `GET /client/v1/locations/last-event` |
 | `list_location_events`<br /><span style={{opacity: 0.7}}>List Raw Events</span> | `locations:read` | Individual events for this client, newest first — the debugging view for confirming an install or chasing a missing property. | `GET /client/v1/locations/events` |
 | `update_location`<br /><span style={{opacity: 0.7}}>Update Location</span> | `locations:write` | Update a client's own details — name, domain, email, phone, website, timezone or global_name. | `PATCH /client/v1/locations/details` |
+| `set_location_plan`<br /><span style={{opacity: 0.7}}>Set Client Tier</span> | `locations:write` | Move this client to a different billing tier. | `PUT /client/v1/locations/plan` |
 | `set_location_hostname`<br /><span style={{opacity: 0.7}}>Set Custom Tracking Hostname</span> | `locations:write` | Attach a first-party tracking hostname (e.g. | `PUT /client/v1/locations/hostname` |
 | `delete_location_hostname`<br /><span style={{opacity: 0.7}}>Remove Custom Tracking Hostname</span> | `locations:write` | Detach this client's custom tracking hostname and stop routing events for it. | `DELETE /client/v1/locations/hostname` |
 

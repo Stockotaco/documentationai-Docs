@@ -112,6 +112,115 @@ paths:
         "403": { $ref: "#/components/responses/AgencyRequired" }
         "409": { $ref: "#/components/responses/GhlLocationTaken" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/locations/plan:
+    get:
+      summary: Get a client's billing tier
+      operationId: getLocationPlan
+      description: >-
+        Which tier this client is billed on, and the tiers it can be moved to.
+        `inherited: true` means no tier is set on the client itself and it
+        follows the agency's, which is the normal state for a client nobody has
+        moved. `selectable` lists only the tiers the current rate card sells,
+        cheapest first; anything else is refused by the PUT.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: The client's tier
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      location_id: { type: string }
+                      plan_id:
+                        type: string
+                        nullable: true
+                        example: pro
+                        description: The tier set on this client, or null when it inherits the agency's.
+                      inherited: { type: boolean, example: false }
+                      selectable:
+                        type: array
+                        items: { type: string }
+                        example: [standard, pro]
+                      rate_card_effective_from: { type: string, format: date, example: "2026-09-01" }
+        "400": { $ref: "#/components/responses/LocationRequired" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    put:
+      summary: Set a client's billing tier
+      operationId: setLocationPlan
+      description: >-
+        Move a client between purchasable tiers. **This changes what you are
+        billed** — each client is priced per day at its tier.
+
+
+        Only tiers listed by `selectable` are accepted. `plan_id` is refused by
+        `PATCH /client/v1/locations/details` precisely so tier changes come
+        through here, where the choice is limited to what the rate card sells.
+
+
+        An upgrade bills from today; a downgrade takes effect tomorrow, because
+        a day is billed at the highest tier the client held that day. The
+        response reports which applied as `billing_effective_from`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan_id]
+              properties:
+                plan_id:
+                  type: string
+                  example: pro
+                  description: A tier from the GET's `selectable` list.
+      responses:
+        "200":
+          description: Tier changed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      location_id: { type: string }
+                      plan_id: { type: string, example: pro }
+                      previous_plan_id: { type: string, nullable: true, example: standard }
+                      billing_effective_from:
+                        type: string
+                        example: "2026-09-07"
+                        description: >-
+                          The date this tier starts billing: today for an
+                          upgrade, or the literal `tomorrow` for a downgrade.
+                      kv_sync: { $ref: "#/components/schemas/KvSync" }
+        "400":
+          description: >-
+            `plan_not_purchasable` — the tier exists but the current rate card
+            does not sell it, or `plan_id` was missing.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: false }
+                  error:
+                    type: object
+                    properties:
+                      code: { type: string, example: plan_not_purchasable }
+                      message: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /client/v1/locations/loader:
     get:
       summary: Get the install snippet
