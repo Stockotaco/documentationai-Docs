@@ -330,6 +330,17 @@ components:
           type: boolean
           example: true
           description: Whether the location is currently active for ingestion.
+        plan_id:
+          type: string
+          nullable: true
+          example: standard
+          description: >-
+            The client's own billing tier, or `null` meaning it inherits the
+            agency default. Deliberately NOT resolved to the effective tier —
+            `null` and "explicitly on the agency's tier" are different states,
+            and only the second survives a change to the agency default. Use
+            `GET /client/v1/locations/plan` for the resolved view and the
+            selectable tiers.
         created_at: { type: string, format: date-time }
     StatsRow:
       type: object
