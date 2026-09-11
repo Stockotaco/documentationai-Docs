@@ -16,11 +16,11 @@ The pre-commit hook runs both against staged files.
 
 ## Components
 
-Only the Documentation.AI set is supported: `Callout`, `Card`, `CodeGroup`, `Columns`, `Expandable`, `ExpandableGroup`, `Iframe`, `Image`, `ParamField`, `Request`, `Response`, `ResponseField`, `Step`, `Steps`, `Tab`, `Tabs`, `Update`, `Video`.
+Only the Documentation.AI set is supported: `Callout`, `Card`, `CodeGroup`, `Columns`, `Expandable`, `ExpandableGroup`, `Iframe`, `Image`, `ParamField`, `Request`, `Response`, `ResponseField`, `Step`, `Steps`, `Tab`, `Tabs`, `Update`, `Video`, `Board`/`BoardColumn`/`BoardCard`, `CollectionList`, `CollectionContent`.
 
 **Every admonition is a `Callout` with a `kind`** (`info`, `alert`, `warning`, `tip`, `note`, `success`). `<Warning>`, `<Note>`, `<Info>`, `<Tip>`, `<Danger>` are Mintlify components that most docs frameworks accept and this one rejects — they are the recurring mistake, and `scripts/check-components.mjs` exists to catch them. Same for `<Accordion>` (use `Expandable`) and `<CardGroup>` (use `Columns`).
 
-Full component reference: the `documentation-ai` skill.
+Full component reference: the `documentation-ai` skill. `check-components.mjs`'s `SUPPORTED` set mirrors that skill's `references/components.md` — when Documentation.AI ships a component, both have to be updated or the check rejects valid MDX.
 
 ## Snippets
 

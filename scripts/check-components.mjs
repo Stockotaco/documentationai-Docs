@@ -26,6 +26,10 @@ const SUPPORTED = new Set([
   'Callout', 'Card', 'CodeGroup', 'Columns', 'Expandable', 'ExpandableGroup',
   'Iframe', 'Image', 'ParamField', 'Request', 'Response', 'ResponseField',
   'Step', 'Steps', 'Tab', 'Tabs', 'Update', 'Video',
+  // Added 2026-09: shipped by Documentation.AI after the skill's component
+  // reference was written, so this check was rejecting valid MDX — the exact
+  // inverse of what it is for.
+  'Board', 'BoardColumn', 'BoardCard', 'CollectionList', 'CollectionContent',
 ]);
 
 // What to write instead, for the mistakes that actually happen.
