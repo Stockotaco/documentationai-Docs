@@ -6,6 +6,8 @@ description: >-
   outcome reported back as kv_sync.
 ---
 
+import ClientV1Auth from "/snippets/client-v1-auth.mdx"
+
 ## Overview
 
 Three things the Mythic SDK executes on a client's site are configured per
@@ -30,11 +32,10 @@ https://mythic-analytics.gulp.workers.dev/client/v1/config
 
 ## Authentication
 
-The same key system as the rest of `/client/v1`: an **agency key** (`ak_`,
-bind a location with `?location_id=` or the `X-Location-Id` header) or a
-**location secret key** (`sk_`, auto-scoped to its own location). Reads accept
-either. **Writes require an agency key** — same rule as Settings,
-Destinations, and Event Contracts.
+<ClientV1Auth />
+
+Reads accept either key. **Writes require an agency key** — same rule as
+Settings, Destinations, and Event Contracts.
 
 <Callout kind="alert">
   This surface deliberately serves **no CORS headers**. `ak_` and `sk_` keys

@@ -9,8 +9,15 @@
 // <Warning>, <Note>, <Info>, <Tip> and <Danger> are the ones that keep getting
 // written (they exist in Mintlify and in most docs frameworks); here every
 // admonition is a Callout with a `kind`.
+//
+// Reusable snippets are the one legitimate source of a non-platform component
+// name: a default import from `/snippets/…` makes that local name renderable on
+// the page. So this also collects those imports per file, allows the names they
+// bind, and fails when the imported file does not exist — the site's own
+// failure mode for that is a rendered "Unable to load snippet" block on a live
+// page, not a publish error.
 
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 // Authoritative list: the components documented in the documentation-ai skill
@@ -35,8 +42,13 @@ const SUGGEST = {
   AccordionGroup: '<ExpandableGroup>',
   CardGroup: '<Columns>',
   Frame: '<Image src="…" />',
-  Snippet: 'inline the content',
+  Snippet: 'a default import from /snippets/… and the imported name as the tag',
 };
+
+// `import Foo from "/snippets/bar.mdx"` — Documentation.AI treats a DEFAULT
+// import under snippets/ as a snippet reference. Named imports are ordinary
+// ESM and bind nothing renderable, so they are not collected.
+const SNIPPET_IMPORT = /^\s*import\s+([A-Z][A-Za-z0-9]*)\s+from\s+['"](\/snippets\/[^'"]+)['"]/gm;
 
 const root = new URL('..', import.meta.url).pathname;
 
@@ -64,18 +76,36 @@ let problems = 0;
 for (const file of files) {
   const src = readFileSync(file, 'utf8');
   const stripped = stripCode(src);
+
+  // Snippet names this page may render. Code fences are already blanked, so an
+  // import shown as example syntax is not collected (and the site does not
+  // expand those either).
+  const snippets = new Set();
+  for (const m of stripped.matchAll(SNIPPET_IMPORT)) {
+    const [, name, path] = m;
+    snippets.add(name);
+    if (!existsSync(join(root, path))) {
+      // m.index sits on the leading \s* of `^\s*import`, so step over it.
+      const line = stripped.slice(0, m.index + m[0].indexOf('import')).split('\n').length;
+      console.error(`✗ ${relative(root, file)}:${line}: snippet ${path} does not exist — the page will render "Unable to load snippet"`);
+      problems++;
+    }
+  }
+
   for (const m of stripped.matchAll(/<([A-Z][A-Za-z0-9]*)/g)) {
     const tag = m[1];
-    if (SUPPORTED.has(tag)) continue;
+    if (SUPPORTED.has(tag) || snippets.has(tag)) continue;
     const line = stripped.slice(0, m.index).split('\n').length;
-    const hint = SUGGEST[tag] ? ` — use ${SUGGEST[tag]}` : ` — supported: ${[...SUPPORTED].join(', ')}`;
+    const hint = SUGGEST[tag]
+      ? ` — use ${SUGGEST[tag]}`
+      : ` — supported: ${[...SUPPORTED].join(', ')}, or a snippet imported from /snippets/`;
     console.error(`✗ ${relative(root, file)}:${line}: <${tag}> is not a supported component${hint}`);
     problems++;
   }
 }
 
 if (problems) {
-  console.error(`\n${problems} unsupported component use(s). The docs site rejects these at publish time.`);
+  console.error(`\n${problems} problem(s). The docs site rejects an unsupported component at publish time, and renders a missing snippet as a broken block on the live page.`);
   process.exit(1);
 }
 console.log(`components check: OK (${files.length} mdx files)`);

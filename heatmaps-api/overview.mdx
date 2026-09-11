@@ -6,6 +6,8 @@ description: >-
   site.
 ---
 
+import ClientV1Auth from "/snippets/client-v1-auth.mdx"
+
 ## Overview
 
 A heatmap is three separate things, and most tools blur them together:
@@ -249,4 +251,6 @@ https://mythic-analytics.gulp.workers.dev/client/v1/data/heatmap
 
 ## Authentication
 
-The same key system as the rest of `/client/v1`: an **agency key** (`ak_`, bind a location with `?location_id=` or the `X-Location-Id` header) or a **location secret key** (`sk_`, auto-scoped to its own location). All five endpoints are reads and accept either; toggling capture is a Settings write and needs an agency key.
+<ClientV1Auth />
+
+All five endpoints are reads and accept either key; toggling capture is a Settings write and needs an agency key.

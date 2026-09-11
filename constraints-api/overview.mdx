@@ -6,6 +6,9 @@ description: >-
   the sale.
 ---
 
+import ClientV1Auth from "/snippets/client-v1-auth.mdx"
+import TierGated from "/snippets/tier-gated.mdx"
+
 ## Overview
 
 Every reporting tool tells you a campaign is underperforming. None of them tell you **why**. The Constraint Finder joins the three data sets you already have into one funnel and names the step that is holding each campaign back:
@@ -38,9 +41,11 @@ https://mythic-analytics.gulp.workers.dev/client/v1/constraints
 
 ## Authentication
 
-The same key system as the rest of `/client/v1`: an **agency key** (`ak_`, bind a location with `?location_id=` or the `X-Location-Id` header) or a **location secret key** (`sk_`, auto-scoped to its own location). Read-only — there is nothing to create.
+<ClientV1Auth />
 
-The Constraint Finder is sold by tier. If your plan does not include it the whole surface answers **402 `feature_not_in_plan`** — the key is valid, the tier is what is missing. `GET /client/v1/agency/quota` lists what your plan includes.
+Every endpoint here is read-only — there is nothing to create.
+
+<TierGated />
 
 ## Quickstart
 

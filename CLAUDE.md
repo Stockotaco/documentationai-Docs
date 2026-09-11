@@ -22,6 +22,27 @@ Only the Documentation.AI set is supported: `Callout`, `Card`, `CodeGroup`, `Col
 
 Full component reference: the `documentation-ai` skill.
 
+## Snippets
+
+A block of content that is byte-identical on several pages lives once in `snippets/` and is pulled in by a **default import**:
+
+```mdx
+import ClientV1Auth from "/snippets/client-v1-auth.mdx"
+
+<ClientV1Auth />
+```
+
+`check-components.mjs` allows the imported name and fails on an import whose file is missing — a missing snippet is not a publish error, it renders "Unable to load snippet" on the live page.
+
+Two limits decide what is worth snippeting:
+
+- **No props.** The block must be identical everywhere, so it cannot name the feature it is on. `snippets/tier-gated.mdx` says "This surface is sold by tier", not "Correlation is sold by tier".
+- **Atomic blocks.** A snippet cannot be the first half of a sentence a page then finishes. The per-module detail goes in its own paragraph after the reference.
+
+Current snippets: `client-v1-auth.mdx` (the `ak_`/`sk_` key system and the location-binding errors, on every `/client/v1` surface page) and `tier-gated.mdx` (the `402 feature_not_in_plan` rule). The auth rule was restated on 15 pages and only 5 of them named `400 location_required` / `403 location_not_linked` — that gap is what the snippet exists to stop.
+
+The eight `authentication.mdx` pages are deliberately **not** snippeted: read-write vs read-only, per-module scopes and per-module error tables differ, and with no props a shared block would drop those facts.
+
 ## OpenAPI
 
 An unquoted comma or colon inside a YAML flow mapping — `description: Raw upstream detail, when there is one.` — parses locally into a junk key and gets the whole spec rejected by the site. Quote any flow-mapping string containing `,` or `:`. `check-openapi.mjs` catches exactly this.

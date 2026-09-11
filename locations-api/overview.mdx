@@ -6,6 +6,8 @@ description: >-
   agency key, with no request to Mythic in the middle.
 ---
 
+import ClientV1Auth from "/snippets/client-v1-auth.mdx"
+
 ## Overview
 
 Onboarding a client has four steps, and this surface covers all of them:
@@ -41,11 +43,10 @@ https://mythic-analytics.gulp.workers.dev/client/v1/locations
 
 ## Authentication
 
-The same key system as the rest of `/client/v1`: an **agency key** (`ak_`,
-bind a location with `?location_id=` or the `X-Location-Id` header) or a
-**location secret key** (`sk_`, auto-scoped to its own location). Reads accept
-either. **Writes require an agency key** — same rule as Client Config,
-Settings, and Destinations.
+<ClientV1Auth />
+
+Reads accept either key. **Writes require an agency key** — same rule as
+Client Config, Settings, and Destinations.
 
 Creating a client needs an **agency-wide** key specifically. A key bound to one
 client cannot create siblings.

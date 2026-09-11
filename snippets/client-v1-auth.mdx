@@ -1,0 +1,10 @@
+---
+title: client-v1-auth
+---
+
+The same key system as the rest of `/client/v1`: an **agency key** (`ak_`, which
+must bind a location on every request with `?location_id=` or the
+`X-Location-Id` header) or a **location secret key** (`sk_`, auto-scoped to its
+own location). An agency key that binds no location returns
+`400 location_required`; one that names a location it is not linked to returns
+`403 location_not_linked`.
