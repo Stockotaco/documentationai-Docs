@@ -952,6 +952,17 @@ paths:
         **Meta keeps no history.** The live response is the current score.
         `history=N` adds the last N days from Mythic's own daily snapshot, which
         is the only way to see when something moved.
+
+
+        **Test fires are set aside.** `test_event_code` keeps an event out of
+        Meta's *reporting*, not out of its quality scoring — measured: a test
+        delivery through `POST /{id}/test` is scored like any other event, and
+        scores badly, because its customer parameters are synthetic. An event
+        whose deliveries in the last 28 days were **all** test fires is
+        therefore flagged `test_events_only` and excluded from `summary`; it
+        stays in `events` and is named in `summary.excluded_test_events`, so the
+        headline can always be reconciled against the list. An event with no
+        deliveries of ours at all is never treated this way.
       tags: [Destinations]
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
@@ -1048,7 +1059,8 @@ paths:
                                     type: string
                                     enum: [emq_low, emq_critical, missing_email, missing_phone,
                                            ip_coverage_low, event_coverage_below_goal,
-                                           server_dedupe_key_missing, browser_dedupe_key_missing]
+                                           server_dedupe_key_missing, browser_dedupe_key_missing,
+                                           test_events_only]
                                   severity: { type: string, enum: [info, warn, critical] }
                                   message: { type: string }
                       summary:
@@ -1062,10 +1074,18 @@ paths:
                           warning_flags: { type: integer }
                           status:
                             type: string
-                            enum: [ok, warn, critical, no_data]
+                            enum: [ok, warn, critical, test_only, no_data]
                             description: >-
                               `no_data` means Meta scored nothing at all — a
-                              dataset with no traffic, not a pass.
+                              dataset with no traffic, not a pass. `test_only`
+                              means every scored event came from test fires.
+                          excluded_test_events:
+                            type: array
+                            description: >-
+                              Event names left out of this summary because their
+                              only deliveries were test fires. Present only when
+                              something was excluded.
+                            items: { type: string }
                       history:
                         type: array
                         nullable: true

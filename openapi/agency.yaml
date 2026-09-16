@@ -148,6 +148,13 @@ paths:
         been read for that client — usually a Conversions API token generated
         without the Dataset Quality option — and it sorts above the healthy
         rows rather than disappearing among them.
+
+
+        **Testing a destination cannot make a client look broken.** Meta scores
+        test events even when `test_event_code` is set, and they score badly.
+        Events whose only deliveries were test fires are counted in
+        `test_only_events` and never contribute to a location's status or its
+        worst score.
       parameters:
         - $ref: "#/components/parameters/LocationIds"
         - name: days_back
@@ -179,11 +186,18 @@ paths:
                             name: { type: string }
                             status:
                               type: string
-                              enum: [critical, warn, no_snapshot, no_data, ok]
+                              enum: [critical, warn, no_snapshot, test_only, no_data, ok]
                               description: >-
                                 Sort order is exactly this enum. `no_data` means
                                 Meta scored nothing (no traffic); `no_snapshot`
-                                means we could not read quality at all.
+                                means we could not read quality at all;
+                                `test_only` means every scored event came from
+                                test fires.
+                            test_only_events:
+                              type: integer
+                              description: >-
+                                Events excluded from this row because their only
+                                deliveries were test fires.
                             min_event_match_quality:
                               type: number
                               nullable: true
