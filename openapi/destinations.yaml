@@ -921,6 +921,181 @@ paths:
         "409": { description: "Config is incomplete, or no reporting credential is stored for this location" }
         "503": { description: Verification is not available in this environment }
 
+  /client/v1/destinations/{id}/quality:
+    get:
+      summary: Meta's own verdict on the data you send
+      operationId: getDatasetQuality
+      description: >
+        `meta_capi` destinations only. A `200` from the Conversions API means
+        Meta ACCEPTED the event, not that it can use it: Meta separately scores
+        every dataset on whether those events can be matched to real accounts,
+        and a destination with a spotless delivery log can still be feeding Meta
+        events it cannot match. This endpoint reads that scoring (Meta's Dataset
+        Quality API) for the destination's pixel.
+
+
+        **One token does both.** Quality is read with the destination's OWN
+        stored credential. Generate it in Events Manager under
+        **Settings → Conversions API → "Set up with Dataset Quality API"** (the
+        recommended option) and the same system-user token sends events and
+        reads quality, scoped to that one dataset. A token generated with the
+        plain option delivers normally and returns `409
+        insufficient_permission` here — regenerate it and store it again.
+
+
+        **Absent is not zero.** Every metric is `null` when Meta reported
+        nothing for it — most often dedupe feedback on a dataset with too little
+        paired browser/server traffic to judge. `null` means unknown, and is
+        never rendered as a failing score.
+
+
+        **Meta keeps no history.** The live response is the current score.
+        `history=N` adds the last N days from Mythic's own daily snapshot, which
+        is the only way to see when something moved.
+      tags: [Destinations]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - name: history
+          in: query
+          required: false
+          description: >-
+            Include the last N days of daily snapshots alongside the live read.
+            Default 0 (live only). Values outside 0-90 are clamped.
+          schema: { type: integer, default: 0, minimum: 0, maximum: 90 }
+      responses:
+        "200":
+          description: Current quality, per event name
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      action_id: { type: string, format: uuid }
+                      dataset_id:
+                        type: string
+                        description: The Meta pixel/dataset the scores describe.
+                      events:
+                        type: array
+                        description: One entry per event name Meta returned.
+                        items:
+                          type: object
+                          properties:
+                            event_name: { type: string }
+                            event_match_quality:
+                              type: number
+                              nullable: true
+                              description: >-
+                                Meta's Event Match Quality, 0-10, for this event.
+                                `null` when Meta did not score it.
+                            match_keys:
+                              type: array
+                              description: >-
+                                Per-parameter coverage behind the score, best
+                                first (`em`, `ph`, `fbp`, `fbc`, `external_id`,
+                                `ip_address`, `user_agent`, `ct`, `st`, `zip`,
+                                `country`). This is what tells you WHY a score is
+                                low.
+                              items:
+                                type: object
+                                properties:
+                                  identifier: { type: string }
+                                  coverage_percentage: { type: number, nullable: true }
+                            event_coverage_percentage:
+                              type: number
+                              nullable: true
+                              description: Server events as a percentage of unique browser events.
+                            event_coverage_goal_percentage:
+                              type: number
+                              nullable: true
+                              description: Meta's own goal for that coverage. Read it from here rather than hardcoding it.
+                            additional_conversions_percentage:
+                              type: number
+                              nullable: true
+                              description: Extra conversions the Conversions API reported over the pixel alone.
+                            potential_additional_conversions_percentage:
+                              type: number
+                              nullable: true
+                            dedupe_key: { type: string, nullable: true }
+                            browser_events_with_dedupe_key_percentage:
+                              type: number
+                              nullable: true
+                              description: >-
+                                Share of browser events carrying the dedupe key.
+                                Below 100% usually means a second pixel on the
+                                site outside the managed tag.
+                            server_events_with_dedupe_key_percentage:
+                              type: number
+                              nullable: true
+                              description: >-
+                                Share of server events carrying it. This pair is
+                                how you PROVE the pixel + CAPI halves collapse
+                                into one conversion instead of double counting.
+                            browser_coverage_from_dedupe_key_percentage:
+                              type: number
+                              nullable: true
+                            upload_frequency: { type: string, nullable: true }
+                            flags:
+                              type: array
+                              description: Findings for this event, each naming what to fix.
+                              items:
+                                type: object
+                                properties:
+                                  code:
+                                    type: string
+                                    enum: [emq_low, emq_critical, missing_email, missing_phone,
+                                           ip_coverage_low, event_coverage_below_goal,
+                                           server_dedupe_key_missing, browser_dedupe_key_missing]
+                                  severity: { type: string, enum: [info, warn, critical] }
+                                  message: { type: string }
+                      summary:
+                        type: object
+                        properties:
+                          events_scored: { type: integer }
+                          events_returned: { type: integer }
+                          min_event_match_quality: { type: number, nullable: true }
+                          worst_event: { type: string, nullable: true }
+                          critical_flags: { type: integer }
+                          warning_flags: { type: integer }
+                          status:
+                            type: string
+                            enum: [ok, warn, critical, no_data]
+                            description: >-
+                              `no_data` means Meta scored nothing at all — a
+                              dataset with no traffic, not a pass.
+                      history:
+                        type: array
+                        nullable: true
+                        description: >-
+                          Daily snapshots when `history` was passed, newest
+                          first; `null` otherwise.
+                        items:
+                          type: object
+                          properties:
+                            day: { type: string, format: date }
+                            event_name: { type: string }
+                            event_match_quality: { type: number, nullable: true }
+                            event_coverage_percentage: { type: number, nullable: true }
+                            server_dedupe_key_percentage: { type: number, nullable: true }
+                            browser_dedupe_key_percentage: { type: number, nullable: true }
+        "400": { description: Not a meta_capi destination }
+        "404": { description: Destination not found }
+        "409":
+          description: >
+            `incomplete_config` (no pixel_id), `credential_required` (no stored
+            token under the destination's credential_name),
+            `insufficient_permission` (the token cannot read dataset quality —
+            regenerate it with the Dataset Quality option; delivery is
+            unaffected), `credential_invalid` (expired token), or
+            `dataset_not_found` (the pixel id does not match the dataset the
+            token was issued for).
+        "429": { description: Meta throttled the request. Retry later. }
+        "502": { description: Meta was unreachable or returned an unexpected error }
+        "504": { description: Meta did not respond in time }
+
   /client/v1/destinations/{id}/test:
     post:
       summary: Test a destination

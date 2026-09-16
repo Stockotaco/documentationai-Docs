@@ -126,6 +126,79 @@ paths:
         "422": { $ref: "#/components/responses/TooManyLocations" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "502": { $ref: "#/components/responses/UpstreamFailed" }
+  /client/v1/agency/destinations/quality:
+    get:
+      summary: Per-location Meta dataset quality
+      operationId: getAgencyDestinationQuality
+      description: >
+        Meta's match-quality scoring for every location with a Meta CAPI
+        destination, worst first — which clients have bad Meta tracking, in one
+        call. One row per location carrying its lowest Event Match Quality, the
+        event holding that score, and counts of critical and warning findings.
+
+
+        **This reads the daily snapshot, not Meta.** Each client's token is
+        scoped to its own dataset, so no single live call can span an agency,
+        and Meta rate-limits per app. The per-destination endpoint
+        (`GET /client/v1/destinations/{id}/quality`) is the live read for one
+        client, and the only place per-parameter coverage appears.
+
+
+        **`no_snapshot` is a finding, not a blank.** It means quality has never
+        been read for that client — usually a Conversions API token generated
+        without the Dataset Quality option — and it sorts above the healthy
+        rows rather than disappearing among them.
+      parameters:
+        - $ref: "#/components/parameters/LocationIds"
+        - name: days_back
+          in: query
+          required: false
+          description: >-
+            How far back to look for each location's most recent snapshot
+            (1–90). Snapshots are written daily.
+          schema: { type: integer, minimum: 1, maximum: 90, default: 7 }
+      responses:
+        "200":
+          description: One row per location, worst first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      days_back: { type: integer, example: 7 }
+                      locations:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            location_id: { type: string }
+                            name: { type: string }
+                            status:
+                              type: string
+                              enum: [critical, warn, no_snapshot, no_data, ok]
+                              description: >-
+                                Sort order is exactly this enum. `no_data` means
+                                Meta scored nothing (no traffic); `no_snapshot`
+                                means we could not read quality at all.
+                            min_event_match_quality:
+                              type: number
+                              nullable: true
+                              description: Lowest EMQ (0-10) across the location's scored events.
+                            worst_event: { type: string, nullable: true }
+                            critical_flags: { type: integer }
+                            warning_flags: { type: integer }
+                            events: { type: integer }
+                            captured_day: { type: string, format: date, nullable: true }
+                            dataset_id: { type: string, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NoLocations" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/UpstreamFailed" }
   /client/v1/agency/contracts/summary:
     get:
       summary: Per-location contract coverage

@@ -49,6 +49,15 @@ The `event_mapping` merges over sensible defaults (`$pageview` → `PageView`, `
 
 If a `meta_capi` credential is already stored you can omit `capi_token`; the token is write-only and never returned. Deliveries use the credential named `credential_name` (default `default`) — pass e.g. `"live"` when the working token is stored under another name. `browser_tag: false` skips the managed pixel for sites that already run their own — Mythic then only sends CAPI.
 
+### Generate the token with Dataset Quality enabled
+
+In Events Manager: **Settings → Conversions API → Set up direct integration → "Set up with Dataset Quality API"** (the recommended option), then copy the token it shows.
+
+That one token does both jobs. It sends conversions, and it lets
+[`GET /destinations/{id}/quality`](/destinations-api/overview) read Meta's own scoring of the data you send it — event match quality, per-parameter coverage, and the dedupe-key coverage that proves the pixel and CAPI halves are collapsing into one conversion rather than double counting. Both permissions are scoped to that single dataset.
+
+A token generated with **"Set up without Dataset Quality API"** delivers conversions normally and returns `409 insufficient_permission` on the quality endpoint. Regenerate it with the recommended option and store it again; delivery is unaffected either way.
+
 ## Connect Google Ads
 
 Google Ads uses the Data Manager API for the server half, so the OAuth credential must exist first (store it with `PUT /credentials/google_ads`, or run the OAuth flow via `POST /oauth/initiate`):
