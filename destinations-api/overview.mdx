@@ -397,6 +397,9 @@ good conversion.
 
 GA4's `AddressInfo` also accepts `addressLine`, `city` and `administrativeArea`,
 which Google Ads ignores; the first is hashed and the other two are plaintext.
+City and state keep their internal spaces (`New York` is sent as `new york`)
+and their accents, which is Google's documented rule and deliberately unlike
+the Meta path, where the same city is hashed as `newyork`.
 Set `send_user_data: false` to suppress hashed identifiers entirely.
 
 ## What GA4 receives without configuration
