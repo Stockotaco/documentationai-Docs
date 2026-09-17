@@ -285,19 +285,25 @@ The full set of options you can pass to `init(key, config)`.
 ### A/B experiments
 
 <ParamField body="capture_experiments" param-type="boolean|object" required="false" show-location="false" deprecated="false">
-  Detect that a third-party split-testing tool has bucketed this visitor and attach the assignment to the session. Default: `true` (on). Supported platform: **Convert.com**. Pass `false` to disable, or an object for control:
+  Detect that a third-party split-testing tool has bucketed this visitor and attach the assignment to the session. Default: `true` (on). Supported platforms: **Convert.com** and **PostHog experiments**. Pass `false` to disable, or an object for control:
 
   - `trackExposures` (boolean) — emit the `$experiment_viewed` event. Default: `true`.
   - `pollWindowMs` (number) — how long after init to keep re-reading the testing tool's cookie, in milliseconds. The tool usually buckets within a second; the window exists because it runs *after* the SDK on a normal page load. Default: `10000`.
   - `dataLayerName` (string) — the dataLayer global to observe. Default: `'dataLayer'`.
 
-  Nothing needs tagging on the page. Every event after detection carries two super properties — `$experiments` (an array of `"<experimentId>:<variationId>"`) and `$ab_platform` — and each assignment produces one `$experiment_viewed` event per session, with `experiment_id`, `variation_id` and `variation_name` where the tool exposes them.
+  Nothing needs tagging on the page. Every event after detection carries two super properties — `$experiments` (an array of arms) and `$ab_platform` (`convert`, `posthog`, or `convert+posthog`) — and each assignment produces one `$experiment_viewed` event per session, with `experiment_id`, `variation_id` and `variation_name` where the tool exposes them.
 
-  Assignments are read from the testing tool's own cookie, which holds the authoritative experiment-to-variation mapping and is already populated for visitors who arrived through a split-URL redirect. Sessions the SDK identifies as bots record no assignment — a crawler executing a testing tool would otherwise count as an exposure in whichever arm it landed in. The tool's `dataLayer` announcement is observed as well, to catch bucketing that happens later in a single-page app and to pick up variation names.
+  An arm reads `"<experimentId>:<variationId>"` for Convert.com and `"posthog:<flagKey>:<variant>"` for PostHog. Only PostHog arms carry a platform prefix, so filters written against Convert assignments keep working unchanged.
+
+  Convert.com assignments are read from its own cookie, which holds the authoritative experiment-to-variation mapping and is already populated for visitors who arrived through a split-URL redirect; its `dataLayer` announcement is observed as well, to catch bucketing that happens later in a single-page app and to pick up variation names.
+
+  PostHog assignments are read from posthog.js's own persisted state (`ph_<projectToken>_posthog`), refreshed through the public `posthog.onFeatureFlags` subscription when flags load or reload. A flag counts as an experiment when PostHog reports it as experiment-linked, and otherwise when it is multivariate: **boolean feature flags are rollouts, not tests, and are excluded**, so a kill switch does not become an arm on every event. Flags you have overridden locally (`overrideFeatureFlags()`, or the PostHog toolbar) are skipped as QA. The SDK never calls `getFeatureFlag()` or `isFeatureEnabled()` — those would write `$feature_flag_called` events into your PostHog project.
+
+  Sessions the SDK identifies as bots record no assignment — a crawler executing a testing tool would otherwise count as an exposure in whichever arm it landed in.
 </ParamField>
 
 <Callout kind="info">
-  On a page with no testing tool this costs a single cookie read: no properties are published, and your `dataLayer` is not touched or created. The observer is only attached once the testing tool has actually been detected.
+  On a page with no testing tool this costs one cookie read and one localStorage scan: no properties are published, and your `dataLayer` is not touched or created. Observers are only attached once a testing tool has actually been detected.
 </Callout>
 
 <Callout kind="note">

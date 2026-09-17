@@ -34,14 +34,14 @@ These fire only when their feature is enabled (most are on by default — see th
 | `$web_vital_lcp`, `$web_vital_cls`, `$web_vital_inp`, … | One event per Core Web Vital metric | `web_vitals` |
 | `$cross_domain_linked` | Session adopted from a cross-domain link | `cross_domain_tracking` |
 | `$heatmap` | Batch of click positions and scroll depths (pixels, no element identity) | `capture_heatmaps` |
-| `$experiment_viewed` | A third-party A/B tool (Convert.com) bucketed this visitor — once per session per assignment, with `experiment_id`, `variation_id`, `variation_name`, `first_exposure`, `convert_visitor_id` | `capture_experiments` |
+| `$experiment_viewed` | A third-party A/B tool (Convert.com, PostHog) bucketed this visitor — once per session per assignment, with `experiment_id`, `variation_id`, `variation_name`, `first_exposure`, and the tool's own visitor id (`convert_visitor_id` or `posthog_distinct_id`) | `capture_experiments` |
 
 <Callout kind="info">
   When remote-config tags or snippets fail, the SDK also reports `$tag_error`, `$snippet_error`, and `$snippet_compilation_error`; a failing event transformer reports `$transformer_error`.
 </Callout>
 
 <Callout kind="note">
-  `$experiment_viewed` fires **once per session per assignment**, so it counts sessions exposed to a variation — not pageviews. To split other events by variation, filter on the `$experiments` super property (`["<experimentId>:<variationId>"]`) that every event carries once the assignment is known.
+  `$experiment_viewed` fires **once per session per assignment**, so it counts sessions exposed to a variation — not pageviews. To split other events by variation, filter on the `$experiments` super property that every event carries once the assignment is known: `"<experimentId>:<variationId>"` for Convert.com, `"posthog:<flagKey>:<variant>"` for PostHog. For PostHog, only experiment-linked and multivariate flags appear — boolean feature flags are rollouts, not tests.
 </Callout>
 
 <Callout kind="warning">
@@ -49,7 +49,7 @@ These fire only when their feature is enabled (most are on by default — see th
 </Callout>
 
 <Callout kind="note">
-  Alongside the event, the SDK stores the A/B assignment on the **person profile** as `$convert_visitor_id` and `$convert_experiments`. `$experiments` is a super property, so it only rides events sent from the browser — a conversion that arrives server-side (a CRM close, a subscription rebill) carries no super properties at all. The person copy is what lets a later off-browser conversion still be credited to the variation, and it is what the [`convert_experiments` destination](/destinations-api/overview#convertcom-experiments) reads. Both are erased with the rest of a person's data on a deletion request, and neither is written for HIPAA-enabled locations, where experiment capture is off entirely.
+  Alongside the event, the SDK stores the A/B assignment on the **person profile**: `$convert_visitor_id` + `$convert_experiments` for Convert.com, `$posthog_distinct_id` + `$posthog_experiments` for PostHog. `$experiments` is a super property, so it only rides events sent from the browser — a conversion that arrives server-side (a CRM close, a subscription rebill) carries no super properties at all. The person copy is what lets a later off-browser conversion still be credited to the variation, and it is what the [`convert_experiments` destination](/destinations-api/overview#convertcom-experiments) reads. Both are erased with the rest of a person's data on a deletion request, and neither is written for HIPAA-enabled locations, where experiment capture is off entirely.
 </Callout>
 
 <Callout kind="warning">

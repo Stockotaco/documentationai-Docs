@@ -55,8 +55,12 @@ Returns this visitor's detected A/B test assignments, or `[]`. Empty means one o
 ```javascript
 mythic.getExperimentAssignments();
 // [{ platform: 'convert', experimentId: '1004208131',
-//    variationId: '1004489003', variationName: 'Homepage — short form' }]
+//    variationId: '1004489003', variationName: 'Homepage — short form' },
+//  { platform: 'posthog', experimentId: 'pricing-page-test',
+//    variationId: 'variant-b' }]
 ```
+
+For PostHog, `experimentId` is the feature-flag key and `variationId` is the variant. Only experiment-linked and multivariate flags are returned — boolean feature flags are rollouts, not tests.
 
 ### `debug(enabled?)`
 
