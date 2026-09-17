@@ -963,6 +963,13 @@ paths:
         stays in `events` and is named in `summary.excluded_test_events`, so the
         headline can always be reconciled against the list. An event with no
         deliveries of ours at all is never treated this way.
+
+
+        **When that check cannot run**, every event carries an info flag
+        `test_only_unknown` and nothing is excluded. It means our own delivery
+        log was unreadable, so a low score here may describe test traffic — the
+        one thing the response will not do is imply the exclusion was applied
+        when it was not.
       tags: [Destinations]
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }

@@ -213,6 +213,78 @@ paths:
         "404": { $ref: "#/components/responses/NoLocations" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "502": { $ref: "#/components/responses/UpstreamFailed" }
+  /client/v1/agency/destinations/quality/trend:
+    get:
+      summary: Per-location Meta dataset quality, day by day
+      operationId: getAgencyDestinationQualityTrend
+      description: >
+        The same roster, over time: one row per (day, location) with that day's
+        worst scored event, its match quality, and the findings that stood on
+        the day.
+
+
+        `GET /client/v1/agency/destinations/quality` answers "who is broken
+        now". This answers "who got worse, and when" — the read that ties a
+        drop to the change that caused it. Meta keeps no history of its own;
+        this series exists because Mythic snapshots every connected dataset
+        daily.
+
+
+        **Gaps are real.** A location with no row on a day was not captured
+        that day. Nothing is carried forward: a flat line through an outage
+        would read as stability.
+
+
+        Test-only events are held out of each day's headline and counted in
+        `test_only_events`, exactly as in the current-state rollup.
+      parameters:
+        - $ref: "#/components/parameters/LocationIds"
+        - name: days_back
+          in: query
+          required: false
+          description: Days of history (1–90). Default 30.
+          schema: { type: integer, minimum: 1, maximum: 90, default: 30 }
+      responses:
+        "200":
+          description: One row per day and location, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      days_back: { type: integer, example: 30 }
+                      days:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            day: { type: string, format: date }
+                            location_id: { type: string }
+                            name: { type: string, nullable: true }
+                            dataset_id: { type: string, nullable: true }
+                            status:
+                              type: string
+                              enum: [critical, warn, test_only, no_data, ok]
+                              description: >-
+                                Derived from that day's findings. There is no
+                                `no_snapshot` here: a location with no capture
+                                on a day has no row for it.
+                            min_event_match_quality: { type: number, nullable: true }
+                            worst_event: { type: string, nullable: true }
+                            critical_flags: { type: integer }
+                            warning_flags: { type: integer }
+                            test_only_events: { type: integer }
+                            events: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NoLocations" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/UpstreamFailed" }
+        "503": { description: Analytics backend not configured }
   /client/v1/agency/contracts/summary:
     get:
       summary: Per-location contract coverage

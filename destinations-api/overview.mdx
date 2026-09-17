@@ -492,6 +492,18 @@ Create the key pair in Convert under **Account → API keys** (v2 Reporting API)
 - `GET /{id}/deliveries/{eventUuid}` returns the **detail** for one delivery: the `request_body` sent to the destination and the raw `response_body` it returned, plus redacted `request_headers`/`response_headers` and the Meta `fbtrace_id`. Key it with the `event_uuid` from a list row. Use it to answer "what did we send, and what did the destination say back?" — on **successful and failed** deliveries alike (confirming the accepted payload is as useful as debugging a failure). Bodies are truncated to 8&nbsp;KB and the audit row is retained for 30 days. HIPAA-enabled locations omit bodies entirely (kept: `fbtrace_id`, `response_status`, `error`); webhook request bodies/headers are redacted for read-only (`sk_`) keys. **Test fires** (`POST /{id}/test`) are not persisted, so this endpoint returns `404 not_found` for a synthetic `test-…` event — expected, not a bug. There is exactly **one** detail row per (destination, `event_uuid`), upserted across retry attempts (`attempt_count` reflects the latest attempt); the per-attempt stream lives in the `GET /{id}/deliveries` list.
 - `GET /health` returns per-destination aggregates over a rolling window (default 24 hours): success rate, failure counts, latency percentiles, and a `credential_ok` flag that flips to `false` when the most recent failure was a 401/403.
 
+## Meta match quality
+
+Three reads, for three different questions, all `meta_capi` only.
+
+- `GET /{id}/quality` is the **live** read: Meta's current scoring of the dataset, per event name, with per-parameter coverage and the findings behind it. It uses the destination's own stored token, so no second credential is involved.
+- `GET /{id}/quality/trend` is the **daily series**: when the score moved. Meta returns only the current score and keeps no history of its own, so this comes from Mythic's own daily snapshot. A day with no row means nothing was captured that day — no value is carried forward, because a flat line through an outage reads as stability.
+- `GET /{id}/quality/match-keys` is the **diagnosis**: the same days split per match key (`em`, `ph`, `fbp`, `fbc`, `external_id`, `ip_address`, `ct`, `st`, `zip`, `country`). Match quality is a composite, so a fall in it names no fix; the parameter whose coverage moved with it does.
+
+Across all three, a `null` metric means Meta reported nothing — not zero. A key listed with `null` coverage was not scored, which is a different finding from a key that is never sent.
+
+Agency-wide, `GET /client/v1/agency/destinations/quality` ranks the roster by current state and `GET /client/v1/agency/destinations/quality/trend` gives the same roster day by day.
+
 ## Testing
 
 `POST /{id}/test` sends a test delivery through the ad-platform adapter using the stored credential. It is supported only for `meta_capi`, `google_ads` and `google_analytics`; webhooks fire on real events and return `400`. Both Google destinations use Data Manager's `validateOnly` flag, so they verify the credential, scope, destination and payload without recording anything in the customer's account — which is also why a GA4 test sends a synthetic client id rather than reporting `skipped`. Meta tests are real sends and honor `test_event_code`.
