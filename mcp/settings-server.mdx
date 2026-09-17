@@ -69,7 +69,9 @@ one server entry per client you want the assistant to work on.
 
 ## Connect
 
-The transport is **Streamable HTTP** (called "HTTP", "streamable-http" or "remote MCP server" depending on the client). Give the client the URL above and one header. There is no OAuth flow: the server publishes no `.well-known` metadata and a client that insists on discovering one cannot connect — configure the key as a static header.
+The transport is **Streamable HTTP** (called "HTTP", "streamable-http" or "remote MCP server" depending on the client). Give the client the URL above and one header.
+
+There is no OAuth flow — configure the key as a static header. The server says so at both places a client looks: a request without a usable key answers `401` with an [RFC 6750 challenge](/mcp/authentication#what-a-401-tells-you), and every OAuth/OIDC discovery path answers `404 {"error": "oauth_not_supported"}` naming the credential to send instead. A client that can *only* authenticate by discovering an authorization server cannot connect.
 
 <CodeGroup>
 ```bash Claude Code

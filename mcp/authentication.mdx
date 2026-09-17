@@ -29,6 +29,36 @@ One `mcp_` API key authenticates both MCP surfaces — the [Settings Server](/mc
 
 The key must begin with `mcp_`. A missing, malformed, or deactivated key returns HTTP `401` with a JSON-RPC error (`code -32600`).
 
+### What a 401 tells you
+
+The `401` carries a `WWW-Authenticate` challenge naming the credential. Two shapes, by whether the request sent one at all:
+
+```text No credentials
+WWW-Authenticate: Bearer realm="mythic-mcp",
+  error_description="Send a Mythic mcp_ API key as a bearer token. This server does not use OAuth.",
+  error_uri="https://docs.mythicdata.io/mcp/settings-server"
+```
+
+```text Key sent, key refused
+WWW-Authenticate: Bearer realm="mythic-mcp", error="invalid_token",
+  error_description="The mcp_ API key is unknown, malformed, or deactivated.",
+  error_uri="https://docs.mythicdata.io/mcp/settings-server"
+```
+
+### There is no OAuth
+
+Neither server implements OAuth, and neither advertises it. Every discovery path a client probes — `/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server`, `/.well-known/openid-configuration`, each also under `/mcp` — answers:
+
+```json
+{
+  "error": "oauth_not_supported",
+  "error_description": "This MCP server authenticates with a static Mythic mcp_ API key sent as Authorization: Bearer mcp_..., not OAuth. There is no authorization server to discover.",
+  "documentation_url": "https://docs.mythicdata.io/mcp/settings-server"
+}
+```
+
+with HTTP `404`. The challenge deliberately omits `resource_metadata`: pointing at protected-resource metadata with no authorization server behind it would tell a client to start a flow that cannot finish. Configure the key as a static header.
+
 ## Scopes
 
 An `mcp_` key carries a `scopes` array that gates which tools it can call (only tools within the scopes are listed; calling any other tool by name answers `insufficient_scope` naming the scope to add) — and, when the key is sent as a Bearer to the HTTP API, which routes it may call. Scopes use `<family>:<action>` form, with `*` wildcards:
