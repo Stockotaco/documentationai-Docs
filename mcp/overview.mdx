@@ -1,28 +1,42 @@
 ---
 title: MCP Platform
 description: >-
-  Register upstream MCP servers, manage discovered tools, control per-agency
-  access, and provision gateway API keys for the Mythic Analytics Model
-  Context Protocol platform.
+  Connect an AI client to the Mythic Analytics MCP server, and — for platform
+  admins — register upstream MCP servers, manage discovered tools, control
+  per-agency access, and provision gateway API keys.
 ---
+
+## Connect an AI client
+
+Point your MCP client — Claude, Cursor, TypingMind, or any other — at the **Settings Server**, the hosted server carrying the full agency tool surface:
+
+```text
+https://mythic-mcp-server-production.up.railway.app/mcp
+```
+
+Use the Streamable HTTP transport and send an `mcp_` key as `Authorization: Bearer mcp_...`. Full setup, client pinning, and the select-a-client flow: [Connect an AI client](/mcp/settings-server).
+
+<Callout kind="warning">
+  This is the only URL an AI client connects to. The worker host further down this page serves the management API and the upstream-tool gateway — it is a plain request/response JSON-RPC endpoint, not an MCP transport, and a client that opens a connection with `GET` gets a `404` from it.
+</Callout>
 
 ## Overview
 
 The MCP Platform has three surfaces:
 
 - A **management API** under `/admin/mcp` for registering upstream MCP servers, probing them for tools, controlling which agencies may use each server and tool, and provisioning gateway API keys. It is authenticated with a Supabase session JWT for an allowlisted admin account.
-- A **gateway** at `/mcp` that speaks JSON-RPC 2.0. External MCP clients call it with an `mcp_` API key to list and execute tools. See [MCP Gateway](/mcp/gateway).
-- A hosted **Settings Server** for agencies to manage a client's analytics settings (insights, dashboards, canvases, destinations, tenant config) with a select-a-client session flow. It uses the same `mcp_` keys and scopes. See [Settings Server](/mcp/settings-server).
+- A **gateway** at `POST /mcp` on the worker host, speaking JSON-RPC 2.0. It proxies the tools of *registered upstream* MCP servers to a caller holding an `mcp_` API key — one request object per HTTP call, with no session and no event stream. Reach for it from your own backend code, not from an AI client. See [MCP Gateway](/mcp/gateway).
+- A hosted **Settings Server** exposing the full agency product surface — 204 tools across 25 scope families — to any MCP client, with a select-a-client session flow. It uses the same `mcp_` keys and scopes. See [Connect an AI client](/mcp/settings-server).
 
-## Base URL
+## Management API & gateway base URL
 
-The management API and gateway share the same worker host.
+The management API and the upstream-tool gateway share the same worker host.
 
 ```text
 https://mythic-analytics.gulp.workers.dev
 ```
 
-Management endpoints are mounted under `/admin/mcp` (for example `/admin/mcp/servers`). The gateway is a single endpoint at `POST /mcp`.
+Management endpoints are mounted under `/admin/mcp` (for example `/admin/mcp/servers`). The gateway is a single endpoint at `POST /mcp`. Neither is the URL an AI client connects to — that is [the Settings Server](#connect-an-ai-client).
 
 ## Response envelope
 

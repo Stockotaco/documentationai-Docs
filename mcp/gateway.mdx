@@ -9,6 +9,10 @@ description: >-
 
 The MCP Gateway is a single JSON-RPC 2.0 endpoint. It authenticates the caller's `mcp_` key, enforces scopes and agency/location access, then proxies the call to a registered **upstream** MCP server, injecting that client's credentials.
 
+<Callout kind="warning">
+  **This is not the endpoint an AI assistant connects to.** It answers one JSON-RPC object per `POST`, with no `Mcp-Session-Id` and no event stream, so an MCP client that opens a connection with `GET` receives a `404`. Point Claude, Cursor, TypingMind and the rest at the [Settings Server](/mcp/settings-server), which speaks Streamable HTTP and takes the same `mcp_` key.
+</Callout>
+
 <Callout kind="note">
   The gateway no longer serves the built-in insights/dashboards/canvases tools — those (and much more) live on the [Settings Server](/mcp/settings-server), which accepts the same `mcp_` keys. Calling a retired tool name here returns `-32601` with the Settings Server URL.
 </Callout>

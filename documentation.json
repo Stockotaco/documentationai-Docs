@@ -441,6 +441,11 @@
                     "icon": "file-text"
                   },
                   {
+                    "title": "Connect an AI Client",
+                    "path": "mcp/settings-server",
+                    "icon": "plug"
+                  },
+                  {
                     "title": "Authentication",
                     "path": "mcp/authentication",
                     "icon": "lock"
@@ -449,11 +454,6 @@
                     "title": "Gateway (JSON-RPC)",
                     "path": "mcp/gateway",
                     "icon": "radio"
-                  },
-                  {
-                    "title": "Settings Server (agency)",
-                    "path": "mcp/settings-server",
-                    "icon": "sliders"
                   },
                   {
                     "title": "Tool Reference",
@@ -830,6 +830,11 @@
                     "icon": "file-text"
                   },
                   {
+                    "title": "Connect an AI Client",
+                    "path": "mcp/settings-server",
+                    "icon": "plug"
+                  },
+                  {
                     "title": "Authentication",
                     "path": "mcp/authentication",
                     "icon": "lock"
@@ -838,11 +843,6 @@
                     "title": "Gateway (JSON-RPC)",
                     "path": "mcp/gateway",
                     "icon": "radio"
-                  },
-                  {
-                    "title": "Settings Server (agency)",
-                    "path": "mcp/settings-server",
-                    "icon": "sliders"
                   },
                   {
                     "title": "Tool Reference",

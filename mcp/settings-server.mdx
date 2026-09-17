@@ -1,17 +1,18 @@
 ---
-title: Settings Server (agency)
+title: Connect an AI client (Settings Server)
 description: >-
-  A hosted MCP server exposing the full agency product surface — 173 tools
-  across data, sessions, replays, analysis, settings, links, Airbyte,
-  segments, insights, dashboards, canvases, destinations, contracts, tenant
-  config, and agency-grain rollups — with a select-a-client session flow.
+  Connect Claude, Cursor, TypingMind or any MCP client to the hosted Settings
+  Server — the full agency product surface, 204 tools across data, sessions,
+  replays, analysis, settings, links, Airbyte, segments, insights, dashboards,
+  canvases, destinations, contracts, tenant config, and agency-grain rollups —
+  with a select-a-client session flow.
 ---
 
 ## Overview
 
 The Settings Server is a hosted MCP server exposing the **full agency product
-surface** — 176 tools across 23 scope families — from any MCP-compatible AI
-client. It is separate from the
+surface** — 204 tools across 25 scope families — from any MCP-compatible AI
+client. It is the URL your AI client connects to. It is separate from the
 [Gateway](/mcp/gateway) (which proxies upstream tools) but authenticates with
 the **same `mcp_` API keys** and scopes.
 
@@ -68,11 +69,35 @@ one server entry per client you want the assistant to work on.
 
 ## Connect
 
-```bash
+The transport is **Streamable HTTP** (called "HTTP", "streamable-http" or "remote MCP server" depending on the client). Give the client the URL above and one header. There is no OAuth flow: the server publishes no `.well-known` metadata and a client that insists on discovering one cannot connect — configure the key as a static header.
+
+<CodeGroup>
+```bash Claude Code
 claude mcp add --transport http mythic \
   https://mythic-mcp-server-production.up.railway.app/mcp \
   --header "Authorization: Bearer mcp_your_api_key"
 ```
+
+```json Any client (config file)
+{
+  "mcpServers": {
+    "mythic": {
+      "type": "http",
+      "url": "https://mythic-mcp-server-production.up.railway.app/mcp",
+      "headers": { "Authorization": "Bearer mcp_your_api_key" }
+    }
+  }
+}
+```
+
+```bash Verify with curl
+curl -X POST https://mythic-mcp-server-production.up.railway.app/mcp \
+  -H "Authorization: Bearer mcp_your_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}'
+```
+</CodeGroup>
 
 <ParamField header="Authorization" param-type="string" required="false" deprecated="false">
   MCP API key as bearer token. Format: `Bearer mcp_...`.

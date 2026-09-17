@@ -15,9 +15,9 @@ Every endpoint under `/admin/mcp` (servers, tools, agency access, API keys) requ
 
 A missing token, an invalid/expired token, or a token for an account not on the admin allowlist returns `401` with `{ "error": "Unauthorized" }`.
 
-## Gateway authentication
+## MCP server authentication
 
-The gateway at `POST /mcp` accepts an `mcp_` API key created through the management API. Provide it as a bearer token or in the `X-Api-Key` header.
+One `mcp_` API key authenticates both MCP surfaces — the [Settings Server](/mcp/settings-server) your AI client connects to, and the upstream-tool [gateway](/mcp/gateway) at `POST /mcp` on the worker host. Provide it as a bearer token or in the `X-Api-Key` header.
 
 <ParamField header="Authorization" param-type="string" required="false" deprecated="false">
   MCP API key as bearer token. Format: `Bearer mcp_...`.
