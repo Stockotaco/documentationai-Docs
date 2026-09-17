@@ -71,7 +71,7 @@ POST /client/v1/destinations/integrations/google_ads
   "customer_id": "1234567890",
   "event_mapping": {
     "purchase": {
-      "conversion_action": "customers/1234567890/conversionActions/987",
+      "conversion_action": "987654321",
       "conversion_label": "AbC-D_efGh",
       "default_value": 100,
       "currency": "USD"
@@ -80,7 +80,7 @@ POST /client/v1/destinations/integrations/google_ads
 }
 ```
 
-Each event needs a `conversion_action` (server half). A `conversion_label` additionally turns on the managed gtag browser tag for that event, with `transaction_id` defaulted to the event uuid so browser and server sends dedupe. Events without a label are server-only.
+Each event needs a `conversion_action` (server half) — the **bare conversion action ID**, which is sent as the Data Manager `productDestinationId`. A Google Ads resource name (`customers/1234567890/conversionActions/987654321`) is accepted and its trailing ID used, so a value copied from the Google Ads API still works. Anything else is rejected as a permanent configuration error rather than failing later as an opaque Google error. A `conversion_label` additionally turns on the managed gtag browser tag for that event, with `transaction_id` defaulted to the event uuid so browser and server sends dedupe. Events without a label are server-only.
 
 ## Status and disconnect
 

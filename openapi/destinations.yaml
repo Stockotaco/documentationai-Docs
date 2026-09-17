@@ -1116,6 +1116,158 @@ paths:
         "502": { description: Meta was unreachable or returned an unexpected error }
         "504": { description: Meta did not respond in time }
 
+  /client/v1/destinations/{id}/quality/trend:
+    get:
+      summary: Meta match quality day by day
+      operationId: getDatasetQualityTrend
+      description: >
+        `meta_capi` destinations only. The daily series behind
+        `GET /client/v1/destinations/{id}/quality`: one row per (day, event),
+        newest first.
+
+
+        **Why it exists.** Meta returns the CURRENT score and keeps no history
+        of its own, so "when did match quality drop" is unanswerable from the
+        live read. Mythic snapshots every connected dataset daily; this is that
+        series.
+
+
+        **Gaps are real.** A day with no row is a day nothing was captured (a
+        sweep outage, or a token that could not read quality). No value is
+        carried forward — a flat line through an outage would read as
+        stability.
+
+
+        Each row is that day's LAST capture. `null` means Meta scored nothing
+        that day, never zero. `flags` are the findings as judged on the day,
+        not re-derived against today's thresholds.
+      tags: [Destinations]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - name: days_back
+          in: query
+          required: false
+          description: Days of history. Default 30, clamped to 1-365.
+          schema: { type: integer, default: 30, minimum: 1, maximum: 365 }
+        - name: event_name
+          in: query
+          required: false
+          description: Restrict to one Meta event name, e.g. `Purchase`.
+          schema: { type: string }
+      responses:
+        "200":
+          description: One row per day and event
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      action_id: { type: string, format: uuid }
+                      days_back: { type: integer }
+                      days:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            day: { type: string, format: date }
+                            event_name: { type: string }
+                            action_id: { type: string, format: uuid }
+                            dataset_id: { type: string }
+                            event_match_quality: { type: number, nullable: true }
+                            event_coverage_percentage: { type: number, nullable: true }
+                            event_coverage_goal_percentage: { type: number, nullable: true }
+                            server_dedupe_key_percentage: { type: number, nullable: true }
+                            browser_dedupe_key_percentage: { type: number, nullable: true }
+                            browser_coverage_from_dedupe_key_percentage: { type: number, nullable: true }
+                            additional_conversions_percentage: { type: number, nullable: true }
+                            critical_flags: { type: integer }
+                            warning_flags: { type: integer }
+                            info_flags: { type: integer }
+                            test_events_only:
+                              type: integer
+                              description: >-
+                                1 when every delivery of this event in the
+                                window was a test fire. Those events are
+                                excluded from rollup headlines.
+                            flag_codes:
+                              type: array
+                              items: { type: string }
+                            upload_frequency: { type: string }
+                            captured_at: { type: string, format: date-time }
+        "400": { description: Not a meta_capi destination }
+        "404": { description: Destination not found }
+        "502": { description: The analytics query failed }
+        "503": { description: Analytics backend not configured }
+
+  /client/v1/destinations/{id}/quality/match-keys:
+    get:
+      summary: Per-parameter match coverage over time
+      operationId: getDatasetQualityMatchKeys
+      description: >
+        `meta_capi` destinations only. Daily coverage for each match key Meta
+        scored — `em`, `ph`, `fbp`, `fbc`, `external_id`, `ip_address`, `ct`,
+        `st`, `zip`, `country` — as one row per (day, event, identifier).
+
+
+        Match quality is a composite, so a drop in it names no fix. This is the
+        series that does: the parameter whose coverage moved with the score is
+        the gap to chase.
+
+
+        **`null` coverage is not 0%.** It means Meta listed the key without
+        scoring it. Zero would say "this parameter is never sent", which is a
+        different problem with a different fix.
+      tags: [Destinations]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - name: days_back
+          in: query
+          required: false
+          description: Days of history. Default 30, clamped to 1-365.
+          schema: { type: integer, default: 30, minimum: 1, maximum: 365 }
+        - name: event_name
+          in: query
+          required: false
+          schema: { type: string }
+        - name: identifier
+          in: query
+          required: false
+          description: Restrict to one match key, e.g. `ip_address`.
+          schema: { type: string }
+      responses:
+        "200":
+          description: One row per day, event and match key
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      action_id: { type: string, format: uuid }
+                      days_back: { type: integer }
+                      match_keys:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            day: { type: string, format: date }
+                            event_name: { type: string }
+                            identifier: { type: string }
+                            action_id: { type: string, format: uuid }
+                            coverage_percentage: { type: number, nullable: true }
+                            captured_at: { type: string, format: date-time }
+        "400": { description: Not a meta_capi destination }
+        "404": { description: Destination not found }
+        "502": { description: The analytics query failed }
+        "503": { description: Analytics backend not configured }
+
   /client/v1/destinations/{id}/test:
     post:
       summary: Test a destination
@@ -1334,7 +1486,11 @@ paths:
                     properties:
                       conversion_action:
                         type: string
-                        description: Conversion action resource name (server destination).
+                        description: >
+                          Conversion action **id** (digits only), sent as the
+                          Data Manager `productDestinationId`. A resource name
+                          (`customers/.../conversionActions/...`) is accepted
+                          and its trailing id used.
                       conversion_label:
                         type: string
                         description: >
@@ -1992,9 +2148,11 @@ components:
                 type: string
                 description: >
                   Conversion action **id** (digits only), sent as the Data
-                  Manager `productDestinationId`. Not a resource name — do not
-                  pass `customers/.../conversionActions/...`. The action must be
-                  of type `UPLOAD_CLICKS` or `WEBPAGE`.
+                  Manager `productDestinationId`. A Google Ads resource name
+                  (`customers/.../conversionActions/...`) is also accepted and
+                  its trailing id used; any other value is rejected as a
+                  permanent configuration error. The action must be of type
+                  `UPLOAD_CLICKS` or `WEBPAGE`.
                 example: "987654321"
               value_property:
                 type: string
