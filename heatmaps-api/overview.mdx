@@ -52,7 +52,9 @@ These resolve against the same session data the [Sessions API](/data-api/overvie
     "page": "acme.com/pricing",
     "device_type": [{ "value": "mobile", "sessions": 412 }, { "value": "desktop", "sessions": 96 }],
     "utm_source":  [{ "value": "facebook", "sessions": 310 }],
-    "utm_medium":  [{ "value": "cpc", "sessions": 310 }]
+    "utm_medium":  [{ "value": "cpc", "sessions": 310 }],
+    "viewport":    [{ "value": "mobile", "sessions": 440, "min": 0, "max": 767 },
+                    { "value": "desktop", "sessions": 61, "min": 1280, "max": 20000 }]
   }
 }
 ```
@@ -66,17 +68,17 @@ An unfiltered heatmap costs nothing extra: the session join is only evaluated wh
 
 ## Viewport windows
 
-By default the click map mixes every screen size. That is usually what you want for a first look and wrong for a decision, because a 1200px layout and a 400px layout are different pages that happen to share a URL.
+By default the click map mixes every screen size. Don't draw that mix on a page. A 1280px layout and a 390px layout are different pages that share a URL. `x_rel` only lines up across widths for fully fluid layouts, and `y_px` changes completely when a layout reflows. On a real paid landing page, 89% of clicks came from phones and 7% from desktops, spread over 104 distinct widths.
 
-Pass `viewport_min` / `viewport_max` to read one breakpoint at a time:
+Read one layout bucket at a time. Take the buckets from `/heatmap/facets` (`viewport`, each with its `min`/`max`), default to the one with the most sessions, and pass the same range to the click, scroll **and** snapshot calls, so the background is captured at that layout too:
 
 ```bash
 # desktop only
-curl "https://mythic-analytics.gulp.workers.dev/client/v1/data/heatmap?url=acme.com/pricing&viewport_min=1200" \
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/data/heatmap?url=acme.com/pricing&viewport_min=1280" \
   -H "Authorization: Bearer sk_live_..."
 ```
 
-Narrower window → truer positions, less data. Wider → more data, blurrier positions. There is no setting that gives you both.
+Narrower window → truer positions, less data. Wider → more data, blurrier positions. There is no setting that gives you both. A bucket is the practical default. Inside the desktop bucket, a centred fixed-width layout still shifts horizontally between a 1280px and a 1920px screen, so narrow `viewport_min`/`viewport_max` around the background's `width` when you need pixel precision there.
 
 ## Scroll depth, precisely
 
@@ -107,13 +109,13 @@ One measurement is taken per session per page, when the visitor leaves it. A ses
 
 The background comes from session replay, not from framing your site. That means no `X-Frame-Options` or CSP negotiation, pages behind a login work, and — the one that matters most — the DOM is the page **as it was when the clicks happened**, not as it is today after a redesign.
 
-Candidate recordings are the ones whose **landing** page matches the URL, so a page visitors only reach mid-funnel returns `404` — pass an explicit `session_id` from [`GET /client/v1/data/replays`](/replays-api/overview) for those.
+Candidates are recorded page loads of that URL, newest first, inside the viewport range you pass. Mid-funnel pages work without a `session_id`. A snapshot from another breakpoint is never substituted. With no match you get `404`, and you should draw on a blank stage at the bucket's typical width rather than a background from another layout.
 
 <Callout kind="warning">
   Pin `rrweb-player` to exactly **`2.0.0-alpha.20`**. The "stable" 2.0.x/2.1.x ESM builds ship without the replay engine and crash on load (`Cannot read properties of undefined (reading 'on')`).
 </Callout>
 
-### Four traps, all of which look like working code
+### Five traps, all of which look like working code
 
 Every one of these produces a page that renders — just wrong. They are worth reading before you write the renderer, because three of them fail silently.
 
@@ -123,6 +125,7 @@ Every one of these produces a page that renders — just wrong. They are worth r
 | Overriding the player's transform once, on mount | Background aligned sometimes, shifted by half the page other times | `rrweb-player` re-applies its own centering (`top/left: 50%` + `translate(-50%,-50%)`) **after** mount, on its own schedule. A one-shot inline override is a race |
 | Painting each scroll band as its own stripe | Thin colour bands separated by unpainted page | The scroll series is **sparse** — one row per band where a session's max landed. 4 sessions on a 17,000px page is 4 rows |
 | Leaving the recorded cursor visible | A dot that reads as a data point | The player draws `.replayer-mouse` from the recording |
+| Stretching the iframe without freezing `vh` | A full-screen hero thousands of px tall, everything below it shifted down | Once the iframe is document-tall, `100vh` in the page's CSS means the document height. After the snapshot rebuilds (`fullsnapshot-rebuilded`), rewrite `vh`/`vmin`/`vmax` in the iframe's readable stylesheets to px at `snapshot.height` |
 
 ### The background
 
@@ -154,10 +157,15 @@ Beat the player's layout with a stylesheet, not inline styles — an `!important
 import rrwebPlayer from 'rrweb-player'
 import 'rrweb-player/dist/style.css'
 
+// One layout at a time: the busiest bucket from /heatmap/facets.
+const facets = await fetch(`${base}/client/v1/data/heatmap/facets?url=${page}`, { headers }).then((r) => r.json())
+const bucket = [...facets.data.viewport].sort((a, b) => b.sessions - a.sessions)[0]
+const vw = `viewport_min=${bucket.min}&viewport_max=${bucket.max}`
+
 const [snap, heat, scroll] = await Promise.all([
-  fetch(`${base}/client/v1/data/heatmap/snapshot?url=${page}`, { headers }).then((r) => r.json()),
-  fetch(`${base}/client/v1/data/heatmap?url=${page}`, { headers }).then((r) => r.json()),
-  fetch(`${base}/client/v1/data/heatmap/scroll?url=${page}`, { headers }).then((r) => r.json()),
+  fetch(`${base}/client/v1/data/heatmap/snapshot?url=${page}&${vw}`, { headers }).then((r) => r.json()),
+  fetch(`${base}/client/v1/data/heatmap?url=${page}&${vw}`, { headers }).then((r) => r.json()),
+  fetch(`${base}/client/v1/data/heatmap/scroll?url=${page}&${vw}`, { headers }).then((r) => r.json()),
 ])
 
 const captureWidth = snap.data.width          // the x denominator

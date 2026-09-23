@@ -109,7 +109,7 @@ Click cells and scroll depth per page.
 | --- | --- | --- | --- |
 | `get_heatmap`<br /><span style={{opacity: 0.7}}>Get Heatmap</span> | `heatmaps:read` | Aggregated click grid for one page. | `GET /client/v1/data/heatmap` |
 | `list_heatmap_pages`<br /><span style={{opacity: 0.7}}>List Heatmap Pages</span> | `heatmaps:read` | Pages that actually have heatmap data for this client, busiest first — START HERE before get_heatmap or get_heatmap_scroll. | `GET /client/v1/data/heatmap/pages` |
-| `get_heatmap_facets`<br /><span style={{opacity: 0.7}}>Get Heatmap Facets</span> | `heatmaps:read` | Filter values that exist for one page (device_type, utm_source, utm_medium, each with session counts), scoped to sessions that actually left heatmap points there — so every value returned yields a non-empty… | `GET /client/v1/data/heatmap/facets` |
+| `get_heatmap_facets`<br /><span style={{opacity: 0.7}}>Get Heatmap Facets</span> | `heatmaps:read` | Filter values that exist for one page (device_type, utm_source, utm_medium, and `viewport` layout buckets mobile/tablet/desktop with their px range), each with session counts, scoped to sessions that actuall… | `GET /client/v1/data/heatmap/facets` |
 | `get_heatmap_scroll`<br /><span style={{opacity: 0.7}}>Get Heatmap Scroll Depth</span> | `heatmaps:read` | Cumulative scroll-depth curve for one page: bands of `band` px with how many sessions reached at least that depth. | `GET /client/v1/data/heatmap/scroll` |
 
 ## BigQuery Export

@@ -20,7 +20,9 @@ info:
     duration, activity counters per row.
 
     3. Play one: `GET /replays/{sessionId}` → feed `data.events` straight into
-    `rrweb-player`. Console and network entries ride along in the same stream
+    `rrweb-player`. If `data.tracks` has more than one entry, the visitor had
+    tabs open at the same time: play one track at a time with
+    `?window_id=<that track's ids, comma-separated>`. Console and network entries ride along in the same stream
     (rrweb Plugin/Custom events) if you want DevTools-style tabs. Version
     note: streams are recorded with rrweb 2.1.0 — pin `rrweb-player` to
     exactly `2.0.0-alpha.20` (the stable 2.0.x/2.1.x ESM builds ship without
@@ -144,6 +146,16 @@ paths:
         `2.0.0-alpha.20` (streams are rrweb 2.1.0; the stable 2.0.x/2.1.x
         rrweb-player ESM builds ship without the replay engine and crash on
         load).
+
+
+        **Tabs.** A session can span several page loads (`windows`), and a
+        visitor with two tabs open records two windows at the same time. An
+        rrweb player has one frame, so two overlapping windows played together
+        corrupt each other: one tab's DOM changes land on the other tab's page.
+        `tracks` groups window ids that never overlap and can share a player.
+        One track (the usual case) means `data.events` plays as-is. More than
+        one means `overlapping: true`: fetch and play each track separately
+        with `?window_id=`.
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
@@ -151,6 +163,14 @@ paths:
           in: path
           required: true
           description: The session id from the list endpoint.
+          schema:
+            type: string
+        - name: window_id
+          in: query
+          required: false
+          description: >
+            Comma-separated window ids (from `tracks` or `windows`). Returns
+            only those windows' events. Omit for the whole session.
           schema:
             type: string
       responses:
@@ -503,6 +523,31 @@ components:
               items:
                 type: object
                 additionalProperties: true
+            windows:
+              type: array
+              description: One entry per page load in the returned events, earliest first.
+              items:
+                type: object
+                properties:
+                  window_id: { type: string }
+                  started_at: { type: integer, description: Epoch ms of the window's first event. }
+                  ended_at: { type: integer, description: Epoch ms of the window's last event. }
+                  event_count: { type: integer }
+                  href: { type: string, nullable: true, description: Page the window opened on. Null when its first block was lost. }
+                  width: { type: integer, nullable: true, description: Viewport width at the start of the window. }
+                  height: { type: integer, nullable: true }
+            tracks:
+              type: array
+              description: >
+                Window ids grouped into sets that never overlap in time, earliest
+                first. Each set plays correctly in one player.
+              items:
+                type: array
+                items: { type: string }
+              example: [["0f4954dc-..."], ["e3a27165-..."]]
+            overlapping:
+              type: boolean
+              description: True when `tracks` has more than one entry (tabs recorded at the same time).
     TimelineEvent:
       type: object
       properties:
