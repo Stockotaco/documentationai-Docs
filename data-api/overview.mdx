@@ -213,6 +213,12 @@ Example error response:
 
 Requests are limited to **120 per 10 seconds per location**. When you exceed the limit you receive a `429` with a `Retry-After` header. Successful responses also carry `X-RateLimit-Limit` and `X-RateLimit-Remaining` headers.
 
+People cursor walks (`GET /people?order=id`) have an extra limit of **30 per 10 seconds per agency**, shared across its locations. Walk locations one after another, not in parallel.
+
+## Response timing
+
+Every response carries a `Server-Timing` header with the server-side milliseconds per step, for example `auth_key;dur=0, data_limit_do;dur=12, query;dur=320, total;dur=381`. `query` is the data lookup itself; the other steps are authentication and rate limiting. A step reads `0` when it was served from cache. Include this header when you report a slow request.
+
 ## Error handling
 
 | Status | Code | Meaning |
