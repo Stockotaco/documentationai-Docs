@@ -43,6 +43,11 @@ paths:
         the previous walk missed. Rows can repeat, so upsert by `id`. People
         merged away since drop out of this list; read `GET /merges` with
         `since` to remove them.
+
+
+        `order=id` requests share a rate limit of 30 per 10 seconds per
+        agency, across all of its locations. That is one walk at full speed,
+        so walk locations one after another, not in parallel.
       parameters:
         - $ref: "#/components/parameters/LocationId"
         - name: limit
