@@ -115,7 +115,7 @@ Candidates are recorded page loads of that URL, newest first, inside the viewpor
   Pin `rrweb-player` to exactly **`2.0.0-alpha.20`**. The "stable" 2.0.x/2.1.x ESM builds ship without the replay engine and crash on load (`Cannot read properties of undefined (reading 'on')`).
 </Callout>
 
-### Five traps, all of which look like working code
+### Six traps, all of which look like working code
 
 Every one of these produces a page that renders — just wrong. They are worth reading before you write the renderer, because three of them fail silently.
 
@@ -125,6 +125,7 @@ Every one of these produces a page that renders — just wrong. They are worth r
 | Overriding the player's transform once, on mount | Background aligned sometimes, shifted by half the page other times | `rrweb-player` re-applies its own centering (`top/left: 50%` + `translate(-50%,-50%)`) **after** mount, on its own schedule. A one-shot inline override is a race |
 | Painting each scroll band as its own stripe | Thin colour bands separated by unpainted page | The scroll series is **sparse** — one row per band where a session's max landed. 4 sessions on a 17,000px page is 4 rows |
 | Leaving the recorded cursor visible | A dot that reads as a data point | The player draws `.replayer-mouse` from the recording |
+| Trusting a load-time background on a page that grows | Clicks in blank space below the footer, and clicks lower down drawn on the wrong content | The background is the page as it loaded. A 2-step order form or an accordion inserts content later, and everything below the insertion shifts for the visitors who triggered it. `page_heights` on the click and scroll responses gives each session's end-of-visit page height. Measure where the rebuilt background's content ends, and warn when a real share of sessions ended well past it |
 | Stretching the iframe without freezing `vh` | A full-screen hero thousands of px tall, everything below it shifted down | Once the iframe is document-tall, `100vh` in the page's CSS means the document height. After the snapshot rebuilds (`fullsnapshot-rebuilded`), rewrite `vh`/`vmin`/`vmax` in the iframe's readable stylesheets to px at `snapshot.height` |
 
 ### The background

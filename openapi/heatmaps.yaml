@@ -265,6 +265,7 @@ paths:
                       points:
                         type: array
                         items: { $ref: "#/components/schemas/HeatmapCell" }
+                      page_heights: { $ref: "#/components/schemas/PageHeights" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
@@ -361,6 +362,7 @@ paths:
                       bands:
                         type: array
                         items: { $ref: "#/components/schemas/ScrollBand" }
+                      page_heights: { $ref: "#/components/schemas/PageHeights" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
@@ -476,6 +478,22 @@ components:
       properties:
         value: { type: string, example: mobile }
         sessions: { type: integer, example: 412 }
+    PageHeights:
+      type: array
+      nullable: true
+      description: >
+        How tall the page was at the end of each measured session, as 100px
+        bands, for the same scope as the request. Null when it could not be
+        read (the heatmap itself is still returned). Compare it with the
+        background's content height: when a large share of sessions ended much
+        taller, the page grows after load (a form step, an expanded section),
+        and clicks below where content was inserted do not line up with a
+        load-time background.
+      items:
+        type: object
+        properties:
+          height_px: { type: integer, example: 3600, description: Band floor in px. }
+          sessions: { type: integer, example: 200 }
     HeatmapViewportBucket:
       type: object
       properties:
