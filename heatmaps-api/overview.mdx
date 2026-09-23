@@ -66,6 +66,8 @@ Since SDK 3.26, every heatmap click also records the element it hit: a short cha
 
 To draw it, match each `chain` against the rebuilt background's DOM (target level first, every ancestor must agree on tag; an `i` or `d` identifies the element on its own, and classes, `n` and `h` score the rest), then place each offset at `rect.left + ox * rect.width`, `rect.top + oy * rect.height`. The element can sit anywhere in the background, so inserted content no longer moves the dot. A chain with no match is an element the background doesn't have: count it and don't draw it. Drawing it at its coordinates brings the original bug back. `selector` is descriptive for people and agents, not a guaranteed-unique selector.
 
+Two things break matching silently. Measure boxes with the rebuilt page scrolled to the top, instantly: rrweb restores the visitor's scroll offset, and on a page with `scroll-behavior: smooth` both that restore and your `scrollTo(0, 0)` animate, so a fixed header measured mid-scroll lands hundreds of pixels low. And prefer a visible element among equally good matches: page builders clone elements (Elementor's sticky header leaves a hidden spacer with identical classes).
+
 `anchored_share` says how much of the window carries elements. Points captured before SDK 3.26 have coordinates only and stay readable in the default `mode=coordinate`.
 
 A load-time background still can't show content that only exists later. `GET /heatmap/snapshot?state=final&min_page_height=<px>` returns a whole recorded visit of the page whose page ended at least that tall. Replay it to its last event and the background shows the page as that visitor last saw it (the payment step open). Use `page_heights` (below) to pick the height.
