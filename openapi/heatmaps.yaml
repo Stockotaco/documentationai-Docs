@@ -187,6 +187,14 @@ paths:
           in: query
           description: Point type. Only `click` is captured today.
           schema: { type: string, default: click, enum: [click] }
+        - name: mode
+          in: query
+          description: >
+            `coordinate` (default) returns grid cells. `element` returns clicks
+            grouped by the element they hit (SDK 3.26+) with the offset inside
+            it, for anchoring to a background's DOM: the response is
+            `HeatmapElementsData` instead, and `x_precision`/`y_bucket` are ignored.
+          schema: { type: string, default: coordinate, enum: [coordinate, element] }
         - name: date_from
           in: query
           description: ISO 8601 or `YYYY-MM-DD`. Defaults to 30 days ago.
@@ -264,7 +272,15 @@ paths:
                       truncated: { type: boolean, example: false }
                       points:
                         type: array
+                        description: mode=coordinate only.
                         items: { $ref: "#/components/schemas/HeatmapCell" }
+                      mode: { type: string, enum: [coordinate, element], description: Present on mode=element responses. }
+                      elements:
+                        type: array
+                        description: mode=element only. Hottest first.
+                        items: { $ref: "#/components/schemas/HeatmapElement" }
+                      anchored_clicks: { type: integer, description: "mode=element: clicks in scope that carry an element." }
+                      anchored_share: { type: number, example: 0.82, description: "mode=element: anchored_clicks / total_clicks." }
                       page_heights: { $ref: "#/components/schemas/PageHeights" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -410,6 +426,23 @@ paths:
           in: query
           description: Only use a snapshot captured at a viewport width <= this (px).
           schema: { type: integer, example: 20000 }
+        - name: state
+          in: query
+          description: >
+            `loaded` (default): the Meta + FullSnapshot pair, the page as it
+            loaded. `final`: every event of one recorded visit of the page, up
+            to the next page. Replay it to its LAST event and the background
+            shows the page as the visitor last saw it (a form step opened, a
+            section expanded).
+          schema: { type: string, default: loaded, enum: [loaded, final] }
+        - name: min_page_height
+          in: query
+          description: >
+            Only use visits whose page ended at least this tall (px, from the
+            visit's scroll-depth measurement). Pair with `state=final` to get a
+            background from a visit where the page grew. Answered only from
+            indexed recordings, so a page with none returns 404.
+          schema: { type: integer, example: 2500 }
         - name: session_id
           in: query
           description: Take the snapshot from this recording instead of searching. The viewport range still applies.
@@ -429,6 +462,8 @@ paths:
                       page: { type: string, example: acme.com/pricing }
                       session_id: { type: string }
                       window_id: { type: string, nullable: true, description: The page load the snapshot came from. }
+                      state: { type: string, enum: [loaded, final] }
+                      ended_at: { type: integer, nullable: true, description: "state=final: epoch ms of the visit's last event." }
                       captured_at: { type: integer, nullable: true, description: Epoch ms of the snapshot. }
                       width: { type: integer, nullable: true, example: 1440, description: Viewport width the DOM was captured at — the x denominator. }
                       height:
@@ -438,7 +473,7 @@ paths:
                         description: Captured VIEWPORT height — not the document height. See the endpoint description.
                       events:
                         type: array
-                        description: Exactly two rrweb events (Meta, FullSnapshot).
+                        description: "state=loaded: exactly two rrweb events (Meta, FullSnapshot). state=final: the whole visit, starting with them."
                         items: { type: object }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -478,6 +513,40 @@ components:
       properties:
         value: { type: string, example: mobile }
         sessions: { type: integer, example: 412 }
+    HeatmapElement:
+      type: object
+      properties:
+        selector:
+          type: string
+          example: "footer#site-footer > a[href^=\"/terms\"]"
+          description: CSS-like description of the chain. Descriptive, not guaranteed unique.
+        chain:
+          type: array
+          description: >
+            The clicked element first, then ancestors (up to 5). Keys: `t` tag,
+            `i` stable id, `k` up to two classes, `n` 1-based position among
+            same-tag siblings, `d` `data-x=value`, `h` link path without query.
+            Never element text.
+          items:
+            type: object
+            properties:
+              t: { type: string, example: a }
+              i: { type: string }
+              k: { type: array, items: { type: string } }
+              n: { type: integer, example: 1 }
+              d: { type: string }
+              h: { type: string, example: /terms }
+        clicks: { type: integer, example: 41 }
+        visitors: { type: integer, example: 30, description: Largest per-offset visitor count (a floor). }
+        offsets:
+          type: array
+          description: Where inside the element's box, 0..1 (2 decimals), with counts.
+          items:
+            type: object
+            properties:
+              ox: { type: number, example: 0.52 }
+              oy: { type: number, example: 0.4 }
+              clicks: { type: integer, example: 12 }
     PageHeights:
       type: array
       nullable: true

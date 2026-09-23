@@ -38,6 +38,38 @@ This is the part that decides whether a heatmap is trustworthy, so it is worth b
 
 **Fixed elements are flagged, not fixed.** A click on a sticky header or a floating chat button carries `target_fixed: 1` and its `y_px` is viewport-relative. Draw those where the element sits, not at that page offset. Without the flag, one sticky nav becomes a vertical streak down the entire page — the classic broken heatmap.
 
+## Element-anchored clicks
+
+Coordinates break on pages that change after they load. A 2-step order form that inserts its payment section after the first click moves everything below it down by that section's height, for exactly the visitors who used it. Their clicks on the reviews and footer land 1,500px below those elements on a background captured at load, and clicks on the payment fields land on nothing.
+
+Since SDK 3.26, every heatmap click also records the element it hit: a short chain from the target up (tag, stable id, up to two classes, position among same-tag siblings, an identifier-style `data-*` attribute, a link's path, never element text) and where inside that element's box the click landed. `GET /client/v1/data/heatmap?mode=element` returns clicks grouped that way:
+
+```json
+{
+  "data": {
+    "mode": "element",
+    "total_clicks": 5148,
+    "anchored_clicks": 812,
+    "anchored_share": 0.158,
+    "elements": [
+      {
+        "selector": "section.reviews:nth-of-type(2) > div.review-card:nth-of-type(2)",
+        "chain": [{ "t": "div", "n": 2, "k": ["review-card"] }, { "t": "section", "n": 2, "k": ["reviews"] }],
+        "clicks": 41,
+        "visitors": 30,
+        "offsets": [{ "ox": 0.52, "oy": 0.4, "clicks": 12 }]
+      }
+    ]
+  }
+}
+```
+
+To draw it, match each `chain` against the rebuilt background's DOM (target level first, every ancestor must agree on tag; an `i` or `d` identifies the element on its own, and classes, `n` and `h` score the rest), then place each offset at `rect.left + ox * rect.width`, `rect.top + oy * rect.height`. The element can sit anywhere in the background, so inserted content no longer moves the dot. A chain with no match is an element the background doesn't have: count it and don't draw it. Drawing it at its coordinates brings the original bug back. `selector` is descriptive for people and agents, not a guaranteed-unique selector.
+
+`anchored_share` says how much of the window carries elements. Points captured before SDK 3.26 have coordinates only and stay readable in the default `mode=coordinate`.
+
+A load-time background still can't show content that only exists later. `GET /heatmap/snapshot?state=final&min_page_height=<px>` returns a whole recorded visit of the page whose page ended at least that tall. Replay it to its last event and the background shows the page as that visitor last saw it (the payment step open). Use `page_heights` (below) to pick the height.
+
 ## Filtering
 
 Every data endpoint takes the same session filters: `device_type`, `utm_source`, `utm_medium`, `utm_campaign`, `country`, and `segment_id` for a stored segment.
@@ -249,7 +281,7 @@ for (const b of sorted) {
 
 - **Not per-visitor.** Both endpoints return aggregates. To watch one person, use session replay.
 - **Not mouse movement.** Clicks and scroll depth only. Move maps are the highest-volume, lowest-signal type and are not captured.
-- **Not element-aware.** These are pixels, not selectors. For "which button got clicked, by name", query `$autocapture` events through the [Data API](/data-api/overview) — that surface knows element text and `href`, and survives a layout change that moves the pixel.
+- **Not text-aware.** `mode=element` knows an element's structure, not its words. For "which button got clicked, by label", query `$autocapture` events through the [Data API](/data-api/overview), which records element text.
 - **Not retroactive.** Points exist from the moment capture is enabled; there is no backfill of past traffic.
 
 ## Base URL

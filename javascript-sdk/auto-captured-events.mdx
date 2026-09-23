@@ -33,7 +33,7 @@ These fire only when their feature is enabled (most are on by default — see th
 | Custom `event_name` | Fired per matched endpoint in `network_endpoints` | `auto_network_intercept` |
 | `$web_vital_lcp`, `$web_vital_cls`, `$web_vital_inp`, … | One event per Core Web Vital metric | `web_vitals` |
 | `$cross_domain_linked` | Session adopted from a cross-domain link | `cross_domain_tracking` |
-| `$heatmap` | Batch of click positions and scroll depths (pixels, no element identity) | `capture_heatmaps` |
+| `$heatmap` | Batch of click positions and scroll depths. Clicks carry a structural element descriptor (tag, stable id, classes, sibling position, link path; never text) | `capture_heatmaps` |
 | `$experiment_viewed` | A third-party A/B tool (Convert.com, PostHog) bucketed this visitor — once per session per assignment, with `experiment_id`, `variation_id`, `variation_name`, `first_exposure`, and the tool's own visitor id (`convert_visitor_id` or `posthog_distinct_id`) | `capture_experiments` |
 
 <Callout kind="info">

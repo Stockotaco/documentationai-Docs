@@ -273,7 +273,7 @@ The full set of options you can pass to `init(key, config)`.
   - `flushIntervalMs` (number) — maximum milliseconds between batches. Default: `5000`.
   - `maxBufferPoints` (number) — hard cap on points per interval. Points past it are **dropped** (and counted in `$heatmap_dropped` on the event) rather than triggering an early send, so a page emits at most one `$heatmap` event per interval no matter how much clicking happens on it. Default: `200`.
 
-  This is **not** the same thing as `autocapture`. Autocapture records *which element* was clicked — its text, `href`, classes. This records *which pixel*, and reads no element identity or text at all. Enable either, both, or neither.
+  This is **not** the same thing as `autocapture`. Autocapture records *which element* was clicked — its text, `href`, classes. This records *where on the page*, plus a structural description of the clicked element so heatmaps stay correct on pages that change after load: tag, a stable id, up to two classes, its position among same-tag siblings, an identifier-style `data-*` attribute, and a link's path. It never reads element text or query strings. Enable either, both, or neither.
 
   Points ride the normal event pipeline as a batched `$heatmap` event, so consent gating, `before_send`, and opt-out apply exactly as they do to any other event. Clicks on position `fixed`/`sticky` elements are flagged so a heatmap renderer can place them correctly instead of streaking one sticky nav down the whole page. Scroll depth is measured once per page per session, when the visitor leaves it.
 </ParamField>
