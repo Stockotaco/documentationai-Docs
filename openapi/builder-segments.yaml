@@ -392,6 +392,9 @@ components:
           type: string
         last_landing_page:
           type: string
+        updated_at:
+          type: string
+          description: When this person's profile last changed, UTC.
     SaveSegmentRequest:
       type: object
       required:

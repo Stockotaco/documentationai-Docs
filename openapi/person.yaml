@@ -33,8 +33,16 @@ paths:
         `after`: pass the previous response's `next_after` until it is
         `null`. Pages cost the same at any depth, unlike `offset`, which gets
         slow on large locations. The walk covers everyone who existed when it
-        started. People created or merged during it can be missed or already
-        tombstoned, so re-run it (or re-fetch changed people) to catch up.
+        started. People created during it can land behind the cursor and be
+        missed.
+
+
+        To catch up later, walk again with `updated_since` set to the start
+        time of the previous walk minus 15 minutes. That returns only people
+        created or changed since (each row's `updated_at`), including anyone
+        the previous walk missed. Rows can repeat, so upsert by `id`. People
+        merged away since drop out of this list; read `GET /merges` with
+        `since` to remove them.
       parameters:
         - $ref: "#/components/parameters/LocationId"
         - name: limit
@@ -72,6 +80,16 @@ paths:
           required: false
           schema:
             type: string
+        - name: updated_since
+          in: query
+          description: >
+            ISO 8601 timestamp. Only people whose `updated_at` is at or after
+            it (created or changed since). Inclusive, so a boundary row
+            repeats rather than being dropped.
+          required: false
+          schema:
+            type: string
+            format: date-time
         - name: identified
           in: query
           description: >
@@ -96,8 +114,8 @@ paths:
             `GET /builder/segments`), keeping this endpoint's full row shape —
             the same scoping already available on `/sessions`,
             `/sessions/breakdown`, and `/replays`. `search`, `limit`, and
-            `offset` compose. `order=id`, `after`, and `identified` do not
-            (`400 invalid_param`). Unknown ids return `404 segment_not_found`.
+            `offset` compose. `order=id`, `after`, `identified`, and
+            `updated_since` do not (`400 invalid_param`). Unknown ids return `404 segment_not_found`.
           required: false
           schema:
             type: string
@@ -111,9 +129,10 @@ paths:
         "400":
           description: >
             `location_required`, or `invalid_param` for an unknown `order`, an
-            `identified` value other than true/false, `after` with
-            `order=last_seen`, `offset` with `order=id`, or `segment_id` with
-            `order=id`/`after`/`identified`.
+            `identified` value other than true/false, an unparseable
+            `updated_since`, `after` with `order=last_seen`, `offset` with
+            `order=id`, or `segment_id` with
+            `order=id`/`after`/`identified`/`updated_since`.
           content:
             application/json:
               schema:
@@ -617,6 +636,13 @@ components:
           type: string
           description: Entry URL of the person's most recent session.
           example: https://example.com/blog/launch
+        updated_at:
+          type: string
+          description: >
+            When this person's profile last changed (new activity, identity,
+            properties, or attribution), UTC. The value `updated_since`
+            filters on.
+          example: "2026-09-23 22:10:14.364"
         properties:
           type: object
           description: >
