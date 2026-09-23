@@ -27,6 +27,14 @@ paths:
         without a per-row `GET /people/{personId}` fetch. Rows also include
         `company`, `avatar`, `session_count`, and first/last-touch channel
         fields. Use `search` to match against name, email, or identities.
+
+
+        To walk every person (bulk sync), use `order=id` and page with
+        `after`: pass the previous response's `next_after` until it is
+        `null`. Pages cost the same at any depth, unlike `offset`, which gets
+        slow on large locations. The walk covers everyone who existed when it
+        started. People created or merged during it can be missed or already
+        tombstoned, so re-run it (or re-fetch changed people) to catch up.
       parameters:
         - $ref: "#/components/parameters/LocationId"
         - name: limit
@@ -40,12 +48,38 @@ paths:
             maximum: 200
         - name: offset
           in: query
-          description: Number of results to skip. Default `0`.
+          description: Number of results to skip. Default `0`. Only with `order=last_seen`.
           required: false
           schema:
             type: integer
             default: 0
             minimum: 0
+        - name: order
+          in: query
+          description: >
+            `last_seen` (default) returns most-recently-seen first. `id`
+            returns a stable order for walking every person with `after`.
+          required: false
+          schema:
+            type: string
+            enum: [last_seen, id]
+            default: last_seen
+        - name: after
+          in: query
+          description: >
+            Cursor for `order=id`. The previous page's `next_after` (its last
+            `id`). Implies `order=id`.
+          required: false
+          schema:
+            type: string
+        - name: identified
+          in: query
+          description: >
+            `true` returns only people with an email, user_id, or phone
+            identity. `false` returns only anonymous visitors.
+          required: false
+          schema:
+            type: boolean
         - name: search
           in: query
           description: >
@@ -62,7 +96,8 @@ paths:
             `GET /builder/segments`), keeping this endpoint's full row shape —
             the same scoping already available on `/sessions`,
             `/sessions/breakdown`, and `/replays`. `search`, `limit`, and
-            `offset` compose. Unknown ids return `404 segment_not_found`.
+            `offset` compose. `order=id`, `after`, and `identified` do not
+            (`400 invalid_param`). Unknown ids return `404 segment_not_found`.
           required: false
           schema:
             type: string
@@ -74,7 +109,15 @@ paths:
               schema:
                 $ref: "#/components/schemas/PeopleListResponse"
         "400":
-          $ref: "#/components/responses/LocationRequired"
+          description: >
+            `location_required`, or `invalid_param` for an unknown `order`, an
+            `identified` value other than true/false, `after` with
+            `order=last_seen`, `offset` with `order=id`, or `segment_id` with
+            `order=id`/`after`/`identified`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: "`segment_not_found` — unknown `segment_id` for this location"
         "401":
@@ -800,6 +843,12 @@ components:
           type: integer
           description: Number of rows returned.
           example: 50
+        next_after:
+          type: string
+          nullable: true
+          description: >
+            Only with `order=id`. Pass as `after` for the next page. `null`
+            when this page was the last.
     PersonResponse:
       type: object
       properties:
