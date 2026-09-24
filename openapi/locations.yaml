@@ -590,6 +590,15 @@ components:
         cf_ssl_status: { type: string, nullable: true, example: pending_validation }
         created_at: { type: string, format: date-time }
         verified_at: { type: string, format: date-time, nullable: true }
+        cname_target:
+          type: string
+          nullable: true
+          description: "The CNAME target to configure in DNS, the same value the PUT returned."
+          example: fallback.example-cdn.com
+        dns_instructions:
+          type: string
+          description: "The DNS record to add, spelled out."
+          example: "Add a CNAME record: analytics.example.com → fallback.example-cdn.com"
         kv_sync: { $ref: "#/components/schemas/KvSync" }
     KvSync:
       type: string
