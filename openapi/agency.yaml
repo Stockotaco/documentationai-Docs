@@ -291,10 +291,12 @@ paths:
       operationId: getAgencyContractsSummary
       description: >
         One row per location: how many event contracts are declared, whether
-        the daily contract-alert webhook is configured, and when the last
+        the daily contract-alert webhook is configured, whether an agency
+        alert rule routes contract alerts for it, and when the last webhook
         alert fired. A location with zero contracts has no event-shape
-        monitoring at all; one with contracts but no webhook finds out about
-        breakage only when someone runs a check by hand.
+        monitoring at all; one with contracts but neither a webhook nor a
+        routing rule finds out about breakage only when someone runs a check
+        by hand.
       parameters:
         - $ref: "#/components/parameters/LocationIds"
       responses:
@@ -562,6 +564,12 @@ components:
           type: boolean
           example: true
           description: Whether the daily contract-alert webhook is set.
+        alert_rule_routed:
+          type: boolean
+          example: true
+          description: >-
+            Whether an enabled agency alert rule sends this location's
+            contract alerts to a channel. See [Alerts](/agency-api/alerts).
         last_alert_at:
           type: string
           format: date-time

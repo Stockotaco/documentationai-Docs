@@ -18,7 +18,7 @@ doing?" — in one call, without iterating a location list yourself:
 | `GET /agency/locations` | location | The roster — every client linked to this agency |
 | `GET /agency/stats` | location | Event volume, unique users, unique sessions over a date window, plus the all-time live person count |
 | `GET /agency/destinations/health` | location × destination | Delivery success rate, failure counts, and the last error over a trailing window — sorted worst-first |
-| `GET /agency/contracts/summary` | location | Declared event contracts, whether the daily alert webhook is wired, and when the last alert fired |
+| `GET /agency/contracts/summary` | location | Declared event contracts, whether the daily alert webhook is wired, whether an [alert rule](/agency-api/alerts) routes contract alerts, and when the last webhook alert fired |
 | `GET /agency/usage` | day × location × surface × route | The agency's own API + MCP request telemetry — the same data Mythic meters on |
 | `GET /agency/quota` | quota in force | The plan, the features it includes, and month-to-date ingested events against the quota |
 

@@ -15,11 +15,13 @@ info:
 
 
     Alerts are raised by Mythic's own detectors, not through this API. Sources
-    today: `contracts` (event contract violations and whole-day tracking
-    outages, daily ~08:00 UTC), `uptime` (a short link destination went down
-    or recovered, every 5 minutes), `airbyte` (a data sync failed or
-    recovered), `drift` (an incrementality experiment drifted, daily) and
-    `quota` (the agency crossed 80% or 100% of a monthly event quota, daily).
+    today, with the severity each raises: `contracts` (event contract
+    violations, warning, and whole-day tracking outages, critical, daily ~08:00
+    UTC), `uptime` (a short link destination failed 2 checks in a row,
+    critical, every 5 minutes), `airbyte` (a sync of a Mythic-managed
+    connection failed, warning), `drift` (an incrementality experiment
+    drifted, info, daily) and `quota` (the agency passed 80%, info, or 100%,
+    warning, of a monthly event quota, daily).
 servers:
   - url: https://mythic-analytics.gulp.workers.dev
 security:
@@ -55,8 +57,10 @@ paths:
       description: >
         The feed, newest first. One row per episode of a condition: it opens
         once, repeat reports only bump `occurrences` and `last_seen_at`, and it
-        resolves when the detector clears it (`resolved_by: source`) or a user
-        resolves it (`resolved_by: user`). A condition that returns after
+        resolves when the detector clears it or stops watching its subject
+        (link disabled, contracts removed, experiment ended, connection
+        deleted), shown as `resolved_by: source`, or when a user resolves it
+        (`resolved_by: user`). A condition that returns after
         resolving opens a new row. Page with `before` set to the previous
         response's `next_before`.
       parameters:
@@ -218,7 +222,10 @@ paths:
     patch:
       summary: Update a rule
       operationId: updateAlertRule
-      description: Change any field. Only the fields sent change.
+      description: >
+        Change any field. Only the fields sent change. A rule that lost its
+        last channel was disabled. Enabling it again needs `channel_ids` in
+        the same request (`400 invalid_rule` otherwise).
       requestBody:
         required: true
         content:
@@ -257,9 +264,10 @@ paths:
       summary: List channels
       operationId: listAlertChannels
       description: >
-        Delivery targets. `target` is masked: a Slack incoming-webhook url
-        authenticates by its path, so it is never returned. A channel with
-        `active: false` was parked after 20 consecutive failed deliveries.
+        Delivery targets. `target` is the origin only: Slack, Discord, Zapier
+        and n8n webhook urls authenticate by their path, so no path or query is
+        ever returned. A channel with `active: false` was parked after 20
+        consecutive failed deliveries.
       responses:
         "200":
           description: Channels
@@ -360,7 +368,8 @@ paths:
       operationId: deleteAlertChannel
       description: >
         The channel is removed from every rule that pointed at it. A rule left
-        with no channels is disabled.
+        with no channels is disabled. Past deliveries stay on their alerts with
+        `channel_id: null`.
       responses:
         "200":
           description: Deleted
@@ -377,8 +386,8 @@ paths:
       summary: Send a test message
       operationId: testAlertChannel
       description: >
-        Sends `{"type": "alert.test", ...}` (webhook) or a test message
-        (Slack) now. The response says whether the target accepted it. The
+        Sends `{"type": "alert.test", ...}` with `alert.source` set to `test`
+        (webhook) or a test message (Slack) now. The response says whether the target accepted it. The
         attempt is recorded and counts toward the channel's failure count.
       responses:
         "200":
@@ -458,8 +467,8 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
-        channel_id: { type: string, format: uuid }
-        rule_id: { type: string, format: uuid, nullable: true }
+        channel_id: { type: string, format: uuid, nullable: true, description: "null once the channel is deleted." }
+        rule_id: { type: string, format: uuid, nullable: true, description: "null once the rule is deleted." }
         transition: { type: string, enum: [opened, changed, resolved, test] }
         ok: { type: boolean }
         http_status: { type: integer, nullable: true }
@@ -480,7 +489,11 @@ components:
             Client ids. Empty or omitted = every client, including ones added
             later. Agency-level alerts (quota) only match rules that cover
             every client.
-        min_severity: { type: string, enum: [info, warning, critical], default: warning }
+        min_severity:
+          type: string
+          enum: [info, warning, critical]
+          default: info
+          description: "The default, info, receives every alert. drift and 80% quota raise only info."
         channel_ids:
           type: array
           items: { type: string, format: uuid }
@@ -501,7 +514,7 @@ components:
         id: { type: string, format: uuid }
         kind: { type: string, enum: [slack, webhook] }
         label: { type: string, nullable: true }
-        target: { type: string, description: "Masked.", example: "https://hooks.slack.com/***" }
+        target: { type: string, description: "Origin only.", example: "https://hooks.slack.com/***" }
         signed: { type: boolean, description: "Webhook channels sign every delivery." }
         active: { type: boolean }
         consecutive_failures: { type: integer }
@@ -525,17 +538,17 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     BadRequest:
-      description: "`invalid_status`, `invalid_source`, `invalid_before` or `invalid_body`."
+      description: "`invalid_status`, `invalid_source`, `invalid_before`, `invalid_body` or `invalid_json` (the body is not JSON)."
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     InvalidRule:
-      description: "`invalid_rule` (details lists each problem) or `unknown_channel` (a channel id is not this agency's)."
+      description: "`invalid_rule` (details lists each problem), `unknown_channel` (a channel id is not this agency's) or `invalid_json`."
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     InvalidChannel:
-      description: "`invalid_channel` — details lists each problem (not https, unknown kind, unknown field)."
+      description: "`invalid_channel` (details lists each problem: not https, unknown kind, unknown field) or `invalid_json`."
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
