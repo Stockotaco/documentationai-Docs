@@ -189,10 +189,14 @@ One `series[]` entry per spec series × breakdown value. `data[]` is aligned to
   Paths only, 1 to 50. Journeys returned, and rows per first/last-touch list.
 </ParamField>
 <ParamField body="exclude" type="string[]">
-  Paths with event touchpoints only. Events left out of journeys. Replaces the
-  default list: `$pageleave`, `$engagement`, `$exception`, `$autocapture`,
-  `$experiment_viewed`, `tag_added`, `tag_removed`. Send `[]` to keep every
-  event.
+  Paths with event touchpoints only. Events left out of journeys, in addition
+  to the defaults: `$pageleave`, `$engagement`, `$exception`, `$autocapture`,
+  `$experiment_viewed`, `tag_added`, `tag_removed`. `meta.exclude` echoes the
+  full list applied.
+</ParamField>
+<ParamField body="default_excludes" type="boolean" default="true">
+  Paths with event touchpoints only. `false` keeps the default-excluded events,
+  so only `exclude` is dropped.
 </ParamField>
 
 ### Filters
@@ -373,7 +377,7 @@ matching rule wins:
 | Group | Rule |
 |-------|------|
 | Paid Search | source is adwords / google_ads / bing_ads, or a search engine with a paid medium (`cpc`, `ppc`, `retargeting`, `paid*`, anything containing `cp`) |
-| Paid Social | a social source (facebook, fb, instagram, ig, tiktok, x, linkedin, youtube, reddit, pinterest, …) with a paid medium, or medium `paid_social` |
+| Paid Social | a social source (facebook, fb, instagram, ig, tiktok, x, linkedin, youtube, reddit, pinterest, …) with a paid medium; medium `paid_social`; an ad-product source (`facebook_ad`, `youtube_ad`, `instagram_ad`, `meta_ads`, `tiktok-ads`, …); or a social source with any other hand-set medium, such as a campaign name (`fb` / `spring_sale`) |
 | Display | medium `display`, `banner`, `expandable`, `interstitial`, `cpm` |
 | Paid Other | any other paid medium |
 | Email | medium contains `email`, or `newsletter`, or source is an email client (Gmail app, mail.google.com, Outlook) |
@@ -381,7 +385,7 @@ matching rule wins:
 | Affiliates | medium `affiliate` |
 | AI | medium `ai` (referred by ChatGPT, Claude, Perplexity, Gemini, Copilot, …) or one of those as the source |
 | Organic Search | medium `organic`, or a search engine source |
-| Organic Social | a social source, or medium `social` / `social-media` / `sm` |
+| Organic Social | a social source with no medium, a referrer-derived medium, or an organic-link medium (`social*`, `organic*`, `share`, `menu`, `bio`, `link`, `manychat`, `dm`, `post`, `story`, `profile`, `community`, `group`), or medium `sm` |
 | Referral | medium `referral`, `app`, `link` |
 | Direct | no source and no medium |
 | Unassigned | anything else, e.g. a custom `utm_medium=menu` |
@@ -397,7 +401,7 @@ behind a group.
   "date_range": { "preset": "30d" },
   "goal": { "event": "form_submitted" },
   "touchpoint": "event",
-  "exclude": ["$pageleave", "$engagement", "input_captured"]
+  "exclude": ["input_captured"]
 }
 ```
 

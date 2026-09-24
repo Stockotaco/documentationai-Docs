@@ -2108,7 +2108,11 @@ components:
           maxItems: 50
           items:
             type: string
-          description: "Paths with event touchpoints only. Replaces the default excludes ($pageleave, $engagement, $exception, $autocapture, $experiment_viewed, tag_added, tag_removed)."
+          description: "Paths with event touchpoints only. Added to the default excludes ($pageleave, $engagement, $exception, $autocapture, $experiment_viewed, tag_added, tag_removed)."
+        default_excludes:
+          type: boolean
+          default: true
+          description: "Paths with event touchpoints only. `false` keeps the default-excluded events."
     RowsResponse:
       type: object
       description: Generic Tinybird result envelope for analytics rows.
