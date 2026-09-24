@@ -325,13 +325,24 @@ paths:
         request counts, auth failures, rate-limited and error counts,
         and latency. This is the same telemetry Mythic
         meters on. Takes no `location_ids` — usage is already the agency's own
-        slice. Returns at most 1000 rows, newest and busiest first.
+        slice. Returns at most 1000 rows, newest and busiest first; `truncated`
+        is true when the cap cut the result. At high volume the location grain
+        passes 1000 rows within a week, so pass `group_by=route` to sum
+        locations and fit 30 days.
       parameters:
         - name: days_back
           in: query
           required: false
           description: Trailing window in days (1–90).
           schema: { type: integer, minimum: 1, maximum: 90, default: 30 }
+        - name: group_by
+          in: query
+          required: false
+          description: >
+            `location` keeps one row per day × location × surface × route.
+            `route` sums locations into one row per day × surface × route and
+            omits `location_id`.
+          schema: { type: string, enum: [location, route], default: location }
       responses:
         "200":
           description: Daily usage rows
@@ -345,9 +356,19 @@ paths:
                     type: object
                     properties:
                       days_back: { type: integer, example: 30 }
+                      group_by: { type: string, enum: [location, route], example: route }
                       usage:
                         type: array
                         items: { $ref: "#/components/schemas/UsageRow" }
+                      truncated:
+                        type: boolean
+                        example: false
+                        description: True when the 1000-row cap cut the result.
+        "400":
+          description: "`invalid_group_by`: `group_by` is not `location` or `route`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/AgencyRequired" }
         "429": { $ref: "#/components/responses/RateLimited" }
@@ -583,7 +604,7 @@ components:
         location_id:
           type: string
           example: loc_abc123
-          description: Empty for agency-grain requests with no location bound.
+          description: Empty for agency-grain requests with no location bound. Omitted with `group_by=route`.
         surface:
           type: string
           example: data

@@ -122,6 +122,11 @@ paths:
         metrics (`revenue:`, `new_revenue:`) appear only for events that actually
         carry a value at `revenue_path` — otherwise the series would be a flat
         zero, which reads as "no relationship" rather than "wrong path".
+        For a top-level or one-level path (`$.value`, `$.order.total`) value
+        presence comes from the property catalog, so discovery costs a fraction
+        of a correlation query at any window; a value metric's `occurrences` is
+        then the event's count in the window. A deeper path scans event
+        properties and can hit the query byte cap on a large client.
       parameters:
         - $ref: "#/components/parameters/LocationId"
         - name: lookback_days

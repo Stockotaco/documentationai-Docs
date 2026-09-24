@@ -169,7 +169,9 @@ One `series[]` entry per spec series × breakdown value. `data[]` is aligned to
 </ParamField>
 <ParamField body="goal" type="Step">
   Paths only, required. The conversion: `event`, optional `filters[]` and
-  `label`.
+  `label`. The goal may be an event the rest of explore does not store, such as
+  `$identify` ("paths to sign-in"), as long as it has no `filters`: it is read
+  from the raw event stream with the same window and person grain.
 </ParamField>
 <ParamField body="touchpoint" type="'session' | 'event'" default="session">
   Paths only. `session` makes each session one step, labeled by `dimension`.
@@ -228,7 +230,8 @@ event property.
 | `event`, `distinct_id`, `session_id`, `user_id` | core columns |
 | anything else | custom event property (scalar, ≤200 chars) |
 
-Discover keys with `GET /properties` and values with `GET /query/values`.
+Discover keys with `GET /properties?queryable=true`, which lists only the event
+properties this endpoint can read, and values with `GET /query/values`.
 
 <Callout kind="note">
   Not queryable here: nested objects, arrays, values longer than 200 characters,
@@ -236,7 +239,11 @@ Discover keys with `GET /properties` and values with `GET /query/values`.
   table above are not exposed either — use the typed name. The events
   `$replay_summary`, `$replay_started`, `$heatmap`, `$web_vital_*`, `$set`,
   `$set_once` and `$identify` are excluded from this table; each has its own
-  surface (replays, heatmaps, web vitals, people).
+  surface (replays, heatmaps, web vitals, people). A spec that names one of
+  these events (except as an unfiltered paths `goal`), a `$`-prefixed property outside the table, a `meta_*` property
+  or a dot-path is rejected with `invalid_spec` instead of counting 0. Objects
+  and arrays under a custom key cannot be told apart from the spec alone; check
+  `queryable` on the key in `GET /properties`.
 </Callout>
 
 ## A funnel
@@ -429,7 +436,7 @@ Paths queries cannot be saved as insights yet.
 
 | status | code | meaning |
 |--------|------|---------|
-| 400 | `invalid_spec` | `error.details[]` lists every problem found |
+| 400 | `invalid_spec` | `error.details[]` lists every problem found, including an event or property explore does not store (`... is not queryable: ...`) |
 | 400 | `invalid_json` | body is not a JSON object |
 | 413 | `payload_too_large` | body over 64 KB |
 | 429 | `rate_limited` | see `Retry-After` |

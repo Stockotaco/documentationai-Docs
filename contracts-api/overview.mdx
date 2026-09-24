@@ -201,7 +201,7 @@ curl "$BASE/client/v1/contracts/samples?location_id=$LOC\
 
 Computing "how often is this field missing" needs an event count, which means reading the raw events. The window therefore has a real cost, and it is bounded:
 
-- **Default window is the last 1 day.** Set `date_from` / `date_to` (ISO 8601) for anything else.
+- **Default window is the start of yesterday (UTC) to now**, 24 to 48 hours depending on when you ask. The response's `window` spells it out as timestamps. Set `date_from` / `date_to` (ISO 8601) for anything else.
 - **Pass `?event=`** whenever you care about one contract. It is the cheapest thing you can do.
 - **Wide windows on high-volume events need `?sample=N`**, which keeps a deterministic 1/N of events. `?sample=10` over 7 days comfortably handles an event with 300k occurrences.
 
@@ -210,7 +210,7 @@ Sampling is uniform over a hash of the event id, so **rates and coverage are unb
 If the window still holds too much to scan, the API returns `400 window_too_large` naming the three fixes above, rather than a timeout dressed up as a server error.
 
 <Callout kind="warning">
-  A `truncated: true` flag on the response means the underlying property statistics hit their row limit. Narrow the window or pass `?event=` before trusting `absent` counts — a truncated read under-counts keys and can manufacture "missing" fields that are really a row limit.
+  The report scans only the contracted events. A `truncated: true` flag on the response means their property statistics still hit the row limit. Narrow the window or pass `?event=` before trusting `absent` counts — a truncated read under-counts keys and can manufacture "missing" fields that are really a row limit.
 </Callout>
 
 ## Getting told, instead of asking
