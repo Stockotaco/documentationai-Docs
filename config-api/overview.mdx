@@ -1,8 +1,8 @@
 ---
 title: Client Config
 description: >-
-  Manage the configuration the SDK runs from — tags, snippets, and event
-  transformers — over REST, with every write synced to the edge and the sync
+  Manage the configuration the SDK runs from — tags, tag templates, snippets,
+  and event transformers — over REST, with every write synced to the edge and the sync
   outcome reported back as kv_sync.
 ---
 
@@ -11,15 +11,16 @@ import ClientV1Auth from "/snippets/client-v1-auth.mdx"
 ## Overview
 
 Three things the Mythic SDK executes on a client's site are configured per
-location:
+location, plus the templates tags are built from:
 
 | Resource | What it is | Table |
 | --- | --- | --- |
+| **Tag templates** | What a tag loads: an external script (`url`) or inline JavaScript (`inline`), with default trigger rules. Mythic's catalog plus the location's own | `tags` |
 | **Tags** | GTM-like tag assignments (a template id plus `params`) fired by the SDK | `tenant_tags` |
 | **Snippets** | Custom JavaScript (`code`) injected by the SDK | `tenant_snippets` |
 | **Transformers** | Event transforms (`map` field mappings or `code`) applied by the SDK to every captured event before it is sent, in `priority` order | `transformers` |
 
-The Client Config API is CRUD over those three on `/client/v1/config` — 14
+The Client Config API is CRUD over those on `/client/v1/config` — 19
 routes. The same operations exist as MCP tools on the
 [Settings Server](/mcp/settings-server) (`tags`, `snippets`, `transformers`
 scope families); this is their headless REST form.
@@ -66,23 +67,72 @@ response tells you how that went:
 Treat a `failed` sync as the write not having taken effect yet — because for
 the SDK, it hasn't.
 
+## Tag templates
+
+A tag assignment points at a template. `GET /tag-templates` lists every
+template the location can assign:
+
+- `owner: "mythic"` — Mythic's catalog. Visible to every location, read-only.
+- `owner: "location"` — the location's own templates, created with
+  `POST /tag-templates`. Only that location can see, edit, delete or assign
+  them. They belong to the location, not the agency, so a key bound to one
+  client can never change the code running on another client's site.
+- `managed: true` marks the Meta and Google tags. They are templates you do not
+  create; see [Managed platform tags](#managed-platform-tags).
+
+A location's template is `url` (the SDK loads `src`, an absolute `https` URL,
+as an async script) or `inline` (the SDK runs `code` as a `<script>` body —
+JavaScript, not HTML). `url` requires `src` and `inline` requires `code`,
+checked on the stored row after a PATCH too, so a type change must bring the
+matching field. `trigger_rules` on a template are its defaults; an
+assignment's own `trigger_rules` replace them.
+
+A new template does nothing until it is assigned. Editing an assigned template
+rebuilds the edge config (`kv_sync: "synced"`); editing an unassigned one
+returns `kv_sync: "not_assigned"`. A template that is still assigned cannot be
+deleted (`409 template_in_use`): remove the assignment first.
+
+Another location's template id reads as `404`, on every route. Assigning one
+with `POST /tags` returns `404 template_not_found`, and the database refuses it
+for every other writer too.
+
 ## Quickstart
 
 <Steps>
+  <Step title="Create a tag template">
+    ```bash
+    curl -X POST "$BASE/client/v1/config/tag-templates?location_id=$LOC" \
+      -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
+      -d '{
+        "name": "Hotjar",
+        "type": "url",
+        "src": "https://static.hotjar.com/c/hotjar-1234567.js?sv=6"
+      }'
+    ```
+
+    The response's `data.id` is the template id. Skip this step to use a
+    template from `GET /tag-templates` instead.
+  </Step>
+
   <Step title="Assign a tag">
     ```bash
     curl -X POST "$BASE/client/v1/config/tags?location_id=$LOC" \
       -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
       -d '{
-        "tag_id": "meta-pixel",
-        "params": { "pixel_id": "1234567890" },
-        "trigger_rules": { "url_contains": "/checkout" }
+        "tag_id": "3f1c2a9e-8d4b-4e7a-9c1f-2b6d8e0a5c47",
+        "trigger_rules": {
+          "version": 1,
+          "operator": "AND",
+          "rules": [{ "type": "url_pattern", "operator": "contains", "value": "/checkout" }]
+        }
       }'
     ```
 
-    `enabled` defaults to `true` and `params` to `{}`. Tags are keyed by
-    `tenant_key` + `tag_id`, so updates and deletes address the assignment by
-    its `tag_id`.
+    `tag_id` is a template id from `GET /tag-templates`. `enabled` defaults to
+    `true` and `params` to `{}`. Tags are keyed by `tenant_key` + `tag_id`, so
+    updates and deletes address the assignment by its `tag_id`.
+    `GET /tags` returns each assignment with a `template` summary (`id`,
+    `name`, `type`, `owner`, `managed`).
   </Step>
 
   <Step title="Add a snippet">
@@ -132,7 +182,7 @@ the SDK, it hasn't.
 
   <Step title="Update and verify">
     ```bash
-    curl -X PATCH "$BASE/client/v1/config/tags/meta-pixel?location_id=$LOC" \
+    curl -X PATCH "$BASE/client/v1/config/tags/3f1c2a9e-8d4b-4e7a-9c1f-2b6d8e0a5c47?location_id=$LOC" \
       -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
       -d '{ "enabled": false }'
     ```
@@ -142,10 +192,14 @@ the SDK, it hasn't.
       "success": true,
       "data": {
         "tenant_key": "loc_abc123",
-        "tag_id": "meta-pixel",
+        "tag_id": "3f1c2a9e-8d4b-4e7a-9c1f-2b6d8e0a5c47",
         "enabled": false,
-        "params": { "pixel_id": "1234567890" },
-        "trigger_rules": { "url_contains": "/checkout" }
+        "params": {},
+        "trigger_rules": {
+          "version": 1,
+          "operator": "AND",
+          "rules": [{ "type": "url_pattern", "operator": "contains", "value": "/checkout" }]
+        }
       },
       "kv_sync": "synced"
     }
@@ -161,10 +215,14 @@ the SDK, it hasn't.
 
 | Status | Code | Meaning |
 | --- | --- | --- |
-| `400` | `bad_json`, `missing_field`, `bad_type`, `bad_config`, `bad_priority`, `nothing_to_update` | Malformed body, a required field missing, transformer `type` not `map`/`code`, an incomplete type-specific transformer `config`, a `priority` outside 1–100, or an empty PATCH |
+| `400` | `bad_json`, `missing_field`, `bad_type`, `bad_config`, `bad_priority`, `nothing_to_update` | Malformed body, a required field missing, a transformer `type` not `map`/`code` or a template `type` not `url`/`inline`, an incomplete type-specific transformer `config`, a `priority` outside 1–100, or an empty PATCH |
+| `400` | `unknown_field`, `bad_name`, `bad_src`, `bad_code`, `bad_description`, `bad_trigger_rules` | Tag templates only: a field that is not writable (`id`, `tenant_key`), a missing or over-200-character name, a `src` that is not an absolute `https` URL, `code` over 64 KB, a description over 2,000 characters, or `trigger_rules` without a `rules` array |
 | `401` | `unauthorized` | Missing/invalid key, or an `ak_` with no location bound |
 | `403` | `agency_required` | Write attempted with an `sk_` key |
-| `404` | `not_found` | No such tag assignment, snippet, or transformer for this location |
+| `403` | `template_read_only` | PATCH or DELETE on a Mythic catalog template |
+| `404` | `not_found` | No such tag assignment, tag template, snippet, or transformer for this location |
+| `404` | `template_not_found` | `POST /tags` with a template id the location cannot see |
+| `409` | `template_in_use` | DELETE on a template that is still assigned |
 | `429` | `rate_limited` | 120 requests/min per location — retry after `Retry-After` |
 
 Deletes are idempotent for tags (removing an absent assignment succeeds);
@@ -268,7 +326,7 @@ without them never download it), and the per-location config (pixel id,
 event mapping) lives in `tenant_tags.params`.
 
 They are listed here because you will see them through these endpoints and the
-`tags` scope: each platform has one global template row (named
+`tags` scope (`managed: true` in `GET /tag-templates`): each platform has one global template row (named
 `Mythic · Meta Pixel` / `Mythic · Google Tag`), and a location's assignment
 carries its config. Don't hand-edit those rows — reconnect through the
 integrations API (or the `connect_meta_integration` / `connect_google_ads_integration`

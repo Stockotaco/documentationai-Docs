@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 216 tools across
+  Every tool the Mythic MCP server exposes — 221 tools across
   26 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 216 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 221 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -339,9 +339,14 @@ GTM-like tags fired by the SDK.
 | Tool | Scope | What it does | Proxies |
 | --- | --- | --- | --- |
 | `list_tags`<br /><span style={{opacity: 0.7}}>List Tags</span> | `tags:read` | List tag assignments (tenant_tags) for the active client. | `GET /client/v1/config/tags` |
+| `list_tag_templates`<br /><span style={{opacity: 0.7}}>List Tag Templates</span> | `tags:read` | Tag templates this client can assign with create_tag: Mythic's catalog (owner "mythic", read-only) plus the client's own (owner "location"). | `GET /client/v1/config/tag-templates` |
+| `get_tag_template`<br /><span style={{opacity: 0.7}}>Get Tag Template</span> | `tags:read` | One tag template by id, including its src or code. | `GET /client/v1/config/tag-templates/:id` |
 | `create_tag`<br /><span style={{opacity: 0.7}}>Create Tag Assignment</span> | `tags:write` | Assign a tag to the active client (tenant_tags row). | `POST /client/v1/config/tags` |
 | `update_tag`<br /><span style={{opacity: 0.7}}>Update Tag Assignment</span> | `tags:write` | Update a tag assignment for the active client. | `PATCH /client/v1/config/tags/:tagId` |
 | `delete_tag`<br /><span style={{opacity: 0.7}}>Delete Tag Assignment</span> | `tags:write` | Remove a tag assignment from the active client. | `DELETE /client/v1/config/tags/:tagId` |
+| `create_tag_template`<br /><span style={{opacity: 0.7}}>Create Tag Template</span> | `tags:write` | Create a tag template owned by this client. | `POST /client/v1/config/tag-templates` |
+| `update_tag_template`<br /><span style={{opacity: 0.7}}>Update Tag Template</span> | `tags:write` | Update one of this client's own tag templates (Mythic's are read-only). | `PATCH /client/v1/config/tag-templates/:id` |
+| `delete_tag_template`<br /><span style={{opacity: 0.7}}>Delete Tag Template</span> | `tags:write` | Delete one of this client's own tag templates. | `DELETE /client/v1/config/tag-templates/:id` |
 
 ## Snippets
 

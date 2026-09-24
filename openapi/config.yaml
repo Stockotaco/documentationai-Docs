@@ -3,8 +3,8 @@ info:
   version: 1.0.0
   title: Client Config
   description: >
-    Tenant configuration served to the SDK at the edge — tags, snippets, and
-    transformers — as a REST surface on `/client/v1/config`.
+    Tenant configuration served to the SDK at the edge — tags, tag templates,
+    snippets, and transformers — as a REST surface on `/client/v1/config`.
 
 
     Reads accept an agency key (`ak_`, bind a location with `location_id` or
@@ -23,7 +23,9 @@ paths:
     get:
       summary: List tag assignments
       operationId: listConfigTags
-      description: Every tag assignment for this location.
+      description: >-
+        Every tag assignment for this location, each with a `template` summary
+        of the template it points at.
       parameters:
         - $ref: "#/components/parameters/LocationId"
       responses:
@@ -59,8 +61,12 @@ paths:
               properties:
                 tag_id:
                   type: string
-                  description: Id of the tag template to assign.
-                  example: meta-pixel
+                  format: uuid
+                  description: >-
+                    Id of a tag template from `GET /client/v1/config/tag-templates`:
+                    Mythic's catalog or this location's own. Another location's
+                    template returns `404 template_not_found`.
+                  example: 3f1c2a9e-8d4b-4e7a-9c1f-2b6d8e0a5c47
                 enabled: { type: boolean, default: true }
                 params:
                   type: object
@@ -77,11 +83,12 @@ paths:
                 type: object
                 properties:
                   success: { type: boolean, example: true }
-                  data: { $ref: "#/components/schemas/Tag" }
+                  data: { $ref: "#/components/schemas/TagAssignment" }
                   kv_sync: { $ref: "#/components/schemas/KvSync" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/TemplateNotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
   /client/v1/config/tags/{tagId}:
     patch:
@@ -114,7 +121,7 @@ paths:
                 type: object
                 properties:
                   success: { type: boolean, example: true }
-                  data: { $ref: "#/components/schemas/Tag" }
+                  data: { $ref: "#/components/schemas/TagAssignment" }
                   kv_sync: { $ref: "#/components/schemas/KvSync" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -143,6 +150,146 @@ paths:
                   kv_sync: { $ref: "#/components/schemas/KvSync" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/AgencyRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/config/tag-templates:
+    get:
+      summary: List tag templates
+      operationId: listConfigTagTemplates
+      description: >-
+        Every template this location can assign: Mythic's catalog
+        (`owner: mythic`, read-only) plus the location's own
+        (`owner: location`), sorted by name.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Tag templates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/TagTemplate" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      summary: Create a tag template
+      operationId: createConfigTagTemplate
+      description: >-
+        Create a template owned by this location. Only this location can see,
+        edit, delete or assign it. It does nothing until assigned with
+        `POST /client/v1/config/tags`, so there is no edge rebuild and no
+        `kv_sync`. Agency key (`ak_`) or an `mcp_` key with `tags:write`
+        required.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TagTemplateCreate" }
+      responses:
+        "201":
+          description: Template created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/TagTemplate" }
+        "400": { $ref: "#/components/responses/TemplateBadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/config/tag-templates/{id}:
+    get:
+      summary: Get a tag template
+      operationId: getConfigTagTemplate
+      description: One template, including its `src` or `code`. Another location's template returns `404`.
+      parameters:
+        - $ref: "#/components/parameters/TagTemplateId"
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Tag template
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/TagTemplate" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    patch:
+      summary: Update a tag template
+      operationId: updateConfigTagTemplate
+      description: >-
+        Partial update of one of this location's own templates. The type rule
+        is checked on the stored row after the change, so switching `type`
+        needs the matching `src` or `code` in the same request. When the
+        template is assigned, the edge config is rebuilt and `kv_sync` reports
+        it; otherwise `kv_sync` is `not_assigned`. Agency key (`ak_`) required.
+      parameters:
+        - $ref: "#/components/parameters/TagTemplateId"
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TagTemplateUpdate" }
+      responses:
+        "200":
+          description: Template updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/TagTemplate" }
+                  kv_sync:
+                    type: string
+                    example: synced
+                    description: "`synced`, `failed: <reason>`, or `not_assigned` when no assignment uses the template."
+        "400": { $ref: "#/components/responses/TemplateBadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/TemplateForbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      summary: Delete a tag template
+      operationId: deleteConfigTagTemplate
+      description: >-
+        Delete one of this location's own templates. Refused with
+        `409 template_in_use` while it is assigned: remove the assignment with
+        `DELETE /client/v1/config/tags/{tagId}` first, so a delete never removes
+        a live tag from the site. Agency key (`ak_`) required.
+      parameters:
+        - $ref: "#/components/parameters/TagTemplateId"
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Template deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/TemplateForbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`template_in_use` — the template is assigned to this location."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "429": { $ref: "#/components/responses/RateLimited" }
   /client/v1/config/snippets:
     get:
@@ -480,8 +627,14 @@ components:
       in: path
       required: true
       description: The tag template id of the assignment.
-      schema: { type: string }
-      example: meta-pixel
+      schema: { type: string, format: uuid }
+      example: 3f1c2a9e-8d4b-4e7a-9c1f-2b6d8e0a5c47
+    TagTemplateId:
+      name: id
+      in: path
+      required: true
+      description: Tag template UUID.
+      schema: { type: string, format: uuid }
     SnippetId:
       name: id
       in: path
@@ -507,6 +660,27 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
     Unauthorized:
       description: Missing or invalid key, or an `ak_` key with no location bound.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    TemplateBadRequest:
+      description: >-
+        `bad_json`, `bad_body`, `missing_field` (`name`/`type` on create, `src`
+        for a `url` template, `code` for an `inline` one), `unknown_field`
+        (`id`, `tenant_key` and other non-writable fields), `bad_name`,
+        `bad_type` (not `url` or `inline`), `bad_src` (not an absolute `https`
+        URL), `bad_code` (over 64 KB), `bad_description`, `bad_trigger_rules`,
+        or `nothing_to_update`.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    TemplateForbidden:
+      description: "`agency_required` (an `sk_` key) or `template_read_only` (a Mythic catalog template)."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    TemplateNotFound:
+      description: "`template_not_found` — the template id is not Mythic's catalog or this location's own."
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -545,19 +719,89 @@ components:
         Optional page/condition rules controlling where the tag or snippet
         fires. Omitted or `null` means everywhere.
       example:
-        url_contains: /checkout
-    Tag:
+        version: 1
+        operator: AND
+        rules:
+          - { type: url_pattern, operator: contains, value: /checkout }
+    TagAssignment:
       type: object
       properties:
         tenant_key:
           type: string
           description: The location this assignment belongs to.
           example: loc_abc123
-        tag_id: { type: string, example: meta-pixel }
+        tag_id: { type: string, format: uuid, example: 3f1c2a9e-8d4b-4e7a-9c1f-2b6d8e0a5c47 }
         enabled: { type: boolean, example: true }
         params:
           type: object
-          example: { pixel_id: "1234567890" }
+          example: {}
+        trigger_rules:
+          $ref: "#/components/schemas/TriggerRules"
+    Tag:
+      allOf:
+        - $ref: "#/components/schemas/TagAssignment"
+        - type: object
+          properties:
+            template:
+              type: object
+              nullable: true
+              description: Summary of the assigned template. Returned by the list route.
+              properties:
+                id: { type: string, format: uuid }
+                name: { type: string, example: Hotjar }
+                type: { type: string, enum: [url, inline, meta_pixel, google_tag] }
+                owner: { type: string, enum: [mythic, location] }
+                managed: { type: boolean, example: false }
+    TagTemplate:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        owner:
+          type: string
+          enum: [mythic, location]
+          description: "`mythic` = Mythic's catalog, read-only. `location` = this location's own."
+        managed:
+          type: boolean
+          description: True for `meta_pixel` / `google_tag`, which are connected through the Platform Integrations API.
+        name: { type: string, example: Hotjar }
+        type: { type: string, enum: [url, inline, meta_pixel, google_tag] }
+        src:
+          type: string
+          nullable: true
+          example: https://static.hotjar.com/c/hotjar-1234567.js?sv=6
+        code: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        trigger_rules:
+          $ref: "#/components/schemas/TriggerRules"
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time, nullable: true }
+    TagTemplateCreate:
+      type: object
+      required: [name, type]
+      description: "`url` requires `src`. `inline` requires `code`."
+      properties:
+        name: { type: string, maxLength: 200, example: Hotjar }
+        type: { type: string, enum: [url, inline] }
+        src:
+          type: string
+          description: Absolute `https` URL, loaded as an async script.
+          example: https://static.hotjar.com/c/hotjar-1234567.js?sv=6
+        code:
+          type: string
+          maxLength: 65536
+          description: JavaScript run as a `<script>` body. Not HTML.
+        description: { type: string, maxLength: 2000 }
+        trigger_rules:
+          $ref: "#/components/schemas/TriggerRules"
+    TagTemplateUpdate:
+      type: object
+      description: Any subset of the create fields. `src`, `code`, `description` and `trigger_rules` accept `null`.
+      properties:
+        name: { type: string, maxLength: 200 }
+        type: { type: string, enum: [url, inline] }
+        src: { type: string, nullable: true }
+        code: { type: string, nullable: true, maxLength: 65536 }
+        description: { type: string, nullable: true, maxLength: 2000 }
         trigger_rules:
           $ref: "#/components/schemas/TriggerRules"
     SnippetSummary:
