@@ -105,7 +105,7 @@ Families follow the plan features they belong to, so a plan and a key describe a
 
 Every tool's exact scope is in the [Tool Reference](/mcp/tools), which is generated from the server's registry. `list_clients` and `select_client` need no scope on an agency-wide key.
 
-Key issuance (`POST`/`PATCH /builder/mcp/api-keys`) validates every scope string against this catalog and answers `400 invalid_scope` — listing the offending strings and every valid one — rather than storing a typo that silently grants nothing. The retired `data:*` and `analysis:*` families are rejected the same way; existing keys that held them were expanded to the new families.
+Key issuance (`POST`/`PATCH /builder/mcp/api-keys`) validates every scope string against this catalog and answers `400 invalid_scope` — listing the offending strings and every valid one — rather than storing a typo that silently grants nothing. An explicit empty `scopes` array is refused on both with `400 empty_scopes`: omit `scopes` on create for unrestricted (`["*"]`), and set `is_active: false` to disable a key. The retired `data:*` and `analysis:*` families are rejected the same way; existing keys that held them were expanded to the new families.
 
 <Callout kind="info">
   A key with a `null` location is **agency-wide** (it selects a client per session, or names one per HTTP request); one bound to a location is **client-scoped** and can never reach an agency-grain operation, whatever its scopes say.
