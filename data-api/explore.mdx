@@ -1,7 +1,7 @@
 ---
 title: Explore queries
 description: >-
-  Build trends and funnels over any event and property in one call with a
+  Build trends, funnels and paths to a goal over any event and property in one call with a
   typed query spec — no SQL, tenant-scoped by construction, sub-second.
 ---
 
@@ -11,7 +11,8 @@ description: >-
 reports (`/events/summary`, `/events/breakdown`, `/sessions/breakdown`) answer
 the questions we anticipated. This route answers the ones you compose: any
 event, any property, filters, several series, a breakdown, a previous-period
-compare, or an ordered funnel with a conversion window.
+compare, an ordered funnel with a conversion window, or the journeys people
+took before a conversion, with first-touch and last-touch counts.
 
 You send a **spec**, not SQL. The spec is validated (unknown keys are rejected),
 compiled on the server to ClickHouse SQL over a wide, typed events table, and
@@ -87,7 +88,7 @@ One `series[]` entry per spec series × breakdown value. `data[]` is aligned to
 
 ## The spec
 
-<ParamField body="kind" type="'trend' | 'funnel'" required>
+<ParamField body="kind" type="'trend' | 'funnel' | 'paths'" required>
   What to compute.
 </ParamField>
 <ParamField body="date_range" type="object" required>
@@ -152,7 +153,8 @@ One `series[]` entry per spec series × breakdown value. `data[]` is aligned to
   Default 7 days, capped at the length of the date range.
 </ParamField>
 <ParamField body="grain" type="'device' | 'person'" default="device">
-  Funnel only. Who a step counts. `device` counts the raw `distinct_id`;
+  Funnel and paths. Paths default to `person`; see [Paths to a goal](#paths-to-a-goal).
+  Who a step counts. `device` counts the raw `distinct_id`;
   `person` resolves each id to its canonical person first, so a journey that
   crosses devices — or a step that is a server/CRM event keyed by a contact id
   rather than a browser id — links into one funnel instead of breaking. It
@@ -163,6 +165,34 @@ One `series[]` entry per spec series × breakdown value. `data[]` is aligned to
 </ParamField>
 <ParamField body="filters" type="Filter[]">
   Applied to every series or step. At most 20 filters in total across the spec.
+  Not accepted on paths; put conditions in `goal.filters`.
+</ParamField>
+<ParamField body="goal" type="Step">
+  Paths only, required. The conversion: `event`, optional `filters[]` and
+  `label`.
+</ParamField>
+<ParamField body="touchpoint" type="'session' | 'event'" default="session">
+  Paths only. `session` makes each session one step, labeled by `dimension`.
+  `event` makes each event one step, with pageviews labeled by their pathname.
+</ParamField>
+<ParamField body="dimension" type="'channel_group' | 'source_medium' | 'source' | 'campaign'" default="channel_group">
+  Paths with session touchpoints only. How a session is labeled.
+</ParamField>
+<ParamField body="lookback_days" type="integer">
+  Paths only, 1 to 180. How far before the goal a journey reaches. Default 90
+  for session touchpoints, 7 for event touchpoints.
+</ParamField>
+<ParamField body="depth" type="integer" default="5">
+  Paths only, 1 to 10. Touchpoints kept per journey: the last N before the goal.
+</ParamField>
+<ParamField body="limit" type="integer" default="20">
+  Paths only, 1 to 50. Journeys returned, and rows per first/last-touch list.
+</ParamField>
+<ParamField body="exclude" type="string[]">
+  Paths with event touchpoints only. Events left out of journeys. Replaces the
+  default list: `$pageleave`, `$engagement`, `$exception`, `$autocapture`,
+  `$experiment_viewed`, `tag_added`, `tag_removed`. Send `[]` to keep every
+  event.
 </ParamField>
 
 ### Filters
@@ -256,6 +286,125 @@ device grain the funnel structurally cannot link it: on a live web+CRM tenant a
 `$pageview → opportunity_created` funnel found 637 conversions by device and
 914 by person, a rate of 3.4% against 5.2%. On a web-only funnel the two agree
 to within 0.1%, and person grain only costs you time.
+
+## Paths to a goal
+
+A paths query answers "what did people do before they converted?" It finds
+everyone who did `goal` in `date_range`. For each person it takes the
+touchpoints in the `lookback_days` before their first goal in the range, merges
+consecutive repeats, and counts identical journeys.
+
+<Request>
+```json
+{
+  "kind": "paths",
+  "date_range": { "preset": "30d" },
+  "goal": { "event": "order_completed" }
+}
+```
+</Request>
+
+<Response>
+```json
+{
+  "success": true,
+  "data": {
+    "kind": "paths",
+    "goal_persons": 667,
+    "no_touchpoint": 38,
+    "sampled": false,
+    "paths": [
+      { "touchpoints": ["Paid Social"], "truncated": false, "persons": 551, "avg_touchpoints": 1.42, "share": 0.826 },
+      { "touchpoints": ["Direct"], "truncated": false, "persons": 15, "avg_touchpoints": 1.67, "share": 0.022 },
+      { "touchpoints": ["Paid Social", "Direct"], "truncated": false, "persons": 8, "avg_touchpoints": 2.25, "share": 0.012 }
+    ],
+    "first_touch": [
+      { "touchpoint": "Paid Social", "persons": 575, "share": 0.862 },
+      { "touchpoint": "Direct", "persons": 29, "share": 0.043 }
+    ],
+    "last_touch": [
+      { "touchpoint": "Paid Social", "persons": 557, "share": 0.835 },
+      { "touchpoint": "Direct", "persons": 34, "share": 0.051 }
+    ],
+    "meta": {
+      "from": "2026-08-25", "to": "2026-09-24", "grain": "person",
+      "goal": { "label": "order_completed", "event": "order_completed" },
+      "touchpoint": "session", "dimension": "channel_group",
+      "lookback_days": 90, "depth": 5, "limit": 20, "goal_id_cap": 20000,
+      "sql_ms": 1070, "cached": false
+    }
+  }
+}
+```
+</Response>
+
+- **Persons, not devices.** By default every id behind one person (browsers,
+  devices, CRM contact ids) is joined before the journey is built, because
+  earlier visits are usually on another device or arrive before the person was
+  identified. `"grain": "device"` builds journeys per `distinct_id` instead.
+- **Session touchpoints** start at or before the goal, so the goal's own session
+  is the last touch. **Event touchpoints** are strictly before the goal.
+- **First touch** is the first touchpoint in the lookback. **Last touch** is the
+  one closest to the goal. Both count every goal person once, so each list sums
+  to `goal_persons - no_touchpoint`.
+- **`share`** is over `goal_persons`, including people whose journey is outside
+  `limit`.
+- **`no_touchpoint`** counts goal persons with nothing tracked in the lookback,
+  typically a CRM conversion whose contact was never linked to a browser
+  visit.
+- **`truncated`** marks journeys that had more than `depth` touchpoints. Only
+  the last `depth` are shown.
+- **`avg_touchpoints`** is the mean number of touchpoints behind that journey
+  before repeats were merged. For session touchpoints, that is sessions.
+- **Sampling.** Above 20,000 goal ids, a fixed hash-based sample of 20,000 is
+  used and `sampled` is `true`. Shares stay representative. Absolute counts
+  cover only the sample.
+
+### Channel groups
+
+`channel_group` classifies each session from its source and medium. When the
+session had no UTMs, those come from the referrer (`google.com` / `organic`,
+`x.com` / `referral`, none for direct). An ad click id overrides a
+referrer-derived value, never an explicit UTM: `gclid`/`gbraid`/`wbraid` →
+google / cpc, `fbclid` → facebook / paid, `msclkid` → microsoft / cpc,
+`twclid`, `ttclid`, `li_fat_id` → twitter, tiktok, linkedin / paid. The first
+matching rule wins:
+
+| Group | Rule |
+|-------|------|
+| Paid Search | source is adwords / google_ads / bing_ads, or a search engine with a paid medium (`cpc`, `ppc`, `retargeting`, `paid*`, anything containing `cp`) |
+| Paid Social | a social source (facebook, fb, instagram, ig, tiktok, x, linkedin, youtube, reddit, pinterest, …) with a paid medium, or medium `paid_social` |
+| Display | medium `display`, `banner`, `expandable`, `interstitial`, `cpm` |
+| Paid Other | any other paid medium |
+| Email | medium contains `email`, or `newsletter`, or source is an email client (Gmail app, mail.google.com, Outlook) |
+| SMS | source or medium `sms` |
+| Affiliates | medium `affiliate` |
+| AI | medium `ai` (referred by ChatGPT, Claude, Perplexity, Gemini, Copilot, …) or one of those as the source |
+| Organic Search | medium `organic`, or a search engine source |
+| Organic Social | a social source, or medium `social` / `social-media` / `sm` |
+| Referral | medium `referral`, `app`, `link` |
+| Direct | no source and no medium |
+| Unassigned | anything else, e.g. a custom `utm_medium=menu` |
+
+Matching ignores case. Use `"dimension": "source_medium"` to see the raw pairs
+behind a group.
+
+### Journeys by event
+
+```json
+{
+  "kind": "paths",
+  "date_range": { "preset": "30d" },
+  "goal": { "event": "form_submitted" },
+  "touchpoint": "event",
+  "exclude": ["$pageleave", "$engagement", "input_captured"]
+}
+```
+
+Each step is an event name, or the pathname for a `$pageview`, e.g.
+`["/pricing", "/demo", "input_captured"]`.
+
+Paths queries cannot be saved as insights yet.
 
 ## Semantics worth knowing
 
