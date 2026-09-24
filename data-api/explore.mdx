@@ -143,7 +143,9 @@ One `series[]` entry per spec series × breakdown value. `data[]` is aligned to
 <ParamField body="steps" type="Step[]">
   Funnel only, 2 to 10, in order. Each: `event`, optional `filters[]` and
   `label`. Sequential semantics: a user must reach the steps in this order
-  within the window, and other events may occur between them.
+  within the window, and other events may occur between them. Steps may repeat
+  an event (`$pageview` then `$pageview` counts people with two or more
+  pageviews). Each event fills at most one step.
 </ParamField>
 <ParamField body="window" type="{ value, unit }">
   Funnel only. Conversion window, `unit` one of `minute`, `hour`, `day`.
