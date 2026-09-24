@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 204 tools across
-  25 scope families — with the scope each one needs and the
+  Every tool the Mythic MCP server exposes — 216 tools across
+  26 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 204 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 216 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -402,6 +402,27 @@ Agency-wide keys only — a key bound to one client cannot hold this scope.
 | `set_airbyte_pipeline`<br /><span style={{opacity: 0.7}}>Set Airbyte Pipeline</span> | `airbyte:write` | Create or update a client's pipeline (orchestrated daily sync of a set of connections, driven by Mythic's cron, with a signed completion webhook once the whole set is done). | `PUT /client/v1/airbyte/pipelines/:clientId` |
 | `start_airbyte_pipeline_run`<br /><span style={{opacity: 0.7}}>Start Airbyte Pipeline Run</span> | `airbyte:write` | Start a pipeline run now instead of waiting for run_hour_utc. | `POST /client/v1/airbyte/pipelines/:clientId/runs` |
 | `airbyte_pipeline_run_action`<br /><span style={{opacity: 0.7}}>Airbyte Pipeline Run Action</span> | `airbyte:write` | Act on one pipeline run. | `POST /client/v1/airbyte/pipelines/:clientId/runs/:runId/retry`<br />`POST /client/v1/airbyte/pipelines/:clientId/runs/:runId/force`<br />`POST /client/v1/airbyte/pipelines/:clientId/runs/:runId/redeliver` |
+
+## Alerts
+
+The central alert feed across every client, the rules that route alerts, and the Slack/webhook channels they are delivered to.
+
+Agency-wide keys only — a key bound to one client cannot hold this scope.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_alerts`<br /><span style={{opacity: 0.7}}>List Alerts</span> | `alerts:read` | The central alert feed across every client, newest first. | `GET /client/v1/alerts/events` |
+| `get_alert`<br /><span style={{opacity: 0.7}}>Get Alert</span> | `alerts:read` | One alert with its payload and every delivery attempt (which channel, which rule routed it, ok or the error). | `GET /client/v1/alerts/events/:id` |
+| `list_alert_rules`<br /><span style={{opacity: 0.7}}>List Alert Rules</span> | `alerts:read` | The agency's routing rules: which sources, for which clients (empty = all, including future clients), at or above which severity, go to which channels. | `GET /client/v1/alerts/rules` |
+| `list_alert_channels`<br /><span style={{opacity: 0.7}}>List Alert Channels</span> | `alerts:read` | Where alerts are delivered: Slack incoming webhooks and signed HTTPS webhooks. | `GET /client/v1/alerts/channels` |
+| `resolve_alert`<br /><span style={{opacity: 0.7}}>Resolve Alert</span> | `alerts:write` | Mark an open alert resolved by hand. | `PATCH /client/v1/alerts/events/:id` |
+| `create_alert_rule`<br /><span style={{opacity: 0.7}}>Create Alert Rule</span> | `alerts:write` | Route alerts to channels. | `POST /client/v1/alerts/rules` |
+| `update_alert_rule`<br /><span style={{opacity: 0.7}}>Update Alert Rule</span> | `alerts:write` | Change any field of a rule. | `PATCH /client/v1/alerts/rules/:id` |
+| `delete_alert_rule`<br /><span style={{opacity: 0.7}}>Delete Alert Rule</span> | `alerts:write` | Delete a rule. | `DELETE /client/v1/alerts/rules/:id` |
+| `create_alert_channel`<br /><span style={{opacity: 0.7}}>Create Alert Channel</span> | `alerts:write` | Add a delivery target. | `POST /client/v1/alerts/channels` |
+| `update_alert_channel`<br /><span style={{opacity: 0.7}}>Update Alert Channel</span> | `alerts:write` | Rename a channel or turn it on/off. | `PATCH /client/v1/alerts/channels/:id` |
+| `delete_alert_channel`<br /><span style={{opacity: 0.7}}>Delete Alert Channel</span> | `alerts:write` | Delete a channel. | `DELETE /client/v1/alerts/channels/:id` |
+| `test_alert_channel`<br /><span style={{opacity: 0.7}}>Test Alert Channel</span> | `alerts:write` | Send a test message to one channel now and report whether it was accepted (HTTP status or error). | `POST /client/v1/alerts/channels/:id/test` |
 
 ## Agency Rollups
 

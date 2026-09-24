@@ -22,6 +22,9 @@ doing?" — in one call, without iterating a location list yourself:
 | `GET /agency/usage` | day × location × surface × route | The agency's own API + MCP request telemetry — the same data Mythic meters on |
 | `GET /agency/quota` | quota in force | The plan, the features it includes, and month-to-date ingested events against the quota |
 
+Alerts across every client (the feed, routing rules and Slack/webhook channels)
+live on their own surface: see [Alerts](/agency-api/alerts).
+
 The same rollups exist as MCP tools on the
 [Settings Server](/mcp/settings-server) (`get_agency_stats`,
 `get_agency_destination_health`, `get_agency_contracts_summary`,

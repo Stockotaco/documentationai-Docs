@@ -190,13 +190,17 @@ parameters, semantics, error codes, and the 100-location `location_ids` batching
 are those of the REST routes. No `select_client` needed: the agency itself is the
 scope.
 
-Twenty-three scope families gate the tools — the full table, with what each one
+The **alert tools** (`list_alerts`, `get_alert`, `resolve_alert`, and the rule
+and channel tools) are also agency-wide only and take `alerts:read` /
+`alerts:write`. They proxy the [Alerts API](/agency-api/alerts).
+
+Scope families gate the tools — the full table, with what each one
 grants, is on the [Authentication](/mcp/authentication#families) page:
 
 `people`, `events`, `sessions`, `replays`, `exceptions`, `heatmaps`,
 `bigquery_export`, `insights`, `dashboards`, `canvases`, `segments`,
 `constraints`, `correlation`, `incrementality`, `contracts`, `destinations`,
-`settings`, `links`, `tags`, `snippets`, `transformers`, `airbyte`, `agency`.
+`settings`, `links`, `tags`, `snippets`, `transformers`, `airbyte`, `alerts`, `agency`.
 
 **[See the Tool Reference](/mcp/tools)** for every tool by name, the scope it
 needs, what it does, and the API route it proxies. That page is generated from

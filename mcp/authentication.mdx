@@ -76,7 +76,7 @@ An `mcp_` key carries a `scopes` array that gates which tools it can call (only 
 
 ### Families
 
-Families follow the plan features they belong to, so a plan and a key describe access in the same words. Twenty-three families:
+Families follow the plan features they belong to, so a plan and a key describe access in the same words. The families:
 
 | Family | Grants | Actions |
 |--------|--------|---------|
@@ -100,6 +100,7 @@ Families follow the plan features they belong to, so a plan and a key describe a
 | `links` | Link redirects, click analytics, link webhooks, uptime | read, write |
 | `tags` / `snippets` / `transformers` | SDK configuration | read, write |
 | `airbyte` | Airbyte sync orchestration — agency-wide keys only | read, write |
+| `alerts` | The alert feed across every client, routing rules, Slack/webhook channels — agency-wide keys only | read, write |
 | `agency` | Client roster and cross-location rollups — agency-wide keys only | read |
 
 Every tool's exact scope is in the [Tool Reference](/mcp/tools), which is generated from the server's registry. `list_clients` and `select_client` need no scope on an agency-wide key.

@@ -100,6 +100,11 @@
                     "title": "Introduction",
                     "path": "agency-api/overview",
                     "icon": "file-text"
+                  },
+                  {
+                    "title": "Alerts",
+                    "path": "agency-api/alerts",
+                    "icon": "bell"
                   }
                 ]
               },
@@ -107,6 +112,11 @@
                 "group": "Agency Rollups",
                 "icon": "building-2",
                 "openapi": "openapi/agency.yaml"
+              },
+              {
+                "group": "Alerts",
+                "icon": "bell",
+                "openapi": "openapi/alerts.yaml"
               }
             ]
           },

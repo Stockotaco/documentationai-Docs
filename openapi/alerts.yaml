@@ -1,0 +1,556 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Alerts API
+  description: >
+    Central alerts on `/client/v1/alerts` — one feed of every alert Mythic
+    raises across the agency's clients, the rules that route them, and the
+    Slack and webhook channels they are delivered to.
+
+
+    **Agency key (`ak_`) only.** A location secret key (`sk_`) gets `403
+    agency_required`. Rules and channels belong to the agency; every feed row
+    names the client (`location_id`) it is about, or `null` for agency-level
+    alerts such as usage thresholds.
+
+
+    Alerts are raised by Mythic's own detectors, not through this API. Sources
+    today: `contracts` (event contract violations and whole-day tracking
+    outages, daily ~08:00 UTC), `uptime` (a short link destination went down
+    or recovered, every 5 minutes), `airbyte` (a data sync failed or
+    recovered), `drift` (an incrementality experiment drifted, daily) and
+    `quota` (the agency crossed 80% or 100% of a monthly event quota, daily).
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+paths:
+  /client/v1/alerts/sources:
+    get:
+      summary: List alert sources
+      operationId: listAlertSources
+      description: The sources a rule can name. A rule with an empty `sources` list matches all of them.
+      responses:
+        "200":
+          description: Source catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        source: { type: string, example: uptime }
+                        label: { type: string, example: Link uptime }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+  /client/v1/alerts/events:
+    get:
+      summary: List alerts
+      operationId: listAlerts
+      description: >
+        The feed, newest first. One row per episode of a condition: it opens
+        once, repeat reports only bump `occurrences` and `last_seen_at`, and it
+        resolves when the detector clears it (`resolved_by: source`) or a user
+        resolves it (`resolved_by: user`). A condition that returns after
+        resolving opens a new row. Page with `before` set to the previous
+        response's `next_before`.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: "`open` (default), `resolved` or `all`."
+          schema: { type: string, enum: [open, resolved, all] }
+        - name: location_id
+          in: query
+          required: false
+          description: Only alerts about this client. Must belong to the agency (`403 location_not_linked`).
+          schema: { type: string }
+        - name: source
+          in: query
+          required: false
+          schema: { type: string, enum: [contracts, uptime, airbyte, drift, quota] }
+        - name: limit
+          in: query
+          required: false
+          description: "1 to 200. Default 50."
+          schema: { type: integer, minimum: 1, maximum: 200 }
+        - name: before
+          in: query
+          required: false
+          description: "ISO timestamp cursor: only alerts opened before it."
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: One page of the feed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Alert" }
+                  next_before:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: Pass as `before` for the next page. `null` on the last page.
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/alerts/events/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      summary: Get an alert
+      operationId: getAlert
+      description: One alert and every delivery attempt made for it, oldest first.
+      responses:
+        "200":
+          description: The alert with its deliveries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/Alert"
+                      - type: object
+                        properties:
+                          deliveries:
+                            type: array
+                            items: { $ref: "#/components/schemas/Delivery" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Resolve an alert
+      operationId: resolveAlert
+      description: >
+        Mark an open alert resolved. Sends no notification. Resolving an
+        already-resolved alert returns it unchanged. If the detector sees the
+        condition again it opens a new alert.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [resolved] }
+      responses:
+        "200":
+          description: The resolved alert
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Alert" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /client/v1/alerts/rules:
+    get:
+      summary: List rules
+      operationId: listAlertRules
+      description: The agency's routing rules, oldest first.
+      responses:
+        "200":
+          description: Rules
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Rule" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+    post:
+      summary: Create a rule
+      operationId: createAlertRule
+      description: >
+        Route alerts to channels. A rule does not set thresholds: each detector
+        decides what counts as a problem, and the rule decides who hears about
+        it. When several rules point at the same channel, each alert is sent to
+        it once. Up to 50 rules per agency and 10 channels per rule.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RuleInput" }
+            example:
+              name: Critical to Slack
+              min_severity: critical
+              channel_ids: ["0b6f4c5e-3a0e-4a53-9d1d-6e2f7c1a9b10"]
+      responses:
+        "201":
+          description: The rule
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Rule" }
+        "400": { $ref: "#/components/responses/InvalidRule" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/TooMany" }
+  /client/v1/alerts/rules/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    patch:
+      summary: Update a rule
+      operationId: updateAlertRule
+      description: Change any field. Only the fields sent change.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RuleInput" }
+            example: { enabled: false }
+      responses:
+        "200":
+          description: The rule
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Rule" }
+        "400": { $ref: "#/components/responses/InvalidRule" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Delete a rule
+      operationId: deleteAlertRule
+      description: Alerts the rule routed stay in the feed.
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Deleted" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /client/v1/alerts/channels:
+    get:
+      summary: List channels
+      operationId: listAlertChannels
+      description: >
+        Delivery targets. `target` is masked: a Slack incoming-webhook url
+        authenticates by its path, so it is never returned. A channel with
+        `active: false` was parked after 20 consecutive failed deliveries.
+      responses:
+        "200":
+          description: Channels
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Channel" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+    post:
+      summary: Create a channel
+      operationId: createAlertChannel
+      description: >
+        `slack` posts a text message to a Slack (or Slack-compatible) incoming
+        webhook. `webhook` POSTs JSON to any HTTPS url, signed with
+        HMAC-SHA256 in `X-Mythic-Signature` (`sha256=<hex>`). The signing
+        secret is returned **once**, in `signing_secret`, and cannot be read
+        again. Targets are stored encrypted. Email is not available yet. Up to
+        20 channels per agency.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, target]
+              properties:
+                kind: { type: string, enum: [slack, webhook] }
+                target: { type: string, description: "HTTPS url." }
+                label: { type: string, description: 'e.g. "#client-alerts".' }
+            example:
+              kind: slack
+              target: https://hooks.slack.com/services/T000/B000/XXXX
+              label: "#client-alerts"
+      responses:
+        "201":
+          description: The channel. `signing_secret` is present for webhook channels only.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/Channel"
+                      - type: object
+                        properties:
+                          signing_secret: { type: string, description: "Webhook channels only. Shown once." }
+        "400": { $ref: "#/components/responses/InvalidChannel" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "409":
+          description: "`channel_exists` — this agency already has a channel for that target."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/TooMany" }
+  /client/v1/alerts/channels/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    patch:
+      summary: Update a channel
+      operationId: updateAlertChannel
+      description: >
+        Change `label` or `active`. Setting `active: true` on a parked channel
+        clears its failure count. To change the target, delete and recreate.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label: { type: string, nullable: true }
+                active: { type: boolean }
+      responses:
+        "200":
+          description: The channel
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Channel" }
+        "400": { $ref: "#/components/responses/InvalidChannel" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Delete a channel
+      operationId: deleteAlertChannel
+      description: >
+        The channel is removed from every rule that pointed at it. A rule left
+        with no channels is disabled.
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Deleted" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /client/v1/alerts/channels/{id}/test:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      summary: Send a test message
+      operationId: testAlertChannel
+      description: >
+        Sends `{"type": "alert.test", ...}` (webhook) or a test message
+        (Slack) now. The response says whether the target accepted it. The
+        attempt is recorded and counts toward the channel's failure count.
+      responses:
+        "200":
+          description: Result of the attempt
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      delivered: { type: boolean }
+                      http_status: { type: integer, nullable: true }
+                      error: { type: string, nullable: true, example: "HTTP 404" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Agency key (`ak_`) only; a location secret key (`sk_`) gets `403
+        agency_required`. Agency-wide scoped keys (`mcp_`) are accepted and
+        need `alerts:read` or `alerts:write`. Keys are server-side
+        credentials; this surface serves no CORS headers.
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: { type: array, items: { type: string } }
+    Deleted:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            deleted: { type: boolean, example: true }
+    Alert:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        source: { type: string, enum: [contracts, uptime, airbyte, drift, quota] }
+        fingerprint:
+          type: string
+          description: "Which condition this is, e.g. `uptime:<location>:<slug>`. At most one open alert per fingerprint."
+          example: "uptime:loc_abc123:spring-sale"
+        location_id: { type: string, nullable: true, description: "The client it is about. `null` for agency-level alerts (quota)." }
+        severity: { type: string, enum: [info, warning, critical] }
+        title: { type: string, example: "Short link /spring-sale is down" }
+        detail: { type: string, nullable: true }
+        payload: { type: object, description: "Source-specific facts, e.g. the violating contract events." }
+        status: { type: string, enum: [open, resolved] }
+        occurrences: { type: integer, description: "How many times the detector reported this episode." }
+        opened_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+        resolved_at: { type: string, format: date-time, nullable: true }
+        resolved_by: { type: string, enum: [source, user], nullable: true }
+    Delivery:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        channel_id: { type: string, format: uuid }
+        rule_id: { type: string, format: uuid, nullable: true }
+        transition: { type: string, enum: [opened, changed, resolved, test] }
+        ok: { type: boolean }
+        http_status: { type: integer, nullable: true }
+        error: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+    RuleInput:
+      type: object
+      properties:
+        name: { type: string, maxLength: 120 }
+        sources:
+          type: array
+          items: { type: string, enum: [contracts, uptime, airbyte, drift, quota] }
+          description: Empty or omitted = every source.
+        location_ids:
+          type: array
+          items: { type: string }
+          description: >-
+            Client ids. Empty or omitted = every client, including ones added
+            later. Agency-level alerts (quota) only match rules that cover
+            every client.
+        min_severity: { type: string, enum: [info, warning, critical], default: warning }
+        channel_ids:
+          type: array
+          items: { type: string, format: uuid }
+          description: Required on create, at least one. Channels must belong to the agency.
+        notify_on_resolve: { type: boolean, default: true }
+        enabled: { type: boolean, default: true }
+    Rule:
+      allOf:
+        - $ref: "#/components/schemas/RuleInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+    Channel:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [slack, webhook] }
+        label: { type: string, nullable: true }
+        target: { type: string, description: "Masked.", example: "https://hooks.slack.com/***" }
+        signed: { type: boolean, description: "Webhook channels sign every delivery." }
+        active: { type: boolean }
+        consecutive_failures: { type: integer }
+        last_delivery_at: { type: string, format: date-time, nullable: true }
+        last_error: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+  responses:
+    Unauthorized:
+      description: "`unauthorized` — missing or invalid key."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    AgencyRequired:
+      description: "`agency_required` — this surface requires an agency key (`ak_`)."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: "`agency_required`, or `location_not_linked` — a location id does not belong to this agency."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    BadRequest:
+      description: "`invalid_status`, `invalid_source`, `invalid_before` or `invalid_body`."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    InvalidRule:
+      description: "`invalid_rule` (details lists each problem) or `unknown_channel` (a channel id is not this agency's)."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    InvalidChannel:
+      description: "`invalid_channel` — details lists each problem (not https, unknown kind, unknown field)."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: "`not_found` — no such id for this agency."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    TooMany:
+      description: "`too_many_rules` (50 per agency) or `too_many_channels` (20 per agency)."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: "`rate_limited` — 120 requests/min per agency. Retry after the `Retry-After` header."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

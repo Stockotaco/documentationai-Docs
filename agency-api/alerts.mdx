@@ -1,0 +1,137 @@
+---
+title: Alerts
+description: >-
+  One feed of every alert Mythic raises across your clients, rules that route
+  them, and the Slack and webhook channels they are delivered to, on
+  /client/v1/alerts with an agency key.
+---
+
+## Overview
+
+Mythic already watches your clients: event contracts, short link uptime, data
+syncs, incrementality experiments and usage. The Alerts API puts everything
+those detectors find in one feed and lets you decide where it goes.
+
+| Route | What it does |
+| --- | --- |
+| `GET /alerts/events` | The feed across every client, newest first |
+| `GET /alerts/events/{id}` | One alert and every delivery attempt made for it |
+| `PATCH /alerts/events/{id}` | Resolve an alert by hand |
+| `/alerts/rules` | Which sources, for which clients, at what severity, go to which channels |
+| `/alerts/channels` | Slack incoming webhooks and signed HTTPS webhooks |
+| `POST /alerts/channels/{id}/test` | Send a test message now |
+
+The same operations are MCP tools: `list_alerts`, `get_alert`,
+`resolve_alert`, `list_alert_rules`, `create_alert_rule`, `update_alert_rule`,
+`delete_alert_rule`, `list_alert_channels`, `create_alert_channel`,
+`update_alert_channel`, `delete_alert_channel` and `test_alert_channel`.
+
+## Base URL
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/alerts
+```
+
+## Authentication
+
+**Agency key (`ak_`), or an agency-wide `mcp_` key with `alerts:read` or
+`alerts:write`.** A location secret key (`sk_`) gets `403 agency_required`.
+
+<Callout kind="alert">
+  This surface serves **no CORS headers**. Call it from your server, never from
+  browser JavaScript.
+</Callout>
+
+## Sources
+
+| Source | Raised when | Checked |
+| --- | --- | --- |
+| `contracts` | Events violate their contract, or the client sent nothing all day | Daily, ~08:00 UTC |
+| `uptime` | A short link destination fails 3 checks in a row, and when it recovers | Every 5 minutes |
+| `airbyte` | A data sync fails, and when the next one succeeds | On each sync |
+| `drift` | An incrementality experiment has new outlier days in its test window | Daily |
+| `quota` | The agency crosses 80% or 100% of a monthly event quota (agency-level, no client) | Daily |
+
+Each detector keeps its own threshold. A rule never re-decides whether
+something is broken; it only decides who hears about it.
+
+<Callout kind="note">
+  The `contracts` and `drift` checks run for a client when either its own
+  webhook is set (`/settings/contract-alerts`, or `alert_webhook_url` on the
+  experiment) or your agency has an enabled rule that routes that source. Those
+  per-feature webhooks keep working unchanged.
+</Callout>
+
+## How an alert moves
+
+One condition is one alert. It **opens** once and notifies the channels your
+rules select. The detector reporting it again only increases `occurrences`.
+If the condition changes shape (a different set of failing contracts, a new
+outlier day, a higher severity) it notifies again as **changed**. When the
+detector clears it, it **resolves** and notifies rules with
+`notify_on_resolve`. If the condition comes back later, a new alert opens.
+
+Resolving by hand (`PATCH /alerts/events/{id}`) sends nothing.
+
+## Set up Slack in two calls
+
+<Steps>
+  <Step title="Create the channel">
+    ```bash
+    curl -X POST "https://mythic-analytics.gulp.workers.dev/client/v1/alerts/channels" \
+      -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
+      -d '{"kind":"slack","target":"https://hooks.slack.com/services/T000/B000/XXXX","label":"#client-alerts"}'
+    ```
+  </Step>
+  <Step title="Route every client's alerts to it">
+    ```bash
+    curl -X POST "https://mythic-analytics.gulp.workers.dev/client/v1/alerts/rules" \
+      -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
+      -d '{"name":"Everything to Slack","channel_ids":["<channel id>"]}'
+    ```
+  </Step>
+</Steps>
+
+Empty `sources` and `location_ids` mean every source and every client,
+including clients you add later. `min_severity` defaults to `warning`.
+
+## Webhook deliveries
+
+A `webhook` channel receives a POST for each transition:
+
+```json
+{
+  "type": "alert.opened",
+  "alert": {
+    "id": "5f0c…",
+    "source": "uptime",
+    "fingerprint": "uptime:loc_abc123:spring-sale",
+    "location_id": "loc_abc123",
+    "location_name": "Rockwell Supply",
+    "severity": "critical",
+    "title": "Short link /spring-sale is down",
+    "detail": "https://rockwellsupply.com/sale failed 3 checks in a row (HTTP 404).",
+    "payload": { "slug": "spring-sale", "status_code": 404 },
+    "status": "open",
+    "occurrences": 1
+  },
+  "sent_at": "2026-09-24T14:02:11.000Z"
+}
+```
+
+`type` is `alert.opened`, `alert.changed`, `alert.resolved` or `alert.test`.
+Every delivery carries `X-Mythic-Event` and `X-Mythic-Signature:
+sha256=<hex>`, the HMAC-SHA256 of the raw body with the channel's signing
+secret. That secret is returned once, when the channel is created. Deduplicate
+on `alert.id` plus `type`.
+
+Delivery is one attempt per transition with a 10-second timeout, recorded on
+the alert (`GET /alerts/events/{id}`). There is no retry queue. After 20
+consecutive failures a channel is parked (`active: false`); set `active: true`
+to resume it.
+
+## Limits
+
+50 rules and 20 channels per agency, 10 channels per rule, 120 requests per
+minute. Channel targets must be `https://`. Email delivery is not available
+yet.
