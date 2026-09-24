@@ -376,7 +376,7 @@ matching rule wins:
 
 | Group | Rule |
 |-------|------|
-| Paid Search | source is adwords / google_ads / bing_ads, or a search engine with a paid medium (`cpc`, `ppc`, `retargeting`, `paid*`, anything containing `cp`) |
+| Paid Search | an ad-product source (`adwords`, `google_ads`, `google_ad`, `bing_ads`, `microsoft_ads`, …); a search engine with a paid medium (`cpc`, `ppc`, `retargeting`, `paid*`, anything containing `cp`); or a search engine with any other hand-set medium, such as a campaign name (`google` / `spring_sale`). A search engine with no medium, `organic`, `seo`, a display medium or an email medium is not Paid Search |
 | Paid Social | a social source (facebook, fb, instagram, ig, tiktok, x, linkedin, youtube, reddit, pinterest, …) with a paid medium; medium `paid_social`; an ad-product source (`facebook_ad`, `youtube_ad`, `instagram_ad`, `meta_ads`, `tiktok-ads`, …); or a social source with any other hand-set medium, such as a campaign name (`fb` / `spring_sale`) |
 | Display | medium `display`, `banner`, `expandable`, `interstitial`, `cpm` |
 | Paid Other | any other paid medium |
