@@ -361,7 +361,7 @@ If the stored targets can't be read, the analysis still runs against pooled rate
       "revenue_paths": ["$.meta_amount"], "usable": true, "suggested_role": "conversion",
       "warning": "No event of this type carries a session (typical of CRM/webhook events)…" },
     { "event_name": "ghl_rebill", "total_events": 3000, "session_coverage": 0,
-      "person_coverage": 0, "credited_via": null,
+      "person_coverage": 0, "credited_via": null, "suggested_role": null,
       "usable": false, "warning": "These events carry neither a session nor a person…" }
   ]
 }
@@ -373,6 +373,8 @@ Four fields do the work:
 - **`person_coverage`** — the share that carry a person. This is what decides usability on a CRM-fed client: a session-less conversion is credited to that person's nearest paid touch (see [How conversions get credited](#how-conversions-get-credited)).
 - **`revenue_paths`** — which JSON paths actually hold a number, so you know what to pass as `revenue_path`. An event with none can still be a `lead_event`; it just can't carry revenue.
 - **`usable`** — whether the event can be credited to a campaign **at all**. `false` only when neither a session nor a person is present. `credited_via` tells you which route it will take.
+
+`suggested_role` repeats the `suggested` pairing on the events themselves: `conversion` and `lead` on the two suggested events, `null` on the rest. It is not a per-event classification, so a `null` event can still be passed as `lead_event` or `conversion_event`.
 
 <Callout kind="alert">
 **A session-less conversion is not an unusable one.** CRM and webhook conversions (GoHighLevel over Pub/Sub, for instance) never touch the browser, so they carry no session — and on a CRM-fed client they are the *only* revenue events there are. They are credited through the person instead, so they remain usable. What that costs you is visible in the response: `conversion_attribution.uncredited` counts the conversions whose people never visited from an ad inside `attribution_window_days`, and on a real account that can be the majority. Read it before quoting a conversion count.

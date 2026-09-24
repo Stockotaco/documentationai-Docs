@@ -976,8 +976,10 @@ paths:
         `issue_id` and it stays put.
 
 
-        Each row carries `occurrences` / `sessions` / `users`, `first_seen` /
-        `last_seen`, a `culprit` (top in-app stack frame, for the list
+        Each row carries `occurrences` / `sessions` / `users`,
+        `first_seen_in_range` / `last_seen` (both bounded by the window: an
+        issue that started before `date_from` reports `date_from`'s first
+        sighting, not its true first one), a `culprit` (top in-app stack frame, for the list
         subtitle), and a `volume_series` bucketed to the window (hourly for
         short ranges, else daily) for the sparkline.
 
@@ -2182,8 +2184,19 @@ components:
           nullable: true
           description: Top in-app stack frame ("function in file"), for the list subtitle.
           example: "handler in app.js"
-        first_seen: { type: string, format: date-time }
-        last_seen: { type: string, format: date-time }
+        first_seen_in_range:
+          type: string
+          format: date-time
+          description: "Earliest occurrence inside the query window. Not the issue's first-ever sighting."
+        first_seen:
+          type: string
+          format: date-time
+          deprecated: true
+          description: "Deprecated alias of `first_seen_in_range` (same value, window-bounded)."
+        last_seen:
+          type: string
+          format: date-time
+          description: "Latest occurrence inside the query window."
         occurrences: { type: integer, example: 366 }
         sessions: { type: integer, example: 204 }
         users: { type: integer, example: 183 }

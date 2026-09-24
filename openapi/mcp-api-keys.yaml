@@ -150,8 +150,9 @@ components:
           type: array
           description: >
             Permission scopes in `resource:action`, `resource:*`, or `*` form
-            (e.g. `insights:read`, `dashboards:*`, `analytics:call`). An empty
-            array grants unrestricted access. See the Authentication page.
+            (e.g. `insights:read`, `dashboards:*`, `analytics:call`). Omitted
+            on create means `["*"]`; an explicit empty array is refused with
+            `400 empty_scopes`. See the Authentication page.
           items:
             type: string
           example:

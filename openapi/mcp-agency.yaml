@@ -91,9 +91,10 @@ paths:
                   items: { type: string }
                   description: >
                     Scope strings (`resource:read`, `resource:write`,
-                    `resource:*`, or `*`). Omitted or empty means `["*"]` —
-                    unrestricted. An empty array does **not** mean "no access";
-                    to restrict a key, name the scopes it should have.
+                    `resource:*`, or `*`). Omitted means `["*"]`, unrestricted.
+                    An explicit empty array is refused with `400 empty_scopes`
+                    (on update too). To restrict a key, name the scopes it
+                    should have. To disable one, PATCH `is_active: false`.
                     Every string must be a scope from the catalog on the
                     authentication page; a misspelled or retired scope answers
                     `400 invalid_scope` naming it, and is never stored.
@@ -123,12 +124,14 @@ paths:
                     type: string
                     example: Save this key now. It cannot be retrieved after this response.
         "400":
-          description: Missing `name`, or client-scoped with no resolvable location.
+          description: >
+            `missing_name`, `invalid_json`, `invalid_scope`, `empty_scopes`, or
+            `location_required` (client-scoped with no resolvable location).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "403":
-          description: Not an agency key, or the location is not linked to this agency.
+          description: "`agency_key_required`, or `location_not_linked` (the location is not linked to this agency)."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -152,6 +155,11 @@ paths:
                 scopes:
                   type: array
                   items: { type: string }
+                  minItems: 1
+                  description: >
+                    Replaces the key's scopes. Same rule as create: catalog
+                    strings only (`400 invalid_scope`), and an empty array is
+                    refused with `400 empty_scopes`.
                   example: ["people:read"]
                 rate_limit_per_minute: { type: integer, example: 120 }
                 is_active:
@@ -571,3 +579,7 @@ components:
         error:
           type: string
           example: MCP admin requires an agency key (ak_)
+        code:
+          type: string
+          description: "Machine-readable reason. On the api-keys routes: `agency_key_required`, `invalid_json`, `missing_name`, `invalid_scope`, `empty_scopes`, `location_required`, `location_not_linked`, `no_fields`, `not_found`, `read_failed`, `create_failed`, `update_failed`, `delete_failed`."
+          example: agency_key_required

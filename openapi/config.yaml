@@ -662,12 +662,20 @@ paths:
       operationId: listConfigSnippets
       description: >
         Every custom code snippet for this location. The list omits the `code`
-        body — fetch a single snippet to read it.
+        body unless `include=code` is passed, so an editor can load every
+        snippet in one call.
       parameters:
         - $ref: "#/components/parameters/LocationId"
+        - name: include
+          in: query
+          required: false
+          description: "Pass `code` to add each snippet's `code` body. Any other value is a `400 invalid_include`."
+          schema:
+            type: string
+            enum: [code]
       responses:
         "200":
-          description: Snippets (without `code`)
+          description: Snippets (with `code` only when `include=code`)
           content:
             application/json:
               schema:
@@ -677,6 +685,7 @@ paths:
                   data:
                     type: array
                     items: { $ref: "#/components/schemas/SnippetSummary" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
     post:
@@ -1272,9 +1281,10 @@ components:
           $ref: "#/components/schemas/TriggerRules"
     SnippetSummary:
       type: object
-      description: List shape — `code` is omitted.
+      description: "List shape: `code` is present only with `include=code`."
       properties:
         id: { type: string, format: uuid }
+        code: { type: string, description: "Only with `include=code`." }
         tenant_key: { type: string, example: loc_abc123 }
         description: { type: string, nullable: true, example: Debug logger }
         enabled: { type: boolean, example: true }

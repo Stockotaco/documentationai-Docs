@@ -1101,7 +1101,16 @@ paths:
                                 CRM-fed client they are the only revenue events there
                                 are. `false` only when neither a session nor a person
                                 is present.
-                            suggested_role: { type: string, enum: [conversion, lead] }
+                            suggested_role:
+                              type: string
+                              enum: [conversion, lead]
+                              nullable: true
+                              description: >
+                                `conversion` on the event named in
+                                `suggested.conversion_event`, `lead` on
+                                `suggested.lead_event`, `null` on every other
+                                event. It marks the suggested pairing, not a
+                                classification of each event.
                             warning:
                               type: string
                               description: >
