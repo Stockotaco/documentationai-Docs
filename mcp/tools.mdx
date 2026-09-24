@@ -317,7 +317,7 @@ Link redirects, click analytics, link webhooks and uptime.
 
 | Tool | Scope | What it does | Proxies |
 | --- | --- | --- | --- |
-| `list_links`<br /><span style={{opacity: 0.7}}>List Links</span> | `links:read` | This client's link redirects, newest first, each enriched with its all-time click_count. | `GET /client/v1/links` |
+| `list_links`<br /><span style={{opacity: 0.7}}>List Links</span> | `links:read` | This client's link redirects, newest first, each enriched with its click_count for date_from..date_to (default: the last 30 days). | `GET /client/v1/links` |
 | `get_link_analytics`<br /><span style={{opacity: 0.7}}>Get Link Analytics</span> | `links:read` | Aggregated click analytics per link (totals by slug), optionally narrowed to one slug, a date range, or specific UTM values. | `GET /client/v1/links/analytics` |
 | `get_link_trend`<br /><span style={{opacity: 0.7}}>Get Link Click Trend</span> | `links:read` | Click counts over time for link redirects — the time-series companion to get_link_analytics. | `GET /client/v1/links/trend` |
 | `get_link_click_stream`<br /><span style={{opacity: 0.7}}>Get Link Click Stream</span> | `links:read` | Individual recent link clicks (real-time stream), newest first — who clicked what, with UTM detail. | `GET /client/v1/links/stream` |

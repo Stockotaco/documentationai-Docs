@@ -90,10 +90,25 @@ paths:
       description: >
         List short links for the authenticated location, ordered by newest
         first. Each link is enriched with a `click_count` sourced from
-        Tinybird.
+        Tinybird, counted over `date_from`..`date_to` (the last 30 days
+        when neither is given).
       parameters:
         - $ref: "#/components/parameters/LocationIdQuery"
         - $ref: "#/components/parameters/LocationIdHeader"
+        - name: date_from
+          in: query
+          description: "Start of the click_count window (ISO date, inclusive). Default: 30 days ago."
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          description: "End of the click_count window (ISO date, inclusive). Default: now."
+          required: false
+          schema:
+            type: string
+            format: date
         - name: enabled
           in: query
           description: Filter by enabled state. Pass `true` or `false`.
@@ -708,7 +723,7 @@ components:
           example: "2024-06-15T08:30:00.000Z"
         click_count:
           type: integer
-          description: Total clicks sourced from Tinybird. Present on the list endpoint.
+          description: "Clicks in the requested window (default: the last 30 days), sourced from Tinybird. Present on the list endpoint."
           example: 1247
     Uptime:
       type: object
