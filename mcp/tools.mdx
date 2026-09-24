@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 228 tools across
+  Every tool the Mythic MCP server exposes — 230 tools across
   26 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 228 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 230 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -345,6 +345,8 @@ GTM-like tags fired by the SDK.
 | `list_tag_versions`<br /><span style={{opacity: 0.7}}>List Tag Versions</span> | `tags:read` | Version history of the tag config, newest first: number, source (auto, publish, restore, mode_change), name, notes, who created it and when. | `GET /client/v1/config/versions` |
 | `get_tag_version`<br /><span style={{opacity: 0.7}}>Get Tag Version</span> | `tags:read` | One version: what changed from the previous version, the full snapshot (disabled rows included) and the layer the SDK runs from it. | `GET /client/v1/config/versions/:version` |
 | `get_live_tag_config`<br /><span style={{opacity: 0.7}}>Get Live Tag Config</span> | `tags:read` | The tags, snippets and transformers the SDK is served right now, which version that is, and in_sync: whether it matches what should be live (latest version in draft mode, workspace in immediate mode). | `GET /client/v1/config/live` |
+| `list_tag_firings`<br /><span style={{opacity: 0.7}}>List Tag Firings</span> | `tags:read` | How often each tag and snippet fired in a window: fires, sessions, distinct pages, distinct triggers, first and last fired. | `GET /client/v1/config/firings` |
+| `get_tag_firing_breakdown`<br /><span style={{opacity: 0.7}}>Get Tag Firing Breakdown</span> | `tags:read` | Where one tag or snippet fired: by page (host + path), by trigger ("page_load" or the Mythic event that triggered it) or by day. | `GET /client/v1/config/firings/:kind/:id` |
 | `create_tag`<br /><span style={{opacity: 0.7}}>Create Tag Assignment</span> | `tags:write` | Assign a tag to the active client (tenant_tags row). | `POST /client/v1/config/tags` |
 | `update_tag`<br /><span style={{opacity: 0.7}}>Update Tag Assignment</span> | `tags:write` | Update a tag assignment for the active client. | `PATCH /client/v1/config/tags/:tagId` |
 | `delete_tag`<br /><span style={{opacity: 0.7}}>Delete Tag Assignment</span> | `tags:write` | Remove a tag assignment from the active client. | `DELETE /client/v1/config/tags/:tagId` |

@@ -40,6 +40,25 @@ These fire only when their feature is enabled (most are on by default — see th
   When remote-config tags or snippets fail, the SDK also reports `$tag_error`, `$snippet_error`, and `$snippet_compilation_error`; a failing event transformer reports `$transformer_error`.
 </Callout>
 
+### `$tags_fired`
+
+When a remote-config tag or snippet fires, the SDK records it on the **next event it sends** as a `$tags_fired` array. No separate event is sent, and each firing appears on exactly one event:
+
+```json
+"$tags_fired": [
+  { "id": "3f1c2a9e-8d4b-4e7a-9c1f-2b6d8e0a5c47", "kind": "tag", "trigger": "page_load", "path": "/checkout" },
+  { "id": "9b0d4e7c-1a2b-4c3d-8e9f-0a1b2c3d4e5f", "kind": "snippet", "trigger": "$autocapture", "path": "/checkout" }
+]
+```
+
+- A firing is a tag whose script loaded, an inline tag that was inserted, a managed Meta or Google tag that initialised, or a snippet that ran. A tag skipped by its trigger rules or a script that failed to load is not a firing. A tag or snippet that throws while running still fired; its error is the separate `$tag_error` or `$snippet_error` event.
+- `trigger` is `page_load`, or the name of the event whose trigger rule matched.
+- `path` is where it fired, which may differ from the carrying event's page: the first `$pageview` is sent before tags load, so page-load firings usually ride the next interaction or the `$pageleave`.
+- Each tag fires at most once per page load, including across SPA navigations.
+- A firing followed by no event at all, such as a bounce under a second, is not reported.
+
+Read the totals with the [Client Config firings routes](/config-api/overview#firings).
+
 <Callout kind="note">
   `$experiment_viewed` fires **once per session per assignment**, so it counts sessions exposed to a variation — not pageviews. To split other events by variation, filter on the `$experiments` super property that every event carries once the assignment is known: `"<experimentId>:<variationId>"` for Convert.com, `"posthog:<flagKey>:<variant>"` for PostHog. For PostHog, only experiment-linked and multivariate flags appear — boolean feature flags are rollouts, not tests.
 </Callout>

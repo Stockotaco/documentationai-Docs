@@ -21,7 +21,7 @@ location, plus the templates tags are built from:
 | **Transformers** | Event transforms (`map` field mappings or `code`) applied by the SDK to every captured event before it is sent, in `priority` order | `transformers` |
 
 The Client Config API is CRUD over those on `/client/v1/config`, plus
-version history and draft/publish for them — 26 routes. The same operations exist as MCP tools on the
+version history, draft/publish and firing data for them — 28 routes. The same operations exist as MCP tools on the
 [Settings Server](/mcp/settings-server) (`tags`, `snippets`, `transformers`
 scope families); this is their headless REST form.
 
@@ -129,6 +129,15 @@ version.
 | `POST /versions/{version}/restore` | Roll back: rewrite the workspace to that version and publish it as a new version (`source: restore`, `restored_from`). In draft mode `{"publish": false}` loads it into the workspace without going live. |
 | `GET /live` | What the SDK is served right now, its `served_version`, and `in_sync`: whether it matches what should be live (the latest version in draft mode, the workspace in immediate mode). `false` means a rebuild failed. |
 
+Only the **3 most recent versions** are kept per location. Recording a new
+version deletes the oldest one beyond that. Version numbers keep counting up,
+so the survivors after nine changes are 7, 8 and 9, a number is never reused,
+and restoring a deleted version returns `404`. `GET /versions` reports the cap
+as `retention`. For the oldest kept version the previous one is gone, so
+`GET /versions/{version}` returns `changes: null` and `previous_pruned: true`.
+In immediate mode every change records a version, so the 3 kept are the last
+3 changes.
+
 Each version records `created_by`: `agency` for an agency key, `mcp:<key
 prefix>` for a scoped key, `admin` or `null` for internal rebuilds. The key
 itself is never stored.
@@ -140,6 +149,24 @@ and is listed in `skipped_tags`.
 These routes use the `tags` scope family: reads need `tags:read`, and
 publishing, restoring and changing the mode need `tags:write`. A publish
 covers snippets and transformers too.
+
+## Firings
+
+Which tags and snippets fired, where and on what. The SDK reports each firing
+on the next event it sends as [`$tags_fired`](/javascript-sdk/auto-captured-events#tags_fired),
+and Mythic totals them per tag. Data starts from SDK 3.33.
+
+| Route | What it does |
+| --- | --- |
+| `GET /firings` | One row per tag and snippet in the workspace: `fires`, `sessions`, distinct `pages`, distinct `triggers`, `first_fired`, `last_fired`. A tag that never fired is listed with zeros. A firing of a tag or snippet that has since been removed is listed with `in_workspace: false`. |
+| `GET /firings/{kind}/{id}` | Where one tag (`kind` = `tag`, `id` = its template id) or snippet (`kind` = `snippet`) fired, grouped by `by=page` (host + path, the default), `by=trigger` (`page_load` or the event name) or `by=day`. |
+
+Both take `date_from` and `date_to` (ISO). The default window is the last 30
+days, and the longest is 365 days, which is also how long firings are kept.
+
+A page-load tag fires once per page load, so its `fires` reads as page loads.
+A managed Meta or Google tag counts once per page load too: forwarding later
+events to the pixel is not a new firing.
 
 ## Quickstart
 
@@ -267,6 +294,9 @@ covers snippets and transformers too.
 | `403` | `template_read_only` | PATCH or DELETE on a Mythic catalog template |
 | `404` | `not_found` | No such tag assignment, tag template, snippet, or transformer for this location |
 | `404` | `template_not_found` | `POST /tags` with a template id the location cannot see |
+| `400` | `bad_date`, `bad_by` | Firings: an unparseable or reversed window, a window over 365 days, or `by` other than `page`/`trigger`/`day` |
+| `502` | `query_failed` | Firings: the analytics query failed |
+| `503` | `analytics_unavailable` | Firings: the analytics backend is not configured |
 | `400` | `bad_mode`, `bad_field`, `bad_limit`, `bad_before`, `publish_required` | Versions: a mode other than `immediate`/`draft`, a `name` over 200 or `notes` over 2,000 characters, a bad page parameter, or `publish: false` on a restore in immediate mode |
 | `404` | `not_found` | No such version for this location |
 | `409` | `template_in_use` | DELETE on a template that is still assigned |

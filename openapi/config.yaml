@@ -404,7 +404,9 @@ paths:
     get:
       summary: List versions
       operationId: listConfigVersions
-      description: Version history, newest first.
+      description: >-
+        Version history, newest first. Only the 3 most recent versions are
+        kept; version numbers keep counting up, so a number is never reused.
       parameters:
         - $ref: "#/components/parameters/LocationId"
         - name: limit
@@ -428,6 +430,10 @@ paths:
                   data:
                     type: array
                     items: { $ref: "#/components/schemas/TagConfigVersion" }
+                  retention:
+                    type: integer
+                    example: 3
+                    description: How many of the most recent versions are kept. Older ones are deleted.
                   next_before: { type: integer, nullable: true }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -459,7 +465,12 @@ paths:
                           counts: { $ref: "#/components/schemas/ConfigCounts" }
                           changes:
                             type: array
+                            nullable: true
+                            description: Changes from the previous version. `null` when the previous version was deleted by the 3-version cap.
                             items: { $ref: "#/components/schemas/ConfigChange" }
+                          previous_pruned:
+                            type: boolean
+                            description: True when the previous version no longer exists.
                           snapshot:
                             type: object
                             description: "The workspace at this version: `tags` (each with its `template`), `snippets`, `transformers`."
@@ -555,6 +566,96 @@ paths:
                       managed_tags: { type: array, items: { type: object } }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/config/firings:
+    get:
+      summary: List tag firings
+      operationId: listConfigFirings
+      description: >-
+        Firing totals for every tag and snippet in the workspace, from the
+        `$tags_fired` property the SDK (3.33+) adds to events. A tag that never
+        fired is listed with zeros; a firing of a removed tag or snippet is
+        listed with `in_workspace: false`. Sorted by `fires`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/FiringDateFrom"
+        - $ref: "#/components/parameters/FiringDateTo"
+      responses:
+        "200":
+          description: Firing totals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/FiringSummary" }
+                  window: { $ref: "#/components/schemas/FiringWindow" }
+        "400": { $ref: "#/components/responses/FiringBadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/FiringQueryFailed" }
+  /client/v1/config/firings/{kind}/{id}:
+    get:
+      summary: Get where a tag fired
+      operationId: getConfigFiringBreakdown
+      description: >-
+        Where one tag or snippet fired, grouped by page (host + path), by
+        trigger (`page_load` or the event whose trigger rule matched) or by
+        day. Each row names its group under the `by` value: `page`,
+        `trigger` or `day`.
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema: { type: string, enum: [tag, snippet] }
+        - name: id
+          in: path
+          required: true
+          description: The tag's template id (its `tag_id`) or the snippet id.
+          schema: { type: string, format: uuid }
+        - name: by
+          in: query
+          required: false
+          schema: { type: string, enum: [page, trigger, day], default: page }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/FiringDateFrom"
+        - $ref: "#/components/parameters/FiringDateTo"
+      responses:
+        "200":
+          description: Breakdown
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        page: { type: string, example: shop.example.com/checkout, description: "Present for by=page." }
+                        trigger: { type: string, example: $autocapture, description: "Present for by=trigger." }
+                        day: { type: string, example: "2026-09-24", description: "Present for by=day." }
+                        fires: { type: integer }
+                        sessions: { type: integer }
+                        first_fired: { type: string, format: date-time }
+                        last_fired: { type: string, format: date-time }
+                  kind: { type: string, enum: [tag, snippet] }
+                  id: { type: string, format: uuid }
+                  by: { type: string, enum: [page, trigger, day] }
+                  window: { $ref: "#/components/schemas/FiringWindow" }
+        "400": { $ref: "#/components/responses/FiringBadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/FiringQueryFailed" }
   /client/v1/config/snippets:
     get:
       summary: List snippets
@@ -893,6 +994,18 @@ components:
       description: The tag template id of the assignment.
       schema: { type: string, format: uuid }
       example: 3f1c2a9e-8d4b-4e7a-9c1f-2b6d8e0a5c47
+    FiringDateFrom:
+      name: date_from
+      in: query
+      required: false
+      description: ISO date or timestamp. Default 30 days before `date_to`. The window is at most 365 days.
+      schema: { type: string }
+    FiringDateTo:
+      name: date_to
+      in: query
+      required: false
+      description: ISO date or timestamp. Default now.
+      schema: { type: string }
     VersionNumber:
       name: version
       in: path
@@ -930,6 +1043,16 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
     Unauthorized:
       description: Missing or invalid key, or an `ak_` key with no location bound.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    FiringBadRequest:
+      description: "`bad_date` (unparseable or reversed window, or over 365 days), `bad_by` or `bad_limit`."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    FiringQueryFailed:
+      description: "`query_failed` — the analytics query failed."
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -999,6 +1122,26 @@ components:
         `POST /client/v1/config/publish`. This field exists because tenant-config
         KV sync is not trigger-driven; a write the SDK never sees is the
         failure mode, so a failed sync is reported instead of silent.
+    FiringWindow:
+      type: object
+      properties:
+        date_from: { type: string, format: date-time }
+        date_to: { type: string, format: date-time }
+    FiringSummary:
+      type: object
+      properties:
+        kind: { type: string, enum: [tag, snippet] }
+        id: { type: string, description: "The tag's template id or the snippet id." }
+        name: { type: string, nullable: true, description: "Template name, or the snippet's description." }
+        type: { type: string, nullable: true, enum: [url, inline, meta_pixel, google_tag] }
+        enabled: { type: boolean }
+        in_workspace: { type: boolean, description: "False for firings of a tag or snippet that has been removed." }
+        fires: { type: integer }
+        sessions: { type: integer }
+        pages: { type: integer, description: Distinct host + path pairs. }
+        triggers: { type: integer, description: Distinct triggers. }
+        first_fired: { type: string, format: date-time, nullable: true }
+        last_fired: { type: string, format: date-time, nullable: true }
     PublishMode:
       type: string
       enum: [immediate, draft]
