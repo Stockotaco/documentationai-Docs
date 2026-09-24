@@ -20,8 +20,8 @@ location, plus the templates tags are built from:
 | **Snippets** | Custom JavaScript (`code`) injected by the SDK | `tenant_snippets` |
 | **Transformers** | Event transforms (`map` field mappings or `code`) applied by the SDK to every captured event before it is sent, in `priority` order | `transformers` |
 
-The Client Config API is CRUD over those on `/client/v1/config` — 19
-routes. The same operations exist as MCP tools on the
+The Client Config API is CRUD over those on `/client/v1/config`, plus
+version history and draft/publish for them — 26 routes. The same operations exist as MCP tools on the
 [Settings Server](/mcp/settings-server) (`tags`, `snippets`, `transformers`
 scope families); this is their headless REST form.
 
@@ -63,6 +63,8 @@ response tells you how that went:
 - `"failed: <reason>"` — the database write landed, but **the edge is still
   serving the previous config**. Retry the write (any successful write
   re-syncs the whole location config), or rebuild via the admin API.
+- `"draft"` — the location is in [draft mode](#versions-and-publishing). The
+  write is saved to the workspace and goes live with `POST /publish`.
 
 Treat a `failed` sync as the write not having taken effect yet — because for
 the SDK, it hasn't.
@@ -95,6 +97,49 @@ deleted (`409 template_in_use`): remove the assignment first.
 Another location's template id reads as `404`, on every route. Assigning one
 with `POST /tags` returns `404 template_not_found`, and the database refuses it
 for every other writer too.
+
+## Versions and publishing
+
+A **version** is a numbered snapshot of the location's tags (with the template
+content they use), snippets and transformers, disabled ones included. The
+managed Meta and Google tags are not versioned: each is paired with a
+server-side destination that is not versioned, so they always go live
+immediately.
+
+Each location has a publishing mode:
+
+| Mode | Writes | Versions |
+| --- | --- | --- |
+| `immediate` (default) | Go live on the spot, as they always have | Recorded automatically (`source: auto`) whenever a write changes the config |
+| `draft` | Saved to the workspace only (`kv_sync: "draft"`) | Recorded by `POST /publish`, which also makes the workspace live |
+
+Switch with `PUT /publish-mode`. Switching to `draft` records the current
+config as a version first. Switching back to `immediate` publishes the
+workspace, drafts included. In draft mode nothing else can publish a draft:
+settings changes, integrations and admin rebuilds keep serving the latest
+version.
+
+| Route | What it does |
+| --- | --- |
+| `GET /workspace` | Mode, latest version, and `changes`: every tag, snippet and transformer added, removed or modified since it. This is the "unpublished changes" list. |
+| `PUT /publish-mode` | `{"mode": "draft"}` or `{"mode": "immediate"}` |
+| `POST /publish` | Record the workspace as a version and make it live. Optional `name` and `notes`. `201` with the new version, or `200` with `created: false` when nothing changed. |
+| `GET /versions` | History, newest first. Page with `?before=<next_before>`. |
+| `GET /versions/{version}` | One version: `changes` from the previous version, the full `snapshot`, and the `layer` the SDK runs from it. |
+| `POST /versions/{version}/restore` | Roll back: rewrite the workspace to that version and publish it as a new version (`source: restore`, `restored_from`). In draft mode `{"publish": false}` loads it into the workspace without going live. |
+| `GET /live` | What the SDK is served right now, its `served_version`, and `in_sync`: whether it matches what should be live (the latest version in draft mode, the workspace in immediate mode). `false` means a rebuild failed. |
+
+Each version records `created_by`: `agency` for an agency key, `mcp:<key
+prefix>` for a scoped key, `admin` or `null` for internal rebuilds. The key
+itself is never stored.
+
+A restore recreates a location's own templates if they were deleted. An
+assignment whose Mythic catalog template no longer exists cannot be restored
+and is listed in `skipped_tags`.
+
+These routes use the `tags` scope family: reads need `tags:read`, and
+publishing, restoring and changing the mode need `tags:write`. A publish
+covers snippets and transformers too.
 
 ## Quickstart
 
@@ -222,7 +267,10 @@ for every other writer too.
 | `403` | `template_read_only` | PATCH or DELETE on a Mythic catalog template |
 | `404` | `not_found` | No such tag assignment, tag template, snippet, or transformer for this location |
 | `404` | `template_not_found` | `POST /tags` with a template id the location cannot see |
+| `400` | `bad_mode`, `bad_field`, `bad_limit`, `bad_before`, `publish_required` | Versions: a mode other than `immediate`/`draft`, a `name` over 200 or `notes` over 2,000 characters, a bad page parameter, or `publish: false` on a restore in immediate mode |
+| `404` | `not_found` | No such version for this location |
 | `409` | `template_in_use` | DELETE on a template that is still assigned |
+| `500` | `publish_failed`, `restore_failed` | The version could not be recorded (nothing went live) or the restore transaction failed (nothing changed) |
 | `429` | `rate_limited` | 120 requests/min per location — retry after `Retry-After` |
 
 Deletes are idempotent for tags (removing an absent assignment succeeds);

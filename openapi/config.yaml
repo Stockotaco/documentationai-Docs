@@ -291,6 +291,270 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/config/workspace:
+    get:
+      summary: Get the workspace status
+      operationId: getConfigWorkspace
+      description: >-
+        Publishing mode, the latest version, and `changes`: every tag, snippet
+        and transformer added, removed or modified since that version. In
+        immediate mode with no version recorded yet, `changes` is empty.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Workspace status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      mode: { $ref: "#/components/schemas/PublishMode" }
+                      latest_version:
+                        allOf:
+                          - $ref: "#/components/schemas/TagConfigVersion"
+                        nullable: true
+                      has_unpublished_changes: { type: boolean }
+                      changes:
+                        type: array
+                        items: { $ref: "#/components/schemas/ConfigChange" }
+                      counts: { $ref: "#/components/schemas/ConfigCounts" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/config/publish-mode:
+    put:
+      summary: Set the publishing mode
+      operationId: setConfigPublishMode
+      description: >-
+        `immediate`: writes go live and record a version automatically.
+        `draft`: writes stay in the workspace until `POST /publish`. Switching
+        to `draft` records the current config as a version first; switching to
+        `immediate` publishes the workspace, drafts included. Agency key (`ak_`)
+        required.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              properties:
+                mode: { $ref: "#/components/schemas/PublishMode" }
+      responses:
+        "200":
+          description: Mode set
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      mode: { $ref: "#/components/schemas/PublishMode" }
+                      changed: { type: boolean }
+                      version: { type: integer, nullable: true }
+                      version_created: { type: boolean }
+                  kv_sync: { $ref: "#/components/schemas/KvSync" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/config/publish:
+    post:
+      summary: Publish the workspace
+      operationId: publishConfig
+      description: >-
+        Record the workspace (tags, snippets, transformers) as a new version and
+        make it live, in either mode. Returns `201` with the new version, or
+        `200` with `created: false` when nothing changed since the latest
+        version. If the version cannot be recorded, nothing goes live
+        (`500 publish_failed`). Agency key (`ak_`) required.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 200, example: Add Hotjar }
+                notes: { type: string, maxLength: 2000 }
+      responses:
+        "200": { $ref: "#/components/responses/Published" }
+        "201": { $ref: "#/components/responses/Published" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500":
+          description: "`publish_failed` — the version was not recorded and nothing went live."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /client/v1/config/versions:
+    get:
+      summary: List versions
+      operationId: listConfigVersions
+      description: Version history, newest first.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: before
+          in: query
+          required: false
+          description: Return versions older than this number. Pass the previous page's `next_before`.
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Versions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/TagConfigVersion" }
+                  next_before: { type: integer, nullable: true }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/config/versions/{version}:
+    get:
+      summary: Get a version
+      operationId: getConfigVersion
+      description: >-
+        One version, with `changes` from the previous version, the full
+        `snapshot` (disabled rows included) and the `layer` the SDK runs from it.
+      parameters:
+        - $ref: "#/components/parameters/VersionNumber"
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Version
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/TagConfigVersion"
+                      - type: object
+                        properties:
+                          counts: { $ref: "#/components/schemas/ConfigCounts" }
+                          changes:
+                            type: array
+                            items: { $ref: "#/components/schemas/ConfigChange" }
+                          snapshot:
+                            type: object
+                            description: "The workspace at this version: `tags` (each with its `template`), `snippets`, `transformers`."
+                          layer:
+                            type: object
+                            description: "What the SDK runs from this version: enabled `tags`, `snippets`, `transformers`."
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/config/versions/{version}/restore:
+    post:
+      summary: Restore a version
+      operationId: restoreConfigVersion
+      description: >-
+        Roll back: rewrite the workspace to this version in one transaction and
+        publish it as a new version (`source: restore`). The managed Meta and
+        Google tags are not touched. A location's own deleted templates are
+        recreated; assignments whose Mythic catalog template no longer exists
+        are listed in `skipped_tags`. In draft mode, `publish: false` loads the
+        version into the workspace without going live. Agency key (`ak_`)
+        required.
+      parameters:
+        - $ref: "#/components/parameters/VersionNumber"
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                publish: { type: boolean, default: true }
+      responses:
+        "200":
+          description: Restored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      restored_from: { type: integer, example: 4 }
+                      published: { type: boolean }
+                      version: { type: integer, description: "The new version, when published." }
+                      created: { type: boolean }
+                      skipped_tags:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            tag_id: { type: string, format: uuid }
+                            reason: { type: string, enum: [catalog_template_missing, template_not_owned] }
+                  kv_sync: { $ref: "#/components/schemas/KvSync" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/config/live:
+    get:
+      summary: Get the live config
+      operationId: getConfigLive
+      description: >-
+        The tags, snippets and transformers the SDK is served right now, which
+        version that is, and `in_sync`: whether it matches what should be live
+        (the latest version in draft mode, the workspace in immediate mode).
+        `in_sync: false` means a rebuild failed or was skipped.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Live config
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      mode: { $ref: "#/components/schemas/PublishMode" }
+                      served_version: { type: integer, nullable: true }
+                      latest_version: { type: integer, nullable: true }
+                      in_sync: { type: boolean }
+                      cfg_updated_at: { type: string, format: date-time, nullable: true }
+                      tags: { type: array, items: { type: object } }
+                      snippets: { type: array, items: { type: object } }
+                      transformers: { type: array, items: { type: object } }
+                      managed_tags: { type: array, items: { type: object } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /client/v1/config/snippets:
     get:
       summary: List snippets
@@ -629,6 +893,12 @@ components:
       description: The tag template id of the assignment.
       schema: { type: string, format: uuid }
       example: 3f1c2a9e-8d4b-4e7a-9c1f-2b6d8e0a5c47
+    VersionNumber:
+      name: version
+      in: path
+      required: true
+      description: Version number (1, 2, 3...).
+      schema: { type: integer, minimum: 1 }
     TagTemplateId:
       name: id
       in: path
@@ -663,6 +933,21 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+    Published:
+      description: "`201` a new version was recorded and is live. `200` nothing changed (`created: false`)."
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success: { type: boolean, example: true }
+              data:
+                type: object
+                properties:
+                  version: { type: integer, example: 5 }
+                  created: { type: boolean }
+                  mode: { $ref: "#/components/schemas/PublishMode" }
+              kv_sync: { $ref: "#/components/schemas/KvSync" }
     TemplateBadRequest:
       description: >-
         `bad_json`, `bad_body`, `missing_field` (`name`/`type` on create, `src`
@@ -709,9 +994,47 @@ components:
         truth and the SDK will pick the change up; `failed: <reason>` means
         the database write landed but the edge is still serving the previous
         config — retry the write (any successful write re-syncs everything)
-        or rebuild via the admin API. This field exists because tenant-config
+        or rebuild via the admin API. `draft` means the location is in draft
+        mode and the write changed the workspace only; it goes live with
+        `POST /client/v1/config/publish`. This field exists because tenant-config
         KV sync is not trigger-driven; a write the SDK never sees is the
         failure mode, so a failed sync is reported instead of silent.
+    PublishMode:
+      type: string
+      enum: [immediate, draft]
+    TagConfigVersion:
+      type: object
+      properties:
+        version: { type: integer, example: 5 }
+        source:
+          type: string
+          enum: [auto, publish, restore, mode_change]
+          description: "`auto` = recorded by a write in immediate mode."
+        name: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        created_by:
+          type: string
+          nullable: true
+          description: "`agency`, `mcp:<key prefix>`, `admin`, or null for an internal rebuild."
+        restored_from: { type: integer, nullable: true }
+        created_at: { type: string, format: date-time }
+    ConfigChange:
+      type: object
+      properties:
+        kind: { type: string, enum: [tag, snippet, transformer] }
+        id: { type: string }
+        name: { type: string, nullable: true }
+        change: { type: string, enum: [added, removed, modified] }
+        fields:
+          type: array
+          items: { type: string }
+          description: "Fields that differ, for `modified`. A template edit shows as `template`."
+    ConfigCounts:
+      type: object
+      properties:
+        tags: { type: object, properties: { total: { type: integer }, enabled: { type: integer } } }
+        snippets: { type: object, properties: { total: { type: integer }, enabled: { type: integer } } }
+        transformers: { type: object, properties: { total: { type: integer }, enabled: { type: integer } } }
     TriggerRules:
       type: object
       nullable: true

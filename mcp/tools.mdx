@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 221 tools across
+  Every tool the Mythic MCP server exposes — 228 tools across
   26 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 221 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 228 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -341,12 +341,19 @@ GTM-like tags fired by the SDK.
 | `list_tags`<br /><span style={{opacity: 0.7}}>List Tags</span> | `tags:read` | List tag assignments (tenant_tags) for the active client. | `GET /client/v1/config/tags` |
 | `list_tag_templates`<br /><span style={{opacity: 0.7}}>List Tag Templates</span> | `tags:read` | Tag templates this client can assign with create_tag: Mythic's catalog (owner "mythic", read-only) plus the client's own (owner "location"). | `GET /client/v1/config/tag-templates` |
 | `get_tag_template`<br /><span style={{opacity: 0.7}}>Get Tag Template</span> | `tags:read` | One tag template by id, including its src or code. | `GET /client/v1/config/tag-templates/:id` |
+| `get_tag_workspace`<br /><span style={{opacity: 0.7}}>Get Tag Workspace</span> | `tags:read` | Publishing mode (immediate or draft) and what a publish would change: every tag, snippet and transformer added, removed or modified since the latest version. | `GET /client/v1/config/workspace` |
+| `list_tag_versions`<br /><span style={{opacity: 0.7}}>List Tag Versions</span> | `tags:read` | Version history of the tag config, newest first: number, source (auto, publish, restore, mode_change), name, notes, who created it and when. | `GET /client/v1/config/versions` |
+| `get_tag_version`<br /><span style={{opacity: 0.7}}>Get Tag Version</span> | `tags:read` | One version: what changed from the previous version, the full snapshot (disabled rows included) and the layer the SDK runs from it. | `GET /client/v1/config/versions/:version` |
+| `get_live_tag_config`<br /><span style={{opacity: 0.7}}>Get Live Tag Config</span> | `tags:read` | The tags, snippets and transformers the SDK is served right now, which version that is, and in_sync: whether it matches what should be live (latest version in draft mode, workspace in immediate mode). | `GET /client/v1/config/live` |
 | `create_tag`<br /><span style={{opacity: 0.7}}>Create Tag Assignment</span> | `tags:write` | Assign a tag to the active client (tenant_tags row). | `POST /client/v1/config/tags` |
 | `update_tag`<br /><span style={{opacity: 0.7}}>Update Tag Assignment</span> | `tags:write` | Update a tag assignment for the active client. | `PATCH /client/v1/config/tags/:tagId` |
 | `delete_tag`<br /><span style={{opacity: 0.7}}>Delete Tag Assignment</span> | `tags:write` | Remove a tag assignment from the active client. | `DELETE /client/v1/config/tags/:tagId` |
 | `create_tag_template`<br /><span style={{opacity: 0.7}}>Create Tag Template</span> | `tags:write` | Create a tag template owned by this client. | `POST /client/v1/config/tag-templates` |
 | `update_tag_template`<br /><span style={{opacity: 0.7}}>Update Tag Template</span> | `tags:write` | Update one of this client's own tag templates (Mythic's are read-only). | `PATCH /client/v1/config/tag-templates/:id` |
 | `delete_tag_template`<br /><span style={{opacity: 0.7}}>Delete Tag Template</span> | `tags:write` | Delete one of this client's own tag templates. | `DELETE /client/v1/config/tag-templates/:id` |
+| `set_tag_publish_mode`<br /><span style={{opacity: 0.7}}>Set Tag Publish Mode</span> | `tags:write` | immediate: every tag, snippet and transformer write goes live and records a version. | `PUT /client/v1/config/publish-mode` |
+| `publish_tag_config`<br /><span style={{opacity: 0.7}}>Publish Tag Config</span> | `tags:write` | Record the workspace (tags, snippets, transformers) as a new version and make it live. | `POST /client/v1/config/publish` |
+| `restore_tag_version`<br /><span style={{opacity: 0.7}}>Restore Tag Version</span> | `tags:write` | Roll back: rewrite the workspace to an earlier version and publish it as a new version. | `POST /client/v1/config/versions/:version/restore` |
 
 ## Snippets
 
