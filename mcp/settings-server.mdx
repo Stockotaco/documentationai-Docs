@@ -116,7 +116,7 @@ error (`code -32600`).
 
 | Key type | `location_id` | Behavior |
 |----------|:---:|----------|
-| **Client-scoped** | set | Fixed to one client. Tools operate on it; navigation tools are hidden. |
+| **Client-scoped** | set | Fixed to one client. Tools operate on it; navigation tools are hidden. A `location_id`/`tenant_key` naming a different client is a tool error, not an answer for the bound client. |
 | **Agency-wide** | `null` | Not bound to a client. Gets `list_clients` / `select_client`; a client must be selected before client-scoped tools work — or connect to [`/mcp/c/<location_id>`](#pinning-a-client-in-the-url). |
 
 Mint keys of either type in the agency Builder or the platform admin UI. Every
@@ -292,6 +292,11 @@ fixed-window counter. Over the limit returns a JSON-RPC `429`.
 Tool-level failures return `{ "isError": true, "content": [...] }` in the result.
 A call outside the key's scopes is one of them: the text is JSON with
 `error.code = "insufficient_scope"`, `error.required` and `error.held`.
+
+Arguments are validated strictly. Every tool schema sets
+`additionalProperties: false`, and an argument the tool does not declare fails
+the call with `Input validation error: … Unrecognized key: "<name>"` instead of
+being dropped.
 
 <Callout kind="alert">
   Never expose `mcp_` API keys in client-side JavaScript, public repositories, or
