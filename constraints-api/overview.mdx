@@ -407,7 +407,8 @@ The one tracking fault no matching can repair is a macro that was never substitu
 "tracking": {
   "match_rate": 0.91,
   "unexpanded_macro": {
-    "sessions": 189,
+    "sessions_all_sources": 189,
+    "sessions_in_unmatched": 4,
     "sample": "{campaignname}",
     "message": "189 session(s) carry an unexpanded ad-platform macro in the campaign UTM…"
   }
@@ -415,6 +416,8 @@ The one tracking fault no matching can repair is a macro that was never substitu
 ```
 
 `{campaignname}` is not a macro Meta recognises, so it is passed through verbatim — the correct forms are `{{campaign.name}}` and `{{campaign.id}}`. `{{campaign.name}}` reaching the pixel unexpanded means the tag is set somewhere that does not support substitution. Either way those clicks carry no campaign and can never be attributed; the fix is in the ad's URL tags, not in a query parameter here.
+
+`sessions_all_sources` counts every session with the broken tag, whatever brought it. `sessions_in_unmatched` is the subset that arrived on a Meta ad click and sits in `unmatched_sessions`, so it is the share of the tracking hole the macro explains; it can be far smaller than the total. The older names `sessions` and `meta_click_sessions` carry the same two counts and are deprecated.
 
 `unexpanded_macro` is absent when there is nothing to report, so its presence alone is the signal. Sessions counted here are also excluded from the join outright — a literal like `{campaignname}` would otherwise be capable of matching a campaign genuinely named "Campaign Name".
 

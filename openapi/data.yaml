@@ -85,6 +85,14 @@ paths:
             type: string
             enum: [occurrences, key, last_seen, first_seen]
             default: occurrences
+        - name: queryable
+          in: query
+          description: >
+            `true` keeps only event properties that `POST /query` can read,
+            filtered before `limit`. Use it to build an explore picker: without
+            it, telemetry events explore does not store (`$replay_summary`,
+            `$heatmap`, `$web_vital_*`) can fill the first page on a busy site.
+          schema: { type: boolean, default: false }
         - name: limit
           in: query
           schema: { type: integer, default: 500, minimum: 1, maximum: 1000 }
@@ -142,6 +150,21 @@ paths:
                             a count of customers.
                         first_seen: { type: string, format: date-time }
                         last_seen: { type: string, format: date-time }
+                        queryable:
+                          type: boolean
+                          description: Whether `POST /query` can filter, break down or aggregate on this key for this event.
+                        unqueryable_reason:
+                          type: string
+                          nullable: true
+                          enum: [event_not_in_explore, sdk_property_not_materialized, crm_blob_property, nested_path, container_value, person_property, null]
+                          description: >
+                            Why not, or null. `event_not_in_explore`: telemetry
+                            and identity events are not stored for explore.
+                            `sdk_property_not_materialized`: a `$` property
+                            outside the typed set. `crm_blob_property`: a GHL
+                            `meta_*` blob. `nested_path`: a dot-path into an
+                            object. `container_value`: an object or array.
+                            `person_property`: explore reads event properties.
         "400":
           $ref: "#/components/responses/LocationRequired"
         "401":

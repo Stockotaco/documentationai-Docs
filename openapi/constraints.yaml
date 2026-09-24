@@ -452,7 +452,23 @@ paths:
                               repair them: the fix is in the ad's URL tags. Absent
                               when there is nothing to report.
                             properties:
-                              sessions: { type: integer }
+                              sessions_all_sources:
+                                type: integer
+                                description: Every session whose campaign UTM holds the macro, from any traffic source.
+                              sessions_in_unmatched:
+                                type: integer
+                                description: >
+                                  The subset that arrived on a Meta ad click and is
+                                  counted in `unmatched_sessions`: the part of the
+                                  tracking hole this macro explains.
+                              sessions:
+                                type: integer
+                                deprecated: true
+                                description: Same as `sessions_all_sources`.
+                              meta_click_sessions:
+                                type: integer
+                                deprecated: true
+                                description: Same as `sessions_in_unmatched`.
                               sample:
                                 type: string
                                 description: One of the literals found, so the tag can be located.

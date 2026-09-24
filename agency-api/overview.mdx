@@ -19,7 +19,7 @@ doing?" — in one call, without iterating a location list yourself:
 | `GET /agency/stats` | location | Event volume, unique users, unique sessions over a date window, plus the all-time live person count |
 | `GET /agency/destinations/health` | location × destination | Delivery success rate, failure counts, and the last error over a trailing window — sorted worst-first |
 | `GET /agency/contracts/summary` | location | Declared event contracts, whether the daily alert webhook is wired, whether an [alert rule](/agency-api/alerts) routes contract alerts, and when the last webhook alert fired |
-| `GET /agency/usage` | day × location × surface × route | The agency's own API + MCP request telemetry — the same data Mythic meters on |
+| `GET /agency/usage` | day × location × surface × route (or day × surface × route with `group_by=route`) | The agency's own API + MCP request telemetry — the same data Mythic meters on |
 | `GET /agency/quota` | quota in force | The plan, the features it includes, and month-to-date ingested events against the quota |
 
 Alerts across every client (the feed, routing rules and Slack/webhook channels)
@@ -223,6 +223,7 @@ Errors are always `{ "success": false, "error": { "code", "message" } }`.
 
 | Status | Code | Meaning |
 | --- | --- | --- |
+| `400` | `invalid_group_by` | `GET /agency/usage`: `group_by` is not `location` or `route` |
 | `401` | `unauthorized` | Missing or invalid key |
 | `403` | `agency_required` | The key is an `sk_` — this surface takes agency keys only |
 | `403` | `location_not_linked` | A `location_ids` entry is not linked to this agency (the message names it) |
@@ -235,3 +236,6 @@ Errors are always `{ "success": false, "error": { "code", "message" } }`.
 `GET /agency/locations` is exempt from the cap (it *is* the batching tool)
 and `GET /agency/usage` takes no `location_ids` at all — usage is already the
 agency's own slice, filtered by day window (`days_back`, default 30, max 90).
+It returns at most 1000 rows and sets `truncated: true` when the cap cut the
+result. A busy agency passes 1000 location-grain rows within a week, so use
+`group_by=route` to fit a month.

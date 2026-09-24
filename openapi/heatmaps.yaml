@@ -537,7 +537,7 @@ components:
               d: { type: string }
               h: { type: string, example: /terms }
         clicks: { type: integer, example: 41 }
-        visitors: { type: integer, example: 30, description: Largest per-offset visitor count (a floor). }
+        visitors: { type: integer, example: 30, description: "Distinct visitors who clicked the element, at any offset." }
         offsets:
           type: array
           description: Where inside the element's box, 0..1 (2 decimals), with counts.

@@ -191,9 +191,10 @@ paths:
       responses:
         "200":
           description: >
-            The report. `truncated: true` means the underlying property
-            statistics hit their row limit — narrow the window or pass `event`
-            before trusting `absent` counts.
+            The report. Only the contracted events are scanned, so events
+            without a contract cannot push the read past its row limit.
+            `truncated: true` means the contracted events alone hit it — narrow
+            the window or pass `event` before trusting `absent` counts.
           content:
             application/json:
               schema:
@@ -673,8 +674,20 @@ components:
     Window:
       type: object
       properties:
-        date_from: { type: string, example: "last 1 day" }
-        date_to: { type: string, example: now }
+        date_from:
+          type: string
+          format: date-time
+          example: "2026-09-23T00:00:00.000Z"
+          description: Start of the window. Without `date_from` it is the start of yesterday (UTC).
+        date_to:
+          type: string
+          format: date-time
+          example: "2026-09-24T18:03:11.482Z"
+          description: End of the window. Without `date_to` it is the time of the request.
+        default:
+          type: string
+          example: start of yesterday (UTC) to now
+          description: Present only when `date_from` was omitted and the default window applied (24 to 48 hours wide).
         sample:
           type: object
           description: Present only when sampling was applied.
