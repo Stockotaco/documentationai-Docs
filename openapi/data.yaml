@@ -542,7 +542,9 @@ paths:
                       avg_touchpoints }`, `first_touch[]` and `last_touch[]`
                       `{ touchpoint, persons, share }`; meta also echoes
                       `goal`, `touchpoint`, `dimension`/`exclude`,
-                      `lookback_days`, `depth`, `limit`, `goal_id_cap`. Always
+                      `lookback_days`, `depth`, `limit`, `goal_id_cap`, and
+                      `campaign_names { ids, named, status }` when campaign
+                      touchpoints were Meta ids. Always
                       `meta { from, to, interval?, previous?, window_seconds?,
                       sql_ms, rows_read, bytes_read, cached, sql? }`.
               examples:
@@ -2110,7 +2112,7 @@ components:
           type: string
           enum: [channel_group, source_medium, source, campaign]
           default: channel_group
-          description: "Paths with session touchpoints only."
+          description: "Paths with session touchpoints only. Self-referral sessions (referrer on the landing page's own registrable domain) are dropped; a journey made only of them reads as Direct. `campaign` is case- and URL-encoding-insensitive, and numeric Meta campaign ids are replaced by their names when the client syncs Meta Ads."
         lookback_days:
           type: integer
           minimum: 1

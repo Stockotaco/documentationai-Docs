@@ -178,7 +178,12 @@ One `series[]` entry per spec series × breakdown value. `data[]` is aligned to
   `event` makes each event one step, with pageviews labeled by their pathname.
 </ParamField>
 <ParamField body="dimension" type="'channel_group' | 'source_medium' | 'source' | 'campaign'" default="channel_group">
-  Paths with session touchpoints only. How a session is labeled.
+  Paths with session touchpoints only. How a session is labeled. `campaign`
+  groups a campaign whatever its case or URL encoding and shows its most
+  common spelling. A numeric campaign value is a Meta campaign id when the
+  client syncs Meta Ads: it is replaced by the campaign's name and merged with
+  it, and `meta.campaign_names` reports `{ ids, named, status }` (`ok`,
+  `no_meta_sync` or `unavailable`).
 </ParamField>
 <ParamField body="lookback_days" type="integer">
   Paths only, 1 to 180. How far before the goal a journey reaches. Default 90
@@ -399,6 +404,14 @@ matching rule wins:
 
 Matching ignores case. Use `"dimension": "source_medium"` to see the raw pairs
 behind a group.
+
+**Self-referrals are not touchpoints.** A session whose referrer is the landing
+page's own site (same registrable domain, so `go2.example.com` referring to
+`example.com` counts) means the visitor was already there: a new session after
+the timeout, or a hop between subdomains. Such sessions are dropped from the
+journey. If every session in a journey is one, the journey reads as Direct
+(`direct/none`, `direct`, `(none)` for the other dimensions). A referral from a
+different domain you also own still counts as Referral.
 
 ### Journeys by event
 
