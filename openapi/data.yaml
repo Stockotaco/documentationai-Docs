@@ -539,7 +539,10 @@ paths:
                       `steps[]` and `breakdown[] { value, steps[] }`. Paths:
                       `goal_persons`, `no_touchpoint`, `sampled`,
                       `paths[] { touchpoints[], truncated, persons, share,
-                      avg_touchpoints }`, `first_touch[]` and `last_touch[]`
+                      avg_touchpoints, median_days, avg_days }`,
+                      `median_days`, `avg_days`, `at_lookback`,
+                      `linear_touch[] { touchpoint, persons, credit, share }`,
+                      value fields with `value_property`, `first_touch[]` and `last_touch[]`
                       `{ touchpoint, persons, share }`; meta also echoes
                       `goal`, `touchpoint`, `dimension`/`exclude`,
                       `lookback_days`, `depth`, `limit`, `goal_id_cap`, and
@@ -2140,6 +2143,9 @@ components:
           type: boolean
           default: true
           description: "Paths with event touchpoints only. `false` keeps the default-excluded events."
+        value_property:
+          type: string
+          description: "Paths only. Numeric property of the goal event (e.g. `value`, `activity_value`). Adds `goal_value`, `goal_first_value`, and `value` / `first_value` on journey, first-touch and last-touch rows (`value` on `linear_touch`). Summed per person over their goal events in the range; `first_value` is the first goal only. Non-numeric values count as 0."
     RowsResponse:
       type: object
       description: Generic Tinybird result envelope for analytics rows.

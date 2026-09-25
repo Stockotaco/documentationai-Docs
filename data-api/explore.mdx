@@ -205,6 +205,15 @@ One `series[]` entry per spec series × breakdown value. `data[]` is aligned to
   Paths with event touchpoints only. `false` keeps the default-excluded events,
   so only `exclude` is dropped.
 </ParamField>
+<ParamField body="value_property" type="string">
+  Paths only. A numeric property of the goal event, such as `value` or GHL's
+  `activity_value` (the order amount on `order_completed`). Each person's value
+  is the sum over their goal events in the range, and `first_value` is their
+  first goal event alone. Adds `goal_value` and `goal_first_value`, and a
+  `value` / `first_value` on every journey, first-touch and last-touch row and
+  a `value` on every `linear_touch` row. Non-numeric values count as 0. Not
+  available on goals explore stores no properties for, such as `$identify`.
+</ParamField>
 
 ### Filters
 
@@ -370,6 +379,22 @@ consecutive repeats, and counts identical journeys.
   visit.
 - **`truncated`** marks journeys that had more than `depth` touchpoints. Only
   the last `depth` are shown.
+- **Days to convert.** `median_days` and `avg_days` run from a person's first
+  touchpoint in the lookback to their goal, on the response and on every
+  journey, first-touch and last-touch row (null for people with no
+  touchpoint). They cannot exceed `lookback_days`, so a long cycle reads short;
+  `at_lookback` counts people whose first touch sits at the edge of the
+  lookback, and a high count means a longer lookback would change the answer.
+- **`linear_touch[]`** splits each person evenly across their touchpoints (a
+  3-session journey gives each session 1/3). `credit` is the people credited
+  (it sums to `goal_persons - no_touchpoint`), `persons` the people who had that
+  touchpoint at all, `share` is `credit / goal_persons`, and `value` the goal
+  value credited the same way. Repeats count: two Paid Social sessions in a
+  3-session journey give Paid Social 2/3.
+- **Revenue by channel.** With `value_property`, first-touch rows answer "which
+  channel starts the journeys that bring the money", which often differs from
+  who brings the buyers: on one tenant Paid Social started 86% of buyers' journeys
+  but 43% of revenue, and Direct 5% of buyers but 36%.
 - **`avg_touchpoints`** is the mean number of touchpoints behind that journey
   before repeats were merged. For session touchpoints, that is sessions.
 - **Sampling.** Above 20,000 goal ids, a fixed hash-based sample of 20,000 is
