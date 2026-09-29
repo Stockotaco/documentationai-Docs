@@ -363,6 +363,90 @@ paths:
         "403": { $ref: "#/components/responses/AgencyRequired" }
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/locations/ghl:
+    get:
+      summary: Get the GoHighLevel connection
+      operationId: getLocationGhlConnection
+      description: >-
+        This client's GoHighLevel connection. `status` is `active`,
+        `not_connected`, `token_inactive` (the app was uninstalled or its
+        token lapsed), or `incomplete`.
+
+
+        Reading this also links an install that finished without the browser
+        returning to Mythic, so a headless caller can poll it after handing
+        out the install link. It never clears a `ghl_location_id` that was set
+        by hand.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Connection state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/GhlConnection" }
+        "400": { $ref: "#/components/responses/LocationRequired" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/GhlLocationTaken" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/GhlAppsUnavailable" }
+        "503": { $ref: "#/components/responses/GhlNotConfigured" }
+  /client/v1/locations/ghl/install:
+    post:
+      summary: Create a GoHighLevel install link
+      operationId: createLocationGhlInstall
+      description: >-
+        A link that installs the Mythic GoHighLevel app on one sub-account and
+        links it to this client. Give `install_url` to someone who can log in
+        to that GoHighLevel account. They must pick a single sub-account; an
+        agency-level install is not linked.
+
+
+        The link does not expire. The return to `return_url` works for
+        `return_expires_in` seconds. After that, `GET /client/v1/locations/ghl`
+        still links the install. On return, `return_url` receives
+        `mythic_ghl=connected&ghl_location_id=…`, or
+        `mythic_ghl=error&mythic_error=<code>`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                return_url:
+                  type: string
+                  description: >-
+                    Where to send the browser afterwards. Its origin must be in
+                    the agency's `oauth_return_origins`.
+                  example: https://app.example.com/clients/123
+      responses:
+        "200":
+          description: Install link
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      install_url: { type: string }
+                      ghl_app_id: { type: string, example: 6827fcaec3217895d84d469e }
+                      return_expires_in: { type: integer, example: 86400 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/GhlNotConfigured" }
   /client/v1/locations/last-event:
     get:
       summary: Check tracking is live
@@ -617,6 +701,16 @@ components:
           properties:
             code: { type: string, example: forbidden_field }
             message: { type: string }
+    GhlConnection:
+      type: object
+      properties:
+        connected: { type: boolean, example: true }
+        status:
+          type: string
+          enum: [active, not_connected, token_inactive, incomplete]
+        ghl_location_id: { type: string, nullable: true, example: HjiMUOsCCHCjtxzEf8PR }
+        connected_at: { type: string, format: date-time, nullable: true }
+        proxy_api_key_set: { type: boolean }
   responses:
     BadRequest:
       description: >-
@@ -651,6 +745,16 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
     GhlLocationTaken:
       description: "`ghl_location_taken` — that GoHighLevel location is already mapped to another client."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    GhlAppsUnavailable:
+      description: "`ghl_apps_unavailable` — the GoHighLevel connection could not be read. Retry shortly."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    GhlNotConfigured:
+      description: "`not_configured` — GoHighLevel install is not configured for this deployment."
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

@@ -164,6 +164,34 @@ Claiming one is a two-phase operation, and the phases matter:
 A hostname already attached to another location is refused with
 `hostname_taken`.
 
+## Connecting GoHighLevel
+
+Link a client to its GoHighLevel sub-account by installing the Mythic GHL app.
+The install runs in the browser of someone who can log in to that GHL account,
+so the API hands you a link rather than doing it for you.
+
+<Steps>
+  <Step title="Create the link">
+    `POST /client/v1/locations/ghl/install` returns `install_url`. Pass
+    `return_url` to get the browser back, with `mythic_ghl=connected` or
+    `mythic_ghl=error&mythic_error=<code>` appended. Its origin must be in the
+    agency's `oauth_return_origins`.
+  </Step>
+  <Step title="Install">
+    The person opens the link, logs in to GoHighLevel, and picks **one
+    sub-account**. An agency-level install is not linked to a client.
+  </Step>
+  <Step title="Confirm">
+    `GET /client/v1/locations/ghl` reads `status: active` with the linked
+    `ghl_location_id`. This read also completes the link when the browser never
+    came back, so a headless caller can poll it.
+  </Step>
+</Steps>
+
+The link does not expire, so treat it like a credential: anyone who opens it
+can link a GHL sub-account they control to this client. A sub-account already
+linked to another client is refused with `ghl_location_taken`.
+
 ## Confirming an install
 
 Two operations, for two different questions.
