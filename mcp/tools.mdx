@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 232 tools across
+  Every tool the Mythic MCP server exposes — 234 tools across
   26 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 232 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 234 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -440,9 +440,9 @@ Agency-wide keys only — a key bound to one client cannot hold this scope.
 | `delete_alert_channel`<br /><span style={{opacity: 0.7}}>Delete Alert Channel</span> | `alerts:write` | Delete a channel. | `DELETE /client/v1/alerts/channels/:id` |
 | `test_alert_channel`<br /><span style={{opacity: 0.7}}>Test Alert Channel</span> | `alerts:write` | Send a test message to one channel now and report whether it was accepted (HTTP status or error). | `POST /client/v1/alerts/channels/:id/test` |
 
-## Agency Rollups
+## Agency
 
-The client roster and cross-location stats, usage, quota, destination health and contract summaries.
+The client roster, cross-location stats, usage, quota, destination health and contract summaries, and agency settings such as OAuth return origins.
 
 Agency-wide keys only — a key bound to one client cannot hold this scope.
 
@@ -455,3 +455,5 @@ Agency-wide keys only — a key bound to one client cannot hold this scope.
 | `get_agency_contracts_summary`<br /><span style={{opacity: 0.7}}>Get Agency Contracts Summary</span> | `agency:read` | Per location: how many event contracts are declared, whether the daily contract-alert webhook is configured, whether an agency alert rule routes contract alerts for it (alert_rule_routed), and when the last… | `GET /client/v1/agency/contracts/summary` |
 | `get_agency_usage`<br /><span style={{opacity: 0.7}}>Get Agency API Usage</span> | `agency:read` | The agency's own API + MCP usage, daily per location/surface/route (or per surface/route with group_by 'route', which fits 30 days at any volume): request counts, auth failures, rate-limited and error counts… | `GET /client/v1/agency/usage` |
 | `get_agency_quota`<br /><span style={{opacity: 0.7}}>Get Agency Plan & Event Quota</span> | `agency:read` | The agency's plan, the features it includes, and month-to-date ingested events against the quota. | `GET /client/v1/agency/quota` |
+| `get_agency_oauth_return_origins`<br /><span style={{opacity: 0.7}}>Get OAuth Return Origins</span> | `agency:read` | The origins (scheme://host[:port]) a browser may be sent back to after a GoHighLevel install or a Google destination consent, via their return_url. | `GET /client/v1/agency/oauth-return-origins` |
+| `set_agency_oauth_return_origins`<br /><span style={{opacity: 0.7}}>Set OAuth Return Origins</span> | `agency:write` | Replace the agency's OAuth return-origin list (the whole list, not an append). | `PUT /client/v1/agency/oauth-return-origins` |

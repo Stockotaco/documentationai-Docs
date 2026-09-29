@@ -217,6 +217,25 @@ their next config fetch rather than waiting for someone to toggle it.
 A plan change takes up to a minute to apply everywhere — entitlements are
 cached briefly on each edge node.
 
+## OAuth return origins
+
+`GET` and `PUT /client/v1/agency/oauth-return-origins` read and replace the
+origins a browser may return to after a GoHighLevel install
+(`POST /client/v1/locations/ghl/install`) or a Google destination consent
+(`POST /client/v1/destinations/oauth/initiate`). A `return_url` on another
+origin is refused with `return_url_not_allowed`. The list starts empty.
+
+```bash
+curl -X PUT "https://mythic-analytics.gulp.workers.dev/client/v1/agency/oauth-return-origins" \
+  -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
+  -d '{"oauth_return_origins":["https://app.agency.com"]}'
+```
+
+`PUT` replaces the whole list. Entries are reduced to `scheme://host[:port]`,
+so register the origin of the app that starts the flow, not a page path. This
+is the only write on this surface: a scoped `mcp_` key needs `agency:write`.
+Airbyte OAuth keeps its own list on `PATCH /client/v1/airbyte/config`.
+
 ## Errors and limits
 
 Errors are always `{ "success": false, "error": { "code", "message" } }`.

@@ -438,6 +438,60 @@ paths:
         "403": { description: Not an agency key, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "502": { description: Plan or quota lookup failed, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
 
+  /client/v1/agency/oauth-return-origins:
+    get:
+      summary: Get OAuth return origins
+      operationId: getAgencyOauthReturnOrigins
+      description: >-
+        The origins (`scheme://host[:port]`) a browser may be sent back to
+        after a GoHighLevel install or a Google destination consent, through
+        their `return_url`. Empty, the default, means `return_url` is refused
+        and those flows end on Mythic's own page. Airbyte OAuth keeps a
+        separate list on `PATCH /client/v1/airbyte/config`.
+      responses:
+        "200":
+          description: Current list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OauthReturnOriginsResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    put:
+      summary: Replace OAuth return origins
+      operationId: setAgencyOauthReturnOrigins
+      description: >-
+        Replace the whole list. Each entry is reduced to its origin, so a path
+        or query is dropped, and duplicates are removed. At most 20 entries,
+        `http` or `https` only, no credentials. A scoped `mcp_` key needs
+        `agency:write`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [oauth_return_origins]
+              properties:
+                oauth_return_origins:
+                  type: array
+                  maxItems: 20
+                  items: { type: string }
+                  example: ["https://app.agency.com", "http://localhost:8080"]
+      responses:
+        "200":
+          description: Stored list, normalised
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OauthReturnOriginsResponse" }
+        "400":
+          description: "`invalid_body` or `invalid_origins` (the message names the entry)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 components:
   securitySchemes:
     BearerAuth:
@@ -503,6 +557,17 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
   schemas:
+    OauthReturnOriginsResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            oauth_return_origins:
+              type: array
+              items: { type: string }
+              example: ["https://app.agency.com"]
     Location:
       type: object
       properties:

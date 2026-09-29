@@ -175,7 +175,8 @@ so the API hands you a link rather than doing it for you.
     `POST /client/v1/locations/ghl/install` returns `install_url`. Pass
     `return_url` to get the browser back, with `mythic_ghl=connected` or
     `mythic_ghl=error&mythic_error=<code>` appended. Its origin must be in the
-    agency's `oauth_return_origins`.
+    agency's `oauth_return_origins`, set with
+    `PUT /client/v1/agency/oauth-return-origins`.
   </Step>
   <Step title="Install">
     The person opens the link, logs in to GoHighLevel, and picks **one
