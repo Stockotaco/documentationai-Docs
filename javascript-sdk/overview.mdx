@@ -47,6 +47,15 @@ mythic.init("pk_your_publishable_key", {api_host: "https://api.adberserk.com"});
       initialization errors fire before the listeners exist and won't appear in
       error tracking.
     </Callout>
+
+    <Callout kind="note">
+      **Running the snippet more than once is safe.** If a tag manager fires it
+      on every event, or it is pasted twice, the first install keeps the
+      global: later runs point `window.mythic` back at it and replay anything
+      queued on their stub. Each extra run can still send one more remote-config
+      request, so trigger the snippet once per page load (in Cloudflare Zaraz,
+      add an `Event Name` equals `Pageview` rule).
+    </Callout>
   </Step>
 
   <Step title="Track events" icon="code" titleType="p">
