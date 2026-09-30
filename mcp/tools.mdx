@@ -311,7 +311,7 @@ One client’s own setup — details, install snippet, custom tracking hostname 
 | `set_location_plan`<br /><span style={{opacity: 0.7}}>Set Client Tier</span> | `locations:write` | Move this client to a different billing tier. | `PUT /client/v1/locations/plan` |
 | `set_location_hostname`<br /><span style={{opacity: 0.7}}>Set Custom Tracking Hostname</span> | `locations:write` | Attach a first-party tracking hostname (e.g. | `PUT /client/v1/locations/hostname` |
 | `delete_location_hostname`<br /><span style={{opacity: 0.7}}>Remove Custom Tracking Hostname</span> | `locations:write` | Detach this client's custom tracking hostname and stop routing events for it. | `DELETE /client/v1/locations/hostname` |
-| `create_ghl_install_link`<br /><span style={{opacity: 0.7}}>Create GoHighLevel Install Link</span> | `locations:write` | A link that installs the Mythic GoHighLevel app on one GHL sub-account and links it to this client. | `POST /client/v1/locations/ghl/install` |
+| `create_ghl_install_link`<br /><span style={{opacity: 0.7}}>Create GoHighLevel Install Link</span> | `locations:write` | A link that installs the Mythic GoHighLevel app on one GHL sub-account and links it to this client. Takes an optional `lane`: `md` (the default, the Mythic Data lane, which also enables the BigQuery export into this client's Mythic dataset) or `hc` (the legacy HC/Iris lane). Read the connection back with `get_ghl_connection` on the same lane. | `POST /client/v1/locations/ghl/install` |
 
 ## Links & Uptime
 
