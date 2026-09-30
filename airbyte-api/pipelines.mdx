@@ -18,6 +18,8 @@ A **pipeline** makes one client's syncs a single daily run:
 
 A pipeline belongs to one client. Each client can have one pipeline, and each pipeline runs at most once per UTC day.
 
+A pipeline is created for you: the client's first connection (OAuth or direct, any platform) creates it enabled with `run_hour_utc` 2, unless that connection sets an explicit `sync_frequency`. Every later connection created without an explicit `sync_frequency` joins it on `manual`. An explicit `sync_frequency` opts out — no pipeline is created for it and nothing is enrolled — and deleting a connection removes it from the scope. Everything else on this page is for reading runs and changing the setup afterwards.
+
 All paths below are relative to `https://mythic-analytics.gulp.workers.dev/client/v1/airbyte`. Reads accept an agency key (`ak_`) or a location secret key (`sk_`). Every write needs an agency key. The MCP server exposes the same operations; the tool for each step is named below.
 
 ## Quickstart

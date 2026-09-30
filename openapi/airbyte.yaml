@@ -527,6 +527,14 @@ paths:
         stream you asked for would lose data you expect. Stream names are the
         CONNECTOR's, not the ad platform's UI labels — Meta's "Ad sets" is the
         stream `ad_sets`.
+
+
+        **Pipelines are the default.** A connection created without an
+        explicit `sync_frequency` is created `manual` and joins the client's
+        pipeline — created automatically, enabled and daily, with the first
+        connection — and the response carries `pipeline` (`pipeline_created`
+        tells you this request created it). An explicit `sync_frequency`
+        opts out: no pipeline is created for it and nothing is enrolled.
       requestBody:
         required: true
         content:
@@ -2511,8 +2519,9 @@ components:
       description: >
         Sync cadence. `24h`, `12h` and `6h` schedule automatic syncs at
         `sync_hour_utc`; `manual` disables them. On create, omitting it means
-        DAILY: `manual` plus enrolment in the client's pipeline when it has
-        one (the pipeline runs it daily), otherwise `24h`.
+        PIPELINE: `manual` plus membership in the client's pipeline, which is
+        created automatically (enabled, daily) with the first connection. An
+        explicit value opts out of the pipeline entirely.
       enum: ["manual", "24h", "12h", "6h"]
       example: 24h
     Job:

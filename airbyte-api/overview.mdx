@@ -283,17 +283,14 @@ Meta connections created before 2026-09-30 are two connections off one source: t
 
 ## Sync frequency
 
-**Daily is the default.** A connection created without an explicit `sync_frequency` syncs once a day:
+**The pipeline is the default.** A connection created without an explicit `sync_frequency` is created `manual` and joins the client's [pipeline](/airbyte-api/pipelines) — created automatically, enabled and daily, with the client's first connection. The pipeline runs it daily, and an Airbyte cron on top would sync it twice. The response carries `pipeline`.
 
-- If the client has a [pipeline](#orchestrated-syncs), the connection is created `manual` and added to it. The pipeline runs it daily, and an Airbyte cron on top would sync it twice. The response carries `pipeline`.
-- Otherwise it gets Airbyte's own `24h` cron at `sync_hour_utc`.
-
-An explicit `sync_frequency` always wins and is never taken over by the pipeline.
+An explicit `sync_frequency` always wins and opts out of the pipeline entirely: no pipeline is created for it and nothing is enrolled.
 
 | Value | Cadence |
 |-------|---------|
-| `manual` | No automatic syncs |
-| `24h` | Once daily (default without a pipeline) |
+| `manual` | No automatic syncs (but the default `manual` joins the pipeline, which syncs it daily) |
+| `24h` | Once daily on Airbyte's own cron (explicit only; never the default) |
 | `12h` | Every 12 hours |
 | `6h` | Every 6 hours |
 
