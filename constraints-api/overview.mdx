@@ -539,8 +539,8 @@ Positional, decay, and data-driven models are deliberately absent: they change h
 
 ## Requirements
 
-- A **BigQuery event dataset** for the location (otherwise `424`).
-- A synced **Meta ads-insights** stream in that dataset. The platform default is `meta_ads_ads_insights_action_type`; pass `?table=` if your connection writes elsewhere (otherwise `424`).
+- Tracked events for the location. Every client has them once the pixel or a server-side stream sends data.
+- A synced **Meta ads-insights** stream (connect Meta through the Airbyte API). The platform default is `meta_ads_ads_insights_action_type`; pass `?table=` if your connection writes elsewhere (otherwise `424`).
 - Meta traffic tagged with UTMs. Untagged traffic isn't lost — it lands in `unmatched_sessions` and drags `match_rate` down, which is the honest signal.
 
 <Callout kind="info">

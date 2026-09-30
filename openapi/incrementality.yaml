@@ -562,11 +562,11 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     DatasetMissing:
       description: >
-        `dataset_missing` — this client has no BigQuery event dataset, so
-        incrementality cannot be assessed. It needs a BigQuery export
-        provisioned (and `api_metadata.client_project_id` set if its data lives
-        in a shared project). Distinguished from a 5xx on purpose: nothing is
-        broken, the client just isn't set up yet.
+        `dataset_missing` — the query needs data this client has not synced
+        yet: Meta ads (connect Meta through the Airbyte API and let its first
+        sync finish) or a `revenue.source: table` commerce table. Events never
+        cause it. Distinguished from a 5xx on purpose: nothing is broken, the
+        client just isn't set up yet.
       content:
         application/json:
           schema:

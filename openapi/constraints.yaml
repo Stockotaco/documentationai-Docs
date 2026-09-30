@@ -796,8 +796,9 @@ paths:
           description: Result truncated — narrow the window or use a coarser `group_by`.
         "424":
           description: >
-            No Meta ads-insights table in this client's dataset, or the client
-            has no BigQuery event dataset yet.
+            No synced Meta ads-insights table for this client yet (connect Meta
+            through the Airbyte API and let its first sync finish, or pass
+            `?table=`).
         "429":
           description: Rate limited (20 requests per minute per location — each request is a BigQuery scan).
   /client/v1/constraints/audit:
@@ -1136,7 +1137,7 @@ paths:
         "401":
           description: Missing or invalid key.
         "424":
-          description: This client has no BigQuery event dataset yet.
+          description: This client has no synced Meta ads data yet.
         "429":
           description: Rate limited (20 requests per minute per location).
   /client/v1/constraints/options:

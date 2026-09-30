@@ -195,7 +195,7 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     DatasetMissing:
-      description: "`dataset_missing` — this client has no BigQuery dataset yet, so nothing can be correlated."
+      description: "`dataset_missing` — a requested Meta metric needs ad data this client has not synced yet. Event metrics always work."
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

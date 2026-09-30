@@ -22,7 +22,7 @@ This endpoint answers it with numbers. Give it 2–5 metric ids, a window, and a
 - **the trend of the correlation itself** — a rolling coefficient per bucket, folded into the same series rows so metrics and their correlation plot on one axis,
 - **a lead/lag scan** — r at every shift, so "how long until spend shows up in revenue" gets a number instead of a guess.
 
-Both sides come out of the same per-client BigQuery dataset, which is what makes the pairing possible: ad spend only exists in the platform tables, revenue only in your events.
+Both sides come out of BigQuery for the same client, which is what makes the pairing possible: ad spend only exists in the synced platform tables, revenue only in your events. Event metrics work for every client. Meta metrics need a synced Meta connection and are marked unavailable in `/metrics` until then.
 
 <Callout kind="warning">
 Correlation is not causation. Two metrics move together happily because a third drives both — seasonality, a promo, a tracking outage. For a causal read on paid spend, use the [Incrementality API](/incrementality-api/overview), which withholds spend from a market and measures what changed.

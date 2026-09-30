@@ -163,7 +163,7 @@ Every calendar day in the measured windows counts: a day with zero conversions i
 
 ## How the coefficient is computed
 
-Two queries against your per-location BigQuery dataset — daily revenue-by-region, and the Meta spend row — with inference in between:
+Two BigQuery queries, daily revenue-by-region from your events and the Meta spend row from your synced ad data, with inference in between:
 
 1. Build daily revenue series for the **test** and **control** regions across the **pre** and **test** windows (every calendar day counts, zeros included).
 2. Fit the counterfactual: a non-negative weighted blend of the control regions that reproduces the test regions' pre-period daily revenue (weighted synthetic control).
