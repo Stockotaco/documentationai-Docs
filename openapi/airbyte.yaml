@@ -1052,8 +1052,20 @@ paths:
         response reports both under `schedule_changes`.
 
 
-        `connection_ids` must be connections belonging to this client;
-        otherwise `400 unknown_connections`. Requires an agency key (`ak_`).
+        ALL OR NOTHING ON TAKEOVER. Airbyte is changed before the pipeline is
+        saved. If Airbyte is unreachable (`502 airbyte_unavailable`) or any
+        connection cannot be set to `manual` (`502 schedule_takeover_failed`,
+        per-connection reasons in `details.errors`), nothing is saved and
+        connections taken over during the request get their schedules back. A
+        hand-back that fails after the save is reported in
+        `schedule_changes.errors` with a top-level `warning`.
+
+
+        Omitted fields keep their stored value; a new pipeline starts
+        disabled with `run_hour_utc` 2. `connection_ids` must be connections
+        belonging to this client; otherwise `400 unknown_connections`. Deleting
+        a connection removes it from the scope automatically. Requires an agency
+        key (`ak_`).
       parameters:
         - $ref: "#/components/parameters/PipelineClientId"
       requestBody:
@@ -1081,12 +1093,14 @@ paths:
                   description: Hour (UTC) the daily run starts.
                 webhook_url:
                   type: string
-                  description: HTTPS endpoint POSTed once the run completes.
+                  nullable: true
+                  description: HTTPS endpoint POSTed once the run completes. Empty string or null removes it.
                 webhook_secret:
                   type: string
+                  nullable: true
                   description: >
                     Used to HMAC-SHA256 the request body into `X-Mythic-Signature`.
-                    Write-only; never returned.
+                    Write-only; never returned. Empty string or null removes it.
       responses:
         "200":
           description: Saved
@@ -1107,8 +1121,11 @@ paths:
                               taken_over: { type: array, items: { type: object } }
                               handed_back: { type: array, items: { type: object } }
                               errors: { type: array, items: { type: object } }
+                  warning:
+                    type: string
+                    description: Present when a connection could not be given its schedule back.
         "400":
-          description: "`unknown_connections`, `invalid_sync_hour`, or `invalid_webhook_url`"
+          description: "`invalid_body` (a field has the wrong type or format) or `unknown_connections`"
           content:
             application/json:
               schema:
@@ -1117,6 +1134,24 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/WriteForbidden"
+        "404":
+          description: "`client_not_found` — the client does not belong to this agency"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "`save_failed` — the database write failed; schedules taken over were given back"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: "`airbyte_unavailable` or `schedule_takeover_failed`; nothing was saved"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /pipelines/{clientId}/candidates:
     get:
       summary: List scope candidates
@@ -1194,12 +1229,16 @@ paths:
         A RUNNING run blocks this with `409 run_in_flight` — it owns live
         Airbyte jobs, and a second run would stack a duplicate sync on each of
         them. A HELD run does not block: a hold is a run parked waiting for a
-        person, and that person asking for a fresh run IS the decision, so the
-        held run is closed as `skipped` (superseded) and a new one starts.
+        person, and that person asking for a fresh run IS the decision. Today's
+        held run is started over in place (`restarted: true`, every step
+        triggered again). A held run from an earlier day is closed as `skipped`
+        (superseded) and a new one starts.
 
 
-        Runs are one per client per day, so a same-day rerun returns
-        `409 run_exists_today` — retry the failed steps instead. Requires `ak_`.
+        Runs are one per client per UTC day. Any other run already today
+        (succeeded, failed or skipped) returns `409 run_exists_today` with
+        `details.run_id`, and nothing is changed. Retry it if it failed.
+        Requires `ak_`.
       parameters:
         - $ref: "#/components/parameters/PipelineClientId"
       responses:
@@ -1212,7 +1251,13 @@ paths:
                 properties:
                   success: { type: boolean }
                   data:
-                    $ref: "#/components/schemas/PipelineRun"
+                    allOf:
+                      - $ref: "#/components/schemas/PipelineRun"
+                      - type: object
+                        properties:
+                          restarted:
+                            type: boolean
+                            description: Today's held run was started over instead of a new run being created.
         "400":
           description: "`empty_scope` — the pipeline has no connections"
           content:
@@ -1224,7 +1269,7 @@ paths:
         "403":
           $ref: "#/components/responses/WriteForbidden"
         "409":
-          description: "`run_in_flight` or `run_exists_today`"
+          description: "`run_in_flight`, `run_exists_today` (both with `details.run_id`), or `run_changed`"
           content:
             application/json:
               schema:
@@ -1261,7 +1306,12 @@ paths:
       description: >
         Reset the attempt counters on failed steps and reopen the run. The next
         tick triggers them again. Use this when the cause was fixed upstream —
-        a re-granted ad account, a restored credential. Requires `ak_`.
+        a re-granted ad account, a restored credential.
+
+
+        Only a `held` or `failed` run can be retried (`400 not_retryable`), and
+        not while another run of this pipeline is in flight
+        (`409 run_in_flight`). Requires `ak_`.
       parameters:
         - $ref: "#/components/parameters/PipelineClientId"
         - name: runId
@@ -1283,8 +1333,20 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/WriteForbidden"
+        "400":
+          description: "`not_retryable` — the run is not held or failed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           $ref: "#/components/responses/NotFoundRun"
+        "409":
+          description: "`run_in_flight` (another run is running) or `run_changed` (the tick advanced this run mid-request)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /pipelines/{clientId}/runs/{runId}/force:
     post:
       summary: Complete a held run anyway
@@ -1338,7 +1400,9 @@ paths:
       description: >
         Re-POST the completion payload. Delivery is at-least-once and the
         payload carries the run id, so a receiver that already processed it
-        should dedupe rather than reject. Requires `ak_`.
+        should dedupe rather than reject. Only a `succeeded` run has a
+        completion (`400 not_completed`), and the pipeline needs a
+        `webhook_url` (`400 no_webhook`). Requires `ak_`.
       parameters:
         - $ref: "#/components/parameters/PipelineClientId"
         - name: runId
@@ -1363,6 +1427,12 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/WriteForbidden"
+        "400":
+          description: "`not_completed` (the run has not succeeded) or `no_webhook`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           $ref: "#/components/responses/NotFoundRun"
   /sync-events:
@@ -2834,7 +2904,11 @@ components:
           type: integer
         estimated_cost_usd:
           type: number
-          description: Estimated cost derived from committed record counts.
+          description: >-
+            Estimated Airbyte Cloud cost from committed record counts: 6 credits per
+            million rows, priced at the credit rate in force when each sync ran
+            ($2.50 before 2026-10-01, $5.00 from 2026-10-01 UTC). An estimate, not
+            Airbyte's invoice.
           example: 2.74
     Stats:
       type: object
@@ -2976,3 +3050,6 @@ components:
             paths. Switch on this rather than on `error`, which is prose and may
             change.
           example: return_url_not_allowed
+        details:
+          type: object
+          description: Structured context on some errors, such as the conflicting `run_id` or per-connection `errors`.

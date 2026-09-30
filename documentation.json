@@ -427,6 +427,11 @@
                     "title": "Authentication",
                     "path": "airbyte-api/authentication",
                     "icon": "lock"
+                  },
+                  {
+                    "title": "Pipelines",
+                    "path": "airbyte-api/pipelines",
+                    "icon": "workflow"
                   }
                 ]
               },
@@ -816,6 +821,11 @@
                     "title": "Authentication",
                     "path": "airbyte-api/authentication",
                     "icon": "lock"
+                  },
+                  {
+                    "title": "Pipelines",
+                    "path": "airbyte-api/pipelines",
+                    "icon": "workflow"
                   }
                 ]
               },
