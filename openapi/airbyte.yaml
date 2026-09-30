@@ -1958,6 +1958,11 @@ components:
     ProvisionRequest:
       type: object
       description: >
+        Usually unnecessary: the first `POST /oauth/initiate` or
+        `POST /connections` for an unprovisioned agency provisions it on
+        Mythic's warehouse automatically.
+
+
         Three modes. MYTHIC WAREHOUSE (the default): send no BigQuery fields and
         Mythic creates a workspace and a destination in its own BigQuery
         project, with a credential it holds. Not available with your own

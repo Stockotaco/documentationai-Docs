@@ -39,7 +39,7 @@ https://mythic-analytics.gulp.workers.dev/client/v1/airbyte
 
 <Steps>
   <Step title="Provision or adopt the destination" titleType="h3">
-    Call `POST /config/provision`. With an empty body your data lands in Mythic's BigQuery warehouse, one dataset per client. Send your BigQuery project, dataset and GCP service-account credentials to use your own BigQuery instead, or `airbyte_workspace_id` + `airbyte_destination_id` to adopt an Airbyte setup you already run. Safe to re-run: it updates in place rather than accumulating destinations. See [Provisioning](#provisioning).
+    Nothing to do for Mythic's warehouse: your first `POST /oauth/initiate` or `POST /connections` provisions it automatically. Call `POST /config/provision` yourself only for your own BigQuery or to adopt an existing setup. With an empty body your data lands in Mythic's BigQuery warehouse, one dataset per client. Send your BigQuery project, dataset and GCP service-account credentials to use your own BigQuery instead, or `airbyte_workspace_id` + `airbyte_destination_id` to adopt an Airbyte setup you already run. Safe to re-run: it updates in place rather than accumulating destinations. See [Provisioning](#provisioning).
   </Step>
   <Step title="Discover platforms" titleType="h3">
     Call `GET /platforms` to see supported sources and the fields each one requires.
@@ -84,7 +84,7 @@ Example error response:
 
 `POST /config/provision` runs in one of three modes.
 
-**Mythic's warehouse (default).** Send no BigQuery fields. Mythic creates an Airbyte workspace and a destination in its own BigQuery project, with a credential Mythic holds. `GET /config` then reports `warehouse: "mythic"` and `has_credentials: false`. Not available together with your own `airbyte_client_id` (`400 warehouse_requires_mythic_org`).
+**Mythic's warehouse (default).** Happens automatically on your first connect if you never provisioned. Or send no BigQuery fields. Mythic creates an Airbyte workspace and a destination in its own BigQuery project, with a credential Mythic holds. `GET /config` then reports `warehouse: "mythic"` and `has_credentials: false`. Not available together with your own `airbyte_client_id` (`400 warehouse_requires_mythic_org`).
 
 **Your own BigQuery.** Send `bigquery_project_id`, `bigquery_dataset` and `gcp_credentials_json`, all three. Mythic creates the workspace and a destination in your project. `warehouse` is `"agency"`.
 
