@@ -1622,6 +1622,10 @@ components:
           type: integer
         estimated_cost_usd:
           type: number
+          description: >-
+            Estimated Airbyte Cloud cost: 6 credits per million committed rows,
+            $2.50/credit before 2026-09-30 and $5.00/credit from 2026-09-30 UTC,
+            each sync priced at its own date.
     Stats:
       type: object
       properties:
