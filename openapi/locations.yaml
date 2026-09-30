@@ -379,6 +379,14 @@ paths:
         by hand.
       parameters:
         - $ref: "#/components/parameters/LocationId"
+        - name: lane
+          in: query
+          required: false
+          description: >-
+            Which install lane to read. `md` reads the Mythic Data lane, `hc`
+            the legacy HC/Iris lane. Must match the lane the install link was
+            created with. Defaults to `hc`.
+          schema: { type: string, enum: [hc, md], default: hc }
       responses:
         "200":
           description: Connection state
@@ -411,6 +419,12 @@ paths:
         still links the install. On return, `return_url` receives
         `mythic_ghl=connected&ghl_location_id=…`, or
         `mythic_ghl=error&mythic_error=<code>`.
+
+
+        Both lanes install the same GHL marketplace app and differ only in the
+        shared secret, the toggles the install turns on, and (for `md`) the
+        BigQuery export that writes this client's GHL rows into this client's
+        own Mythic dataset. `md` is the lane to use for Mythic Data clients.
       parameters:
         - $ref: "#/components/parameters/LocationId"
       requestBody:
@@ -426,6 +440,14 @@ paths:
                     Where to send the browser afterwards. Its origin must be in
                     the agency's `oauth_return_origins`.
                   example: https://app.example.com/clients/123
+                lane:
+                  type: string
+                  enum: [hc, md]
+                  default: hc
+                  description: >-
+                    Install lane. `md` is the Mythic Data lane. `hc` is the
+                    legacy HC/Iris lane. Read the connection back with the same
+                    lane.
       responses:
         "200":
           description: Install link
@@ -440,6 +462,7 @@ paths:
                     properties:
                       install_url: { type: string }
                       ghl_app_id: { type: string, example: 6827fcaec3217895d84d469e }
+                      lane: { type: string, enum: [hc, md], example: md }
                       return_expires_in: { type: integer, example: 86400 }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -718,7 +741,8 @@ components:
         `agency_id` — the message names it and why), `unknown_field` (a typo;
         the message lists what is settable), `invalid_field` (a settable field
         failed validation), `missing_field` (`name` absent on create),
-        `invalid_body` (not a JSON object), `invalid_hostname`, or
+        `invalid_body` (not a JSON object), `invalid_hostname`,
+        `invalid_lane` (`lane` was not `hc` or `md`), or
         `empty_update` (a PATCH with nothing in it).
       content:
         application/json:
