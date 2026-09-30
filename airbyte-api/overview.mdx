@@ -39,7 +39,7 @@ https://mythic-analytics.gulp.workers.dev/client/v1/airbyte
 
 <Steps>
   <Step title="Provision or adopt the destination" titleType="h3">
-    Call `POST /config/provision` — with your BigQuery project, dataset, and GCP service-account credentials to have Mythic create the workspace and destination, or with `airbyte_workspace_id` + `airbyte_destination_id` to adopt an Airbyte setup you already run. Safe to re-run: it updates in place rather than accumulating destinations. See [Provisioning](#provisioning).
+    Call `POST /config/provision`. With an empty body your data lands in Mythic's BigQuery warehouse, one dataset per client. Send your BigQuery project, dataset and GCP service-account credentials to use your own BigQuery instead, or `airbyte_workspace_id` + `airbyte_destination_id` to adopt an Airbyte setup you already run. Safe to re-run: it updates in place rather than accumulating destinations. See [Provisioning](#provisioning).
   </Step>
   <Step title="Discover platforms" titleType="h3">
     Call `GET /platforms` to see supported sources and the fields each one requires.
@@ -82,9 +82,11 @@ Example error response:
 
 ## Provisioning
 
-`POST /config/provision` runs in one of two modes.
+`POST /config/provision` runs in one of three modes.
 
-**Create.** Send `bigquery_project_id`, `bigquery_dataset` and `gcp_credentials_json`; Mythic creates an Airbyte workspace and a BigQuery destination for you.
+**Mythic's warehouse (default).** Send no BigQuery fields. Mythic creates an Airbyte workspace and a destination in its own BigQuery project, with a credential Mythic holds. `GET /config` then reports `warehouse: "mythic"` and `has_credentials: false`. Not available together with your own `airbyte_client_id` (`400 warehouse_requires_mythic_org`).
+
+**Your own BigQuery.** Send `bigquery_project_id`, `bigquery_dataset` and `gcp_credentials_json`, all three. Mythic creates the workspace and a destination in your project. `warehouse` is `"agency"`.
 
 **Adopt.** Send the ids of an Airbyte setup you already run, and Mythic uses it instead of building a parallel one:
 
@@ -99,6 +101,24 @@ When you adopt a destination, the BigQuery fields are not required: the destinat
 <Callout kind="warning">
   In **create** mode Mythic lists the target dataset first and refuses with `409 dataset_in_use` if it already holds Airbyte-managed tables. Two Airbyte workspaces writing the same streams into one dataset duplicate rows and split incremental cursor state, and neither side reports an error — you find out from the numbers or the invoice. Adopt the existing destination, pick another dataset, or resend with `confirm_shared_dataset: true` if the sharing is intended.
 </Callout>
+
+### One dataset per client
+
+Whichever warehouse you use, every connection writes its own dataset, `client_<client id with dashes replaced by underscores>`, and every table is prefixed with the platform:
+
+```
+client_538d4ced_447c_40b9_9afa_d220f9afcc84.meta_ads_campaigns
+client_538d4ced_447c_40b9_9afa_d220f9afcc84.meta_ads_ads_insights_action_type
+client_538d4ced_447c_40b9_9afa_d220f9afcc84.google_ads_ad_groups
+```
+
+The connection row says where: `bigquery_project_id`, `bigquery_dataset`, `table_prefix`. Connections created before 2026-09-30 have these as `null` and keep writing the destination's default dataset under bare stream names. On Mythic's warehouse this is the same dataset as the client's [BigQuery export](/bigquery-api/overview), so an export reader also sees the synced ad tables.
+
+Correlation, constraints and incrementality read a client's Meta tables from this dataset once its connection has synced at least once.
+
+### Moving between warehouses
+
+An agency that already has a destination cannot be switched between Mythic's warehouse and its own BigQuery by accident. Provision answers `409 warehouse_change` unless you send `confirm_warehouse_change: true`, because existing connections would write to the new place from their next sync, without their history.
 
 ### Re-running provision
 
@@ -253,44 +273,27 @@ The stored connection's `tables_json` always reflects the streams actually confi
   `defaultStreams` is read once, when a connection is created — adding a stream to the catalog does not reach connections that already exist. Send an explicit `streams` array to `PUT /connections/{id}` to add one to a live connection, remembering that enabling a stream triggers a backfill from the source's start date.
 </Callout>
 
-### Some streams sync weekly, on their own connection
+### Meta is one connection
 
-A platform can also declare `weeklyStreams` in `GET /platforms`. Those streams are expensive to sync and slow to change — Meta's `ad_creatives_from_ads` is a full refresh of every creative on every ad — so they do not belong on the same cadence as daily insights.
+`ad_creatives_from_ads` syncs incrementally (cursor `updated_time`, key `id`) on the same daily connection as the other Meta streams.
 
-Airbyte's cadence is a property of the **connection**, not the stream, so this is expressed the only way it can be: **one `POST /connections` for Meta creates two connections off one source.**
+Meta connections created before 2026-09-30 are two connections off one source: the daily streams, and a companion carrying only `ad_creatives_from_ads`. The companion is not a duplicate. Mythic never adds a stream to one of the pair that the other already syncs, and deleting one keeps the shared source for the other (the response reports `source_deleted` and `siblings_kept`).
 
-- **Primary** — the `defaultStreams`, on whatever `sync_frequency` you asked for.
-- **Weekly companion** — the `weeklyStreams` only, `manual` in Airbyte, run by the pipeline one day a week (`sync_dow`, Sunday by default).
-
-They share a source, so there is one consent, one credential and one account list. The response to `POST /connections` (and the connection created by an OAuth callback) carries a `companions` array with the second connection's row, plus a `pipeline` object saying whether both were added to the client's pipeline scope. Both stream sets are disjoint — no stream is ever written by both connections.
-
-```json
-{
-  "id": "…", "platform": "meta_ads", "tables_json": [ /* daily streams */ ],
-  "companions": [
-    { "id": "…", "display_name": "meta_ads - acme (weekly)", "sync_dow": 1,
-      "tables_json": [{ "name": "ad_creatives_from_ads", "syncMode": "full_refresh_overwrite" }] }
-  ],
-  "pipeline": { "enrolled": true, "pipeline_id": "…", "connection_ids": ["…", "…"], "pipeline_enabled": true }
-}
-```
-
-Three things follow from the split, all of them things a portal has to handle:
-
-- **Supplying your own `streams` opts out.** An explicit stream list is a decision, so no companion is created — put the weekly streams wherever you want them.
-- **A companion needs the pipeline.** It is `manual` in Airbyte on purpose; if the client has no pipeline, nothing will ever trigger it. It appears in `GET /pipelines/{clientId}/candidates` like any other connection — add it, or sync it by hand with `POST /connections/{id}/sync`.
-- **Deleting one does not delete the other.** The shared source is removed only with the last connection using it; the response reports `source_deleted` and `siblings_kept`.
-
-`sync_dow` (0 = Sunday … 6 = Saturday, `null` = every run) is writable on `PUT /connections/{id}` if Sunday is the wrong day. It is read by the pipeline only — a connection on its own Airbyte cron ignores it, because the cron already says when it runs.
+`sync_dow` (0 = Sunday … 6 = Saturday, `null` = every run) on `PUT /connections/{id}` limits a connection to one pipeline run a week. It is read by the pipeline only. A connection on its own Airbyte cron ignores it.
 
 ## Sync frequency
 
-**`manual` is the default.** A connection created without an explicit `sync_frequency` does not sync on a schedule — you trigger it with `POST /connections/{id}/sync`. Scheduled syncing is something you opt into.
+**Daily is the default.** A connection created without an explicit `sync_frequency` syncs once a day:
+
+- If the client has a [pipeline](#orchestrated-syncs), the connection is created `manual` and added to it. The pipeline runs it daily, and an Airbyte cron on top would sync it twice. The response carries `pipeline`.
+- Otherwise it gets Airbyte's own `24h` cron at `sync_hour_utc`.
+
+An explicit `sync_frequency` always wins and is never taken over by the pipeline.
 
 | Value | Cadence |
 |-------|---------|
-| `manual` | No automatic syncs (default) |
-| `24h` | Once daily |
+| `manual` | No automatic syncs |
+| `24h` | Once daily (default without a pipeline) |
 | `12h` | Every 12 hours |
 | `6h` | Every 6 hours |
 

@@ -630,8 +630,8 @@ paths:
         the local record is deleted. Requires an agency key (`ak_`).
 
 
-        THE SOURCE MAY BE SHARED. A weekly companion connection runs off the
-        same source as its primary, so the source is deleted only with the LAST
+        THE SOURCE MAY BE SHARED. A weekly companion connection (Meta, created
+        before 2026-09-30) runs off the same source as its primary, so the source is deleted only with the LAST
         connection using it — otherwise deleting one half would leave the other
         unable to sync, with nothing to say why. The response reports both
         facts: `source_deleted`, and `siblings_kept` listing connections on this
@@ -1677,15 +1677,14 @@ components:
           type: array
           description: >
             Streams that get their OWN connection, synced one day a week instead
-            of on the primary connection's cadence. Empty for most platforms.
+            of on the primary connection's cadence. Empty for every platform
+            today: Meta's `ad_creatives_from_ads` moved to `defaultStreams` on
+            2026-09-30 once it could sync incrementally.
 
 
-            Non-empty means a single `POST /connections` creates TWO connections
-            off one source — the second carries only these streams, is `manual`
-            in Airbyte, and is run by the pipeline on `sync_dow`. Meta declares
-            `ad_creatives_from_ads` here: a full refresh of every creative on
-            every ad, over data that changes weekly at most. Supplying your own
-            `streams` array opts out of the split entirely.
+            Non-empty would mean a single `POST /connections` creates TWO
+            connections off one source, the second carrying only these streams,
+            `manual` in Airbyte and run by the pipeline on `sync_dow`.
           items:
             $ref: "#/components/schemas/Stream"
     Stream:
@@ -1871,7 +1870,19 @@ components:
         bigquery_dataset:
           type: string
           nullable: true
-          example: mythic_ads
+          description: >
+            The destination's default dataset. Connections do not write here:
+            each writes its own `client_<client id>` dataset (see
+            `Connection.bigquery_dataset`).
+          example: airbyte_default
+        warehouse:
+          type: string
+          enum: ["mythic", "agency"]
+          description: >
+            `mythic`: the destination is Mythic's own BigQuery (the default when
+            provisioning with no BigQuery fields), with a credential Mythic
+            holds. `agency`: the agency supplied or adopted its own BigQuery.
+          example: mythic
         staging_bucket_name:
           type: string
           nullable: true
@@ -1894,8 +1905,11 @@ components:
           example: Standard
         has_credentials:
           type: boolean
-          description: Whether encrypted GCP credentials are stored. The credentials themselves are never returned.
-          example: true
+          description: >
+            Whether encrypted agency GCP credentials are stored. The credentials
+            themselves are never returned. Always `false` on Mythic's warehouse,
+            whose credential is held by the worker.
+          example: false
         destination_adopted:
           type: boolean
           description: >
@@ -1944,19 +1958,33 @@ components:
     ProvisionRequest:
       type: object
       description: >
-        Two modes. CREATE (the default): supply the BigQuery fields and Mythic
-        creates a workspace and a BigQuery destination for you. ADOPT: supply
+        Three modes. MYTHIC WAREHOUSE (the default): send no BigQuery fields and
+        Mythic creates a workspace and a destination in its own BigQuery
+        project, with a credential it holds. Not available with your own
+        `airbyte_client_id` (`400 warehouse_requires_mythic_org`). OWN BIGQUERY:
+        supply `bigquery_project_id`, `bigquery_dataset` and
+        `gcp_credentials_json`, all three. ADOPT: supply
         `airbyte_workspace_id` + `airbyte_destination_id` (and
         `airbyte_client_id`/`airbyte_client_secret` if that setup lives in your
         own Airbyte org) and Mythic uses what you already run instead of
         building a parallel copy of it. The BigQuery fields are required only
-        in CREATE mode — an adopted destination already carries its own target
-        and credentials.
-      required:
-        - bigquery_project_id
-        - bigquery_dataset
-        - gcp_credentials_json
+        in OWN BIGQUERY mode — an adopted destination already carries its own
+        target and credentials, and Mythic's warehouse needs none.
+
+
+        Whichever mode, every connection writes its own dataset
+        `client_<client id with dashes as underscores>` with platform-prefixed
+        tables. Switching an agency that already has a destination between
+        Mythic's warehouse and its own BigQuery answers `409 warehouse_change`
+        unless `confirm_warehouse_change` is `true`.
       properties:
+        confirm_warehouse_change:
+          type: boolean
+          description: >
+            Required to move an agency that already has a destination between
+            Mythic's warehouse and its own BigQuery. Existing connections would
+            write to the new place from their next sync, without their history.
+          default: false
         airbyte_workspace_id:
           type: string
           description: >
@@ -2277,6 +2305,25 @@ components:
           description: Resolved stream selection stored for the connection.
           items:
             type: object
+        bigquery_project_id:
+          type: string
+          nullable: true
+          description: BigQuery project this connection's tables land in. `null` on connections created before 2026-09-30.
+          example: mythic-data
+        bigquery_dataset:
+          type: string
+          nullable: true
+          description: >
+            The client's dataset, `client_<client id with dashes as
+            underscores>`. On Mythic's warehouse it is also the client's BigQuery
+            export dataset. `null` on connections created before 2026-09-30,
+            which write the destination's default dataset.
+          example: client_538d4ced_447c_40b9_9afa_d220f9afcc84
+        table_prefix:
+          type: string
+          nullable: true
+          description: Prefix on every table this connection writes, e.g. `meta_ads_campaigns`.
+          example: meta_ads_
         companions:
           type: array
           description: >
@@ -2298,10 +2345,10 @@ components:
           type: object
           nullable: true
           description: >
-            Whether the new connections were added to the client's pipeline
-            scope. Present only when companions were created. A weekly companion
-            is `manual` in Airbyte by design, so one that is NOT in a pipeline
-            has nothing that will ever trigger it.
+            Whether the new connection was added to the client's pipeline scope.
+            Present when a `manual` connection was created (the default when
+            the client has a pipeline) or companions were. A `manual` connection
+            that is NOT in a pipeline has nothing that will ever trigger it.
           properties:
             enrolled:
               type: boolean
@@ -2374,7 +2421,8 @@ components:
 
 
         This is how a connection syncs less often than the run that owns it —
-        Meta's weekly creatives companion is created with `0` (Sunday). A run on
+        Meta's weekly creatives companions (connections created before
+        2026-09-30) were created with `0` (Sunday). A run on
         any other day marks the step `skipped` with reason `weekly — only runs
         on Sunday (UTC)`, which never holds the run's gate.
 
@@ -2387,11 +2435,11 @@ components:
       type: string
       description: >
         Sync cadence. `24h`, `12h` and `6h` schedule automatic syncs at
-        `sync_hour_utc`; `manual` disables them, and is the DEFAULT — a
-        connection created without this field does not sync on a schedule.
+        `sync_hour_utc`; `manual` disables them. On create, omitting it means
+        DAILY: `manual` plus enrolment in the client's pipeline when it has
+        one (the pipeline runs it daily), otherwise `24h`.
       enum: ["manual", "24h", "12h", "6h"]
-      default: manual
-      example: manual
+      example: 24h
     Job:
       type: object
       description: >
