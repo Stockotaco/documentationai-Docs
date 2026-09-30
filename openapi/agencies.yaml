@@ -319,6 +319,122 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /agencies/{id}/billing/claim:
+    post:
+      summary: Connect billing
+      operationId: claimAgencyBilling
+      description: >
+        Link the agency to the live SureCart customer who bought the account
+        plan with this email, and pull the subscription's billing state across
+        at once. Only a live customer with exactly this email and an account
+        subscription is linked, and never one another agency already holds.
+        Pass only an email you have verified belongs to the agency's owner:
+        the customer found here pays for the agency from then on. Safe to
+        repeat; an agency already linked to this customer is re-synced.
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: owner@agency.com
+      responses:
+        "200":
+          description: >-
+            `claimed: true` with the applied billing fields, or `claimed: false`
+            with `reason` (`no_customer` or `no_subscription`).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      claimed: { type: boolean, example: true }
+                      reason:
+                        type: string
+                        enum: [no_customer, no_subscription]
+                      subscription_id: { type: string, format: uuid }
+                      billing_status: { type: string, example: active }
+        "400":
+          description: Missing email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Agency not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: The agency is linked to a different SureCart customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: SureCart could not be read or the sync failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: SureCart is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /agencies/{id}/billing/portal:
+    get:
+      summary: Billing portal link
+      operationId: getAgencyBillingPortal
+      description: >
+        A SureCart customer-portal link for the agency's billing: payment
+        methods, invoices, cancellation. Minted per request. It signs its
+        holder in to that customer's portal, so hand it only to the agency's
+        owner or admins, and never cache it.
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+      responses:
+        "200":
+          description: The portal link
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      portal_url: { type: string, format: uri }
+        "404":
+          description: Agency not found, or billing is not connected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: SureCart could not be read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: SureCart is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /agencies/{id}/locations:
     post:
       summary: Link location

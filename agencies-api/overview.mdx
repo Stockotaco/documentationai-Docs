@@ -64,6 +64,8 @@ Responses are JSON, but the envelope varies by endpoint rather than following a 
 | `PATCH /agencies/{id}` | `{ "data": { ...agency } }` |
 | `DELETE /agencies/{id}` | `{ "success": true }` |
 | `POST /agencies/{id}/rotate-key` | `{ "success": true, "agency_key": "ak_..." }` |
+| `POST /agencies/{id}/billing/claim` | `{ "data": { "claimed": true, ... } }` |
+| `GET /agencies/{id}/billing/portal` | `{ "data": { "portal_url": "https://..." } }` |
 | `POST /agencies/{id}/locations` | `{ "success": true, "data": { ... } }` |
 | `DELETE /agencies/{id}/locations/{locationId}` | `{ "success": true }` |
 

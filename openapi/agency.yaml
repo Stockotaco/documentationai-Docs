@@ -588,6 +588,16 @@ components:
             and only the second survives a change to the agency default. Use
             `GET /client/v1/locations/plan` for the resolved view and the
             selectable tiers.
+        domain: { type: string, nullable: true, example: acmedental.com }
+        website:
+          type: string
+          nullable: true
+          example: https://acmedental.com
+        timezone:
+          type: string
+          nullable: true
+          example: America/Chicago
+          description: IANA timezone the location reports in.
         created_at: { type: string, format: date-time }
     StatsRow:
       type: object
