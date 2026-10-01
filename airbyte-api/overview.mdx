@@ -275,7 +275,7 @@ The stored connection's `tables_json` always reflects the streams actually confi
 
 ### Meta is one connection
 
-`ad_creatives_from_ads` syncs incrementally (cursor `updated_time`, key `id`) on the same daily connection as the other Meta streams.
+`ad_creatives_from_ads` syncs incrementally (cursor `updated_time`, key `id`) on the same daily connection as the other Meta streams. `activities` (the account change log) syncs incrementally on the same connection, cursor `event_time`, key `account_id`, `actor_id`, `application_id`, `event_type`, `object_id`, `event_time`. The connector declares no key for it, so Mythic sends one. `event_time` is in the key so repeated edits are kept as separate rows.
 
 Meta connections created before 2026-09-30 are two connections off one source: the daily streams, and a companion carrying only `ad_creatives_from_ads`. The companion is not a duplicate. Mythic never adds a stream to one of the pair that the other already syncs, and deleting one keeps the shared source for the other (the response reports `source_deleted` and `siblings_kept`).
 
