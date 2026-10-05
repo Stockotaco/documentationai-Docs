@@ -58,6 +58,21 @@
                     "title": "Replay Vision",
                     "path": "agency-app/replay-vision",
                     "icon": "scan-eye"
+                  },
+                  {
+                    "title": "Destinations",
+                    "path": "agency-app/destinations",
+                    "icon": "send"
+                  },
+                  {
+                    "title": "Tags",
+                    "path": "agency-app/tags",
+                    "icon": "tag"
+                  },
+                  {
+                    "title": "Link uptime",
+                    "path": "agency-app/uptime",
+                    "icon": "activity"
                   }
                 ]
               }

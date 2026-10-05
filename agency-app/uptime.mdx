@@ -1,0 +1,61 @@
+---
+title: Link uptime
+description: >-
+  See whether your clients' short link destinations are up, how fast they
+  respond, and how alerts reach you when one goes down.
+---
+
+## Overview
+
+Mythic checks the destination of every short link every 5 minutes. The
+**Link uptime** screen shows the result. There is nothing to turn on: a link
+is monitored as soon as it is created, as long as it is enabled and not
+expired.
+
+Open **Link uptime** from the agency menu to see every client's links, or from a
+client's menu to see only that client's.
+
+## Read the screen
+
+The tiles at the top show:
+
+- **Monitored links**: links checked in the last 24 hours.
+- **Down now**: links whose latest check failed.
+- **Uptime**: the share of checks that succeeded, over the last 30 days or
+  since the link was created, whichever is shorter.
+
+| Column | What it shows |
+| --- | --- |
+| **Link** | The link's title or short path, and the destination URL it points to |
+| **Status** | **Up**, or **Down** with the HTTP status code or the error |
+| **Uptime 24h** | The share of checks that succeeded in the last 24 hours |
+| **Response** | How long the destination took to answer the latest check |
+| **Checked** | When the latest check ran |
+
+A client's screen also charts the daily average response time for the last 14
+days.
+
+## When a link goes down
+
+A link counts as down after **2 failed checks in a row**, so one slow answer
+doesn't raise an alert. Mythic then opens a critical alert, such as "Short
+link /spring-sale is down", and sends it to your alert channels. When the
+destination answers again, the alert resolves. A rule can also send that
+recovery.
+
+Choose where alerts go, a Slack channel or a webhook, on the **Alerts**
+screen.
+
+## Common causes
+
+- **404**: the page the link points to was moved or deleted. Update the
+  link's destination, or restore the page.
+- **5xx or no response**: the client's site is down or blocking the check.
+  Some firewalls block automated requests. Ask the client's host to allow
+  them.
+
+## For developers
+
+Uptime is available on the [Client Links API](/client-links-api/overview),
+with `link_down` and `link_up` webhooks. Alert routing is on the
+[Alerts API](/agency-api/alerts).

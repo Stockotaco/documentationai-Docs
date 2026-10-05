@@ -1,0 +1,85 @@
+---
+title: Tags
+description: >-
+  Manage everything the Mythic snippet runs on a client's site: ad platform
+  pixels, vendor scripts and your own code, with drafts and version history.
+---
+
+## Overview
+
+The **Tags** screen lists everything the Mythic snippet loads on a client's
+site. The client installs the snippet once. After that, you add, change and
+remove tags here without touching the site.
+
+Open a client and choose **Tags**. The screen has two parts: **Ad platforms**
+and **Custom tags**.
+
+## Ad platforms
+
+Each card is one ad platform: Meta, Google Ads, Google Analytics 4 and OpenAI
+Ads. A platform runs in two places:
+
+- **Browser**: the platform's own tag on the page, such as the Meta Pixel or
+  the Google tag. It catches visitors before the server sees them. Google
+  Analytics 4 and OpenAI Ads have no browser tag in Mythic.
+- **Server**: Mythic sends the same events from its servers, such as Meta's
+  Conversions API. The server side is always on. It survives ad blockers and
+  adds hashed email and phone once the visitor is identified.
+
+Open a platform to set it up, choose which Mythic events it receives
+(**Events sent**), check deliveries and failures for the last 24 hours, and
+**Send test event**. A card marked **Needs attention** has failed deliveries.
+
+Changes to an ad platform go live when you save, even in draft mode, because
+the browser tag and the server destination have to change together.
+
+## Custom tags
+
+Click **New tag** to add one of these:
+
+- **Vendor presets** such as Microsoft Clarity, Hotjar, TikTok Pixel,
+  LinkedIn Insight Tag and Klaviyo onsite. You enter the vendor's ID, such as
+  a Clarity project ID, and Mythic writes the code.
+- **Custom HTML**, **Custom JavaScript**, or a **Script URL** for anything
+  else.
+
+The list shows each tag's trigger, how often it fired in the last 7 days, its
+errors in the last 24 hours, and a switch to turn it on or off. **Never fired**
+means the tag is live and on but didn't run in the last 7 days. Check its
+trigger.
+
+If a tag throws errors on the site, a banner names it. The rest of the page and
+tracking keep working.
+
+### Triggers
+
+A trigger says when a tag runs:
+
+- **All pages**, or only **pages** that match conditions.
+- **On an event**, such as `purchase`, `lead` or `form_submitted`.
+
+Conditions can check the page URL, a query parameter, a cookie, the device, or
+a JavaScript variable. Use a cookie condition to wait for consent, for example
+a `CookieConsent` cookie that contains `marketing:true`.
+
+## Publish changes
+
+The **Publishing** setting decides when custom tag changes reach the site:
+
+- **Publish on save**: each change goes live on the next page view.
+- **Draft, then publish**: changes wait as **Unpublished changes** until you
+  click **Review and publish**, name the version, and publish it. **Discard**
+  throws the drafts away.
+
+**History** lists the 3 most recent versions. **Restore** puts an earlier
+version back, as a draft or straight to the site. Versions cover custom tags,
+not ad platforms.
+
+## Ask for help
+
+**Ask agent** opens the chat panel with this client's tags as context. Ask it
+to help write a tag, set up a trigger, or find out why a tag isn't firing.
+
+## For developers
+
+Tags are served by the client config API. See [Client Config](/config-api/overview).

@@ -1,0 +1,89 @@
+---
+title: Destinations
+description: >-
+  See where a client's events are sent server-side, check that deliveries
+  succeed, connect ad platforms, and add webhooks in the agency app.
+---
+
+## Overview
+
+A **destination** sends a client's events from Mythic's servers to another
+platform: the Meta Conversions API, Google Ads, Google Analytics 4, OpenAI Ads,
+Convert, or your own webhook. Each destination has a **trigger**, the events
+that make it fire.
+
+Open a client and choose **Destinations**. Destinations are grouped by
+platform, with the last 24 hours of deliveries for each.
+
+## Read the list
+
+| Column | What it shows |
+| --- | --- |
+| **Destination** | The name, with a status dot (below). Click it to see its details |
+| **Delivered** | Events the platform accepted in the last 24 hours |
+| **Failed** | Deliveries the platform refused or that errored |
+| **Skipped** | Events that matched the trigger but were not sent, with a reason on each delivery |
+| **Last** | When the last delivery happened |
+
+| Status | Meaning |
+| --- | --- |
+| **Healthy** | Deliveries in the last 24 hours, none failed |
+| **Some failures** | Some deliveries failed, but 90% or more succeeded |
+| **Failing** | Fewer than 90% of deliveries succeeded |
+| **Credential rejected** | The platform refused the stored login or token. Reconnect it |
+| **No deliveries in 24h** | Nothing matched the trigger. Check the trigger and the client's traffic |
+| **Paused** | The destination is turned off |
+
+Skipped is often normal. A Convert destination skips visitors who weren't in a
+running experiment. Google destinations skip events with nothing Google can
+match, such as no click ID or client ID. A destination also skips events over
+its delivery cap (10,000 per hour by default).
+
+## Destination details
+
+Click a destination to see:
+
+- **Trigger**: the events that fire it. "Any event" means it has no event
+  filter.
+- **Triggered (all time)**, **Success rate 24h** and **Avg latency 24h**.
+- **Last error**, when the latest delivery failed.
+- **Recent deliveries**: the last 20, each with its event, attempt number and
+  result.
+
+A Meta Conversions API destination also has a **Match quality** tab with Meta's
+live score for each event. See [Meta match quality](/agency-app/meta-quality).
+
+A Convert destination shows **Convert verification** beside the details: how
+many conversions Mythic sent in the window, and how many Convert counted.
+
+## Send a test
+
+**Send test** sends one test event through an ad platform destination with its
+stored credential. Use it after connecting a platform to confirm the setup.
+Google tests are validated without being recorded in the account. Meta tests
+are real sends, so they appear in Events Manager. Webhooks have no test: they
+fire on real events.
+
+## Connect an ad platform
+
+The **Integrations** panel lists each platform and whether it is connected.
+Click **Connect** next to Google Ads or Google Analytics to sign in with Google
+in a new tab. **Stored credentials** lists the logins and tokens saved for this
+client. Mythic never shows the secret itself.
+
+If Connect is unavailable, Google sign-in isn't set up for your agency yet.
+
+## Add a webhook
+
+Click **Add destination** and enter a name, the URL that should receive the
+events, and the trigger event, such as `$pageview` or `purchase`. Mythic sends
+each matching event to the URL as JSON.
+
+Ad platform destinations need a connected integration first. Ask the Mythic
+assistant in the chat panel to set one up, or use the API.
+
+## For developers
+
+Everything on this screen is available on the
+[Destinations API](/destinations-api/overview), including trigger rules,
+event mapping and per-platform settings.
