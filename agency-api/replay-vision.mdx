@@ -208,7 +208,9 @@ page. `next_cursor` is `null` on the last page.
 
 Each succeeded observation is ingested as an event on the client, attributed
 to the recorded visitor's `distinct_id` and carrying `$session_id`, so it joins
-the session in the Data API and Explore. Properties: `observation_id`,
+the session in the Data API and Explore. It is left out of the session
+timeline (`GET /client/v1/data/replays/{id}/timeline`), which lists what the
+visitor did, and out of what later scans see. Properties: `observation_id`,
 `scanner_id`, `scanner_name`, `scanner_type`, `scanner_version`,
 `triggered_by`, `model_used`, `provider_used`, `cost_usd`,
 `scanner_output_confidence`, `scanner_output_key_moment_ms`, plus the answer:

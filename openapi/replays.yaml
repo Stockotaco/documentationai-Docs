@@ -199,7 +199,9 @@ paths:
         AI-summarization view, NOT the raw rrweb stream. Turns the event stream
         into an ordered sequence of meaningful steps (page journey, dwell time,
         form submissions, field inputs, identify, and custom events). Replay
-        heartbeat/start markers, engagement pings, and web vitals are dropped.
+        heartbeat/start markers, engagement pings, web vitals and Replay Vision
+        `$recording_observed` events (answers about the visit, not steps of it)
+        are dropped.
         Contains no PII — form and input values are excluded, only field
         metadata. `sessionId` must be a UUIDv7 (all recording session ids are).
         Feed `data` to a model to summarize what the visitor did and where they
