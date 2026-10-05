@@ -1,0 +1,107 @@
+---
+title: Replay Vision
+description: >-
+  Set up AI scanners that watch your clients' session recordings and answer a
+  question about each visit, then review the answers in the agency app.
+---
+
+## Overview
+
+A **scanner** is a question an AI model answers by watching a session
+recording: did the visitor hit an error, what did they come to do, how engaged
+were they. Each answer is a **result**. Results are also sent into the
+client's data as a `$recording_observed` event, so you can count and chart
+them like any other event.
+
+Scans run on your own OpenRouter or Gemini key, and the provider bills you
+directly.
+
+Open **Replay Vision** from the agency menu to see every client's scanners, or
+from a client's menu to see only that client's.
+
+## Set it up
+
+<Steps>
+  <Step title="Add a model key">
+    Open the **Model keys** tab and add an OpenRouter or Gemini API key. A key
+    added at the agency level is used by every client. A key added on a client
+    is used for that client instead. Mythic checks the key with the provider,
+    encrypts it, and never shows it again.
+
+    A Gemini key must be on a paid plan. Google may use free-tier content to
+    improve its products, and recordings show your clients' visitors.
+  </Step>
+  <Step title="Create a scanner">
+    Click **New scanner**, choose the client and the type, and write the
+    question. Describe what can be seen, not feelings. "Answer yes if the
+    visitor clicked Submit and an error appeared" works. "Answer yes if the
+    visitor was confused" does not. Say what to answer when the recording
+    doesn't show enough.
+  </Step>
+  <Step title="Test it on a few recordings">
+    Click **Scan recordings** and pick recordings you have already watched.
+    Results appear within a few minutes. Read the reasoning, and edit the
+    question until the answers match what you saw.
+  </Step>
+  <Step title="Turn on automatic scanning">
+    Switch on **Scan new recordings automatically** and set the sample, the
+    share of new recordings to scan. Every 5 minutes the scanner picks from
+    the recordings that just ended.
+  </Step>
+</Steps>
+
+## Scanner types
+
+| Type | Answers with | Example question |
+| --- | --- | --- |
+| **Monitor** | Yes or no, or "inconclusive" if you allow it | Did the visitor hit an error? |
+| **Classifier** | One or more of your tags | Why did they come: browsing, buying, account, unclear |
+| **Scorer** | A number on your scale | How engaged were they, 0 to 10 |
+| **Summarizer** | A title, summary, intent, outcome, friction points and keywords | What happened in this visit? |
+
+Every answer includes the model's confidence, its reasoning, and the key
+moment in the recording, with a link to the session.
+
+## Review results
+
+Each scanner lists its results under its settings. On a client's Replay Vision
+screen, the **Results** tab lists every scanner's results for that client. A
+client's **Sessions** screen shows the results for each recording, and can
+scan a single session.
+
+Filter results by status (answered, failed, not eligible, queued, scanning)
+and by the second check.
+
+### Second check
+
+After your model answers, a second model reads the answer's reasoning and the
+visit's timeline and checks whether they support the answer. Results where the
+two disagree are marked **Check disagrees**. Watch those recordings first. A
+scanner with many disagreements usually has a vague question.
+
+Agreement does not prove the answer is right. The second check does not see
+the video. It catches an answer that its own reasoning doesn't support, or
+reasoning the timeline contradicts.
+
+## Limits and costs
+
+- Each scanner scans up to its monthly limit (500 by default), automatic and
+  picked scans together. The scanner shows this month's scans, answers,
+  failures and model spend.
+- **Scan recordings** takes up to 50 recordings at a time. It ignores the
+  sample and counts against the monthly limit.
+- A scanner scans each recording once.
+- Recordings shorter than 15 seconds, with less than 10 seconds of activity,
+  or with more than an hour of activity are not eligible. They are not sent to
+  your model and don't count against the limit.
+- Recordings are kept 30 days. HIPAA clients have no recordings.
+- A client can have up to 25 scanners.
+- Editing a scanner's question, settings or model starts a new version.
+  Earlier results keep the version they were scanned with.
+- Deleting a scanner deletes its results. Events already sent stay in the
+  client's data.
+
+## For developers
+
+The same scanners, keys and results are available on the
+[Replay Vision API](/agency-api/replay-vision) and as MCP tools.

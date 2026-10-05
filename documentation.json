@@ -42,6 +42,28 @@
             ]
           },
           {
+            "tab": "Agency App",
+            "icon": "layout-dashboard",
+            "groups": [
+              {
+                "group": "Screens",
+                "icon": "monitor",
+                "pages": [
+                  {
+                    "title": "Meta match quality",
+                    "path": "agency-app/meta-quality",
+                    "icon": "gauge"
+                  },
+                  {
+                    "title": "Replay Vision",
+                    "path": "agency-app/replay-vision",
+                    "icon": "scan-eye"
+                  }
+                ]
+              }
+            ]
+          },
+          {
             "tab": "Data API",
             "icon": "database",
             "groups": [

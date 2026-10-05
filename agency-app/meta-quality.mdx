@@ -1,0 +1,79 @@
+---
+title: Meta match quality
+description: >-
+  Read Meta's own scoring of the events Mythic sends to the Conversions API,
+  for every client at once, and find the clients that need attention.
+---
+
+## Overview
+
+The **Meta match quality** screen shows how well Meta can match the events
+Mythic sends it to Meta accounts, for every client with a Meta Conversions API
+destination. The scores come from Meta, not from Mythic. They are the same
+numbers you see in Events Manager.
+
+Clients are listed worst first, so the ones that need work are at the top.
+
+## Where the numbers come from
+
+Mythic reads Meta's scores every day at 07:00 UTC and keeps one snapshot per
+day. The table shows those snapshots for the window you pick (7, 14, 30 or 90
+days).
+
+Events Manager shows Meta's score right now, so it can differ from the morning
+snapshot. Click **Refresh** to read Meta again for every client and replace
+today's snapshot. Refresh can run once a minute.
+
+Expand a client to see Meta's live read for each of its Meta destinations,
+with the score per event and a daily trend. The same panel is on the client's
+**Destinations** screen.
+
+## Read the table
+
+| Column | What it shows |
+| --- | --- |
+| **Client** | Opens the client's Destinations screen |
+| **Dataset** | The Meta dataset (pixel) the events go to |
+| **Status** | The client's worst finding, see below |
+| **Worst match quality** | The lowest event score, and which event it is |
+| **Findings** | Critical findings, warnings, and events that were only test fires |
+| **Captured** | The day of the snapshot shown |
+
+| Status | Meaning |
+| --- | --- |
+| **Critical** | An event scores under 4.0, or events reach Meta without a dedupe key |
+| **Warning** | An event scores under 6.0, IP coverage is low, or server events are behind Meta's coverage goal |
+| **Never read** | No snapshot in the window. Usually the client has no Meta destination, or its token lacks the Dataset Quality permission |
+| **Test only** | Every scored event was a test fire |
+| **No data** | Meta found the dataset but scored nothing, because it had no traffic in Meta's window |
+| **Healthy** | Scored, above the thresholds, no findings |
+
+Clients that were never read are hidden by default. Click **Show never read**
+to list them, then expand one to see why.
+
+## What the scores mean
+
+- **Match quality** is Meta's 0 to 10 score for how often it can tie an event
+  to a Meta account. Under 6.0 is a warning, under 4.0 is critical.
+- **Dedupe key coverage** shows whether the browser pixel and the Conversions
+  API send the same event ID, so Meta counts one conversion instead of two.
+  Under 90% on either side means Meta counts some conversions twice.
+- **Match keys** are the customer details Meta used to match, such as email,
+  phone, IP address and click ID, with the share of events that carried each.
+- **Test fires** are scored by Meta even when a test event code is set. An
+  event whose deliveries were all tests is flagged and left out of the
+  headline score, and stays in the event table with its real score.
+- **A blank value** means Meta reported nothing, not zero. Meta leaves out
+  dedupe numbers for datasets with too little paired traffic.
+
+## Improve a low score
+
+Match quality goes up when events carry more customer details. Check the match
+keys for the low event in the expanded client. Common fixes are capturing email
+or phone on forms and keeping the click ID from ad links.
+
+## For developers
+
+The screen reads `GET /client/v1/agency/destinations/quality`, and Refresh
+calls `POST /client/v1/agency/destinations/quality/refresh`. Both are in the
+[Agency API](/agency-api/overview).
