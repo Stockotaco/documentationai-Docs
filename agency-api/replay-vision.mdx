@@ -65,6 +65,39 @@ Every answer also has `confidence` (0 to 1, the model's own estimate),
 `reasoning` (except summarizers) with `(t N)` citations of video seconds,
 `key_moment_t`, and `citations` mapped back to recording time.
 
+## Decisions
+
+After your model answers, a decision model (Cloudflare **Clef-flash** on
+Workers AI) reads that answer's reasoning and the event timeline and returns
+a probability for every allowed answer. It is stored in the observation's
+`decision`, next to `output`. Nothing your model wrote is replaced.
+
+The probabilities repeat on identical input, and they rank answers better
+than the confidence a model reports about itself. `agrees` is `false` where
+the two models disagree: those are the recordings worth watching first.
+
+| Scanner type | `decision` fields | `agrees` is true when |
+| --- | --- | --- |
+| `monitor` | `p_yes` | `p_yes` is on the same side of 0.5 as `verdict`; `null` for `inconclusive` |
+| `classifier` (one tag) | `tag`, `confidence`, `probabilities` per tag | `tag` is in `output.tags` |
+| `classifier` (`multiple`) | `tags` (probability 0.5 or more), `tag_probabilities` | `tags` equals `output.tags` |
+| `scorer` | `score`, `confidence`, `probabilities` per scale point | `score` is within 20% of the scale of `output.score` |
+| `summarizer` | `p_supported`: is the summary consistent with the timeline | `p_supported` is 0.5 or more |
+
+Every decision also has `model`, `input_tokens`, `cost_usd` and `ms`. Mythic
+pays for the decision model; its `cost_usd` is not part of the observation's
+`cost_usd`, which is your provider's charge. If the decision model fails, the
+observation still succeeds and `decision` is `{ "model", "error" }`.
+`decision` is `null` on observations scanned before October 7, 2026.
+
+```json
+"output": { "verdict": "yes", "reasoning": "Clicked Save My Seat three times (t 14) …", "confidence": 0.9, "key_moment_t": 14 },
+"decision": { "model": "clef-flash", "p_yes": 0.97, "agrees": true, "input_tokens": 1029, "cost_usd": 0.00009, "ms": 520 }
+```
+
+The decision model gets the same session details and timeline as your model,
+plus your model's answer. It never gets the video.
+
 Write prompts around what can be seen, not feelings: "answer yes if the
 visitor clicked Submit and an error appeared", not "answer yes if the visitor
 was confused". Say what to answer when the recording does not show enough.
@@ -218,7 +251,10 @@ visitor did, and out of what later scans see. Properties: `observation_id`,
 `scanner_output_tags_freeform`, `scanner_output_score`,
 `scanner_output_reasoning`, or for summarizers `scanner_output_title`,
 `scanner_output_summary`, `scanner_output_intent`, `scanner_output_outcome`,
-`scanner_output_friction_points` and `scanner_output_keywords`. The event's
+`scanner_output_friction_points` and `scanner_output_keywords`. With a
+decision: `scanner_decision_model`, `scanner_decision_agrees`, and
+`scanner_decision_p_yes`, `scanner_decision_tags`, `scanner_decision_score`
+or `scanner_decision_p_supported` by scanner type. The event's
 time is when the observation finished, not when the visit happened.
 
 Deleting a scanner deletes its observations; events already sent stay.

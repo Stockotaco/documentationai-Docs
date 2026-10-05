@@ -456,6 +456,19 @@ components:
             `freeform_tags`, `reasoning`. scorer: `score`, `reasoning`.
             summarizer: `title`, `summary`, `intent`, `outcome`,
             `friction_points`, `keywords`.
+        decision:
+          type: object
+          nullable: true
+          description: >
+            The decision model's (Clef-flash) read of the answer, from its
+            reasoning and the event timeline. All types: `model`, `agrees`
+            (false where it disagrees with `output`; null for an inconclusive
+            monitor), `input_tokens`, `cost_usd` (paid by Mythic), `ms`.
+            monitor: `p_yes`. classifier: `tag`, `confidence`,
+            `probabilities`, or with `multiple` `tags`, `tag_probabilities`.
+            scorer: `score`, `confidence`, `probabilities` per scale point.
+            summarizer: `p_supported`. `{ model, error }` when the decision
+            model failed; null on observations scanned before 2026-10-07.
         citations:
           type: array
           items:
