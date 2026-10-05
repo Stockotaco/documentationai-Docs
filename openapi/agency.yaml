@@ -227,7 +227,8 @@ paths:
 
         One Meta call per Meta CAPI destination, made one at a time. A client
         whose read fails is reported in `results` with an error `code` and does
-        not stop the others. Limited to one call per agency per minute.
+        not stop the others. Answers 429 with `Retry-After` when any of the
+        targeted locations was read in the last minute.
       parameters:
         - $ref: "#/components/parameters/LocationIds"
       responses:
