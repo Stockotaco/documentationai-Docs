@@ -488,8 +488,9 @@ paths:
         `ct`/`st`/`zp`/`country` keys.
 
 
-        Off by default, and never applied to HIPAA tenants — IP and geo are
-        identifying.
+        On by default since 2026-10-06. Set it to false to stop collecting IP
+        and geo for a location. Never applied to HIPAA tenants, whatever the
+        value.
       requestBody:
         required: true
         content:
