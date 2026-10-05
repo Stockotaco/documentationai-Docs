@@ -213,6 +213,66 @@ paths:
         "404": { $ref: "#/components/responses/NoLocations" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "502": { $ref: "#/components/responses/UpstreamFailed" }
+  /client/v1/agency/destinations/quality/refresh:
+    post:
+      summary: Re-read Meta dataset quality now
+      operationId: refreshAgencyDestinationQuality
+      description: >
+        Re-reads Meta's current match quality for every location in the roster
+        (or only `location_ids`) and overwrites today's snapshot. Call
+        `GET /client/v1/agency/destinations/quality` afterwards and it returns
+        the score Events Manager shows now, instead of the daily 07:00 UTC
+        capture, which can trail Meta by up to a day.
+
+
+        One Meta call per Meta CAPI destination, made one at a time. A client
+        whose read fails is reported in `results` with an error `code` and does
+        not stop the others. Limited to one call per agency per minute.
+      parameters:
+        - $ref: "#/components/parameters/LocationIds"
+      responses:
+        "200":
+          description: One result per Meta CAPI destination read
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      day: { type: string, format: date, description: UTC day the snapshot rows were written to. }
+                      destinations: { type: integer, description: Meta CAPI destinations attempted. }
+                      rows_written: { type: integer, description: Snapshot rows written (one per scored event). }
+                      results:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            location_id: { type: string }
+                            name: { type: string, nullable: true }
+                            action_id: { type: string, description: The destination id. }
+                            status:
+                              type: string
+                              description: >-
+                                The client's quality status (`critical`, `warn`,
+                                `ok`, `test_only`, `no_data`), or `error` /
+                                `skipped` when it could not be read.
+                            code:
+                              type: string
+                              nullable: true
+                              description: >-
+                                Why a read failed or was skipped, for example
+                                `insufficient_permission`, `credential_invalid`,
+                                `no_credential`, `no_pixel_id`.
+                            min_event_match_quality: { type: number, nullable: true }
+                            events: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NoLocations" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/UpstreamFailed" }
   /client/v1/agency/destinations/quality/trend:
     get:
       summary: Per-location Meta dataset quality, day by day

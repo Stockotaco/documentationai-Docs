@@ -508,7 +508,7 @@ Three reads, for three different questions, all `meta_capi` only.
 
 Across all three, a `null` metric means Meta reported nothing — not zero. A key listed with `null` coverage was not scored, which is a different finding from a key that is never sent.
 
-Agency-wide, `GET /client/v1/agency/destinations/quality` ranks the roster by current state and `GET /client/v1/agency/destinations/quality/trend` gives the same roster day by day.
+Agency-wide, `GET /client/v1/agency/destinations/quality` ranks the roster by current state and `GET /client/v1/agency/destinations/quality/trend` gives the same roster day by day. The roster reads the daily 07:00 UTC snapshot, so it can trail Events Manager by up to a day. `POST /client/v1/agency/destinations/quality/refresh` re-reads Meta now and updates today's snapshot (once a minute per agency).
 
 ## Testing
 
