@@ -1,0 +1,229 @@
+---
+title: Replay Vision
+description: >-
+  AI scanners that watch your clients' session recordings with your own model
+  key (OpenRouter or Gemini) and turn what they see into structured,
+  queryable answers, on /client/v1/replay-vision with an agency key.
+---
+
+## Overview
+
+A **scanner** is a saved question about recordings: "did the visitor hit a
+broken form?", "what did they come to do?", "how engaged were they?". Mythic
+renders each recording to a video, sends it with a compact event timeline to
+**your** model, and stores the answer as an **observation**. Every answer is
+also sent through ingestion as a `$recording_observed` event, so you can count,
+chart and filter on it like any other event.
+
+You pay your model provider directly. Mythic does not meter model spend.
+
+| Route | What it does |
+| --- | --- |
+| `GET /keys`, `PUT /keys`, `DELETE /keys` | The agency's model key and per-client overrides |
+| `GET /models` | Models that can watch video and return structured answers |
+| `/scanners` | Create, list, change and delete scanners |
+| `POST /scanners/{id}/scan` | Scan up to 50 recordings now |
+| `GET /scanners/{id}/observations` | One scanner's answers |
+| `GET /observations` | Every scanner's answers for a client or one recording |
+| `GET /observations/{id}`, `POST /observations/{id}/retry` | One answer, or retry a failed one |
+
+The same operations are MCP tools (`list_replay_scanners`,
+`create_replay_scanner`, `scan_replays`, `list_scanner_observations`, …),
+except setting a key: a provider key must not pass through an AI conversation,
+so `PUT /keys` is HTTP only.
+
+## Base URL
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/replay-vision
+```
+
+## Authentication
+
+**Agency key (`ak_`), or an agency-wide `mcp_` key with `replay_vision:read`
+or `replay_vision:write`.** Setting a key (`PUT /keys`) takes an `ak_` only:
+`mcp_` keys get `403 not_available_to_scoped_keys` there, so a provider key
+never passes through an AI tool. A location secret key (`sk_`) gets `403
+agency_required`. Every `location_id` must be one of your clients (`403
+location_not_linked`).
+
+<Callout kind="alert">
+  This surface serves **no CORS headers**. Call it from your server, never from
+  browser JavaScript.
+</Callout>
+
+## Scanner types
+
+| Type | Answer | Config |
+| --- | --- | --- |
+| `monitor` | `verdict`: `yes` / `no` (or `inconclusive`) | `allow_inconclusive` |
+| `classifier` | `tags` from your vocabulary | `tags` (2-30), `multiple`, `freeform` |
+| `scorer` | `score` on your scale | `min`, `max`, `label` |
+| `summarizer` | `title`, `summary`, `intent`, `outcome`, `friction_points`, `keywords` | `length`: `short`, `medium`, `long` |
+
+Every answer also has `confidence` (0 to 1, the model's own estimate),
+`reasoning` (except summarizers) with `(t N)` citations of video seconds,
+`key_moment_t`, and `citations` mapped back to recording time.
+
+Write prompts around what can be seen, not feelings: "answer yes if the
+visitor clicked Submit and an error appeared", not "answer yes if the visitor
+was confused". Say what to answer when the recording does not show enough.
+
+## Quick start
+
+<Steps>
+  <Step title="Add your model key">
+    ```bash
+    curl -X PUT "https://mythic-analytics.gulp.workers.dev/client/v1/replay-vision/keys" \
+      -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
+      -d '{"provider":"openrouter","api_key":"sk-or-v1-…"}'
+    ```
+    Mythic checks the key with the provider before storing it. Omit
+    `location_id` for the agency default; pass a client's id to override it for
+    that client.
+  </Step>
+  <Step title="Create a scanner">
+    ```bash
+    curl -X POST "https://mythic-analytics.gulp.workers.dev/client/v1/replay-vision/scanners" \
+      -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
+      -d '{"location_id":"<client id>","name":"Form friction","type":"monitor",
+           "prompt":"Answer yes if the visitor clicked a button or submitted a form and nothing happened, an error appeared, or they clicked the same control repeatedly. Otherwise no.",
+           "config":{"allow_inconclusive":true},"sampling_rate":0.1}'
+    ```
+  </Step>
+  <Step title="Scan a few recordings you know">
+    ```bash
+    curl -X POST "https://mythic-analytics.gulp.workers.dev/client/v1/replay-vision/scanners/<id>/scan" \
+      -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
+      -d '{"session_ids":["<session id>"]}'
+    ```
+    Session ids come from `GET /client/v1/data/replays`. Read the answers with
+    `GET /scanners/<id>/observations` a few minutes later, check the
+    reasoning, and adjust the prompt before raising `sampling_rate`.
+  </Step>
+</Steps>
+
+## Model keys
+
+| Provider | Key | Default model | How the video is sent |
+| --- | --- | --- | --- |
+| `openrouter` | An OpenRouter API key | `google/gemini-3.5-flash-lite` | Inline in each request, routed only to providers that support every parameter and do not store prompts (`data_collection: deny`) |
+| `gemini` | A Google AI Studio API key on a **paid** plan | `gemini-3.5-flash-lite` | Inline, or through the Gemini Files API for large videos (deleted after the call) |
+
+A scan uses the client's key if it has one, otherwise the agency's. A scanner's
+`model` overrides the key's `default_model` and must be a model of that key's
+provider: OpenRouter ids look like `google/gemini-3.5-flash-lite`, Gemini ids
+like `gemini-3.5-flash-lite`. Setting a scanner model of the other provider
+gets `422 model_provider_mismatch`. If a key is later replaced with the other
+provider, scans use the new key's `default_model` until you update the
+scanner. `GET /models?provider=openrouter` lists OpenRouter models that accept
+video and return structured output, cheapest first.
+
+<Callout kind="warning">
+  Direct Gemini keys require `"confirm_paid_tier": true`. Google may use
+  free-tier API content to improve its products, and recordings show your
+  clients' visitors. OpenRouter keys do not need this: Mythic routes them only
+  to providers that do not store or train on prompts.
+</Callout>
+
+Keys are encrypted at rest and never returned; `GET /keys` shows the last four
+characters. If the provider rejects a key during a scan (expired, revoked, out
+of credits), `last_error` on the key says so and those scans fail with
+`error.kind: auth`.
+
+## How scans run
+
+- **Background sweep.** An enabled scanner looks at recordings that ended in
+  the last few minutes, every 5 minutes. It applies the scanner's `filters`
+  (`device_type`, `utm_source`, `utm_medium`, `utm_campaign`, `landing_page`,
+  `country`, `browser`, `os`, `min_duration_s`), then keeps a random
+  `sampling_rate` share. A new or re-enabled scanner starts from now; use
+  `/scan` for older recordings.
+- **On demand.** `POST /scanners/{id}/scan` queues up to 50 recordings. It
+  ignores `sampling_rate` and works on a disabled scanner.
+- **Once per recording.** A scanner observes each recording at most once.
+  Re-sending a session id reports the existing observation.
+- **Monthly limit.** `monthly_scan_limit` (default 500) caps queued, running
+  and succeeded scans per calendar month (UTC), sweep and on-demand together.
+  `GET /scanners/{id}` shows `this_month`, including `cost_usd` when the
+  provider reports it (OpenRouter does, direct Gemini does not).
+- **Versions.** A change to `prompt`, `config` or `model` increments
+  `version`; re-sending the same values does not. Each observation keeps the
+  scanner as it was when it was queued.
+
+Queued scans start within a minute and most finish within a few minutes.
+Mythic retries `transient`, `rate_limited` and `render_failed` failures itself,
+with backoff, up to three attempts.
+
+### What the model sees
+
+The recording is rebuilt from its rrweb snapshots, one frame per second of
+activity. Idle stretches are cut to a single frame, and a footer on each frame
+shows the time, the browser tab and the page path. Next to the video the model
+gets a timeline: clicks, rage clicks, dead clicks, field typing (never the
+values), page loads, console errors, exceptions, failed or slow requests, and
+the client's own analytics events. The video shows the page as it was
+recorded, so anything the SDK masked stays masked. Query strings are removed
+from URLs, and emails and long numbers are redacted from the timeline.
+
+Recordings shorter than 15 seconds, with less than 10 seconds of activity, or
+with more than an hour of activity are `ineligible` and never reach your model.
+For recordings with more than 30 minutes of activity, only the first 30
+minutes are rendered, and the model is told so.
+
+## Observation statuses
+
+| Status | Meaning |
+| --- | --- |
+| `pending` / `running` | Queued or in progress |
+| `succeeded` | `output` holds the answer; a `$recording_observed` event was sent |
+| `ineligible` | `ineligible_reason`: `no_recording`, `too_short`, `too_inactive` or `too_long`. Your model was not called |
+| `failed` | `error.kind` says why (below) |
+
+| `error.kind` | Meaning |
+| --- | --- |
+| `auth` | The provider rejected the key (invalid, revoked, out of credits). Replace it with `PUT /keys` |
+| `no_key` | No key for the client or the agency when the scan ran |
+| `rate_limited` | The provider kept refusing with 429 |
+| `transient` | Timeouts, network errors or provider 5xx after every retry |
+| `bad_request` | The provider refused the request, most often an unknown model id |
+| `rejected` | The provider's safety filter refused the content |
+| `too_large` | The video was over the provider's inline limit |
+| `bad_response` | The provider answered with something unreadable |
+| `validation_failed` | The model's answer did not fit the scanner, twice |
+| `render_failed` | The recording could not be rendered after every retry |
+| `orphaned` | The scan was interrupted three times |
+| `internal_error` | A Mythic error |
+
+Retry a failed observation with `POST /observations/{id}/retry` after fixing
+the cause. A retry counts against `monthly_scan_limit` like a new scan.
+
+## Paging
+
+Observation lists are newest first, `limit` 1-200 (default 50). When more
+remain, the response has `next_cursor`; pass it back as `cursor` for the next
+page. `next_cursor` is `null` on the last page.
+
+## `$recording_observed` events
+
+Each succeeded observation is ingested as an event on the client, attributed
+to the recorded visitor's `distinct_id` and carrying `$session_id`, so it joins
+the session in the Data API and Explore. Properties: `observation_id`,
+`scanner_id`, `scanner_name`, `scanner_type`, `scanner_version`,
+`triggered_by`, `model_used`, `provider_used`, `cost_usd`,
+`scanner_output_confidence`, `scanner_output_key_moment_ms`, plus the answer:
+`scanner_output_verdict`, `scanner_output_tags`,
+`scanner_output_tags_freeform`, `scanner_output_score`,
+`scanner_output_reasoning`, or for summarizers `scanner_output_title`,
+`scanner_output_summary`, `scanner_output_intent`, `scanner_output_outcome`,
+`scanner_output_friction_points` and `scanner_output_keywords`. The event's
+time is when the observation finished, not when the visit happened.
+
+Deleting a scanner deletes its observations; events already sent stay.
+
+## Limits
+
+25 scanners per client, 50 sessions per `/scan` call, 120 requests per minute.
+Prompts up to 4,000 characters. Recordings are kept 30 days, so older
+sessions come back `ineligible: no_recording`. HIPAA clients have no
+recordings.

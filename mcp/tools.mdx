@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 234 tools across
-  26 scope families — with the scope each one needs and the
+  Every tool the Mythic MCP server exposes — 247 tools across
+  27 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 234 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 247 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -304,14 +304,14 @@ One client’s own setup — details, install snippet, custom tracking hostname 
 | `get_location_plan`<br /><span style={{opacity: 0.7}}>Get Client Tier</span> | `locations:read` | Which billing tier this client is on, and the tiers it can be moved to. | `GET /client/v1/locations/plan` |
 | `get_location_loader`<br /><span style={{opacity: 0.7}}>Get Install Snippet</span> | `locations:read` | The tracking snippet to paste into this client's site, plus the publishable key, API host and SDK global name it uses. | `GET /client/v1/locations/loader` |
 | `get_location_hostname`<br /><span style={{opacity: 0.7}}>Get Custom Tracking Hostname</span> | `locations:read` | This client's custom tracking hostname and its validation state (Cloudflare hostname status and SSL status), or null when none is attached. | `GET /client/v1/locations/hostname` |
-| `get_ghl_connection`<br /><span style={{opacity: 0.7}}>Get GoHighLevel Connection</span> | `locations:read` | This client's GoHighLevel connection: status (active, not_connected, token_inactive, incomplete), the linked GHL sub-account id, and when it connected. Takes an optional `lane` that defaults to `md`, matching `create_ghl_install_link`, so a read matches the install you just started; pass `hc` to read the legacy HC/Iris lane. | `GET /client/v1/locations/ghl` |
+| `get_ghl_connection`<br /><span style={{opacity: 0.7}}>Get GoHighLevel Connection</span> | `locations:read` | This client's GoHighLevel connection: status (active, not_connected, token_inactive, incomplete), the linked GHL sub-account id, and when it connected. | `GET /client/v1/locations/ghl` |
 | `get_location_last_event`<br /><span style={{opacity: 0.7}}>Check Tracking Is Live</span> | `locations:read` | Event count and the most recent event timestamp for this client. | `GET /client/v1/locations/last-event` |
 | `list_location_events`<br /><span style={{opacity: 0.7}}>List Raw Events</span> | `locations:read` | Individual events for this client, newest first — the debugging view for confirming an install or chasing a missing property. | `GET /client/v1/locations/events` |
 | `update_location`<br /><span style={{opacity: 0.7}}>Update Location</span> | `locations:write` | Update a client's own details — name, domain, email, phone, website, timezone or global_name. | `PATCH /client/v1/locations/details` |
 | `set_location_plan`<br /><span style={{opacity: 0.7}}>Set Client Tier</span> | `locations:write` | Move this client to a different billing tier. | `PUT /client/v1/locations/plan` |
 | `set_location_hostname`<br /><span style={{opacity: 0.7}}>Set Custom Tracking Hostname</span> | `locations:write` | Attach a first-party tracking hostname (e.g. | `PUT /client/v1/locations/hostname` |
 | `delete_location_hostname`<br /><span style={{opacity: 0.7}}>Remove Custom Tracking Hostname</span> | `locations:write` | Detach this client's custom tracking hostname and stop routing events for it. | `DELETE /client/v1/locations/hostname` |
-| `create_ghl_install_link`<br /><span style={{opacity: 0.7}}>Create GoHighLevel Install Link</span> | `locations:write` | A link that installs the Mythic GoHighLevel app on one GHL sub-account and links it to this client. Takes an optional `lane`: `md` (the default, the Mythic Data lane, which also enables the BigQuery export into this client's Mythic dataset) or `hc` (the legacy HC/Iris lane). Read the connection back with `get_ghl_connection` on the same lane. | `POST /client/v1/locations/ghl/install` |
+| `create_ghl_install_link`<br /><span style={{opacity: 0.7}}>Create GoHighLevel Install Link</span> | `locations:write` | A link that installs the Mythic GoHighLevel app on one GHL sub-account and links it to this client. | `POST /client/v1/locations/ghl/install` |
 
 ## Links & Uptime
 
@@ -418,6 +418,28 @@ Agency-wide keys only — a key bound to one client cannot hold this scope.
 | `set_airbyte_pipeline`<br /><span style={{opacity: 0.7}}>Set Airbyte Pipeline</span> | `airbyte:write` | Create or update a client's pipeline (orchestrated daily sync of a set of connections, driven by Mythic's cron, with a signed completion webhook once the whole set is done). | `PUT /client/v1/airbyte/pipelines/:clientId` |
 | `start_airbyte_pipeline_run`<br /><span style={{opacity: 0.7}}>Start Airbyte Pipeline Run</span> | `airbyte:write` | Start a pipeline run now instead of waiting for run_hour_utc. | `POST /client/v1/airbyte/pipelines/:clientId/runs` |
 | `airbyte_pipeline_run_action`<br /><span style={{opacity: 0.7}}>Airbyte Pipeline Run Action</span> | `airbyte:write` | Act on one pipeline run. | `POST /client/v1/airbyte/pipelines/:clientId/runs/:runId/retry`<br />`POST /client/v1/airbyte/pipelines/:clientId/runs/:runId/force`<br />`POST /client/v1/airbyte/pipelines/:clientId/runs/:runId/redeliver` |
+
+## Replay Vision
+
+AI scanners that watch session recordings with the agency’s own model key (OpenRouter or Gemini): keys, scanners, on-demand scans and their observations.
+
+Agency-wide keys only — a key bound to one client cannot hold this scope.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_replay_vision_keys`<br /><span style={{opacity: 0.7}}>List Replay Vision Keys</span> | `replay_vision:read` | The agency's model keys for Replay Vision: the agency default (scope agency) and per-client overrides (scope location). | `GET /client/v1/replay-vision/keys` |
+| `list_replay_vision_models`<br /><span style={{opacity: 0.7}}>List Replay Vision Models</span> | `replay_vision:read` | Models that can watch video and return structured answers. | `GET /client/v1/replay-vision/models` |
+| `list_replay_scanners`<br /><span style={{opacity: 0.7}}>List Replay Scanners</span> | `replay_vision:read` | Replay Vision scanners: saved questions an AI model answers by watching session recordings. | `GET /client/v1/replay-vision/scanners` |
+| `get_replay_scanner`<br /><span style={{opacity: 0.7}}>Get Replay Scanner</span> | `replay_vision:read` | One scanner with this month's usage: queued, succeeded, failed, ineligible, how many count against monthly_scan_limit, and the model spend the provider reported (OpenRouter reports it; direct Gemini does not). | `GET /client/v1/replay-vision/scanners/:id` |
+| `list_scanner_observations`<br /><span style={{opacity: 0.7}}>List Scanner Observations</span> | `replay_vision:read` | One scanner's observations, newest first. | `GET /client/v1/replay-vision/scanners/:id/observations` |
+| `list_replay_observations`<br /><span style={{opacity: 0.7}}>List Replay Observations</span> | `replay_vision:read` | Every scanner's observations for one client, or for one recording (session_id). | `GET /client/v1/replay-vision/observations` |
+| `get_replay_observation`<br /><span style={{opacity: 0.7}}>Get Replay Observation</span> | `replay_vision:read` | One observation with the scanner snapshot that produced it, its answer, citations mapped to recording time (recording_ms), the key moment, model, key scope, token usage and cost. | `GET /client/v1/replay-vision/observations/:id` |
+| `delete_replay_vision_key`<br /><span style={{opacity: 0.7}}>Delete Replay Vision Key</span> | `replay_vision:write` | Remove the agency default key (no location_id) or one client's override (location_id). | `DELETE /client/v1/replay-vision/keys` |
+| `create_replay_scanner`<br /><span style={{opacity: 0.7}}>Create Replay Scanner</span> | `replay_vision:write` | Create a scanner on one client. | `POST /client/v1/replay-vision/scanners` |
+| `update_replay_scanner`<br /><span style={{opacity: 0.7}}>Update Replay Scanner</span> | `replay_vision:write` | Change a scanner. | `PATCH /client/v1/replay-vision/scanners/:id` |
+| `delete_replay_scanner`<br /><span style={{opacity: 0.7}}>Delete Replay Scanner</span> | `replay_vision:write` | Delete a scanner and its observations. | `DELETE /client/v1/replay-vision/scanners/:id` |
+| `scan_replays`<br /><span style={{opacity: 0.7}}>Scan Replays</span> | `replay_vision:write` | Queue up to 50 recordings (session ids from list_replays) for one scanner now. | `POST /client/v1/replay-vision/scanners/:id/scan` |
+| `retry_replay_observation`<br /><span style={{opacity: 0.7}}>Retry Replay Observation</span> | `replay_vision:write` | Put a failed observation back in the queue with the same scanner snapshot. | `POST /client/v1/replay-vision/observations/:id/retry` |
 
 ## Alerts
 

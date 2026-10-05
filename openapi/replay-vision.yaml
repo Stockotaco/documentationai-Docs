@@ -1,0 +1,500 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Replay Vision API
+  description: >
+    AI scanners over session recordings on `/client/v1/replay-vision`, run
+    with the agency's own model key (OpenRouter or Gemini). A scanner is a
+    saved question; an observation is its answer for one recording. Each
+    succeeded observation is also ingested as a `$recording_observed` event.
+
+
+    **Agency key (`ak_`) only**, or an agency-wide `mcp_` key with
+    `replay_vision:read` / `replay_vision:write`. Every `location_id` must be
+    one of the agency's clients. No CORS headers: call from a server.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+paths:
+  /client/v1/replay-vision/keys:
+    get:
+      summary: List model keys
+      operationId: listReplayVisionKeys
+      description: The agency default (`scope` agency) and per-client overrides (`scope` location). Only a hint of each key is returned.
+      responses:
+        "200":
+          description: Keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { type: array, items: { $ref: "#/components/schemas/Key" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+    put:
+      summary: Set a model key
+      operationId: setReplayVisionKey
+      description: >
+        Set the agency default (omit `location_id`) or one client's override.
+        The key is checked with the provider first (`422 key_rejected` if it
+        is refused), encrypted, and never returned again. Replacing a key
+        clears its `last_error`. Agency key (`ak_`) only: `mcp_` keys get
+        `403 not_available_to_scoped_keys`, so a provider key never passes
+        through an AI tool.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, api_key]
+              properties:
+                provider: { type: string, enum: [openrouter, gemini] }
+                api_key: { type: string, description: The provider API key. }
+                location_id: { type: string, nullable: true, description: A client id for an override. Omit or null for the agency default. }
+                default_model: { type: string, description: "Model used when a scanner sets none. Must be a model id of `provider` (`400` otherwise). Default `google/gemini-3.5-flash-lite` (OpenRouter) or `gemini-3.5-flash-lite` (Gemini)." }
+                confirm_paid_tier: { type: boolean, description: "Required `true` for `gemini`: free-tier keys let Google use request content." }
+      responses:
+        "200": { description: Key replaced, content: { application/json: { schema: { $ref: "#/components/schemas/KeyResponse" } } } }
+        "201": { description: Key added, content: { application/json: { schema: { $ref: "#/components/schemas/KeyResponse" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "422": { $ref: "#/components/responses/BadRequest" }
+    delete:
+      summary: Delete a model key
+      operationId: deleteReplayVisionKey
+      parameters:
+        - name: location_id
+          in: query
+          required: false
+          description: Remove this client's override. Omit to remove the agency default.
+          schema: { type: string }
+      responses:
+        "200": { description: Deleted, content: { application/json: { schema: { $ref: "#/components/schemas/Deleted" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /client/v1/replay-vision/models:
+    get:
+      summary: List video models
+      operationId: listReplayVisionModels
+      description: "`openrouter`: OpenRouter models that accept video and return structured output, cheapest input first. `gemini`: current Gemini Flash models."
+      parameters:
+        - name: provider
+          in: query
+          required: false
+          schema: { type: string, enum: [openrouter, gemini], default: openrouter }
+      responses:
+        "200":
+          description: Models
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  default: { type: string, example: google/gemini-3.5-flash-lite }
+                  note: { type: string, description: "Present for `gemini`, which is a fixed list of current Flash models." }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, example: google/gemini-3.5-flash-lite }
+                        name: { type: string }
+                        prompt_usd_per_million: { type: number, nullable: true, example: 0.3 }
+                        context_length: { type: integer, nullable: true }
+  /client/v1/replay-vision/scanners:
+    get:
+      summary: List scanners
+      operationId: listReplayScanners
+      parameters:
+        - name: location_id
+          in: query
+          required: false
+          description: Only this client's scanners.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Scanners
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { type: array, items: { $ref: "#/components/schemas/Scanner" } }
+    post:
+      summary: Create a scanner
+      operationId: createReplayScanner
+      description: >
+        An enabled scanner sweeps recordings that end from now on. Older
+        recordings are scanned with `POST /scanners/{id}/scan`. At most 25
+        scanners per client (`422 too_many_scanners`). A `model` of the other
+        provider than the client's key gets `422 model_provider_mismatch`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/ScannerInput"
+                - type: object
+                  required: [location_id, name, type]
+                  properties:
+                    location_id: { type: string }
+                    type: { type: string, enum: [monitor, classifier, scorer, summarizer] }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/ScannerResponse" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "422": { $ref: "#/components/responses/BadRequest" }
+  /client/v1/replay-vision/scanners/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      summary: Get a scanner
+      operationId: getReplayScanner
+      description: The scanner plus `this_month` usage.
+      responses:
+        "200":
+          description: Scanner
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/Scanner"
+                      - type: object
+                        properties:
+                          this_month: { $ref: "#/components/schemas/MonthUsage" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Update a scanner
+      operationId: updateReplayScanner
+      description: "`type` and `location_id` cannot change. A change to `prompt`, `config` or `model` increments `version`; re-sending the same values does not. A `model` of the other provider than the client's key gets `422 model_provider_mismatch`. Re-enabling sweeps from now on."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScannerInput" }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/ScannerResponse" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/BadRequest" }
+    delete:
+      summary: Delete a scanner
+      operationId: deleteReplayScanner
+      description: Deletes its observations too. `$recording_observed` events already sent stay.
+      responses:
+        "200": { description: Deleted, content: { application/json: { schema: { $ref: "#/components/schemas/Deleted" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /client/v1/replay-vision/scanners/{id}/scan:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      summary: Scan recordings now
+      operationId: scanReplays
+      description: >
+        Queue up to 50 recordings. Ignores `sampling_rate` and works on a
+        disabled scanner, but counts against `monthly_scan_limit`. Sessions the
+        scanner already observed are listed in `already_observed`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [session_ids]
+              properties:
+                session_ids: { type: array, minItems: 1, maxItems: 50, items: { type: string }, description: Recording session ids from GET /client/v1/data/replays. }
+      responses:
+        "202":
+          description: Queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      queued: { type: array, items: { type: object, properties: { observation_id: { type: string, format: uuid }, session_id: { type: string } } } }
+                      already_observed: { type: array, items: { type: object, properties: { observation_id: { type: string, format: uuid }, session_id: { type: string }, status: { type: string } } } }
+                      skipped_monthly_limit: { type: integer }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/BadRequest" }
+        "429": { $ref: "#/components/responses/BadRequest" }
+  /client/v1/replay-vision/scanners/{id}/observations:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      summary: List a scanner's observations
+      operationId: listScannerObservations
+      parameters:
+        - $ref: "#/components/parameters/Status"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200": { description: Observations, content: { application/json: { schema: { $ref: "#/components/schemas/ObservationPage" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /client/v1/replay-vision/observations:
+    get:
+      summary: List observations for a client
+      operationId: listReplayObservations
+      description: Every scanner's observations for one client, optionally for one recording.
+      parameters:
+        - name: location_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: session_id
+          in: query
+          required: false
+          schema: { type: string }
+        - $ref: "#/components/parameters/Status"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200": { description: Observations, content: { application/json: { schema: { $ref: "#/components/schemas/ObservationPage" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /client/v1/replay-vision/observations/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      summary: Get an observation
+      operationId: getReplayObservation
+      description: The observation plus `scanner_snapshot`, the scanner as it was when this observation was queued.
+      responses:
+        "200":
+          description: Observation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/Observation"
+                      - type: object
+                        properties:
+                          scanner_snapshot:
+                            type: object
+                            properties:
+                              id: { type: string, format: uuid }
+                              name: { type: string }
+                              type: { type: string }
+                              prompt: { type: string }
+                              config: { type: object }
+                              model: { type: string, nullable: true }
+                              version: { type: integer }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /client/v1/replay-vision/observations/{id}/retry:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      summary: Retry a failed observation
+      operationId: retryReplayObservation
+      description: Puts a `failed` observation back in the queue with the same scanner snapshot. Anything else gets `409 not_failed`. A retry counts against the scanner's `monthly_scan_limit` (`429 monthly_limit_reached`).
+      responses:
+        "202":
+          description: Queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Observation" }
+        "409": { $ref: "#/components/responses/BadRequest" }
+        "429": { $ref: "#/components/responses/BadRequest" }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Agency key (`ak_`) only; a location secret key (`sk_`) gets `403
+        agency_required`. Agency-wide scoped keys (`mcp_`) need
+        `replay_vision:read` or `replay_vision:write`.
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Status:
+      name: status
+      in: query
+      required: false
+      schema: { type: string, enum: [pending, running, succeeded, failed, ineligible] }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: 1-200, default 50.
+      schema: { type: integer }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: "`next_cursor` from the previous page. Opaque; `400 invalid_cursor` if altered."
+      schema: { type: string }
+  schemas:
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: { type: array, items: { type: string } }
+    Deleted:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            deleted: { type: boolean, example: true }
+    Key:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        scope: { type: string, enum: [agency, location] }
+        location_id: { type: string, nullable: true }
+        provider: { type: string, enum: [openrouter, gemini] }
+        key_hint: { type: string, example: "…a1b2" }
+        default_model: { type: string }
+        verified_at: { type: string, format: date-time }
+        last_error: { type: string, nullable: true, description: Why the provider last rejected this key during a scan. }
+        last_error_at: { type: string, format: date-time, nullable: true }
+        updated_at: { type: string, format: date-time }
+    KeyResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/Key" }
+    ScannerInput:
+      type: object
+      properties:
+        name: { type: string, maxLength: 120 }
+        prompt: { type: string, maxLength: 4000, description: "The question. Required except for `summarizer`, where it is optional context." }
+        config:
+          type: object
+          description: >
+            monitor `{allow_inconclusive}`; classifier `{tags (2-30,
+            lowercase), multiple, freeform}`; scorer `{min, max, label}`;
+            summarizer `{length: short|medium|long}`.
+        filters:
+          type: object
+          description: "Sweep filters: `device_type`, `utm_source`, `utm_medium`, `utm_campaign`, `landing_page`, `country`, `browser`, `os` (exact strings) and `min_duration_s`."
+        sampling_rate: { type: number, minimum: 0, maximum: 1, default: 0.1 }
+        model: { type: string, nullable: true, description: "Model id of the key's provider. Null uses the key's default_model." }
+        monthly_scan_limit: { type: integer, minimum: 1, maximum: 100000, default: 500 }
+        enabled: { type: boolean, default: true }
+    Scanner:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        location_id: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [monitor, classifier, scorer, summarizer] }
+        prompt: { type: string }
+        config: { type: object }
+        filters: { type: object }
+        sampling_rate: { type: number }
+        model: { type: string, nullable: true }
+        monthly_scan_limit: { type: integer }
+        enabled: { type: boolean }
+        version: { type: integer }
+        last_swept_at: { type: string, format: date-time, nullable: true }
+        last_error: { type: string, nullable: true, description: "Why the last sweep queued nothing, e.g. `no model key` or `monthly_scan_limit reached`." }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ScannerResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/Scanner" }
+    MonthUsage:
+      type: object
+      properties:
+        month_start: { type: string, format: date-time }
+        queued: { type: integer }
+        succeeded: { type: integer }
+        failed: { type: integer }
+        ineligible: { type: integer }
+        counted_against_limit: { type: integer }
+        cost_usd: { type: number, description: "Spend the provider reported. OpenRouter reports it; direct Gemini does not." }
+    Observation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        scanner_id: { type: string, format: uuid }
+        location_id: { type: string }
+        session_id: { type: string }
+        status: { type: string, enum: [pending, running, succeeded, failed, ineligible] }
+        triggered_by: { type: string, enum: [schedule, on_demand, retry] }
+        scanner: { type: object, properties: { name: { type: string }, type: { type: string }, version: { type: integer } } }
+        output:
+          type: object
+          nullable: true
+          description: >
+            The answer. All types: `confidence` (0-1), `key_moment_t` (video
+            second). monitor: `verdict`, `reasoning`. classifier: `tags`,
+            `freeform_tags`, `reasoning`. scorer: `score`, `reasoning`.
+            summarizer: `title`, `summary`, `intent`, `outcome`,
+            `friction_points`, `keywords`.
+        citations:
+          type: array
+          items:
+            type: object
+            properties:
+              video_s: { type: integer }
+              recording_ms: { type: integer, description: Epoch ms in the recording. }
+        key_moment_ms: { type: integer, nullable: true, description: Milliseconds from the start of the recording. }
+        ineligible_reason: { type: string, nullable: true, enum: [no_recording, too_short, too_inactive, too_long] }
+        error:
+          type: object
+          nullable: true
+          properties:
+            kind: { type: string, enum: [auth, no_key, rate_limited, transient, bad_request, rejected, too_large, bad_response, validation_failed, render_failed, orphaned, internal_error] }
+            message: { type: string }
+        provider: { type: string, nullable: true }
+        model: { type: string, nullable: true }
+        key_scope: { type: string, nullable: true, enum: [agency, location] }
+        cost_usd: { type: number, nullable: true }
+        usage: { type: object, nullable: true, description: "Tokens (input, output, video), calls, video bytes and seconds." }
+        attempts: { type: integer }
+        created_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time, nullable: true }
+    ObservationPage:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data: { type: array, items: { $ref: "#/components/schemas/Observation" } }
+        next_cursor: { type: string, nullable: true, description: "Pass as `cursor` for the next page. Null on the last page." }
+  responses:
+    Unauthorized:
+      description: Missing or invalid key
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    AgencyRequired:
+      description: Not an agency key, or a location not linked to the agency
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    BadRequest:
+      description: Invalid request
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: Not found
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }

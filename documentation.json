@@ -105,6 +105,11 @@
                     "title": "Alerts",
                     "path": "agency-api/alerts",
                     "icon": "bell"
+                  },
+                  {
+                    "title": "Replay Vision",
+                    "path": "agency-api/replay-vision",
+                    "icon": "eye"
                   }
                 ]
               },
@@ -117,6 +122,11 @@
                 "group": "Alerts",
                 "icon": "bell",
                 "openapi": "openapi/alerts.yaml"
+              },
+              {
+                "group": "Replay Vision",
+                "icon": "eye",
+                "openapi": "openapi/replay-vision.yaml"
               }
             ]
           },
