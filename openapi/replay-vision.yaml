@@ -239,6 +239,7 @@ paths:
       operationId: listScannerObservations
       parameters:
         - $ref: "#/components/parameters/Status"
+        - $ref: "#/components/parameters/Agrees"
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Cursor"
       responses:
@@ -259,6 +260,7 @@ paths:
           required: false
           schema: { type: string }
         - $ref: "#/components/parameters/Status"
+        - $ref: "#/components/parameters/Agrees"
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Cursor"
       responses:
@@ -335,6 +337,12 @@ components:
       in: query
       required: false
       schema: { type: string, enum: [pending, running, succeeded, failed, ineligible] }
+    Agrees:
+      name: agrees
+      in: query
+      required: false
+      description: "`false`: only answers the decision model disagreed with. `true`: only agreed ones. `400 invalid_agrees` otherwise."
+      schema: { type: string, enum: ["true", "false"] }
     Limit:
       name: limit
       in: query
@@ -437,6 +445,8 @@ components:
         ineligible: { type: integer }
         counted_against_limit: { type: integer }
         cost_usd: { type: number, description: "Spend the provider reported. OpenRouter reports it; direct Gemini does not." }
+        decision_agreed: { type: integer, description: Succeeded answers the decision model agreed with. }
+        decision_disagreed: { type: integer, description: Succeeded answers the decision model disagreed with. Many usually means a vague prompt. }
     Observation:
       type: object
       properties:
@@ -468,7 +478,7 @@ components:
             `probabilities`, or with `multiple` `tags`, `tag_probabilities`.
             scorer: `score`, `confidence`, `probabilities` per scale point.
             summarizer: `p_supported`. `{ model, error }` when the decision
-            model failed; null on observations scanned before 2026-10-07.
+            model failed (after one retry); null on observations scanned before 2026-10-05.
         citations:
           type: array
           items:

@@ -65,6 +65,10 @@ Every answer also has `confidence` (0 to 1, the model's own estimate),
 `reasoning` (except summarizers) with `(t N)` citations of video seconds,
 `key_moment_t`, and `citations` mapped back to recording time.
 
+Write prompts around what can be seen, not feelings: "answer yes if the
+visitor clicked Submit and an error appeared", not "answer yes if the visitor
+was confused". Say what to answer when the recording does not show enough.
+
 ## Decisions
 
 After your model answers, a decision model (Cloudflare **Clef-flash** on
@@ -72,9 +76,16 @@ Workers AI) reads that answer's reasoning and the event timeline and returns
 a probability for every allowed answer. It is stored in the observation's
 `decision`, next to `output`. Nothing your model wrote is replaced.
 
-The probabilities repeat on identical input, and they rank answers better
-than the confidence a model reports about itself. `agrees` is `false` where
-the two models disagree: those are the recordings worth watching first.
+The probabilities repeat on identical input. `agrees` is `false` where the
+two models disagree: those are the recordings worth watching first. List them
+with `?agrees=false` on either observation list. `GET /scanners/{id}` counts
+them for the month as `decision_agreed` and `decision_disagreed`. A scanner
+with many disagreements usually has a vague prompt.
+
+Agreement is not proof the answer is right. The decision model reads your
+model's reasoning, so a wrong reasoning that supports its own verdict still
+agrees. What it catches is a verdict the reasoning does not support, or
+reasoning the timeline contradicts.
 
 | Scanner type | `decision` fields | `agrees` is true when |
 | --- | --- | --- |
@@ -87,8 +98,9 @@ the two models disagree: those are the recordings worth watching first.
 Every decision also has `model`, `input_tokens`, `cost_usd` and `ms`. Mythic
 pays for the decision model; its `cost_usd` is not part of the observation's
 `cost_usd`, which is your provider's charge. If the decision model fails, the
-observation still succeeds and `decision` is `{ "model", "error" }`.
-`decision` is `null` on observations scanned before October 7, 2026.
+observation still succeeds and `decision` is `{ "model", "error" }` (rate
+limits and timeouts are retried once first). `decision` is `null` on
+observations scanned before October 5, 2026.
 
 ```json
 "output": { "verdict": "yes", "reasoning": "Clicked Save My Seat three times (t 14) …", "confidence": 0.9, "key_moment_t": 14 },
@@ -96,11 +108,10 @@ observation still succeeds and `decision` is `{ "model", "error" }`.
 ```
 
 The decision model gets the same session details and timeline as your model,
-plus your model's answer. It never gets the video.
-
-Write prompts around what can be seen, not feelings: "answer yes if the
-visitor clicked Submit and an error appeared", not "answer yes if the visitor
-was confused". Say what to answer when the recording does not show enough.
+plus your model's answer. It never gets the video. It runs on Cloudflare
+Workers AI, in the same Cloudflare account that already runs Mythic's API and
+renders the recordings. Cloudflare does not use Workers AI inputs to train
+models ([data usage](https://developers.cloudflare.com/workers-ai/platform/data-usage/)).
 
 ## Quick start
 
@@ -233,7 +244,8 @@ the cause. A retry counts against `monthly_scan_limit` like a new scan.
 
 ## Paging
 
-Observation lists are newest first, `limit` 1-200 (default 50). When more
+Observation lists are newest first, `limit` 1-200 (default 50), and take
+`status` and `agrees` (`true` or `false`) filters. When more
 remain, the response has `next_cursor`; pass it back as `cursor` for the next
 page. `next_cursor` is `null` on the last page.
 
