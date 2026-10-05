@@ -1013,7 +1013,7 @@ paths:
                               type: array
                               description: >-
                                 Per-parameter coverage behind the score, best
-                                first (`em`, `ph`, `fbp`, `fbc`, `external_id`,
+                                first (`email`, `phone`, `fn`, `ln`, `fbp`, `fbc`, `external_id`,
                                 `ip_address`, `user_agent`, `ct`, `st`, `zip`,
                                 `country`). This is what tells you WHY a score is
                                 low.
@@ -1058,7 +1058,18 @@ paths:
                             upload_frequency: { type: string, nullable: true }
                             flags:
                               type: array
-                              description: Findings for this event, each naming what to fix.
+                              description: >-
+                                Findings for this event, each naming what to fix.
+                                `missing_email` and `missing_phone` appear only on
+                                an event scoring under 6.0, and never on
+                                `PageView`, where most visitors are anonymous.
+                                `ip_coverage_low` fires under 90% client IP
+                                coverage and names the cause from your location's
+                                IP/geo enrichment setting: off (turn it on with
+                                `PUT /client/v1/settings/ip-geo-enrichment`), or
+                                on (another sender on the same dataset lacks IP).
+                                With enrichment off it also fires when no event
+                                carried an IP. It never fires for a HIPAA location.
                               items:
                                 type: object
                                 properties:
@@ -1067,7 +1078,7 @@ paths:
                                     enum: [emq_low, emq_critical, missing_email, missing_phone,
                                            ip_coverage_low, event_coverage_below_goal,
                                            server_dedupe_key_missing, browser_dedupe_key_missing,
-                                           test_events_only]
+                                           test_events_only, test_only_unknown]
                                   severity: { type: string, enum: [info, warn, critical] }
                                   message: { type: string }
                       summary:
@@ -1216,7 +1227,7 @@ paths:
       operationId: getDatasetQualityMatchKeys
       description: >
         `meta_capi` destinations only. Daily coverage for each match key Meta
-        scored — `em`, `ph`, `fbp`, `fbc`, `external_id`, `ip_address`, `ct`,
+        scored — `email`, `phone`, `fn`, `ln`, `fbp`, `fbc`, `external_id`, `ip_address`, `ct`,
         `st`, `zip`, `country` — as one row per (day, event, identifier).
 
 
