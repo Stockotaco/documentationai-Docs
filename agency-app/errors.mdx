@@ -1,0 +1,60 @@
+---
+title: Errors
+description: >-
+  See the browser errors on clients' sites, grouped into issues, and how many
+  visits they affect.
+---
+
+## Overview
+
+Mythic records the JavaScript errors visitors hit on a client's site and
+groups repeats of the same error into an **issue**. Both views cover the last
+7 days (UTC).
+
+- From the agency, **Errors** compares every client.
+- Open a client and choose **Errors** to see its issues.
+
+**Crash-free sessions** is the share of visits that had no error. It is the
+quickest way to tell whether errors are affecting real visitors.
+
+## Across clients
+
+The tiles show total occurrences with the change from the previous week,
+crash-free sessions, and new issues across every client. The chart shows the
+5 clients with the most occurrences.
+
+| Column | Meaning |
+| --- | --- |
+| **Client** | The client. |
+| **Occurrences** | Errors this week, with the change from last week. |
+| **Crash-free** | The share of this week's visits with no error. |
+| **New** | Issues first seen this week. |
+
+Click a client to open its Errors screen.
+
+## One client
+
+The tiles show **Occurrences (7d)**, **Crash-free sessions**, **Issues** and
+**New this week**, each with the change from last week where there is one.
+**Weekly digest** charts occurrences per day, this week against last.
+
+Each issue shows:
+
+| Column | Meaning |
+| --- | --- |
+| **Issue** | The error type and message, marked **New** if first seen this week. |
+| **Events** | How many times it happened. |
+| **Visitors** | How many people hit it. |
+| **Last seen** | When it last happened. |
+
+**Open** shows the latest stack trace and each occurrence with its time,
+page, browser and the end of the session id. **Diagnose** asks the assistant in the chat panel to find
+the cause and an affected session.
+
+To be told when errors spike, add an alert. See
+[Alerts](/agency-app/alerts). To email the weekly digest, see
+[Scheduled reports](/agency-app/reports).
+
+## For developers
+
+Exceptions are on the [Data API](/data-api/overview).

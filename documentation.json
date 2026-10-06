@@ -50,6 +50,11 @@
                 "icon": "monitor",
                 "pages": [
                   {
+                    "title": "Overview",
+                    "path": "agency-app/overview",
+                    "icon": "layout"
+                  },
+                  {
                     "title": "Clients",
                     "path": "agency-app/clients",
                     "icon": "users"
@@ -143,6 +148,21 @@
                     "title": "Constraint finder",
                     "path": "agency-app/constraints",
                     "icon": "gauge"
+                  },
+                  {
+                    "title": "Errors",
+                    "path": "agency-app/errors",
+                    "icon": "alert-triangle"
+                  },
+                  {
+                    "title": "Usage & billing",
+                    "path": "agency-app/usage",
+                    "icon": "briefcase"
+                  },
+                  {
+                    "title": "Settings",
+                    "path": "agency-app/settings",
+                    "icon": "settings"
                   },
                   {
                     "title": "Meta match quality",

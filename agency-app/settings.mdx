@@ -1,0 +1,52 @@
+---
+title: Settings
+description: >-
+  Set your agency profile, let clients log in to their own portal, and manage
+  where connection flows return.
+---
+
+## Overview
+
+The **Settings** screen sets your agency profile, what your clients see when
+they log in, and where connection flows such as GoHighLevel return. Choose
+**Settings** in the agency navigation.
+
+## Agency
+
+- **Agency name**: the name clients see. Leave it blank to use your Mythic
+  agency name.
+- **Portal domain**: where clients log in, such as
+  `insights.youragency.com`. The app stores it but does not set up DNS. Point
+  the domain at the app yourself.
+- **Let clients log in**: client users see only their own site, read-only.
+- **Client chat**: lets client users ask the assistant about their own data.
+  It is read-only and cannot change tracking or destinations.
+
+Click **Save changes**.
+
+## Portal members
+
+Invite a client user to give them read-only access to their site:
+
+1. Enter their **Email**.
+2. Pick the **Client**.
+3. Click **Invite**.
+
+Each member shows a status: **Invited** (has not signed in yet), **Active**
+or **Removed**, with the client and their last login. **Re-invite** sends the
+invite again. **Remove** takes away their access immediately. You can invite
+them again later.
+
+Invited members cannot sign in until **Let clients log in** is on and saved.
+Clients see only the dashboards you share with them. See
+[Dashboards](/agency-app/dashboards).
+
+## Callback origins
+
+When you connect a service such as GoHighLevel, Mythic returns you to this
+app afterwards. **Callback origins** lists the addresses it may return to,
+one per line, such as `https://app.youragency.com`. Paths are ignored. Up to
+20.
+
+If the screen warns that this app's origin is not registered, click **Save
+callback origins**. Connecting GoHighLevel from the app also registers it.
