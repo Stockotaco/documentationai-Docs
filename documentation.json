@@ -55,6 +55,11 @@
                     "icon": "layout"
                   },
                   {
+                    "title": "Activity",
+                    "path": "agency-app/activity",
+                    "icon": "activity"
+                  },
+                  {
                     "title": "Clients",
                     "path": "agency-app/clients",
                     "icon": "users"

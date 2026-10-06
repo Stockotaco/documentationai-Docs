@@ -1,0 +1,52 @@
+---
+title: Activity
+description: >-
+  Watch events arrive from clients' sites as they happen, and open any event
+  to see everything Mythic captured.
+---
+
+## Overview
+
+The **Activity** screen is a live feed of events, newest first, from the last
+7 days. Use it to check that tracking works and to see what visitors are
+doing right now.
+
+- From the agency, **Activity** shows the newest 200 events across every
+  client.
+- Open a client and choose **Activity** to see the newest 100 events from
+  that client.
+
+## The feed
+
+Each row shows the **Event**, the **Person** (or **Anonymous**), the **URL**
+and the **Time**. The agency feed adds the **Client**, and a single client's
+feed adds the **Source**. With **Live** on, the feed refreshes every 30
+seconds and new events slide in at the top. Turn **Live** off to stop it
+while you read. **Reload** refreshes it now.
+
+- **Event type**: show only one event, such as `form_submitted`.
+- **Internal events**: off by default. It hides Mythic's own background
+  events, such as session recording and page performance, and GoHighLevel tag
+  changes. The label shows how many are hidden. Page views and identify
+  events always show.
+
+If a client has sent no events, check its [Tracking setup](/agency-app/tracking).
+
+## An event
+
+Click a row to see everything Mythic captured for that event:
+
+- **Properties**: the data sent with the event.
+- **Page & device**: URL, referrer, UTM source, medium and campaign, click
+  id, device, location and the tracking library.
+- **Person**: who sent it, whether they are identified, a link to the
+  session, and their sessions and first visit.
+- **Deliveries**: each destination the event was sent to, with its status and
+  how long it took. Agency only.
+- **Raw**: the event exactly as stored.
+
+**Ask agent** asks the assistant in the chat panel about the event.
+
+## For developers
+
+Events are on the [Data API](/data-api/overview).
