@@ -1,0 +1,55 @@
+---
+title: Scheduled reports
+description: >-
+  Email dashboards, weekly error digests and event contract reports on a
+  schedule.
+---
+
+## Overview
+
+The **Scheduled reports** screen emails reports from live Mythic data on a
+schedule, to up to 5 recipients each. Choose **Scheduled reports** in the
+navigation. Reports are for your agency and are not part of the client
+portal.
+
+## Report types
+
+| Type | What the email contains |
+| --- | --- |
+| **Dashboard** | The current value of each panel on one client's [dashboard](/agency-app/dashboards). |
+| **Error digest** | Exceptions, crash-free sessions and top issues for the last 7 days. |
+| **Contract report** | Event contract results for yesterday (UTC). |
+
+## Create a report
+
+1. Click **New report**.
+2. Enter a **Name**.
+3. Choose a **Client**, or **All clients** to send one email covering every
+   client. Dashboard reports need a single client, because each dashboard
+   belongs to one client.
+4. Choose the **Type**. For a dashboard report, choose the **Dashboard**.
+5. Set the schedule: **Repeats** daily, weekly or monthly, the weekday or
+   **Day of month** (31 means the last day of the month), the time (**At**)
+   and the **Timezone**.
+6. Enter up to 5 **Recipients**, separated by commas.
+7. Click **Create report**.
+
+## The list
+
+Each report shows its type, schedule and timezone, the next run (or
+**Paused**), its recipients and when it was last sent:
+
+| Status | Meaning |
+| --- | --- |
+| **Sent** | Sent to every recipient. |
+| **Sent with a failed section** | One section failed to load. The email says so. |
+| **Not sent: email not configured** | No email provider is set up, so nothing was sent. |
+| **Failed** | The send failed. Hover for the reason. |
+| **Never** | It has not been sent yet. |
+
+**Send now** sends the report straight away. The menu on each row has
+**Preview email**, **Edit**, **Pause** or **Resume**, and **Delete**. Deleting
+a report stops it sending and cannot be undone.
+
+If the screen shows **Email isn't configured**, previews still work, but
+sends are recorded as not sent until an admin sets up an email provider.

@@ -1,0 +1,59 @@
+---
+title: Experiments
+description: >-
+  See A/B test results from Convert and PostHog, and track incrementality
+  holdouts.
+---
+
+## Overview
+
+The **Experiments** screen shows a client's A/B tests and incrementality
+holdouts. Open a client and choose **Experiments**. Pick the **Goal** event
+that counts as a conversion, such as a form submission or a purchase. A/B
+results need a goal event other than a page view.
+
+## A/B tests
+
+Mythic detects Convert and PostHog experiments on its own. The tracking
+snippet reads which version each visitor was shown and tags their events with
+it. There is nothing to set up. A test appears once a visitor is placed in
+it. **Detect A/B tests** turns detection on or off for the client. It is off
+for HIPAA clients.
+
+The table covers the last 90 days:
+
+| Column | Meaning |
+| --- | --- |
+| **Experiment** | The test name. |
+| **Platform** | Convert or PostHog. |
+| **People exposed** | People who saw any version. |
+| **Arms** | The number of versions. |
+| **Lift** | How much better the best version converts than the baseline. |
+| **Confidence** | How sure Mythic is that the best version beats the baseline. |
+
+A person counts as converted if they did the goal within 30 days of first
+seeing the test. The baseline is PostHog's `control` arm, or the lowest
+Convert variation id.
+
+Click a test to see **Exposure**, daily sessions per version, and a
+**Confidence** gauge. Above 50% the variant is ahead, below 50% the baseline
+is. With too few conversions, Mythic does not compare the versions.
+
+## Incrementality holdouts
+
+A geo holdout pauses ads in a set of regions to measure the revenue the ads
+really add (iROAS). Set one up by asking the assistant in the chat panel, or
+through the Incrementality API.
+
+| Column | Meaning |
+| --- | --- |
+| **Holdout** | The test name. |
+| **Status** | Where the test is, such as running. |
+| **iROAS** | Incremental revenue per dollar of ad spend, with its likely range. |
+| **Confidence** | How sure Mythic is of the result. Blank when the data cannot support a reliable result. |
+
+## For developers
+
+See the [Incrementality API](/incrementality-api/overview), and
+[configuration](/javascript-sdk/configuration) for the snippet's experiment
+settings.

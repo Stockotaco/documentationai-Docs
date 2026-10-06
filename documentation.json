@@ -95,6 +95,21 @@
                     "icon": "layout-dashboard"
                   },
                   {
+                    "title": "Scheduled reports",
+                    "path": "agency-app/reports",
+                    "icon": "send"
+                  },
+                  {
+                    "title": "Saved analyses",
+                    "path": "agency-app/analyses",
+                    "icon": "search"
+                  },
+                  {
+                    "title": "Experiments",
+                    "path": "agency-app/experiments",
+                    "icon": "flask-conical"
+                  },
+                  {
                     "title": "Meta match quality",
                     "path": "agency-app/meta-quality",
                     "icon": "gauge"
