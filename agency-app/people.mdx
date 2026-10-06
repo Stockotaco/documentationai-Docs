@@ -1,0 +1,89 @@
+---
+title: People & segments
+description: >-
+  Look up a client's visitors, open a person's profile and history, save
+  segments, and see the journeys that lead to a conversion.
+---
+
+## Overview
+
+The **People & segments** screen lists the visitors Mythic has seen on a
+client's site, identified and anonymous. Open a client and choose **People**.
+The screen has three tabs: **People**, **Segments** and **Journeys**.
+
+## People
+
+Search by name, email or company. Each row shows:
+
+| Column | Meaning |
+| --- | --- |
+| **Person** | Name, email or user id. **Identified** means Mythic has an email or user id for them. **Anonymous** means it has neither yet. |
+| **First source** | The channel of their first visit. |
+| **Last source** | The channel of their most recent visit. |
+| **Sessions** | How many visits they have made. |
+| **Last seen** | When they last visited. |
+
+When a visitor later fills in a form or is identified another way, Mythic
+links their earlier anonymous visits to the same person.
+
+## A person's profile
+
+Click a person to open their profile:
+
+- **Profile**: email, user id, first and last seen, sessions, devices and
+  country.
+- **Identities**: every identifier Mythic has linked to this person, with its
+  type.
+- **First touch** and **Last touch**: the channel, source and medium,
+  campaign, referrer, landing page and device of their first and latest
+  visits.
+- **Events**: everything they did, newest first, with the page and source of
+  each event.
+
+## Segments
+
+A segment is a saved set of person filters, such as everyone with an email who
+came from paid search. Membership is worked out live, so a segment always
+reflects the latest data. Each card shows the segment's size.
+
+- **View members** opens the People tab filtered to the segment. Click
+  **Show everyone** to clear it.
+- **Ask agent** asks the assistant in the chat panel about the segment.
+- **New segment** builds one from these filters. People must match every
+  filter you set:
+  - **Has an email**
+  - **Last-touch utm_source**, for example `google`
+  - **Minimum sessions**
+  - **Active within (days)**
+
+Deleting a segment removes its definition. The people in it are not affected.
+For more complex segments, ask the assistant to build one.
+
+## Journeys
+
+Journeys show the paths people took before they converted.
+
+1. Choose a **Goal event**, such as a purchase or a form submission. Goals
+   need at least one conversion in the last 30 days.
+2. For GoHighLevel appointment and opportunity status events, choose an
+   **Outcome**, such as an appointment that showed or an opportunity that was
+   won.
+3. Optionally choose **Revenue from** to add revenue, such as the GoHighLevel
+   order or payment amount.
+4. Choose **Label journeys by** (Channel, Source / medium or Campaign) and a
+   **Goal range** of 30 or 90 days.
+
+The screen then shows:
+
+- How many people reached the goal, how many of them have a tracked journey,
+  the median time to convert, and revenue if chosen.
+- **Paths to** the goal: the most common journeys, one step per visit, oldest
+  first, with people, share, revenue and time to convert. Mythic looks back up
+  to 90 days before each conversion. Visits referred by the client's own site
+  do not count as touches.
+- **People by** channel, source or campaign, credited by **First touch**,
+  **Last touch** or **Split evenly** across every touch.
+
+## For developers
+
+People, identity and journeys are on the [Data API](/data-api/overview).

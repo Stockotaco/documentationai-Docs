@@ -1,0 +1,51 @@
+---
+title: Heatmaps
+description: >-
+  See where visitors click and how far they scroll on each page of a client's
+  site.
+---
+
+## Overview
+
+The **Heatmaps** screen shows where visitors click and how far they scroll on
+a client's site, over the last 30 days. Open a client and choose
+**Heatmaps**.
+
+Heatmap capture is off by default and is turned on per client. If it is off,
+the screen says so. Pages appear once capture is on and visitors click or
+scroll.
+
+## Read a heatmap
+
+1. Choose a **Page**. Each page shows its clicks and sessions.
+2. Choose a **Mode**:
+   - **Clicks**: where visitors clicked. Hotter colors mean more clicks.
+   - **Scroll depth**: how far down the page visitors got.
+3. Narrow it down with **Layout** (Mobile, Tablet or Desktop) and **Source**.
+   Both list only the values that reached this page, with their session
+   counts.
+
+The heat is drawn on a recorded visit of the page, so it lines up with the
+real layout. The note under the heatmap says which visit was used. If there is
+no recording for the chosen layout, the heat is drawn on a blank page of that
+width.
+
+Very long pages show their top part only, and a banner says how much is
+shown.
+
+## Clicked elements
+
+Under the click map, a table groups clicks by the element that was clicked,
+with **Clicks** and **Visitors** for each. Only clicks from tracking snippet
+version 3.26 or later have element data. Older clicks have positions only.
+
+## Empty heatmaps
+
+- **No clicks for this filter**: try another layout or source.
+- **No scroll measurements**: scroll depth is saved when a visitor leaves the
+  page, so a page can have clicks before it has scroll data.
+
+## For developers
+
+See the [Heatmaps API](/heatmaps-api/overview). Turn capture on with
+`PUT /client/v1/settings/heatmaps`.

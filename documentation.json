@@ -80,6 +80,21 @@
                     "icon": "chart-line"
                   },
                   {
+                    "title": "People & segments",
+                    "path": "agency-app/people",
+                    "icon": "users"
+                  },
+                  {
+                    "title": "Heatmaps",
+                    "path": "agency-app/heatmaps",
+                    "icon": "flame"
+                  },
+                  {
+                    "title": "Dashboards",
+                    "path": "agency-app/dashboards",
+                    "icon": "layout-dashboard"
+                  },
+                  {
                     "title": "Meta match quality",
                     "path": "agency-app/meta-quality",
                     "icon": "gauge"
