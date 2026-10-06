@@ -1,0 +1,68 @@
+---
+title: Correlation
+description: >-
+  See how closely a client's metrics move together, whether that is holding,
+  and how long one takes to show up in another.
+---
+
+## Overview
+
+The **Correlation** screen compares a client's metrics over time, such as ad
+spend and new-customer revenue. It shows how closely they move together,
+whether that is holding lately, and how long one takes to show up in the
+other. Open a client and choose **Correlation**.
+
+Correlation reads the client's BigQuery dataset. If the client does not have
+one yet, see [Exports](/agency-app/exports).
+
+## Ask a question
+
+Start from one of the suggested questions, such as **Does spend bring
+visits?**, or set it up yourself:
+
+- **Metrics**: pick 2 to 5. The first is the one that leads in the lead time
+  scan.
+- **Window**: the last 30, 90, 180 or 365 days.
+- **Grain**: compare by **Day**, **Week** or **Month**.
+- **Rolling window**: how many points each "lately" reading uses. Leave it
+  empty for the default. 0 turns it off.
+- **Max lag**: how far to shift one metric when looking for a lead time.
+  Leave it empty for the default.
+- **First-time lookback (days)**: for new-customer metrics, the history
+  checked before the window so returning customers do not count as new.
+
+## Read the result
+
+With more than two metrics, choose the **Pair** to look at. For each pair:
+
+- **Overall**: the correlation (r) from -1 to 1, with its strength and
+  direction. Near 1 means the metrics rise together. Near -1 means one rises
+  as the other falls. Near 0 means no clear link.
+- **Lately**: the correlation over the most recent rolling window, and
+  whether it is **Holding**, **Weakening** or **Strengthening**.
+- **Lead time**: how long the first metric takes to show up in the second,
+  or **None**.
+- **Trend**: both metrics over the window.
+- **Correlation over time**: the rolling correlation.
+- A table of r at each shift, with the **Best** one marked.
+
+**Ask agent** asks the assistant in the chat panel to explain the result.
+
+## Warnings
+
+| Warning | Meaning |
+| --- | --- |
+| **Too few points** | There is not enough data for a reliable answer. Try a longer window or a finer grain. |
+| **A series never changes** | One metric is flat, so it cannot correlate. |
+| **A metric starts or stops mid-window** | One metric has data for only part of the window. |
+| **No real lead time** | The best shift barely beats no shift. The metrics move together in the same period, with no delay. |
+| **The peak may be further out** | The best shift is at the edge of the scan. Try a larger max lag. |
+| **A few outliers drive the fit** | A few unusual points account for most of the correlation. |
+
+Correlation shows that metrics move together. It does not prove that one
+causes the other. To measure what ads really add, see
+[Experiments](/agency-app/experiments).
+
+## For developers
+
+See [Correlation Analysis](/correlation-api/overview).

@@ -1,0 +1,89 @@
+---
+title: Constraint finder
+description: >-
+  Follow each Meta campaign from impression to conversion and find the step
+  it is stuck on.
+---
+
+## Overview
+
+The **Constraint finder** follows each Meta campaign from impression to
+conversion. It names the step where the campaign loses the most: the ad, the
+tracking, the landing page or the sale. Open a client and choose
+**Constraint finder**.
+
+It needs two things for the client: a BigQuery dataset with its tracked
+visits (see [Exports](/agency-app/exports)) and Meta Ads data synced into
+that dataset. The screen says which one is missing.
+
+## The steps
+
+| Step | What it measures | A low rate usually means |
+| --- | --- | --- |
+| **Ad** | Impressions to link clicks | The creative or targeting is not earning the click. |
+| **Tracking** | Link clicks to tracked visits | Redirects, consent banners, slow pages or stripped UTMs. |
+| **Landing page** | Visits to leads | The page is not converting the visit. |
+| **Sales** | Leads to conversions | Leads arrive but do not close. |
+| **Site** | Visits to conversions | Used when no lead step is chosen. Pick a lead event to split page problems from sales problems. |
+
+Each step's rate is compared with a target. By default the target is the
+client's own account average, not an industry benchmark. The verdict is the
+step where closing the gap would add the most conversions, taking the later
+steps into account. A campaign at or above target on every step reads
+**Healthy, scale it**. **Can't measure** means the visits could not be tied
+to that campaign, ad set or ad.
+
+## Constraints tab
+
+Set up the view:
+
+- **Window**: the date range.
+- **Group by**: **Campaign**, **Ad set** or **Ad**.
+- **Conversion**: the event that counts as a conversion.
+- **Lead step**: the event that counts as a lead, or none for a single
+  **Site** step.
+- **Credit**: **Last paid touch** (closest to what Meta claims) or **First
+  paid touch** (the campaign that first acquired the person).
+- **Credit window**: **Own session only**, **7 days** (matches Ads Manager),
+  **30 days** or **90 days** (long sales cycles).
+
+The table shows each row's spend, the rate at each step, conversions and the
+verdict, ordered by how much there is to gain. Click a row to see the funnel,
+and **Ask agent what to change** to get suggestions in the chat panel. **Show
+ad creative** adds each ad's copy, call to action, destination and URL tags.
+It adds about 290 MB of BigQuery scan per run.
+
+## Tracking audit tab
+
+Checks whether ad clicks can be matched to visits. Each campaign gets a
+verdict:
+
+| Verdict | Meaning |
+| --- | --- |
+| **OK** | Clicks match visits. |
+| **Low tracking** | Many clicks have no matching visit. |
+| **Name only** | Visits match by campaign name only, which breaks when the campaign is renamed. |
+| **No sessions** | No visits could be matched. |
+| **No delivery** | The campaign had no clicks. |
+
+The tab lists causes with the visits affected and the fix, and names
+problems such as an unexpanded macro in the UTM tags. Add
+`utm_id={{campaign.id}}` to the ad's URL tags so visits match by id.
+
+## Events tab
+
+Lists the client's events with how many carry a session or a person, which
+decides whether they can be credited to a campaign. Mythic suggests which
+event to use as the conversion and which as the lead step.
+
+## Targets tab
+
+Replace the account average with your own targets. Set an account target,
+or **Add a campaign target** for one campaign, as a percentage for each
+step. A step left empty falls back to the next target in line: the campaign
+target, then the account target, then the account average. **Clear** removes
+a set of targets.
+
+## For developers
+
+See the [Constraint Finder API](/constraints-api/overview).

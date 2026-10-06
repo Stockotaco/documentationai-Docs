@@ -1,0 +1,70 @@
+---
+title: Event contracts
+description: >-
+  Declare the events and properties each client must send, and catch tracking
+  that breaks.
+---
+
+## Overview
+
+An **event contract** says which events a client must send and which
+properties each event must carry, such as a `purchase` event with a `value`.
+Mythic checks every contract daily at 8:00 AM UTC against the previous day's
+events, so a broken form or a removed tag shows up the next morning.
+
+- From the agency, **Event contracts** shows every client's results.
+- Open a client and choose **Event contracts** to declare and edit its
+  contracts.
+
+## Across clients
+
+| Column | Meaning |
+| --- | --- |
+| **Client** | The client, with its status: **Passing**, **Violating** or **No data**. **No contracts** means none are declared. |
+| **Contracts** | How many contracts the client has. |
+| **Violating** | How many contracts failed yesterday. |
+| **Worst violation** | The most serious failure. |
+| **Alerts routed** | Where failures are sent: **Alert rule**, **Webhook** or **Not routed**. |
+| **Last alert** | When a failure last sent an alert, or **Never**. |
+
+To be told about failures, route them with an alert rule. See
+[Alerts](/agency-app/alerts).
+
+## One client's contracts
+
+The tiles show the number of contracts, how many are violating, yesterday's
+event count and how many had no data. Each contract row has:
+
+| Column | Meaning |
+| --- | --- |
+| **Event** | The event, with its status. |
+| **Min / day** | The minimum number of events per day, if set. |
+| **Yesterday** | How many of the event arrived yesterday. |
+
+| Status | Meaning |
+| --- | --- |
+| **Passing** | The event arrived with every required property. |
+| **Violating** | A required property was missing, empty or the wrong type, or fewer events arrived than the minimum. |
+| **No data** | The event did not arrive yesterday. |
+
+Click an event to see what failed, the lowest coverage of a required
+property, and the latest failing event. There you can set **Minimum events
+per day**, delete the contract, or click **Ask agent to fix** to work through
+the failure in the chat panel.
+
+## Declare contracts
+
+- **Suggest from traffic**: enter an event name. Mythic reads the last 30
+  days of that event and marks a property required when it is on at least 99%
+  of events. Review the list and click **Declare contract**.
+- **Apply preset**: adds a ready-made set of contracts, such as **Commerce**.
+  It replaces contracts with the same event name.
+
+If no events arrived at all yesterday, the screen warns you, since every
+contract would fail. A **Partial property scan** warning means the client
+sent more property data than Mythic reads in one pass. Coverage may then read
+lower than it is, but passing results are unaffected.
+
+## For developers
+
+See the [Contracts API](/contracts-api/overview).

@@ -1,0 +1,37 @@
+---
+title: Metric definitions
+description: >-
+  Define what a lead, a purchase or revenue means for each client, so the
+  assistant measures it the same way every time.
+---
+
+## Overview
+
+A **metric definition** says what a business term means for one client. For
+example, a lead might be "a contact created from any form", and revenue might
+be "the sum of `value` on `order_completed`". The assistant reads these
+definitions before it builds any chart, so "how many leads last week?" gets
+the same answer every time. Open a client and choose **Metric definitions**.
+
+## Add a definition
+
+1. Click **Add definition**.
+2. Enter a **Name**, such as `Lead`, and an optional **Description**.
+3. Pick the **Event**. The list shows this client's real events with their
+   counts for the last 30 days.
+4. Pick the **Measure**:
+   - **Count of events**
+   - **Unique users**
+   - **Unique sessions**
+   - **Sum of a property** or **Average of a property**, then pick the
+     **Property**
+5. Optionally click **Add filter** to count only some events. Pick a
+   property, an operator (such as **is**, **is one of**, **contains** or **is
+   set**) and a value. For **is one of**, separate values with commas.
+6. Check the preview of the last 30 days, then click **Add definition**.
+
+## Edit or delete
+
+Each definition shows its name and a plain description of what it counts.
+Click **Edit** to change it. Deleting a definition stops the assistant from
+using it. Mythic data is not touched.

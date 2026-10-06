@@ -125,6 +125,26 @@
                     "icon": "refresh-cw"
                   },
                   {
+                    "title": "Event contracts",
+                    "path": "agency-app/contracts",
+                    "icon": "file-check"
+                  },
+                  {
+                    "title": "Metric definitions",
+                    "path": "agency-app/definitions",
+                    "icon": "book"
+                  },
+                  {
+                    "title": "Correlation",
+                    "path": "agency-app/correlation",
+                    "icon": "activity"
+                  },
+                  {
+                    "title": "Constraint finder",
+                    "path": "agency-app/constraints",
+                    "icon": "gauge"
+                  },
+                  {
                     "title": "Meta match quality",
                     "path": "agency-app/meta-quality",
                     "icon": "gauge"
