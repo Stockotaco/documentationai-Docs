@@ -20,12 +20,11 @@ events, so a broken form or a removed tag shows up the next morning.
 
 | Column | Meaning |
 | --- | --- |
-| **Client** | The client, with its status: **Passing**, **Violating** or **No data**. **No contracts** means none are declared. |
+| **Client** | The client, with its status: **Passing**, **Violating** or **No data**. **No contracts** means none are declared. Clients with contracts are listed first, failing ones at the top. |
 | **Contracts** | How many contracts the client has. |
 | **Violating** | How many contracts failed yesterday. |
 | **Worst violation** | The most serious failure. |
-| **Alerts routed** | Where failures are sent: **Alert rule**, **Webhook** or **Not routed**. |
-| **Last alert** | When a failure last sent an alert, or **Never**. |
+| **Alerts** | Where failures are sent (**Alert rule**, **Webhook** or **Not routed**) and when a failure last sent an alert. |
 
 To be told about failures, route them with an alert rule. See
 [Alerts](/agency-app/alerts).
