@@ -1,0 +1,49 @@
+---
+title: Sessions
+description: >-
+  Browse a client's visits, watch session replays, and read a step-by-step
+  timeline of what each visitor did.
+---
+
+## Overview
+
+A **session** is one visit to the client's site. The **Sessions** screen lists
+them newest first, with a replay and a timeline for each. Open a client and
+choose **Sessions**.
+
+## The list
+
+Each session shows the visitor, when the visit started, how long it lasted,
+and the landing page. The dot shows whether the visit was engaged:
+
+- **Engaged**: more than one page view, at least 10 seconds long, or an event
+  other than a page view.
+- **Bounced**: none of those.
+
+A play icon means the visit was recorded. Use **Engagement** to show only
+engaged or only bounced visits.
+
+## A session
+
+Click a session to see:
+
+- **Session replay**: click **Play replay** to watch the visit. If the
+  visitor had more than one browser tab open, choose the tab to watch.
+- **Timeline**: each page view, click, form interaction, error and custom
+  event in order. The timeline is built from the recording.
+- **Details**: device, pages viewed, duration and traffic source.
+- **Replay Vision** results for the recording, if a scanner has watched it.
+  You can scan the session from here. See [Replay Vision](/agency-app/replay-vision).
+
+**Copy session link** copies a link to this session. **Summarize this
+session** asks the assistant in the chat panel to describe what happened.
+
+## What gets recorded
+
+Not every visit is recorded. A visit without a play icon was not sampled for
+recording. Recordings are kept for 30 days. Anything the snippet masks stays
+masked in the replay. HIPAA clients have no recordings.
+
+## For developers
+
+Sessions and replays are on the [Data API](/data-api/overview).

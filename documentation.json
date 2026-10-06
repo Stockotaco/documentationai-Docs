@@ -65,6 +65,21 @@
                     "icon": "key"
                   },
                   {
+                    "title": "Tracking setup",
+                    "path": "agency-app/tracking",
+                    "icon": "radio"
+                  },
+                  {
+                    "title": "Sessions",
+                    "path": "agency-app/sessions",
+                    "icon": "play-circle"
+                  },
+                  {
+                    "title": "Insights",
+                    "path": "agency-app/insights",
+                    "icon": "chart-line"
+                  },
+                  {
                     "title": "Meta match quality",
                     "path": "agency-app/meta-quality",
                     "icon": "gauge"

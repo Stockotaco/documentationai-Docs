@@ -1,0 +1,53 @@
+---
+title: Insights
+description: >-
+  Save charts of a client's data as insights, edit their queries, and reuse
+  them on dashboards and in reports.
+---
+
+## Overview
+
+An **insight** is a saved chart: a query over the client's events plus a chart
+type. The **Insight library** lists a client's insights. Any insight can be
+added to a dashboard. Open a client and choose **Insights**.
+
+Each card shows the chart for its saved date range. Click the sparkle icon on
+a chart to ask the assistant in the chat panel to explain it.
+
+## Create an insight
+
+The fastest way is to ask the assistant, for example: "Save an insight of
+daily pageviews for the last 30 days, compared with the previous 30." It
+writes the query and saves the insight.
+
+To write one yourself, click **New insight** and fill in:
+
+- **Name** and an optional **Description**.
+- **Chart**: Number, Line, Bar, Pie, Table or Funnel.
+- **Query**: the data to chart, written as an explore query. The editor starts
+  with an example and checks the query as you type.
+
+```json
+{
+  "kind": "trend",
+  "date_range": { "preset": "30d" },
+  "interval": "day",
+  "series": [{ "event": "$pageview", "math": "total", "label": "Pageviews" }],
+  "compare": "previous_period"
+}
+```
+
+A query sets the kind (a trend or a funnel), the date range, the series or
+funnel steps, and optionally an interval, a breakdown, a comparison and
+filters.
+
+## Edit or delete
+
+Use the menu on a card to **Edit** or **Delete** it. Deleting an insight also
+removes it from every dashboard it is on.
+
+## For developers
+
+The query format is documented under
+[Explore](/data-api/explore), and saved insights are on the
+[Builder API](/builder-api/insight-config).

@@ -1,0 +1,65 @@
+---
+title: Tracking setup
+description: >-
+  Install Mythic on a client's site, check that events arrive, serve tracking
+  from the client's own domain, and connect GoHighLevel.
+---
+
+## Overview
+
+The **Tracking setup** screen walks through getting one client's tracking
+live. Open a client and choose **Tracking**. Each step checks itself and
+shows whether it is done.
+
+## Install the snippet
+
+Copy the snippet and paste it into the `<head>` of every page on the client's
+site, or into the site builder's header code setting. The snippet loads Mythic
+with the client's publishable key, which is safe on a public website.
+
+## Verify events are arriving
+
+This step shows the time of the last event and the number of events in the
+last 24 hours. It turns done once the first event arrives, usually within a
+minute of someone loading a page. Click **Check again** to refresh.
+
+If nothing arrives, check that the snippet is in the page's `<head>` on the
+live site, not only in a draft. **Ask agent to diagnose** opens the chat panel
+to work through it with you.
+
+## Serve from your own domain
+
+Recommended. Tracking runs from a subdomain of the client's site, such as
+`data.acmeplumbing.com`, instead of Mythic's domain. Browsers and ad blockers
+treat it as part of the client's site, so fewer events are lost.
+
+1. Enter the **Tracking hostname** and click **Add hostname**.
+2. Add the CNAME record shown under **Point DNS at Mythic** at the client's
+   DNS provider.
+3. Mythic issues the certificate once the record resolves. **DNS**,
+   **Certificate** and **Verified** turn done when it is ready.
+
+**Remove** stops serving from the hostname.
+
+## Connect GoHighLevel
+
+For clients on GoHighLevel. Click **Connect GoHighLevel** and choose the
+client's sub-account. Mythic then receives CRM events such as new contacts
+and opportunity changes, and ties them to the same people as the website
+events. **Reconnect** fixes a connection that shows **Disconnected**.
+
+## Privacy and capture
+
+- **Add IP and location at the edge**: adds the visitor's IP address and
+  location to every event, including the first one of a visit. Meta uses
+  these to match conversions. It does nothing for HIPAA clients.
+- **Autocapture clicks and forms**: records clicks and form submissions
+  without extra code. This setting overrides the site's own snippet settings.
+- **Allowed sites**: the hostnames that may send events for this client,
+  comma separated. Subdomains are included. Leave it empty to accept any site.
+
+## For developers
+
+See the [JavaScript SDK](/javascript-sdk/overview) for tracking methods and
+configuration, and [Onboard a client](/for-agencies/onboard-a-client) for the
+API steps.
