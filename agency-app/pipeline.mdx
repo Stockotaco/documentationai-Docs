@@ -1,0 +1,68 @@
+---
+title: Data pipeline
+description: >-
+  Sync a client's ad platform connections together once a day and know when
+  the data is complete.
+---
+
+## Overview
+
+The **Data pipeline** screen runs a client's ad platform connections, such as
+Meta Ads and Google Ads, together once a day. If a sync fails, the run is
+held until it is fixed. When every connection has synced, Mythic can tell
+your system that the data is in. Open a client and choose **Data pipeline**.
+
+A client needs at least one ad platform connection before it can have a
+pipeline.
+
+## Set up a pipeline
+
+1. Click **Set up pipeline**.
+2. Leave **Run every day** on, and choose the time in **Run at**.
+3. Choose the connections to include. A connection that has never synced
+   backfills on its first run and does not hold up the others.
+4. Optionally enter a **Completion webhook** URL. Mythic sends it a POST once
+   every connection in a run has synced. Add a **Signing secret** so your
+   system can verify the request came from Mythic.
+5. Click **Set up pipeline**.
+
+Connections in a pipeline stop syncing on their own schedule and sync only as
+part of the pipeline. Removing a connection from the pipeline gives it its
+old schedule back. Turning **Run every day** off keeps the settings but stops
+the daily run and gives every connection its schedule back.
+
+**Edit** changes the settings. **Run now** starts a run straight away.
+
+## Runs
+
+The screen lists recent runs with the day, status, connections synced,
+records, how long it took, and whether it was started by the schedule or by
+hand.
+
+| Status | Meaning |
+| --- | --- |
+| **Running** | Syncs are in progress. |
+| **Held** | At least one sync failed after its retries. The run keeps retrying every five minutes and completes on its own once the sync passes. |
+| **Complete** | Every connection that could sync did, and the webhook was sent. |
+| **Failed** | The run made no progress for 36 hours. |
+| **Superseded** | A manual run replaced it. |
+
+A connection that is turned off or not due that day is **Skipped** and does
+not hold the run.
+
+## Fix a held run
+
+Click a run to see each connection, its status, records and last success,
+and the reason the run is held. Fix the cause, such as an expired login to
+the ad account, then:
+
+- **Retry failed**: syncs the failed connections again on the next check,
+  within 5 minutes.
+- **Complete anyway**: marks the run complete and sends the webhook now
+  without the missing data. The run and the webhook are marked **Forced**
+  permanently, because anything built on them used incomplete data.
+- **Resend webhook**: sends the completion webhook again for a finished run.
+
+## For developers
+
+See [Pipelines](/airbyte-api/pipelines).

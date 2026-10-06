@@ -1,0 +1,52 @@
+---
+title: Short links
+description: >-
+  Create tracked short links, see who clicks them, and get a webhook when a
+  link's destination goes down.
+---
+
+## Overview
+
+The **Short links** screen creates tracked short links for a client. Each
+click is recorded and joined to the visitor's profile, so a person who clicks
+a link in an email or text and later converts is the same person in Mythic.
+Open a client and choose **Short links**.
+
+Whether each link's destination is up is on the
+[Link uptime](/agency-app/uptime) screen under Monitor.
+
+## Create a link
+
+1. Click **New link**.
+2. Enter where the link **Goes to**, for example
+   `https://example.com/offer`.
+3. Optionally enter a **Slug**, the end of the short link, such as
+   `spring-offer`. Use letters, numbers, hyphens and underscores. Mythic
+   picks one if you leave it empty.
+4. Optionally add a **Title** to name the link in the list.
+5. Click **Create link**. The short link has the form `/r/<slug>`.
+
+## The Links tab
+
+| Column | Meaning |
+| --- | --- |
+| **Short link** | The title, or the short link if there is no title. |
+| **Goes to** | The destination. |
+| **Clicks (7d)** | Clicks in the last 7 days. |
+
+Use the copy button to copy a short link. Deleting a link stops the short URL
+from redirecting. Past clicks stay in analytics.
+
+**Recent clicks** lists each click in the last 7 days with the link, the
+visitor's location, the referrer and the time. Clicks show up a few seconds
+after they happen.
+
+## The Webhooks tab
+
+A webhook gets a POST when a short link's destination goes down
+(`link_down`) or recovers (`link_up`). Click **Add webhook** and enter the
+URL. Deleting a webhook stops these events from posting to it.
+
+## For developers
+
+See the [Client Links API](/client-links-api/overview).

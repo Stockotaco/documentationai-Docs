@@ -110,6 +110,21 @@
                     "icon": "flask-conical"
                   },
                   {
+                    "title": "Exports",
+                    "path": "agency-app/exports",
+                    "icon": "database"
+                  },
+                  {
+                    "title": "Short links",
+                    "path": "agency-app/links",
+                    "icon": "link"
+                  },
+                  {
+                    "title": "Data pipeline",
+                    "path": "agency-app/pipeline",
+                    "icon": "refresh-cw"
+                  },
+                  {
                     "title": "Meta match quality",
                     "path": "agency-app/meta-quality",
                     "icon": "gauge"

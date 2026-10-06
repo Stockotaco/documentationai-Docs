@@ -1,0 +1,45 @@
+---
+title: Exports
+description: >-
+  See a client's BigQuery dataset of raw events, sessions and people, and the
+  tables in it.
+---
+
+## Overview
+
+The **Exports** screen shows the BigQuery dataset where a client's raw events,
+sessions and people live. The client queries it directly. Mythic keeps it
+current, and no data is copied out. Open a client and choose **Exports**.
+
+Warehouse exports are part of the Pro plan. On other plans the screen shows
+an upgrade notice.
+
+## The dataset
+
+| Field | Meaning |
+| --- | --- |
+| **Dataset** | The BigQuery dataset name. |
+| **Status** | Whether the dataset is ready. |
+| **Tables** | How many tables it holds. |
+| **Provisioned** | When the dataset was created. |
+| **Updated** | When it last changed, or **Never**. |
+
+If the screen says **No BigQuery dataset for this client yet**, the dataset
+has not been created. Mythic creates it on request. Click **Check again**
+after it has been set up.
+
+## The tables
+
+Under **Export schema** is every table in the dataset:
+
+| Column | Meaning |
+| --- | --- |
+| **Table** | The table name. |
+| **Rows** | How many rows it holds. |
+| **Partitioned on** | The column to filter on to keep queries fast and cheap, or **None**. |
+| **Freshness** | How up to date the table is. |
+| **Columns** | How many columns it has. |
+
+## For developers
+
+See [BigQuery Export](/bigquery-api/overview).
