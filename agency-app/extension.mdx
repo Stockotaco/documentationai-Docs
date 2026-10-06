@@ -1,0 +1,96 @@
+---
+title: Chrome extension
+description: Connect Mythic's read-only results overlay to Meta Ads Manager.
+---
+
+The **Mythic for Meta Ads Manager** Chrome extension adds Mythic's tracked
+sessions, lead sessions, conversions, revenue, cost per conversion, ROAS and
+Constraint Finder verdict beside Meta's campaign, ad set and ad rows. It reads
+Mythic's data; it does not edit ads or tracking settings.
+
+<Callout kind="info">
+The initial release is being validated before store publication. For an
+operator-assisted preview, load the approved unpacked release folder in
+Chrome's **Manage Extensions → Developer mode → Load unpacked**. Do not load
+an unverified ZIP or paste an agency API key into Ads Manager.
+</Callout>
+
+## Connect a browser
+
+1. Install or load the approved **Mythic for Meta Ads Manager** extension.
+2. Sign in to the [agency app](https://portal-production-341f.up.railway.app)
+   as an agency user. Open **Keys → Connect a browser**, or
+   `/extension/connect`.
+3. Wait for **Mythic extension detected in this browser**, then select
+   **Connect this browser**.
+4. After **Connected**, open Meta Ads Manager. Mythic's panel appears beside
+   the campaign grid. Choose the client if the account is not resolved
+   automatically.
+
+The connect page creates an agency-wide key named **Chrome extension ·
+&lt;date&gt;**, limited to `extension:read` and `constraints:read`. The key is
+handed to the extension, not placed in the URL or shown in the page. A failed
+handoff attempts to delete the newly created key; check the Keys page if the
+connection failed. Each connection creates a separate key, including when
+connecting again in the same browser.
+
+## Select the right client and dates
+
+The extension first matches the visible Meta ad account against your clients'
+Airbyte connections. If there are multiple matches or no recorded match,
+select a client in the panel. A remembered client link is local to this
+browser and agency; **Forget** removes it so you can choose again.
+
+Connect Meta and complete an ads sync for that client before expecting
+results. The overlay follows the account, campaign/ad set/ad level and date
+window in Ads Manager. Unreadable date presets and ranges longer than 92 days
+require a supported explicit date range before it loads.
+Google Ads results are not supported in this release.
+
+## Understand the numbers
+
+Mythic counts tracked site sessions and identity-resolved conversions. Meta
+counts modeled attributed results. On-platform objectives such as lead forms
+and messaging have no site sessions, so differences are expected. Open a
+Mythic row's details to inspect its funnel verdict and any warnings. A grey
+**—** means unavailable or unmeasurable, not a healthy result.
+
+Revenue values have no currency symbol: the API does not return currency in
+this release. The revenue column hides when there is no revenue. Zero
+denominators display **—** instead of an infinite ratio.
+
+Results come from [Constraint Finder](/agency-app/constraints), filtered to
+the visible ad account **after attribution** across the client's accounts.
+Account totals are account-scoped; benchmarks, tracking and attribution
+diagnostics remain client-wide. The client's Constraint Finder plan
+entitlement and query limits still apply.
+
+## Disconnect or revoke
+
+**Disconnect** in the extension popup removes the credential from that
+browser; it does not revoke the server-side key. To revoke access, delete the
+corresponding **Chrome extension** key on the agency [Keys page](/agency-app/keys).
+Keys do not expire automatically in this release. Delete unused keys after
+reconnecting or retiring a browser.
+
+Open tabs normally recheck access and operator notices every four minutes and
+when focused; offline or suspended tabs cannot guarantee immediate updates.
+A revoked key removes displayed results after revalidation. An operator can
+also require an extension update before results are shown.
+
+## If results are missing
+
+- **Extension not detected:** enable it in Chrome and reload the connect page.
+- **Choose a client:** select the client that owns the synced account; use
+  **Forget** if a remembered link is wrong.
+- **No ads sync:** connect Meta and finish a sync for that client.
+- **Not in plan:** Constraint Finder is not enabled for that client.
+- **Update required:** install the operator-approved newer extension version.
+- **Grid not found:** reload Ads Manager and use **Report a problem** if it
+  persists. Reports contain clipped diagnostic text and are logged for
+  operators, not retained as a queryable report history. Do not include
+  credentials or personal data in a report.
+
+The bootstrap and account-resolution contract is documented in the
+**Ads Manager Extension API** reference. The actual results contract is
+`GET /client/v1/constraints?account_id=…`.

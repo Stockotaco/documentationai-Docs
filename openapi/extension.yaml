@@ -1,0 +1,254 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Ads Manager Extension API
+  description: >
+    Bootstrap routes for the Mythic browser extension, which shows Mythic's own
+    per-campaign results (sessions, conversions, revenue, the funnel
+    constraint) inside Meta Ads Manager. Three routes on
+    `/client/v1/extension`: who the key belongs to plus the client roster with
+    ad-platform flags (`/me`), which client syncs the ad account on screen
+    (`/resolve`), and a write-only problem report (`/issues`).
+
+
+    The results themselves are **not** served here. The extension reads
+    `GET /client/v1/constraints?account_id=<ad account>` with the resolved
+    client as `X-Location-Id`, so that route's plan gate, benchmarks and
+    20-per-minute limit apply unchanged.
+
+
+    **Agency-wide keys only.** The agency app mints the extension an `mcp_`
+    key with `["extension:read", "constraints:read"]`; an agency key (`ak_`)
+    works too. A location secret key (`sk_`) gets `403 agency_key_required`,
+    and so does an `mcp_` key bound to one client. Revoke the extension's key
+    on the agency Keys page.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+paths:
+  /client/v1/extension/me:
+    get:
+      summary: Extension bootstrap
+      operationId: getExtensionMe
+      description: >
+        The agency, the key in use (prefix and name, never the secret), every
+        location on the roster with what each has connected for Meta and
+        Google, and the extension controls an operator can set.
+
+
+        `connected` means an active ad-platform connection exists. `synced`
+        means Mythic would find its ad tables: a connection whose dataset sits
+        in Mythic's warehouse and has synced at least once, or a legacy
+        connection that has synced. It is a cheap proxy that never queries
+        BigQuery, so a `synced` location can still answer `424
+        ads_table_missing` on `/client/v1/constraints`.
+      responses:
+        "200":
+          description: Bootstrap state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      agency:
+                        type: object
+                        properties:
+                          id: { type: string }
+                          name: { type: string, nullable: true }
+                      key:
+                        type: object
+                        properties:
+                          type: { type: string, enum: [mcp, agency] }
+                          prefix: { type: string, nullable: true, description: "The `mcp_` key's display prefix. `null` for an `ak_` key." }
+                          name: { type: string, nullable: true, description: "The key's label. `null` for an `ak_` key." }
+                          scopes:
+                            type: array
+                            items: { type: string }
+                            description: "The key's scopes; `[\"*\"]` for an `ak_` key. The results need `constraints:read`."
+                      locations:
+                        type: array
+                        description: Every location linked to the agency, oldest first.
+                        items:
+                          type: object
+                          properties:
+                            id: { type: string }
+                            name: { type: string, nullable: true }
+                            status: { type: string, nullable: true }
+                            platforms:
+                              type: object
+                              properties:
+                                meta: { $ref: "#/components/schemas/PlatformFlags" }
+                                google: { $ref: "#/components/schemas/PlatformFlags" }
+                      roster_size: { type: integer }
+                      extension:
+                        type: object
+                        description: >
+                          Operator controls. `min_version` asks older extensions to
+                          update before they show data; `notice` is shown in the
+                          extension panel. Both `null` when unset.
+                        properties:
+                          min_version: { type: string, nullable: true, example: "1.2.0" }
+                          notice: { type: string, nullable: true }
+              example:
+                success: true
+                data:
+                  agency: { id: "6f1c...", name: "Acme Agency" }
+                  key: { type: mcp, prefix: "mcp_3fa9", name: "Chrome extension · 2026-10-06", scopes: ["extension:read", "constraints:read"] }
+                  locations:
+                    - id: "c84d700c-..."
+                      name: "Boundless Therapy"
+                      status: active
+                      platforms:
+                        meta: { connected: true, synced: true }
+                        google: { connected: false, synced: false }
+                  roster_size: 1
+                  extension: { min_version: "1.0.0", notice: "Meta is rolling out a new Ads Manager layout this week." }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/extension/resolve:
+    get:
+      summary: Resolve an ad account to a client
+      operationId: resolveAdAccount
+      description: >
+        Which of the agency's clients syncs this ad account, from the clients'
+        Airbyte ad-platform connections. The id is matched on its digits
+        exactly: `act_1234567890` and `1234567890` are the same Meta account,
+        `123-456-7890` and `1234567890` the same Google account, and `12` never
+        matches `123`. A connection that syncs several accounts matches each of
+        them. Only clients on the caller's roster are returned.
+
+
+        An empty `matches` is a normal answer, not an error: a client connected
+        before Mythic recorded account ids has no row to match, and the
+        extension then asks the user to pick the client once. Several matches
+        mean several clients sync the same account; active connections are
+        listed first.
+      parameters:
+        - name: platform
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [meta, google]
+        - name: account
+          in: query
+          required: true
+          description: Ad account id as the ad platform shows it.
+          schema:
+            type: string
+            example: act_1234567890
+      responses:
+        "200":
+          description: Matching clients
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      platform: { type: string, enum: [meta, google] }
+                      account: { type: string, description: "The normalised id: digits only." }
+                      matches:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            location_id: { type: string }
+                            name: { type: string, nullable: true }
+                            source: { type: string, enum: [airbyte] }
+                            connection_status: { type: string, nullable: true, enum: [active, inactive, error, pending] }
+                      roster_size: { type: integer }
+              example:
+                success: true
+                data:
+                  platform: meta
+                  account: "1234567890"
+                  matches:
+                    - { location_id: "c84d700c-...", name: "Boundless Therapy", source: airbyte, connection_status: active }
+                  roster_size: 12
+        "400":
+          description: "`invalid_params` — unknown `platform`, or an `account` with no digits."
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/extension/issues:
+    post:
+      summary: Report an extension problem
+      operationId: reportExtensionIssue
+      description: >
+        A problem report from the extension, usually that Meta changed Ads
+        Manager's page and the overlay could not attach. Logged for Mythic's
+        operators and **never stored**; there is no route to read reports back.
+        Strings are clipped to 300 characters. Past 30 reports per agency per
+        hour the report is acknowledged with `accepted: false` and dropped
+        rather than answered with `429`, so a looping extension goes quiet
+        instead of retrying.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind:
+                  type: string
+                  enum: [panel_not_mounted, grid_not_found, context_unreadable, exception, api_error]
+                version: { type: string, description: Extension version. }
+                level: { type: string, enum: [info, warn, error], default: warn }
+                path: { type: string, description: The Ads Manager path the problem occurred on. }
+                detail:
+                  description: Free text, or an object (stringified before clipping).
+                  oneOf:
+                    - type: string
+                    - type: object
+      responses:
+        "200":
+          description: Received
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      accepted: { type: boolean, description: "`false` when the hourly report budget is spent." }
+        "400":
+          description: "`invalid_json`, or `invalid_params` for an unknown `kind`."
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Agency-wide `mcp_` key holding `extension:read`, or an agency key
+        (`ak_`). A location secret key (`sk_`) or a client-bound `mcp_` key gets
+        `403 agency_key_required`. See [Using an mcp_ key over HTTP](/mcp/authentication).
+  schemas:
+    PlatformFlags:
+      type: object
+      properties:
+        connected: { type: boolean, description: An active ad-platform connection exists. }
+        synced: { type: boolean, description: "Mythic would find this platform's ad tables (synced at least once)." }
+  responses:
+    Unauthorized:
+      description: Missing or invalid key.
+    Forbidden:
+      description: >
+        `agency_key_required` (location `sk_` key or client-bound `mcp_` key),
+        or `insufficient_scope` (an `mcp_` key without `extension:read`).
+    RateLimited:
+      description: Over 120 requests per minute for the agency on this surface, or the key's own per-minute ceiling.

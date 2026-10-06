@@ -75,6 +75,11 @@
                     "icon": "key"
                   },
                   {
+                    "title": "Chrome extension",
+                    "path": "agency-app/extension",
+                    "icon": "plug"
+                  },
+                  {
                     "title": "Tracking setup",
                     "path": "agency-app/tracking",
                     "icon": "radio"
@@ -284,6 +289,11 @@
                 "group": "Replay Vision",
                 "icon": "eye",
                 "openapi": "openapi/replay-vision.yaml"
+              },
+              {
+                "group": "Ads Manager Extension",
+                "icon": "plug",
+                "openapi": "openapi/extension.yaml"
               }
             ]
           },

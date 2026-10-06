@@ -157,6 +157,38 @@ paths:
           required: false
           schema:
             type: string
+        - name: account_id
+          in: query
+          description: >
+            Return only one Meta ad account's rows: the numeric id, with or
+            without the `act_` prefix Ads Manager shows (`act_1234567890` and
+            `1234567890` are the same filter). Anything else is a `400`.
+
+            The filter runs **after** attribution. Conversions are credited
+            across every ad account in the location first, then the rows are
+            filtered, so a person who clicked an ad in account A and later one in
+            account B is credited once, to whichever touch the attribution model
+            picks, and never to both accounts. Benchmarks, `pooled_rates`,
+            `tracking`, `conversion_attribution` and any `diagnostic` stay
+            location-wide; the response says so with `diagnostics_scope:
+            location` and adds `account_totals`. Combine with `campaign` to
+            narrow further. If the account has no rows in the window the
+            response carries an `account_not_found` diagnostic.
+          required: false
+          schema:
+            type: string
+            pattern: "^(act_)?[0-9]{1,20}$"
+            example: act_1234567890
+        - name: platform
+          in: query
+          description: >
+            Ad platform. Only `meta` is supported; `google` answers
+            `501 platform_not_supported` until a Google Ads adapter exists.
+          required: false
+          schema:
+            type: string
+            enum: [meta, google]
+            default: meta
         - name: revenue_path
           in: query
           description: >
@@ -527,11 +559,11 @@ paths:
                         type: object
                         description: >
                           Present ONLY when nothing could be credited (or the
-                          `campaign` filter matched nothing). Without it the
+                          `campaign` or `account_id` filter matched nothing). Without it the
                           response would be `constraint: null` on every row, which is
                           indistinguishable from a healthy account.
                         properties:
-                          code: { type: string, enum: [no_campaign_data, no_conversion_events, no_conversions_attributed, campaign_not_found, grain_unresolvable] }
+                          code: { type: string, enum: [no_campaign_data, no_conversion_events, no_conversions_attributed, campaign_not_found, account_not_found, grain_unresolvable] }
                           message: { type: string }
                       audit:
                         type: object
@@ -574,6 +606,38 @@ paths:
                         properties:
                           code: { type: string, enum: [low_conversion_coverage] }
                           message: { type: string }
+                      account_id:
+                        type: string
+                        description: Present only with `account_id` — the normalised filter (digits, no `act_`).
+                      diagnostics_scope:
+                        type: string
+                        enum: [location]
+                        description: >
+                          Present only with `account_id`. `rows`, `account_totals` and
+                          `summary` are the account's; `benchmarks`, `pooled_rates`,
+                          `tracking`, `conversion_attribution` and `diagnostic` describe
+                          the whole location, because attribution ran across every
+                          account in it.
+                      account_totals:
+                        type: object
+                        description: >
+                          Present only with `account_id`. Sums over every row in the
+                          account (and campaign, if set) **before** the `min_impressions`
+                          floor, so it is the account's real total rather than what
+                          cleared the volume bar. Ratios come from the sums and are
+                          `null` on a zero denominator.
+                        properties:
+                          rows: { type: integer }
+                          impressions: { type: integer }
+                          clicks: { type: integer }
+                          spend: { type: number }
+                          sessions: { type: integer }
+                          lead_sessions: { type: integer }
+                          converting_sessions: { type: integer }
+                          conversions: { type: integer }
+                          revenue: { type: number }
+                          cost_per_conversion: { type: number, nullable: true, description: "spend ÷ conversions." }
+                          roas: { type: number, nullable: true, description: "revenue ÷ spend." }
                       excluded_low_volume: { type: integer }
                       min_impressions: { type: integer }
                       rows:
@@ -589,6 +653,10 @@ paths:
                           properties:
                             campaign_id: { type: string, nullable: true }
                             campaign_name: { type: string, nullable: true }
+                            account_id:
+                              type: string
+                              nullable: true
+                              description: The Meta ad account the row belongs to, digits only (no `act_`). What the `account_id` filter matches.
                             impressions: { type: integer }
                             clicks:
                               type: integer
@@ -789,11 +857,14 @@ paths:
             guard. Also `ads_table_unsupported`: the `?table=` you named exists
             but is not shaped like Meta ads-insights. Google Ads tables sit in
             the same dataset and look like the obvious equivalent, but this
-            funnel reads Meta only.
+            funnel reads Meta only. A malformed `account_id` or unknown
+            `platform` is `invalid_params`.
         "401":
           description: Missing or invalid key.
         "422":
           description: Result truncated — narrow the window or use a coarser `group_by`.
+        "501":
+          description: "`platform=google` — Google Ads is not supported yet (`platform_not_supported`)."
         "424":
           description: >
             No synced Meta ads-insights table for this client yet (connect Meta

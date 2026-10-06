@@ -102,6 +102,7 @@ Families follow the plan features they belong to, so a plan and a key describe a
 | `airbyte` | Airbyte sync orchestration — agency-wide keys only | read, write |
 | `alerts` | The alert feed across every client, routing rules, Slack/webhook channels — agency-wide keys only | read, write |
 | `agency` | Client roster and cross-location rollups — agency-wide keys only | read |
+| `extension` | The Mythic Ads Manager browser extension's bootstrap: roster with ad-platform flags and ad-account to client resolution — agency-wide keys only. The extension's key holds `extension:read` + `constraints:read` | read |
 
 Every tool's exact scope is in the [Tool Reference](/mcp/tools), which is generated from the server's registry. `list_clients` and `select_client` need no scope on an agency-wide key.
 
@@ -128,8 +129,8 @@ Each route requires the scope of the tool that proxies it — the **Proxies** co
 
 - **Location binding works as for `ak_`/`sk_`.** A client-scoped key carries its own location; an agency-wide key names one with `location_id` or `X-Location-Id` on location-grain routes (`400 location_required` otherwise).
 - **Writes need the `:write` scope**, whichever key shape holds it — unlike `sk_`, a client-scoped `mcp_` key can write.
-- **Agency-grain routes** (`/client/v1/agency/*`, `/client/v1/airbyte/*`, `GET /builder/locations`) refuse client-scoped keys with `403 agency_key_required`.
-- **Routes with no tool are closed to `mcp_` keys**, including an unrestricted one: the OAuth browser legs, the embed SPA's internals, and above all key issuance under `/builder/mcp` answer `403 not_available_to_scoped_keys`. Minting or rescoping a key is the privilege boundary and stays with `ak_`.
+- **Agency-grain routes** (`/client/v1/agency/*`, `/client/v1/airbyte/*`, `/client/v1/extension/*`, `GET /builder/locations`) refuse client-scoped keys with `403 agency_key_required`.
+- **Routes with no tool are closed to `mcp_` keys** unless the route names a scope of its own (`GET /client/v1/extension/me` and `POST /client/v1/extension/issues` take `extension:read`). Otherwise even an unrestricted key is refused: the OAuth browser legs, the embed SPA's internals, and above all key issuance under `/builder/mcp` answer `403 not_available_to_scoped_keys`. Minting or rescoping a key is the privilege boundary and stays with `ak_`.
 - A missing scope answers `403 insufficient_scope` with the `required` scope named.
 - Plan entitlements and per-key rate limits apply as on any other key (`rate_limit_per_minute`, default 60).
 

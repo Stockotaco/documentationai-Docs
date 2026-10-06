@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 254 tools across
-  27 scope families — with the scope each one needs and the
+  Every tool the Mythic MCP server exposes — 255 tools across
+  28 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 254 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 255 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -486,3 +486,13 @@ Agency-wide keys only — a key bound to one client cannot hold this scope.
 | `get_agency_oauth_return_origins`<br /><span style={{opacity: 0.7}}>Get OAuth Return Origins</span> | `agency:read` | The origins (scheme://host[:port]) a browser may be sent back to after a GoHighLevel install or a Google destination consent, via their return_url. | `GET /client/v1/agency/oauth-return-origins` |
 | `refresh_agency_destination_quality`<br /><span style={{opacity: 0.7}}>Refresh Agency Destination Quality</span> | `agency:write` | Re-read Meta's match quality now for every client in the agency (or only location_ids) and overwrite today's snapshot, so get_agency_destination_quality matches Events Manager instead of the 07:00 UTC capture. | `POST /client/v1/agency/destinations/quality/refresh` |
 | `set_agency_oauth_return_origins`<br /><span style={{opacity: 0.7}}>Set OAuth Return Origins</span> | `agency:write` | Replace the agency's OAuth return-origin list (the whole list, not an append). | `PUT /client/v1/agency/oauth-return-origins` |
+
+## Ads Manager extension
+
+Read-only bootstrap for the Mythic browser extension: agency roster with ad-platform flags and ad-account to client resolution.
+
+Agency-wide keys only — a key bound to one client cannot hold this scope.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `resolve_ad_account`<br /><span style={{opacity: 0.7}}>Resolve Ad Account to Client</span> | `extension:read` | Which of the agency's clients syncs a given Meta or Google ad account, from the clients' Airbyte ad-platform connections. | `GET /client/v1/extension/resolve` |
