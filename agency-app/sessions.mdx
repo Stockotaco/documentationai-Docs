@@ -40,9 +40,12 @@ session** asks the assistant in the chat panel to describe what happened.
 
 ## What gets recorded
 
-Not every visit is recorded. A visit without a play icon was not sampled for
-recording. Recordings are kept for 30 days. Anything the snippet masks stays
-masked in the replay. HIPAA clients have no recordings.
+Recording is turned on per client with **Record session replays** in
+[Tracking setup](/agency-app/tracking), which also sets the share of visits
+recorded. A visit without a play icon was not recorded: it fell outside that
+share, lasted under 10 seconds, or happened before recording was on.
+Recordings are kept for 30 days. Typed values are masked in the replay unless
+masking was turned off for the client. HIPAA clients have no recordings.
 
 ## For developers
 
