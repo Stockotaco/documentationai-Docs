@@ -50,6 +50,21 @@
                 "icon": "monitor",
                 "pages": [
                   {
+                    "title": "Clients",
+                    "path": "agency-app/clients",
+                    "icon": "users"
+                  },
+                  {
+                    "title": "Alerts",
+                    "path": "agency-app/alerts",
+                    "icon": "bell"
+                  },
+                  {
+                    "title": "API & MCP keys",
+                    "path": "agency-app/keys",
+                    "icon": "key"
+                  },
+                  {
                     "title": "Meta match quality",
                     "path": "agency-app/meta-quality",
                     "icon": "gauge"

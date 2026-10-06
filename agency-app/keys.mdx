@@ -1,0 +1,74 @@
+---
+title: API & MCP keys
+description: >-
+  Create scoped keys for your own tools and AI clients such as Claude, Cursor
+  and ChatGPT, and see what each key can reach.
+---
+
+## Overview
+
+The **API & MCP keys** screen lists the keys your agency uses outside the app:
+your own scripts, and AI clients connected to Mythic's MCP server. Each key
+works for both the API and MCP.
+
+The app's own chat panel uses separate keys that Mythic manages for you. The
+agency chat uses a key that reaches every client. When you pick a client, the
+chat switches to a key limited to that client. Client portal chats use a
+read-only key for their own client. The key enforces this, so the chat cannot
+reach further than its key allows, whatever it is asked.
+
+## Read the list
+
+| Column | What it shows |
+| --- | --- |
+| **Name** | The key's name, and whether it is **Active** or **Inactive** |
+| **Reaches** | The client the key works for, or every client |
+| **Created** | When the key was made |
+| **Last used** | When the key was last used |
+
+**Deactivate** stops a key without deleting it. **Activate** turns it back
+on. **Delete** removes it for good: anything using it stops working at once.
+
+## Create a key
+
+<Steps>
+  <Step title="Name it and pick a client">
+    Click **Create key**. Give it a name that says where it is used, such as
+    "Claude Desktop", and choose the client it reaches. Keys made here reach
+    one client only.
+  </Step>
+  <Step title="Choose its scopes">
+    For each area, such as People, Sessions, Insights or Dashboards, choose
+    **Off**, **Read** or **Write**. Give the key only what the tool needs. A
+    reporting tool usually needs Read on a few areas.
+  </Step>
+  <Step title="Save the key">
+    Mythic shows the key once. Copy it into your password manager or the
+    tool's settings before you close the dialog. It can't be shown again. If
+    you lose it, delete it and create a new one.
+  </Step>
+</Steps>
+
+## Connect Claude, Cursor or ChatGPT
+
+Add Mythic's MCP server to the AI client's settings, with your key in place of
+`mcp_your_api_key`:
+
+```json
+{
+  "mcpServers": {
+    "mythic": {
+      "type": "http",
+      "url": "https://mythic-mcp-server-production.up.railway.app/mcp",
+      "headers": { "Authorization": "Bearer mcp_your_api_key" }
+    }
+  }
+}
+```
+
+The AI client can then use the tools the key's scopes allow.
+
+## For developers
+
+See [MCP authentication](/mcp/authentication) for every scope, and the
+[MCP tools list](/mcp/tools) for what each tool needs.

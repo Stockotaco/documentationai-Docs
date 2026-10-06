@@ -1,0 +1,63 @@
+---
+title: Clients
+description: >-
+  List your agency's clients, check that each one is sending events, and add
+  a new client with its keys and install snippet.
+---
+
+## Overview
+
+The **Clients** screen lists every client linked to your agency. Click a
+client to open it. The whole workspace, and the chat panel, then focus on that
+client until you switch back to **All clients** in the top bar.
+
+## Read the list
+
+| Column | What it shows |
+| --- | --- |
+| **Client** | The name and website |
+| **Status** | **Active**, or **Disabled** when the client is turned off |
+| **Plan** | The client's plan. A client without its own plan uses your agency's |
+| **Events (24h)** | Events received in the last 24 hours |
+| **Last event** | When the latest event arrived, or **No events yet** |
+
+Use the search box to find a client by name or domain. A client with no events
+for a long time usually lost its snippet, for example after a site rebuild.
+
+## Add a client
+
+<Steps>
+  <Step title="Create it">
+    Click **Add client**, enter the client's name and, optionally, its website,
+    and click **Create client**. The client starts on your agency's plan and
+    can take events right away. Adding a client needs an active subscription.
+  </Step>
+  <Step title="Install the snippet">
+    The dialog shows the client's keys and the install snippet. Paste the
+    snippet into the `<head>` of every page on the client's site. You can find
+    it again later on the client's **Tracking** screen.
+  </Step>
+  <Step title="Check the first event">
+    The dialog watches for the first event and shows **First event received**
+    when it arrives, usually within a minute of a page view. **Send a test
+    event** sends a test page view if you want to check before the site is
+    live.
+  </Step>
+</Steps>
+
+### The client's keys
+
+| Key | Use it for |
+| --- | --- |
+| **Publishable key** (`pk_`) | The install snippet. It is safe on a public website |
+| **Secret key** (`sk_`) | Read-only API access to this one client, from your server. Never put it in a website |
+| **Client id** | Naming the client in API calls made with your agency key |
+
+If the dialog says Mythic created the client but didn't finish setting it up,
+events are refused until that finishes. Ask the assistant in the chat panel to
+rebuild the client's config.
+
+## For developers
+
+Clients are created on the provisioning API. See
+[Onboard a client](/for-agencies/onboard-a-client).

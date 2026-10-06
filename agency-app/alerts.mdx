@@ -1,0 +1,86 @@
+---
+title: Alerts
+description: >-
+  See every alert Mythic raises across your clients in one feed, and choose
+  which alerts go to Slack or a webhook with rules and channels.
+---
+
+## Overview
+
+Mythic watches your clients for you: event contracts, short link uptime, data
+syncs, incrementality experiments and usage. When one of these checks finds a
+problem, it opens an **alert**. The **Alerts** screen has three tabs:
+
+- **Feed**: the alerts.
+- **Rules**: which alerts go where.
+- **Channels**: the Slack channels and webhooks alerts are sent to.
+
+Open **Alerts** from the agency menu to see every client, or from a client's
+menu to see only that client.
+
+## What raises an alert
+
+| Check | Raised when | Severity | How often |
+| --- | --- | --- | --- |
+| Event contracts | Events break their contract | Warning | Daily, about 08:00 UTC |
+| Event contracts | The client sent no events all day | Critical | Daily, about 08:00 UTC |
+| Link uptime | A short link fails 2 checks in a row | Critical | Every 5 minutes |
+| Data syncs | A sync Mythic manages fails | Warning | On each sync |
+| Experiments | An incrementality experiment has new outlier days | Info | Daily |
+| Usage | Your agency passes 80% of a monthly event quota | Info | Daily |
+| Usage | Your agency reaches 100% of a monthly event quota | Warning | Daily |
+
+Each check decides what counts as broken. Rules only decide who hears about
+it.
+
+## The feed
+
+The feed shows **Open** alerts by default. Switch to **Resolved** or **All**
+to see older ones. Each alert shows its client, the check, when it opened, and
+how many times the check has seen it since.
+
+One problem is one alert. It notifies your channels when it opens, and again
+if it changes, such as a different set of failing contracts or a higher
+severity. When the check stops finding the problem, the alert resolves on its
+own. If it comes back later, a new alert opens.
+
+- **Resolve** closes an alert by hand. It sends no notification.
+- **Investigate** opens the chat panel with the alert, so the assistant can
+  look into the cause with the client's data.
+
+## Send alerts to Slack or a webhook
+
+<Steps>
+  <Step title="Add a channel">
+    On the **Channels** tab, click **Add channel** and choose:
+
+    - **Slack incoming webhook**: paste the webhook URL from Slack
+      (`https://hooks.slack.com/services/...`).
+    - **HTTPS webhook (signed)**: your own endpoint. Mythic shows a signing
+      secret once. Every delivery is signed with it in the
+      `X-Mythic-Signature` header, so copy it before closing the dialog.
+
+    Click **Send test** to check the channel. A channel that fails 20 times in
+    a row is parked and stops receiving alerts.
+  </Step>
+  <Step title="Create a rule">
+    Click **New alert rule** and choose:
+
+    - **Checks**: which kinds of alerts. Leave it empty for all of them.
+    - **Clients**: the clients the rule watches.
+    - **Severity**: the lowest severity to send. Critical sends only critical
+      alerts. Info sends everything.
+    - **Send to**: one or more channels.
+    - **Also notify when resolved**: sends a message when the problem clears.
+  </Step>
+</Steps>
+
+Rules can be turned off with their switch, or deleted. Deleting a rule keeps
+its alerts in the feed.
+
+Email isn't available as a channel yet.
+
+## For developers
+
+The feed, rules and channels are on the [Alerts API](/agency-api/alerts),
+including the webhook payload and how to verify its signature.
