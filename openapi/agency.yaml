@@ -637,6 +637,76 @@ paths:
         "404": { $ref: "#/components/responses/NoLocations" }
         "422": { $ref: "#/components/responses/TooManyLocations" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/agency/contracts/status:
+    get:
+      summary: Yesterday's contract result per location
+      operationId: getAgencyContractStatus
+      description: >
+        Yesterday's (UTC) event contract result for every location in one
+        call, the same report `GET /client/v1/contracts/violations` returns for
+        that day and the window the 08:00 UTC sweep checks. Locations without
+        contracts return `no_contracts` and are not scanned. A day too large
+        to scan unsampled is retried at `sample` 10: rates and coverage stay
+        accurate. One location's failure returns `status: error` on its row,
+        not a failed response.
+      parameters:
+        - $ref: "#/components/parameters/LocationIds"
+      responses:
+        "200":
+          description: One status row per roster location
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      day: { type: string, format: date, example: "2026-10-05" }
+                      locations:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            location_id: { type: string, format: uuid }
+                            name: { type: string }
+                            status:
+                              type: string
+                              enum: [ok, violations, no_data, no_contracts, not_in_plan, error]
+                              description: >
+                                `violations` when any contract failed, else
+                                `no_data` when any contracted event did not
+                                arrive, else `ok`. `not_in_plan` when the
+                                location's plan excludes contracts.
+                            contracts: { type: integer, example: 4 }
+                            events_with_violations: { type: integer, example: 1 }
+                            events_no_data: { type: integer, example: 0 }
+                            worst:
+                              type: object
+                              nullable: true
+                              description: The first violation of the event with the most violations.
+                              properties:
+                                event: { type: string, example: order_completed }
+                                kind: { type: string, example: missing_required }
+                                detail: { type: string, example: "`value` is absent on 200 of 1000 events" }
+                            outage:
+                              type: boolean
+                              nullable: true
+                              description: True when the location sent no events at all, so every `no_data` is that outage. Null when the reference count was unavailable.
+                            sample: { type: integer, example: 1, description: "1, or 10 when the day was retried sampled." }
+                            truncated: { type: boolean, description: Present and true when property statistics hit the row limit. }
+                            error:
+                              type: object
+                              description: Present when `status` is `error`.
+                              properties:
+                                code: { type: string }
+                                message: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NoLocations" }
+        "422": { $ref: "#/components/responses/TooManyLocations" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /client/v1/agency/usage:
     get:
       summary: The agency's own API usage

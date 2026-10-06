@@ -24,6 +24,7 @@ doing?" — in one call, without iterating a location list yourself:
 | `GET /agency/last-event` | location | Events and the latest event time over `hours_back`, every client listed, so a silent snippet shows up as a zero row |
 | `GET /agency/links/uptime` | location × short link | Each link checked in the last 24 hours: latest check, 24h uptime, and check counts over `days_back`, down first, with a check-weighted summary |
 | `GET /agency/contracts/summary` | location | Declared event contracts, whether the daily alert webhook is wired, whether an [alert rule](/agency-api/alerts) routes contract alerts, and when the last webhook alert fired |
+| `GET /agency/contracts/status` | location | Yesterday's contract result: status, violating and silent events, the worst violation |
 | `GET /agency/usage` | day × location × surface × route (or day × surface × route with `group_by=route`) | The agency's own API + MCP request telemetry — the same data Mythic meters on |
 | `GET /agency/quota` | quota in force | The plan, the features it includes, and month-to-date ingested events against the quota |
 
