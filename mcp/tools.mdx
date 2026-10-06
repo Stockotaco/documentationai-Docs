@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 250 tools across
+  Every tool the Mythic MCP server exposes — 253 tools across
   27 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 250 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 253 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -475,6 +475,9 @@ Agency-wide keys only — a key bound to one client cannot hold this scope.
 | `get_agency_destination_quality`<br /><span style={{opacity: 0.7}}>Get Agency Destination Quality</span> | `agency:read` | Meta dataset quality for every client with a Meta CAPI destination, worst first — the answer to 'which of my clients has bad Meta tracking'. | `GET /client/v1/agency/destinations/quality` |
 | `get_agency_destination_quality_trend`<br /><span style={{opacity: 0.7}}>Get Agency Destination Quality Trend</span> | `agency:read` | How every client's Meta match quality MOVED, day by day — one row per (day, location) with that day's worst scored event, its match quality, and the critical/warning counts. | `GET /client/v1/agency/destinations/quality/trend` |
 | `get_agency_last_event`<br /><span style={{opacity: 0.7}}>Get Agency Last Event</span> | `agency:read` | Tracking heartbeat for every client in one call: events received and the latest event time per client over hours_back (default 24). | `GET /client/v1/agency/last-event` |
+| `list_agency_events`<br /><span style={{opacity: 0.7}}>List Agency Events</span> | `agency:read` | The newest raw events across every client in one call, newest first: event name, client (location_id, location_name), person ids, session position, page URL, UTM, device, country and the full properties JSON. | `GET /client/v1/agency/events` |
+| `get_agency_event_types`<br /><span style={{opacity: 0.7}}>Get Agency Event Types</span> | `agency:read` | Every event name seen across the roster in hours_back, with its total count summed over all clients, largest first. | `GET /client/v1/agency/events/summary` |
+| `get_agency_error_summary`<br /><span style={{opacity: 0.7}}>Get Agency Error Summary</span> | `agency:read` | JavaScript error tracking for every client in one call, most exceptions first: exceptions in [date_from, date_to] and the equal window before it, sessions with an exception, all sessions, crash-free session… | `GET /client/v1/agency/exceptions/summary` |
 | `get_agency_link_uptime`<br /><span style={{opacity: 0.7}}>Get Agency Link Uptime</span> | `agency:read` | Short link uptime for every client in one call: each link checked in the last 24 hours with its client, title, destination, whether the latest check was up, status code or error, response time, 24h uptime, a… | `GET /client/v1/agency/links/uptime` |
 | `get_agency_contracts_summary`<br /><span style={{opacity: 0.7}}>Get Agency Contracts Summary</span> | `agency:read` | Per location: how many event contracts are declared, whether the daily contract-alert webhook is configured, whether an agency alert rule routes contract alerts for it (alert_rule_routed), and when the last… | `GET /client/v1/agency/contracts/summary` |
 | `get_agency_usage`<br /><span style={{opacity: 0.7}}>Get Agency API Usage</span> | `agency:read` | The agency's own API + MCP usage, daily per location/surface/route (or per surface/route with group_by 'route', which fits 30 days at any volume): request counts, auth failures, rate-limited and error counts… | `GET /client/v1/agency/usage` |

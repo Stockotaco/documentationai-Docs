@@ -391,6 +391,155 @@ paths:
         "404": { $ref: "#/components/responses/NoLocations" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "502": { $ref: "#/components/responses/UpstreamFailed" }
+  /client/v1/agency/events:
+    get:
+      summary: Activity feed across clients
+      operationId: listAgencyEvents
+      description: >
+        The newest raw events across every client, newest first, in one call.
+        Same columns as GET /client/v1/locations/events plus location_id and
+        location_name. Filters apply before the limit, so
+        exclude_system_events (drops $-prefixed SDK telemetry other than
+        $pageview and $identify) cannot let telemetry crowd real events out.
+        Events stamped more than 5 minutes in the future are left out.
+      parameters:
+        - $ref: "#/components/parameters/LocationIds"
+        - { name: hours_back, in: query, required: false, description: "Lookback window in hours (1–720).", schema: { type: integer, minimum: 1, maximum: 720, default: 24 } }
+        - { name: limit, in: query, required: false, description: "Rows to return (1–1000).", schema: { type: integer, minimum: 1, maximum: 1000, default: 100 } }
+        - { name: event_type, in: query, required: false, description: "Only these event names, comma separated.", schema: { type: string } }
+        - { name: exclude_event_type, in: query, required: false, description: "Drop these event names, comma separated.", schema: { type: string } }
+        - { name: exclude_system_events, in: query, required: false, description: "true drops $-prefixed telemetry except $pageview and $identify.", schema: { type: boolean } }
+      responses:
+        "200":
+          description: Events, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        location_id: { type: string }
+                        location_name: { type: string }
+                        event: { type: string, example: "$pageview" }
+                        distinct_id: { type: string }
+                        user_id: { type: string, nullable: true }
+                        session_id: { type: string, description: "Empty for server-side events." }
+                        timestamp: { type: string, example: "2026-10-06 01:11:58", description: "UTC." }
+                        uuid: { type: string }
+                        properties: { type: string, description: "The event's properties as a JSON string." }
+                        url: { type: string, nullable: true }
+                        referrer: { type: string, nullable: true }
+                        browser: { type: string, nullable: true }
+                        os: { type: string, nullable: true }
+                        device_type: { type: string, nullable: true }
+                        utm_source: { type: string, nullable: true }
+                        utm_medium: { type: string, nullable: true }
+                        utm_campaign: { type: string, nullable: true }
+                        country: { type: string, nullable: true }
+                        is_identified: { type: integer, enum: [0, 1] }
+                        event_position_in_session: { type: integer, nullable: true }
+                        session_event_count: { type: integer, nullable: true }
+                        session_start: { type: string, nullable: true }
+                        session_duration_seconds: { type: integer, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NoLocations" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/UpstreamFailed" }
+  /client/v1/agency/events/summary:
+    get:
+      summary: Event names across clients
+      operationId: getAgencyEventTypes
+      description: >
+        Every event name seen across the roster in hours_back with its count
+        summed over all clients, largest first.
+      parameters:
+        - $ref: "#/components/parameters/LocationIds"
+        - { name: hours_back, in: query, required: false, description: "Lookback window in hours (1–720).", schema: { type: integer, minimum: 1, maximum: 720, default: 24 } }
+      responses:
+        "200":
+          description: Event names with totals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      hours_back: { type: integer, example: 24 }
+                      event_types:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            event_type: { type: string, example: "$pageview" }
+                            total_events: { type: integer, example: 15230 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NoLocations" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/UpstreamFailed" }
+  /client/v1/agency/exceptions/summary:
+    get:
+      summary: Error tracking across clients
+      operationId: getAgencyErrorSummary
+      description: >
+        JavaScript errors for every client in one call, most exceptions first:
+        exceptions in [date_from, date_to] and the equal-length window before
+        it, sessions with an exception, all sessions, crash-free session rate
+        (null when there were no sessions) and the number of issues new this
+        window (not seen in the new_lookback_days before date_from). Every
+        client is listed. The per-client form is
+        GET /client/v1/data/exceptions/digest.
+      parameters:
+        - $ref: "#/components/parameters/LocationIds"
+        - { name: date_from, in: query, required: false, description: "YYYY-MM-DD. Default 6 days before date_to.", schema: { type: string, format: date } }
+        - { name: date_to, in: query, required: false, description: "YYYY-MM-DD. Default today (UTC).", schema: { type: string, format: date } }
+        - { name: new_lookback_days, in: query, required: false, description: "Days an issue must be unseen before date_from to count as new (1–365).", schema: { type: integer, minimum: 1, maximum: 365, default: 90 } }
+      responses:
+        "200":
+          description: One row per client
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      range:
+                        type: object
+                        properties:
+                          date_from: { type: string, format: date }
+                          date_to: { type: string, format: date }
+                      locations:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            location_id: { type: string }
+                            name: { type: string }
+                            exceptions: { type: integer, example: 1896 }
+                            exceptions_previous: { type: integer, example: 2105 }
+                            exception_sessions: { type: integer, example: 1177 }
+                            sessions: { type: integer, example: 1825 }
+                            crash_free_sessions: { type: number, nullable: true, example: 0.355 }
+                            new_issues: { type: integer, example: 2 }
+        "400":
+          description: invalid_date_range
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NoLocations" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/UpstreamFailed" }
   /client/v1/agency/links/uptime:
     get:
       summary: Short link uptime across clients
