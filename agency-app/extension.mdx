@@ -43,8 +43,17 @@ browser and agency; **Forget** removes it so you can choose again.
 
 Connect Meta and complete an ads sync for that client before expecting
 results. The overlay follows the account, campaign/ad set/ad level and date
-window in Ads Manager. Unreadable date presets and ranges longer than 92 days
-require a supported explicit date range before it loads.
+window in Ads Manager. When its URL contains a supported comma-suffix preset
+(such as `last_7d`), the preset takes precedence over the saved interval, which
+can be stale. Without a supported preset, an explicit interval uses an
+exclusive end: `2026-09-28_2026-10-05` selects September 28–October 4.
+Unknown/custom suffixes retain a valid explicit interval. Unreadable dates,
+ranges longer than 92 days and lifetime selections require a supported,
+bounded date selection before results load.
+
+Presets resolve using the browser's local date, not the ad account's timezone.
+Mythic counts UTC event days; Meta uses the ad account's timezone, so the first
+and last day can differ. This is not timezone-aligned reporting.
 Google Ads results are not supported in this release.
 
 ## Understand the numbers
