@@ -39,6 +39,24 @@ Click a test to see **Exposure**, daily sessions per version, and a
 **Confidence** gauge. Above 50% the variant is ahead, below 50% the baseline
 is. With too few conversions, Mythic does not compare the versions.
 
+## Conversion forwarding
+
+Conversion forwarding credits a goal in the client's testing tool whenever a
+Mythic event fires, so the tool's own results count conversions Mythic
+already tracks. The client keeps the conversion in one place instead of
+tagging it in both. It works with Convert and GrowthBook. PostHog is not
+supported.
+
+1. Pick the **Mythic event**, such as `order_completed`.
+2. Pick the **Tool**: **Convert**, **GrowthBook**, or **Custom event** for
+   other tools, which fires a `mythic:ab_conversion` event on the page.
+3. Enter the **Convert goal ID** from Convert's dashboard, or the
+   **GrowthBook event name**.
+4. Click **Add**.
+
+By default each goal is credited once per visit. **Remove** stops forwarding
+that event. With no goals mapped, forwarding is off.
+
 ## Incrementality holdouts
 
 A geo holdout pauses ads in a set of regions to measure the revenue the ads
