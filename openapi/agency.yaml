@@ -346,6 +346,72 @@ paths:
         "429": { $ref: "#/components/responses/RateLimited" }
         "502": { $ref: "#/components/responses/UpstreamFailed" }
         "503": { description: Analytics backend not configured }
+  /client/v1/agency/links/uptime:
+    get:
+      summary: Short link uptime across clients
+      operationId: getAgencyLinkUptime
+      description: >
+        Every short link checked in the last 24 hours, for every client, in
+        one call. Each link has its latest check (up or down, status code or
+        error, response time), its 24h uptime, and its check counts over
+        days_back. The summary counts links and links down now, and gives
+        check-weighted uptime over the window (null when nothing was checked).
+        Down links sort first. A link raises an uptime alert after 2 failed
+        checks in a row; is_up is the latest single check.
+      parameters:
+        - $ref: "#/components/parameters/LocationIds"
+        - name: days_back
+          in: query
+          required: false
+          description: Window for the check counts and window uptime, in days (1–90).
+          schema: { type: integer, minimum: 1, maximum: 90, default: 30 }
+      responses:
+        "200":
+          description: Links with their latest check, down first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      days_back: { type: integer, example: 30 }
+                      summary:
+                        type: object
+                        properties:
+                          links: { type: integer, example: 10 }
+                          down: { type: integer, example: 1 }
+                          window_up_checks: { type: integer, example: 86990 }
+                          window_total_checks: { type: integer, example: 87190 }
+                          uptime_pct_window: { type: number, nullable: true, example: 99.7706 }
+                          window_since: { type: string, format: date-time, nullable: true, description: "Start of the earliest hour with a check in the window." }
+                      links:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            location_id: { type: string }
+                            location_name: { type: string, example: Rockwell Supply }
+                            slug: { type: string, example: spring-sale }
+                            title: { type: string, nullable: true, example: Spring sale }
+                            destination_url: { type: string, example: "https://rockwellsupply.com/sale" }
+                            is_up: { type: boolean, description: "Whether the latest check succeeded (2xx or 3xx)." }
+                            status_code: { type: integer, description: "HTTP status of the latest check; 0 when no response arrived." }
+                            response_time_ms: { type: integer, example: 169 }
+                            error_type: { type: string, nullable: true, description: "timeout, dns, ssl, connection_refused, connection_reset or network; null when up." }
+                            error_message: { type: string, nullable: true }
+                            last_checked_at: { type: string, format: date-time }
+                            uptime_pct_24h: { type: number, example: 100 }
+                            window_up_checks: { type: integer }
+                            window_total_checks: { type: integer }
+                            window_first_hour: { type: string, format: date-time, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NoLocations" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/UpstreamFailed" }
   /client/v1/agency/contracts/summary:
     get:
       summary: Per-location contract coverage
