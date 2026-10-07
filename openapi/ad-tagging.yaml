@@ -70,6 +70,8 @@ paths:
                             default: [ACTIVE, PAUSED, IN_REVIEW]
                             description: All three supported ad status selections.
                           rule_types: { type: array, items: { $ref: "#/components/schemas/RuleType" } }
+                          resolve_names: { type: boolean, enum: [true], description: Default for resolve_names. }
+                          name_macros: { type: array, items: { type: string }, description: "The macros resolve_names replaces: {{campaign.name}}, {{adset.name}}, {{ad.name}}." }
                           auto_interval_minutes:
                             type: object
                             properties:
@@ -89,7 +91,7 @@ paths:
         bump `revision`, void earlier previews and cancel queued or running runs.
         An unchanged save does not bump it. Turning only auto mode off cancels
         auto runs without invalidating manual previews. Changing the account,
-        template, overwrite policy, statuses, rules or short_links also revokes
+        template, overwrite policy, statuses, rules, short_links or resolve_names also revokes
         auto approval. These are the fingerprint fields. Enabled, credential name
         and interval are not in the fingerprint. A save that changes the interval
         and another field follows that other field's invalidation rules.
@@ -223,7 +225,7 @@ paths:
 
 
         The body may override `rules`, `utm_template`, `overwrite`,
-        `ad_statuses` or `short_links` to try them without saving. Previews never
+        `ad_statuses`, `short_links` or `resolve_names` to try them without saving. Previews never
         create short links. If the effective settings
         differ from the saved config, it cannot be applied
         (`applies_to_saved_config: false`). Save the settings and preview again.
@@ -245,6 +247,7 @@ paths:
                 utm_template: { $ref: "#/components/schemas/UtmTemplate" }
                 overwrite: { $ref: "#/components/schemas/OverwritePolicy" }
                 short_links: { type: boolean, description: Override the saved short link setting for this preview. }
+                resolve_names: { type: boolean, description: Override the saved resolve_names setting for this preview. }
                 ad_statuses:
                   type: array
                   minItems: 1
@@ -854,6 +857,16 @@ components:
             or create links during apply and auto runs. New links appear in Links.
             Previews never create links. Existing-post creatives only get tags.
             Changing this field bumps revision, voids previews and revokes approval.
+        resolve_names:
+          type: boolean
+          default: true
+          description: >
+            Included in the fingerprint. Write each ad's current campaign, ad set
+            and ad names (URL-encoded) in place of {{campaign.name}},
+            {{adset.name}} and {{ad.name}}, and keep them current: those keys are
+            refreshed under either overwrite policy. Meta's own name macros keep
+            the name from first publish. ID macros stay macros. Auto mode skips a
+            delivering ad whose only change is a name (names_outdated_delivering).
         credential_name: { type: string, minLength: 1, maxLength: 100, default: default, description: "Non-blank name of the stored meta_ads token. Not in the fingerprint. Edits bump revision and invalidate previews and active runs." }
         auto_interval_minutes: { $ref: "#/components/schemas/AutoInterval" }
         auto_enabled: { type: boolean, enum: [false], description: "Only false here. Approve with POST /meta/auto." }
@@ -863,6 +876,7 @@ components:
         ad_account_id: { type: string }
         enabled: { type: boolean }
         short_links: { type: boolean, default: false, description: Whether tagged ads use Mythic short links with UTM passthrough. }
+        resolve_names: { type: boolean, default: true, description: Whether name macros are written as each ad's current names. }
         utm_template: { $ref: "#/components/schemas/UtmTemplate" }
         overwrite: { $ref: "#/components/schemas/OverwritePolicy" }
         ad_statuses: { type: array, minItems: 1, items: { $ref: "#/components/schemas/AdStatus" }, default: [ACTIVE, PAUSED, IN_REVIEW] }
@@ -879,7 +893,7 @@ components:
         last_auto_error: { type: string, nullable: true, readOnly: true, description: "Error detail as a string, or null when there is no error. No failed-scan run is created." }
         generation: { type: string, format: uuid, description: "Immutable config identity. Recreating the config changes it and prevents reuse of old previews." }
         revision: { type: integer }
-        fingerprint: { type: string, description: "Hash of account, template, overwrite, ad statuses, rules and short_links. Excludes enabled, credential_name and interval. Apply and auto approval bind to generation, revision and fingerprint." }
+        fingerprint: { type: string, description: "Hash of account, template, overwrite, ad statuses, rules, short_links and resolve_names. Excludes enabled, credential_name and interval. Apply and auto approval bind to generation, revision and fingerprint." }
         auto_enabled: { type: boolean, description: "Approval saved. While writes_enabled is false it is pending global activation and no ads change." }
         auto_approved_fingerprint: { type: string, nullable: true }
         auto_approved_preview_id: { type: string, nullable: true }
@@ -959,6 +973,7 @@ components:
         template_snapshot: { type: string, nullable: true }
         overwrite_snapshot: { type: string, nullable: true, enum: [fill_missing, enforce] }
         short_links_snapshot: { type: boolean, description: Short link setting used for this run. }
+        resolve_names_snapshot: { type: boolean, description: resolve_names setting used for this run. }
         attempts: { type: integer, description: Run claim attempt counter. }
         source_preview_id: { type: string, format: uuid, nullable: true }
         truncated: { type: boolean }
@@ -999,7 +1014,7 @@ components:
         resolved: { type: boolean, description: "True after processing. Does not confirm the ad swap." }
     DecisionReason:
       type: string
-      enum: [unsupported_creative, no_link, inline_utms_in_link, already_correct, has_values_fill_missing, link_unverified, short_link_conflict]
+      enum: [unsupported_creative, no_link, inline_utms_in_link, already_correct, has_values_fill_missing, link_unverified, short_link_conflict, names_outdated_delivering]
       description: >
         unsupported_creative means the creative cannot be safely copied.
         no_link means a readable creative has no destination.
@@ -1009,6 +1024,8 @@ components:
         kept. link_unverified means an existing post hides the link. Manual
         previews may return set for it. Auto mode skips it. short_link_conflict
         means URL tags would pass key to a short link and could select the wrong client.
+        names_outdated_delivering (auto mode only) means a delivering ad's only
+        change is an outdated name; a manual apply updates it.
     ChangeStatus:
       type: string
       enum: [planned, creative_pending, creative_created, swap_pending, applied, failed, uncertain, reconciled, skipped, stale, cancelled]

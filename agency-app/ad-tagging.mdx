@@ -70,6 +70,7 @@ holds it when that client is in your agency.
 | **Tag this client's ads** | The on switch. **Turn off** stops tagging and cancels queued runs. It always works, even if the client's plan changes. |
 | **URL parameters** | The parameters to set, as a query string. Values may use letters, digits, `_ . -` and Meta's macros, such as `{{campaign.id}}`. |
 | **When an ad already has values** | **Fill missing** adds the parameters an ad lacks and keeps its values. **Enforce** sets every parameter in the template to the template's value. |
+| **Write current names** | On by default. Writes each ad's current campaign, ad set and ad names instead of Meta's name macros, and keeps them current after renames and duplicates. |
 | **Use Mythic short links** | Off by default. Points each tagged ad at one of this client's short links. The short link passes the UTMs to the page. |
 | **Which ads** | Active, paused and in-review ads. All three are selected by default. Paused includes ads paused by their campaign or ad set. In review includes Meta's `PENDING_REVIEW` and `IN_PROCESS` states. |
 | **Which campaigns** | Filter by name contains, name doesn't contain, created on or after a UTC date, or campaign status. Status choices are active, paused and archived. Choose **Match all** or **Match any**. No conditions includes every campaign. |
@@ -101,6 +102,18 @@ ad already has is kept. The default template sets `utm_source=facebook` and
 attribution joins on. The screen warns you if your template drops
 `utm_id={{campaign.id}}` or `ad_id={{ad.id}}`, or wouldn't group as Paid
 Social.
+
+Meta fills `{{campaign.name}}`, `{{adset.name}}` and `{{ad.name}}` with the
+name an ad had when it was first published. A renamed or duplicated ad keeps
+reporting the old name. With **Write current names** on, Mythic writes the
+current names into the URL instead, such as `utm_campaign=Spring%20Sale`, and
+rewrites them when a name changes. ID macros stay macros. A parameter that uses
+a name macro is always kept current, even under **Fill missing**, so a value
+you set by hand on that parameter is replaced. A rename means a new creative
+and a swap, which restarts Meta review. Automatic checks fix names only on
+paused and in-review ads, where new duplicates are. A delivering ad with an
+outdated name shows **Name outdated, ad delivering**: apply it manually to
+update it.
 
 With **Use Mythic short links** on, Mythic keeps a link that already is one
 of this client's short links. It reuses an enabled, unexpired short link to

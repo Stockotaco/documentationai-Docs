@@ -74,6 +74,7 @@ curl -X PUT "https://mythic-analytics.gulp.workers.dev/client/v1/ad-tagging/meta
     "overwrite": "fill_missing",
     "ad_statuses": ["ACTIVE", "PAUSED", "IN_REVIEW"],
     "short_links": false,
+    "resolve_names": true,
     "auto_interval_minutes": 15,
     "rules": {
       "operator": "AND",
@@ -89,7 +90,7 @@ One ad account belongs to one client. A second client claiming it gets `409 ad_a
 
 ## Options and filters reference
 
-Use this reference for API clients and custom settings screens. `GET /meta` returns `data.defaults.utm_template`, `macros`, `overwrite_policies`, `ad_statuses` and `rule_types`. Use those returned enums where available. It also returns `auto_interval_minutes: {min: 5, max: 1440, step: 5, default: 15}` in `data.defaults`. Other enums below are defined by this API reference.
+Use this reference for API clients and custom settings screens. `GET /meta` returns `data.defaults.utm_template`, `macros`, `overwrite_policies`, `ad_statuses` and `rule_types`. Use those returned enums where available. It also returns `auto_interval_minutes: {min: 5, max: 1440, step: 5, default: 15}`, `resolve_names: true` and `name_macros` in `data.defaults`. Other enums below are defined by this API reference.
 
 ### Config fields
 
@@ -103,11 +104,12 @@ Use this reference for API clients and custom settings screens. `GET /meta` retu
 | `rules` | Object. `{version: 1, operator: "AND", conditions: []}`. | Yes | Campaign filters. At most 20 conditions. |
 | `credential_name` | Non-blank string. `default`. At most 100 characters. | No | Name of the stored `meta_ads` token. |
 | `short_links` | Boolean. `false`. | Yes | Uses this client's Mythic short links for readable destination URLs. |
+| `resolve_names` | Boolean. `true`. | Yes | Writes each ad's current campaign, ad set and ad names in place of the name macros and keeps them current. See [Current names](#current-names-instead-of-name-macros). |
 | `auto_interval_minutes` | Integer. `15`. Minimum 5, maximum 1440, multiple of 5. | No | Requested time between automatic checks. It is not a timing guarantee. |
 
 `auto_enabled` is controlled by `POST /meta/auto`. `PUT /meta` accepts `auto_enabled: false` only. It is not a way to approve auto mode. Unknown config fields are rejected.
 
-The fingerprint covers the account, template, overwrite policy, ad statuses, rules and `short_links`. It excludes `enabled`, `credential_name` and `auto_interval_minutes`.
+The fingerprint covers the account, template, overwrite policy, ad statuses, rules, `short_links` and `resolve_names`. It excludes `enabled`, `credential_name` and `auto_interval_minutes`.
 
 Changes to fingerprint fields bump `revision`, void earlier previews, cancel queued or running runs and revoke auto approval. Changes to `enabled` or `credential_name` also bump the revision and invalidate earlier previews and runs. They do not themselves change the fingerprint. An unchanged save does not bump the revision.
 
@@ -185,9 +187,21 @@ Campaign statuses are separate from ad statuses. The status rule uses campaign `
 
 All referenced campaign fields must be readable before either `AND` or `OR` is evaluated. Missing or unknown names, dates or statuses fail closed. A matching branch of `OR` cannot authorize a write if another branch needs unreadable data. Negative name rules also fail closed.
 
+### Current names instead of name macros
+
+Meta fills `{{campaign.name}}`, `{{adset.name}}` and `{{ad.name}}` with the name the ad had when it was first published. Renaming a campaign, ad set or ad does not change the URL, and a duplicated ad reports the original's name.
+
+With `resolve_names: true` (the default), Mythic writes each ad's current names as literal, URL-encoded values instead. `utm_campaign={{campaign.name}}` becomes `utm_campaign=Spring%20Sale` on that ad. ID macros and `{{placement}}`/`{{site_source_name}}` stay macros because Meta always fills them correctly.
+
+- **Kept current.** Keys whose template value uses a name macro are refreshed under either overwrite policy. A duplicate that still carries the original's name is rewritten, and so is a name macro typed into Ads Manager. A hand-set value on such a key is replaced too. To keep one, remove the key from the template or set `resolve_names: false`.
+- **Renames rewrite the ad.** Each rename means a new creative and a swap, which restarts Meta review. Automatic checks fix outdated names only on ads that are not delivering (paused or in review, which is where new duplicates are). A delivering ad whose only change is a name is skipped as `names_outdated_delivering`. A manual apply fixes it.
+- **Checked before writing.** Mythic re-reads the ad's names before each write. If a name changed after the preview, the row becomes `stale` instead of writing the old name.
+
+With `resolve_names: false`, name macros are written as macros.
+
 ### Preview overrides
 
-`POST /meta/preview` accepts only `rules`, `utm_template`, `overwrite`, `ad_statuses` and `short_links`. It does not accept account, enabled, credential or interval overrides. Overrides do not save settings. If the effective fingerprint differs, `applies_to_saved_config` is `false`. Save those settings and preview again before applying or approving auto mode.
+`POST /meta/preview` accepts only `rules`, `utm_template`, `overwrite`, `ad_statuses`, `short_links` and `resolve_names`. It does not accept account, enabled, credential or interval overrides. Overrides do not save settings. If the effective fingerprint differs, `applies_to_saved_config` is `false`. Save those settings and preview again before applying or approving auto mode.
 
 ### Short links and `link_changes`
 
@@ -246,6 +260,7 @@ A `key=pk_...` parameter selects the client before the hostname does. Without it
 | `has_values_fill_missing` | No missing value to add. Existing values differ and `fill_missing` keeps them. |
 | `link_unverified` | An existing post hides its link. Manual preview may return `set`. Auto mode returns `skip`. |
 | `short_link_conflict` | A planned short link would receive a `key` parameter from URL tags. That parameter can select the wrong client. The ad is skipped. |
+| `names_outdated_delivering` | Auto mode only. The ad is delivering and its only change is an outdated name. A manual apply updates it. |
 
 ### Change statuses
 
@@ -469,7 +484,7 @@ Choose `auto_interval_minutes` with `PUT /meta`. It is an integer from 5 to 1440
 
 Follow queued work in run history. Use a manual preview if you need to inspect skipped ads. The [run journal fields](#query-filters-and-pagination) and [last automatic check fields](#last-automatic-check) distinguish scans from write runs.
 
-Auto mode skips `link_unverified` ads. It uses the same fresh eligibility and full copy checks as apply. Turn it off with `{"enabled": false}`. This cancels auto runs only.
+Auto mode skips `link_unverified` ads and delivering ads whose only change is an outdated name (`names_outdated_delivering`). It uses the same fresh eligibility and full copy checks as apply. Turn it off with `{"enabled": false}`. This cancels auto runs only.
 
 ## Live writes switch
 
