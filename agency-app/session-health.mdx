@@ -1,0 +1,57 @@
+---
+title: Session health
+description: >-
+  See whether a client's site code keeps starting new sessions, what is causing
+  it, and which sessions to open to check.
+---
+
+## Overview
+
+Mythic starts a new session only after 4 hours of inactivity. When a device
+starts a new session within 5 minutes of its previous one, or while the
+previous one is still going, the site's own code caused it. The **Session
+health** screen shows how often that happens for one client.
+
+Restarted sessions split one visit into many short ones, which inflates
+session counts, shortens durations and breaks replays and attribution.
+
+Open **Session health** from a client's **Monitor** menu. It is agency only.
+
+## Read the screen
+
+Pick a window of 1, 3, 7 or 30 days. The banner gives the status:
+
+| Status | Meaning |
+| --- | --- |
+| **Restarting sessions** | 5% or more of the window's sessions are restarts |
+| **Healthy** | Below 5% |
+| **Too few sessions to judge** | Fewer than 100 sessions in the window |
+| **No sessions** | No web sessions in the window |
+
+The tiles show the window's sessions, how many were restarts, and how many
+devices had at least one.
+
+**How restarted sessions began** counts the first event of each restarted
+session. When most of them begin with `$identify`, the site calls `reset()` on
+page load before `identify()`, often while its login state is still loading.
+Call `reset()` only when a user logs out.
+
+**Recent restarts** lists the latest ones. Open **Previous** and **New** to see
+both sessions on the **Sessions** screen.
+
+## Common causes
+
+- `reset()` runs on every page load, for example in code that treats "login
+  still loading" as "logged out".
+- The SDK is installed twice on the page.
+- Code clears local storage or cookies on page load.
+
+A visitor moving between subdomains, or logging out and back in, also counts,
+which is why a small share is normal.
+
+## Alerts
+
+Mythic checks every client daily at about 08:30 UTC over the last 3 days and
+opens a **Session health** alert when a client is restarting sessions. The
+alert resolves once the client is back under 5%. Route it to Slack or a webhook
+on the **Alerts** screen.

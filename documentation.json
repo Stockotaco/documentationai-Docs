@@ -200,6 +200,11 @@
                     "icon": "activity"
                   },
                   {
+                    "title": "Session health",
+                    "path": "agency-app/session-health",
+                    "icon": "heart-pulse"
+                  },
+                  {
                     "title": "Ad UTM tagging",
                     "path": "agency-app/ad-tagging",
                     "icon": "tag"
