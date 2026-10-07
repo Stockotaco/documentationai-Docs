@@ -1025,7 +1025,8 @@ components:
         previews may return set for it. Auto mode skips it. short_link_conflict
         means URL tags would pass key to a short link and could select the wrong client.
         names_outdated_delivering (auto mode only) means a delivering ad's only
-        change is an outdated name; a manual apply updates it.
+        change is an outdated name; a manual apply updates it. Delivering is
+        ACTIVE with an ad set that has started; scheduled ads are not delivering.
     ChangeStatus:
       type: string
       enum: [planned, creative_pending, creative_created, swap_pending, applied, failed, uncertain, reconciled, skipped, stale, cancelled]

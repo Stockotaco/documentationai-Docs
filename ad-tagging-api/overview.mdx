@@ -194,7 +194,7 @@ Meta fills `{{campaign.name}}`, `{{adset.name}}` and `{{ad.name}}` with the name
 With `resolve_names: true` (the default), Mythic writes each ad's current names as literal, URL-encoded values instead. `utm_campaign={{campaign.name}}` becomes `utm_campaign=Spring%20Sale` on that ad. ID macros and `{{placement}}`/`{{site_source_name}}` stay macros because Meta always fills them correctly.
 
 - **Kept current.** Keys whose template value uses a name macro are refreshed under either overwrite policy. A duplicate that still carries the original's name is rewritten, and so is a name macro typed into Ads Manager. A hand-set value on such a key is replaced too. To keep one, remove the key from the template or set `resolve_names: false`.
-- **Renames rewrite the ad.** Each rename means a new creative and a swap, which restarts Meta review. Automatic checks fix outdated names only on ads that are not delivering (paused or in review, which is where new duplicates are). A delivering ad whose only change is a name is skipped as `names_outdated_delivering`. A manual apply fixes it.
+- **Renames rewrite the ad.** Each rename means a new creative and a swap, which restarts Meta review. Automatic checks fix outdated names only on ads that are not delivering: paused, in review, or scheduled (`ACTIVE` but the ad set's start time is still ahead). That is where new duplicates are. A delivering ad whose only change is a name is skipped as `names_outdated_delivering`. A manual apply fixes it.
 - **Checked before writing.** Mythic re-reads the ad's names before each write. If a name changed after the preview, the row becomes `stale` instead of writing the old name.
 
 With `resolve_names: false`, name macros are written as macros.
