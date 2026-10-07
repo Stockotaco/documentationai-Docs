@@ -891,6 +891,89 @@ paths:
           $ref: "#/components/responses/UpstreamError"
         "503":
           $ref: "#/components/responses/NotConfigured"
+  /sessions/health:
+    get:
+      summary: Session health
+      operationId: getSessionHealth
+      description: >
+        Checks whether the site's own code keeps starting new sessions. The SDK
+        starts a new session only after 4 hours of inactivity, so a device that
+        starts a new session within 5 minutes of its previous one was restarted
+        by the site: usually `reset()` on every page load (for example while
+        login state is still loading, before `identify()`), a second SDK
+        install, or code that clears storage. Overlapping sessions on one
+        device count as restarts too.
+
+
+        `status` is `restarting` when 5% or more of the window's sessions are
+        restarts, `ok` below that, `insufficient_data` under 100 sessions, and
+        `no_data` with no web sessions. `likely_cause` is
+        `reset_before_identify` when most restarted sessions open with
+        `$identify`. The daily `sessions` alert source uses the same report.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - name: days
+          in: query
+          required: false
+          description: Trailing window in days. Default `3`, min `1`, max `30`.
+          schema:
+            type: integer
+            default: 3
+            minimum: 1
+            maximum: 30
+      responses:
+        "200":
+          description: Session health report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/SessionHealth"
+              example:
+                success: true
+                data:
+                  location_id: 538d4ced-447c-40b9-9afa-d220f9afcc84
+                  status: restarting
+                  days: 3
+                  sessions: 315
+                  devices: 150
+                  restarts: 138
+                  restart_devices: 29
+                  restart_rate: 0.4381
+                  likely_cause: reset_before_identify
+                  message: "43.8% of sessions started within 5 minutes of the same device's previous session. ..."
+                  first_events:
+                    - { event: $identify, count: 112 }
+                    - { event: $pageleave, count: 10 }
+                  examples:
+                    - device_id: 01a06b84-dfdb-78d8-9cae-bf7ddf60ddc6
+                      previous_session_id: 01a11711-e31f-7f22-b1cd-32abf507c2e6
+                      session_id: 01a11712-4aa5-7582-a8af-8dffeba7a225
+                      started_at: "2026-10-07 15:53:57"
+                      first_event: $identify
+                      gap_seconds: 0
+                  thresholds: { gap_seconds: 300, restart_rate: 0.05, min_sessions: 100 }
+        "400":
+          description: No location bound (`location_required`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/NotConfigured"
   /exceptions/digest:
     get:
       summary: Error-tracking weekly digest
@@ -2341,6 +2424,46 @@ components:
         country: { type: string }
         city: { type: string }
         timezone: { type: string }
+    SessionHealth:
+      type: object
+      description: How often the site's code starts new sessions in the trailing window.
+      properties:
+        location_id: { type: string }
+        status: { type: string, enum: [ok, restarting, insufficient_data, no_data] }
+        days: { type: integer, description: Window in days. }
+        sessions: { type: integer, description: Web sessions in the window (events with a device id). }
+        devices: { type: integer }
+        restarts: { type: integer, description: "Sessions that started within `thresholds.gap_seconds` of the same device's previous session, or overlapped it." }
+        restart_devices: { type: integer, description: Devices with at least one restart. }
+        restart_rate: { type: number, nullable: true, description: "`restarts / sessions`, 4 decimals. `null` with no sessions." }
+        likely_cause: { type: string, nullable: true, enum: [reset_before_identify], description: "Set when most restarted sessions open with `$identify`." }
+        message: { type: string, description: Plain-language finding and what to change. }
+        first_events:
+          type: array
+          description: The first event of each restarted session, counted, most common first.
+          items:
+            type: object
+            properties:
+              event: { type: string }
+              count: { type: integer }
+        examples:
+          type: array
+          description: Up to 5 of the most recent restarts.
+          items:
+            type: object
+            properties:
+              device_id: { type: string }
+              previous_session_id: { type: string }
+              session_id: { type: string }
+              started_at: { type: string, description: "UTC, `YYYY-MM-DD HH:MM:SS`." }
+              first_event: { type: string }
+              gap_seconds: { type: integer, description: Seconds from the previous session's last event. Negative when the sessions overlap. }
+        thresholds:
+          type: object
+          properties:
+            gap_seconds: { type: integer }
+            restart_rate: { type: number }
+            min_sessions: { type: integer }
     SessionBreakdownRow:
       type: object
       description: Session aggregates for one group.

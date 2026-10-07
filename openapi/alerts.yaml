@@ -20,8 +20,10 @@ info:
     UTC), `uptime` (a short link destination failed 2 checks in a row,
     critical, every 5 minutes), `airbyte` (a sync of a Mythic-managed
     connection failed, warning), `drift` (an incrementality experiment
-    drifted, info, daily) and `quota` (the agency passed 80%, info, or 100%,
-    warning, of a monthly event quota, daily).
+    drifted, info, daily), `quota` (the agency passed 80%, info, or 100%,
+    warning, of a monthly event quota, daily) and `sessions` (the site's code
+    keeps starting new sessions, warning, daily ~08:30 UTC; see
+    `GET /client/v1/data/sessions/health`).
 servers:
   - url: https://mythic-analytics.gulp.workers.dev
 security:
@@ -77,7 +79,7 @@ paths:
         - name: source
           in: query
           required: false
-          schema: { type: string, enum: [contracts, uptime, airbyte, drift, quota] }
+          schema: { type: string, enum: [contracts, uptime, airbyte, drift, quota, sessions] }
         - name: limit
           in: query
           required: false
@@ -447,7 +449,7 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
-        source: { type: string, enum: [contracts, uptime, airbyte, drift, quota] }
+        source: { type: string, enum: [contracts, uptime, airbyte, drift, quota, sessions] }
         fingerprint:
           type: string
           description: "Which condition this is, e.g. `uptime:<location>:<slug>`. At most one open alert per fingerprint."
@@ -480,7 +482,7 @@ components:
         name: { type: string, maxLength: 120 }
         sources:
           type: array
-          items: { type: string, enum: [contracts, uptime, airbyte, drift, quota] }
+          items: { type: string, enum: [contracts, uptime, airbyte, drift, quota, sessions] }
           description: Empty or omitted = every source.
         location_ids:
           type: array

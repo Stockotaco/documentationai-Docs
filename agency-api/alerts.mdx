@@ -53,6 +53,7 @@ https://mythic-analytics.gulp.workers.dev/client/v1/alerts
 | `drift` | An incrementality experiment has new outlier days in its test window | `info` | Daily |
 | `quota` | The agency passes 80% of a monthly event quota (agency-level, no client) | `info` | Daily |
 | `quota` | The agency reaches 100% of a monthly event quota | `warning` | Daily |
+| `sessions` | 5% or more of a client's sessions (at least 100 in 3 days) start within 5 minutes of the same device's previous session, which means the site's code is starting new sessions | `warning` | Daily, ~08:30 UTC |
 
 `airbyte` covers connections created through Mythic. A connection built
 directly in Airbyte has no Mythic record, so its syncs raise nothing.
