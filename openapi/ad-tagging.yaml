@@ -137,7 +137,7 @@ paths:
         "402": { $ref: "#/components/responses/FeatureNotInPlan" }
         "403": { $ref: "#/components/responses/AgencyRequired" }
         "409":
-          description: "`credential_required` (store a `meta_ads` token first), `ad_account_in_use` (another client owns this ad account) or `concurrent_update`"
+          description: "`credential_required` (store a `meta_ads` token first), `ad_account_in_use` (another client owns this ad account: the message names it, and `error.details.client` gives its `location_id` and `name`, only when that client is in your agency) or `concurrent_update`"
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -146,7 +146,9 @@ paths:
       operationId: deleteMetaAdTagging
       description: >
         Removes the config and cancels its queued or running runs. Run history
-        and the `meta_ads` token stay. Ads already tagged are not changed.
+        and the `meta_ads` token stay. Deleting the token instead
+        (`DELETE /client/v1/destinations/credentials/meta_ads`) removes this
+        config too. Ads already tagged are not changed.
         Sent writes may still take effect and remain uncertain. The cancelled
         run retains its account reservation until worker quiescence and release,
         or lease expiry plus a 30-second grace period. Recreating the config

@@ -179,7 +179,10 @@ paths:
       description: >
         Delete a credential for the calling location. Requires an agency
         (`ak_`) key. Omitting `credential_name` deletes all credentials of the
-        given type.
+        given type. Deleting a `meta_ads` token also removes the client's
+        [Ad UTM tagging](/ad-tagging-api/overview) setup that uses it, cancels
+        its queued runs and frees its ad account for another client; the
+        response then carries `data.ad_tagging_removed`. Run history stays.
       parameters:
         - $ref: "#/components/parameters/CredentialType"
         - name: credential_name

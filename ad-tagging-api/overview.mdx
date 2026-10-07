@@ -60,7 +60,7 @@ Mythic needs a token that can read and edit the client's ads. A [Meta destinatio
 Test it with `GET /meta/ad-accounts`. An invalid token returns `409 credential_invalid`. Missing account access returns `409 insufficient_permission`. The message explains the fix. The optional `credential_name` query uses the saved name, or `default` if no config exists.
 
 <Callout kind="note">
-The token uses destination credential storage. Remove it with `DELETE /client/v1/destinations/credentials/meta_ads`. Deleting the tagging config does not delete the token or run history.
+The token uses destination credential storage. Remove it with `DELETE /client/v1/destinations/credentials/meta_ads`. Deleting the token also removes this tagging config, cancels its queued runs and frees the ad account. Deleting the tagging config does not delete the token. Run history stays either way.
 </Callout>
 
 ## 2. Save a config
@@ -85,7 +85,7 @@ curl -X PUT "https://mythic-analytics.gulp.workers.dev/client/v1/ad-tagging/meta
   }'
 ```
 
-One ad account belongs to one client. A second client claiming it gets `409 ad_account_in_use`. `PUT /meta` is partial. Omitted fields keep their saved values. The defaults below apply on creation.
+One ad account belongs to one client. A second client claiming it gets `409 ad_account_in_use`. When the holder is in your agency, the message names it and `error.details.client` gives its `location_id` and `name`. A holder in another agency is never named. Free the account by removing ad tagging (or its token) from the holder. `PUT /meta` is partial. Omitted fields keep their saved values. The defaults below apply on creation.
 
 ## Options and filters reference
 
@@ -369,7 +369,7 @@ Public route failures use `{success: false, error: {code, message, details?}}`. 
 | `credential_required` | 409 | No stored `meta_ads` token for the selected credential name. |
 | `credential_invalid` | 409 | Meta rejected the token. Generate a new one. |
 | `insufficient_permission` | 409 | Missing `ads_read` or `ads_management`, or access to the ad account, Page or Instagram account. Meta's message explains the problem when available. |
-| `ad_account_in_use` | 409 | Another client owns this ad account. |
+| `ad_account_in_use` | 409 | Another client owns this ad account. Named in `details.client` when it is in your agency. |
 | `concurrent_update` | 409 | Config identity or revision changed during a save, delete or Meta request. Fetch the current config and retry. |
 | `config_disabled` | 409 | Enable the config before apply or auto approval. Also a run cancellation code. |
 | `config_changed` | 409 | Preview generation or revision no longer matches the saved config, or a bound config is missing. Preview again. Also a run cancellation code. |
