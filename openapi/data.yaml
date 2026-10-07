@@ -974,6 +974,95 @@ paths:
           $ref: "#/components/responses/UpstreamError"
         "503":
           $ref: "#/components/responses/NotConfigured"
+  /sessions/bot-traffic:
+    get:
+      summary: Ad platform bot traffic
+      operationId: getBotTraffic
+      description: >
+        Daily count of ad platform review bots Mythic dropped before storing
+        anything. When ads launch, the platform's own crawlers open every landing
+        page. Meta's arrive with ordinary phone and desktop browsers, an `fbclid`
+        and a facebook.com referrer, so they look like ad clicks. Mythic drops
+        any request from Meta's, TikTok's, LinkedIn's or X's own network, and
+        declared ad crawlers such as `AdsBot-Google`, at the edge. They never
+        reach sessions, attribution, experiments, replays or destinations, so
+        this count is the only place they show.
+
+
+        `source` is `events` (event batches; `events` counts the events in
+        them), `replay` (session recording uploads) or `link_click` (Mythic
+        short-link clicks). Events stored before the filter shipped on
+        2026-10-07 were removed from Meta's network by IP.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - name: days
+          in: query
+          required: false
+          description: Trailing window in days. Default `30`, min `1`, max `400`.
+          schema:
+            type: integer
+            default: 30
+            minimum: 1
+            maximum: 400
+      responses:
+        "200":
+          description: Bot traffic dropped per day
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      location_id: { type: string }
+                      days: { type: integer }
+                      date_from: { type: string, format: date }
+                      total_requests: { type: integer }
+                      total_events: { type: integer }
+                      by_platform:
+                        type: object
+                        description: "Per platform (meta, tiktok, linkedin, x, google, pinterest, snap, microsoft): requests and events."
+                        additionalProperties:
+                          type: object
+                          properties:
+                            requests: { type: integer }
+                            events: { type: integer }
+                      daily:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            date: { type: string, format: date }
+                            platform: { type: string }
+                            source: { type: string, enum: [events, replay, link_click] }
+                            requests: { type: integer }
+                            events: { type: integer }
+              example:
+                success: true
+                data:
+                  location_id: 538d4ced-447c-40b9-9afa-d220f9afcc84
+                  days: 30
+                  date_from: "2026-09-08"
+                  total_requests: 121
+                  total_events: 259
+                  by_platform: { meta: { requests: 121, events: 259 } }
+                  daily:
+                    - { date: "2026-10-07", platform: meta, source: events, requests: 81, events: 259 }
+                    - { date: "2026-10-07", platform: meta, source: replay, requests: 40, events: 0 }
+        "400":
+          description: No location bound (`location_required`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/NotConfigured"
   /exceptions/digest:
     get:
       summary: Error-tracking weekly digest

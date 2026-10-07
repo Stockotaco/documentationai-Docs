@@ -66,6 +66,23 @@ The event routes are location-scoped. The `/export` route is agency-wide and req
   </Card>
 </Columns>
 
+## Ad platform bots are excluded
+
+When ads launch, the platform's own crawlers open every landing page. Meta's
+arrive with ordinary phone and desktop browsers, an `fbclid` and a facebook.com
+referrer, so they look exactly like ad clicks. On Vision Labs clients they were
+20% of all sessions over one week, and 47% on one site, without a single lead or
+purchase.
+
+Mythic drops any request that comes from Meta's, TikTok's, LinkedIn's or X's own
+network, plus declared ad crawlers such as `AdsBot-Google`, before anything is
+stored. Real people are not affected: a click in the Facebook or Instagram app
+still comes from the person's own internet or mobile provider. Dropped traffic is
+missing from every endpoint, from sessions and attribution to experiments,
+replays and destinations. `GET /sessions/bot-traffic` counts it per day,
+platform and source. Events stored before 2026-10-07 from Meta's network were
+removed by IP.
+
 ## Before you explain a drop-off
 
 `GET /explain/coverage?page=/pricing` answers one question: **is there enough data
