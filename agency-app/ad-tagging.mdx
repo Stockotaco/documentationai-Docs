@@ -1,0 +1,269 @@
+---
+title: Ad UTM tagging
+description: >-
+  Find the Meta ads in a client's campaigns that are missing UTMs or carry the
+  wrong ones, and have Mythic set them.
+---
+
+## Overview
+
+Attribution, channel grouping and the Constraint finder read the UTMs a paid
+click arrives with. Ads launched without them lose that attribution. **Ad UTM
+tagging** checks the ads in the campaigns you choose, shows which ones need
+URL parameters, and sets them for you.
+
+Open a client and choose **Automate**, then **Ad UTM tagging**. The screen
+has five parts: the Meta token, the settings, a preview, automatic checks and
+the run history.
+
+<Callout kind="info">
+Until Mythic switches on live Meta writes, the screen says **Live Meta writes
+aren't switched on yet**. Previews work, but applying is blocked. You can
+**Save auto approval** now. The status is **Pending activation**, and no ads
+change until Mythic globally switches on live writes.
+</Callout>
+
+<Callout kind="note">
+If the client's plan no longer includes ad tagging, the screen shows
+**Stop ad tagging** instead of settings, previews or run history. You can
+**Turn off auto mode**, **Turn off ad tagging**, or enter a known run UUID
+under **Run ID to cancel** and click **Cancel run**. Turning off auto mode
+cancels auto runs only. Turning off tagging cancels queued and running writes.
+Already-written ads are not reverted. Read-only clients cannot use these controls.
+</Callout>
+
+## 1. Store a Meta token
+
+Ad tagging needs a Meta Marketing API token for the client's ad account. Use
+a system-user token, so it doesn't expire when someone leaves:
+
+<Steps>
+  <Step title="Create the token">
+    In Meta Business Settings, open **Users**, then **System users**. Pick or
+    add a system user and click **Generate token**.
+  </Step>
+  <Step title="Give it the permissions">
+    Select `ads_read` and `ads_management`.
+  </Step>
+  <Step title="Assign the ad account">
+    In **Accounts**, then **Ad accounts**, assign the system user this
+    client's ad account.
+  </Step>
+  <Step title="Store it in Mythic">
+    Paste the token into **Meta access token** and click **Store token**.
+    Mythic keeps it and never shows it again.
+  </Step>
+</Steps>
+
+Click **Test token** to list the ad accounts it can see. If Meta rejects it,
+the screen shows Meta's reason and the fix, such as regenerating the token or
+assigning the ad account. **Remove token** stops previews, applies and the
+automatic checks until a new token is stored.
+
+## 2. Choose the settings
+
+| Setting | What it does |
+| --- | --- |
+| **Ad account** | The account to tag. One ad account can belong to one client. |
+| **Tag this client's ads** | The on switch. **Turn off** stops tagging and cancels queued runs. It always works, even if the client's plan changes. |
+| **URL parameters** | The parameters to set, as a query string. Values may use letters, digits, `_ . -` and Meta's macros, such as `{{campaign.id}}`. |
+| **When an ad already has values** | **Fill missing** adds the parameters an ad lacks and keeps its values. **Enforce** sets every parameter in the template to the template's value. |
+| **Use Mythic short links** | Off by default. Points each tagged ad at one of this client's short links. The short link passes the UTMs to the page. |
+| **Which ads** | Active, paused and in-review ads. All three are selected by default. Paused includes ads paused by their campaign or ad set. In review includes Meta's `PENDING_REVIEW` and `IN_PROCESS` states. |
+| **Which campaigns** | Filter by name contains, name doesn't contain, created on or after a UTC date, or campaign status. Status choices are active, paused and archived. Choose **Match all** or **Match any**. No conditions includes every campaign. |
+| **Auto interval** | Time between automatic checks. Default 15 minutes. Choose 5 to 1440 minutes in steps of 5. The interval is not a timing guarantee. |
+
+Name conditions accept 1 to 200 characters. They ignore case unless you choose
+case-sensitive matching. Use at most 20 conditions. Every field referenced by
+a condition must be readable. Missing campaign data excludes the campaign,
+even with **Match any** or a negative name condition.
+
+The template allows at most 20 unique keys and 1000 characters. Keys match
+`^[a-z][a-z0-9_]{0,63}$`. Values must be non-empty. The allowed macros are
+`{{campaign.id}}`, `{{campaign.name}}`, `{{adset.id}}`, `{{adset.name}}`,
+`{{ad.id}}`, `{{ad.name}}`, `{{placement}}` and `{{site_source_name}}`.
+
+For example, to tag only campaigns named "XYZ" that were created this year,
+add **Campaign name contains** `XYZ` and **Campaign created on or after**
+1 January, with **Match all**. The sentence under **Which campaigns** reads
+the rules back in plain language.
+
+To add one of Meta's macros, put the cursor where it goes and click the
+macro under the field. The example below the field shows a click URL with
+sample campaign and ad names, and the blue labels list the parameters Mythic
+manages.
+
+Mythic manages only the parameters in your template. Any other parameter an
+ad already has is kept. The default template sets `utm_source=facebook` and
+`utm_medium=paid`, so the clicks group as Paid Social, plus the ids
+attribution joins on. The screen warns you if your template drops
+`utm_id={{campaign.id}}` or `ad_id={{ad.id}}`, or wouldn't group as Paid
+Social.
+
+With **Use Mythic short links** on, Mythic keeps a link that already is one
+of this client's short links. It reuses an enabled, unexpired short link to
+the same page if UTM passthrough is on, or creates one during apply or auto
+mode. New links appear in the client's **Links**. Previews never create links.
+Existing-post ads marked **Link not verified** only get tags. Their links are
+not shortened. Call-to-action and carousel card links are shortened too.
+
+Before each swap, Mythic checks that every short link the ad will use is still
+enabled and sends clicks to this client. If a check fails, the ad keeps its
+current creative.
+
+Click **Save settings**. Changing only the auto interval preserves the revision,
+previews, runs and auto approval. Other setting changes make earlier previews
+unusable and cancel queued or running runs. Changes to the ad account,
+parameters, overwrite policy, ad statuses, campaigns or short links also turn
+auto mode off. An unchanged save leaves the preview valid. Turning off auto
+mode alone does not invalidate a manual preview.
+
+Previews and approval checks bind to the saved settings' generation, revision
+and fingerprint. Disconnecting and reconnecting creates a new generation, so
+an old preview cannot be reused even if the settings look identical.
+
+## 3. Preview
+
+Click **Run preview**. Mythic reads the matching campaigns and their ads from
+Meta and decides what to do with each ad. Nothing is written to Meta. With
+unsaved changes, the button reads **Preview unsaved changes**: you can see
+the result, but you have to save before applying it.
+
+| Decision | Meaning |
+| --- | --- |
+| **Will set** | The ad needs URL parameters or a short link. Mythic will make those changes. |
+| **Link not verified** | The ad uses an existing post, so Meta doesn't show Mythic its link. You can apply it by hand after checking the link in Ads Manager. Auto mode skips these ads. |
+| **Already correct** | Every parameter already has the template's value. |
+| **Nothing to add** | **Fill missing** has nothing to add. Some values differ from the template. **Enforce** would replace them. |
+| **UTMs in link** | The ad's link already has one of your parameters, so Mythic leaves it alone rather than duplicate it. |
+| **Unsupported creative** | Catalog, template URL and dynamic creatives aren't supported yet. |
+| **No link** | The ad has no destination link. |
+| **Key parameter** | Short links are on and the URL parameters include `key`. Short links use `key` to pick the client, so Mythic leaves the ad alone. |
+
+Results are grouped by campaign. Click a campaign's row to collapse it. The
+**URL parameters and links** column shows each parameter Mythic would add in green and
+each it would change in yellow, with the old value struck through. Parameters
+that stay the same are listed as **Unchanged**.
+
+The same column shows each destination link change:
+
+- **Short link kept** shows the URL already on the ad. If that link is
+  disabled, expired or doesn't pass URL parameters, the line says so and the
+  apply will fail that ad instead of setting tags the page would never get.
+- **Reuses** shows an existing short URL Mythic plans to use.
+- **Creates a short link for** shows the destination page. The short URL is
+  chosen during apply or auto mode. Run details show **Created** and the short
+  URL once it is resolved.
+
+An ad can be **Will set** even when its URL parameters are unchanged. Its
+destination link may still need shortening. A resolved link in run details
+does not by itself confirm the ad swap. Check the ad's state.
+
+A preview lasts 24 hours. The label at the top right counts down and turns
+orange in the last hour. If it stopped early on a very large account, a
+banner says so. You can still apply what it lists.
+
+## 4. Apply
+
+Select the ads (every **Will set** ad starts selected) and click **Apply
+selected**.
+
+<Callout kind="warning">
+Meta doesn't allow editing a creative's URL parameters. For each ad, Mythic
+creates a copy of the creative with the new parameters and swaps it onto the
+ad. Meta may treat that as a significant edit. Delivering ads can return to
+learning. In-review ads have no delivery or learning history yet, but tagging
+restarts their review. The confirmation shows how many selected ads are running.
+Tick the acknowledgement to continue.
+</Callout>
+
+Mythic processes up to 25 ads every 5 minutes, within a time budget. Watch
+progress under **Runs**. One apply or auto run can be in progress per ad account.
+
+Before creating a copy and again before swapping it onto the ad, Mythic checks
+fresh account, ad status, campaign rules and creative data. Ads no longer
+eligible, or missing required eligibility data, are left alone. Before the swap,
+Mythic reads back the copy and checks the full story content and creative
+settings against a fresh original. This includes text, media, calls to action,
+carousel content and the new URL parameters. Shared or recovered copies are
+checked too. Missing or changed content fails verification. Mythic does not
+swap an unverified copy.
+
+## 5. Automatic checks
+
+The default interval is 15 minutes. Choose an integer from 5 to 1440 minutes
+in steps of 5. Cron checks due accounts every five minutes. It takes up to
+10 configs per tick, oldest due first, within a time budget. Busy, skipped
+and failed checks consume capacity too. Large rosters or Meta cooldowns can
+stretch the interval.
+
+Changing only the interval keeps previews, runs and auto approval valid.
+An in-review ad can be `IN_PROCESS` after a swap. The next check still sees
+it when in-review ads are selected. Correct tags are skipped, so it is not
+swapped again unless its destination still needs shortening.
+
+To approve it, run a preview of the saved settings, then click **Turn on auto
+mode** (or **Save auto approval** while live writes are off). The preview must
+be complete, published and unexpired, match the current saved settings, and
+the settings must be switched on. While writes are off, approval is saved as
+**Pending activation**. No ads change until global activation. Changing what
+a run would do turns auto mode off again. Auto mode skips ads whose links
+Mythic cannot inspect and uses the same fresh eligibility and copy checks as
+manual apply.
+
+The last automatic check is separate from run history. It reports `queued`,
+`no_changes`, `incomplete`, `skipped_busy` or an error code. A queued check has
+a run to follow. No-change or failed scans do not create runs. An incomplete
+check did not cover the full account. A busy check found other reserved work.
+Errors can report missing or invalid tokens, permissions, Meta timeouts or
+throttling, short-link setup problems or storage failures. Check the error
+detail and fix the cause.
+
+For API clients, the read-only config fields are `last_auto_at`,
+`last_auto_status` and `last_auto_error`. Auto runs use a `run_slot` timestamp
+instead of `run_date`. `last_auto_date` is removed. These are not editable settings.
+
+## Runs
+
+**Runs** lists applies and auto runs. **Include previews** adds previews.
+Auto runs contain only ads marked `set`. Skips are counted in `ads_skipped`
+but do not have auto journal rows. Run a preview to inspect skipped ads.
+Click **Details** to see each ad:
+
+| State | Meaning |
+| --- | --- |
+| **Waiting** | Queued for the next batch. |
+| **Writing** | Mythic is creating the creative or swapping it onto the ad. |
+| **Applied** | The ad uses the new creative. |
+| **Uncertain** | Meta didn't confirm the write. Mythic reads it back before considering at most one write retry. Exhausted read retries or cancellation can leave it unresolved. Check the ad in Ads Manager. |
+| **Failed** | Meta refused the write. The reason is shown. |
+| **Changed in Meta** | The creative, ad status, campaign eligibility or tagging plan changed, or required eligibility data was missing, so Mythic left it alone. |
+| **Cancelled** | The run was cancelled or the settings changed first. |
+
+Failed reads have a budget of three retryable failures with increasing
+backoff. A permanent read failure exhausts it immediately. If reads cannot
+resolve a sent write, the ad stays **Uncertain** and automatic retries stop.
+The run finishes **Partial** once its other work is done. Check those ads in
+Ads Manager and resolve them manually. An uncertain write may have succeeded.
+
+**Cancel run** stops a queued or running run and prevents subsequent swaps.
+Ads already written keep their new creative. Writes already sent to Meta
+cannot be recalled: they may take effect and remain **Uncertain**. The account
+stays reserved until the worker has stopped and released it, or its lease
+expires plus a 30-second grace period. You may need to wait before starting
+a replacement run.
+
+If Meta rate-limits the ad account, Mythic persists the cooldown and continues
+eligible work automatically afterward. A delayed or shorter rate-limit
+response cannot shorten an existing cooldown.
+
+Short link failures show a plain explanation. `short_link_unavailable`
+means a short link could not be created, is disabled, expired or not passing
+URL parameters, doesn't send clicks to this client, or the link store stayed
+unreachable after three tries. Mythic does not swap the ad onto it. `short_links_unavailable`
+means the client needs an active custom hostname or a publishable key before
+Mythic can build short URLs.
+
+## For developers
+
+See the [Ad UTM tagging API](/ad-tagging-api/overview). Its [Options and filters reference](/ad-tagging-api/overview#options-and-filters-reference) includes the full settings, decision reasons, run and change statuses, history filters, automatic-check outcomes and error codes. HTTP errors and per-ad journal errors are listed separately.

@@ -198,6 +198,11 @@
                     "title": "Link uptime",
                     "path": "agency-app/uptime",
                     "icon": "activity"
+                  },
+                  {
+                    "title": "Ad UTM tagging",
+                    "path": "agency-app/ad-tagging",
+                    "icon": "tag"
                   }
                 ]
               }
@@ -473,6 +478,28 @@
                 "group": "Contracts",
                 "icon": "check-check",
                 "openapi": "openapi/contracts.yaml"
+              }
+            ]
+          },
+          {
+            "tab": "Ad UTM Tagging",
+            "icon": "tags",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "ad-tagging-api/overview",
+                    "icon": "file-text"
+                  }
+                ]
+              },
+              {
+                "group": "Ad Tagging",
+                "icon": "tag",
+                "openapi": "openapi/ad-tagging.yaml"
               }
             ]
           },

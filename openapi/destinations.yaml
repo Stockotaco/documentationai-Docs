@@ -1850,10 +1850,13 @@ components:
         Destination type the credential belongs to. `convert_experiments` is a
         special case: delivering to Convert needs no credential at all, but
         reading Convert's report to verify a delivery does, so its only valid
-        `credential_name` is `reporting`.
+        `credential_name` is `reporting`. `meta_ads` is not a destination at
+        all: it is the Meta Marketing API token (system user, `ads_read` +
+        `ads_management`) that [Ad UTM tagging](/ad-tagging-api/overview)
+        reads. Nothing delivers events with it.
       schema:
         type: string
-        enum: [meta_capi, google_ads, google_analytics, openai_ads, convert_experiments]
+        enum: [meta_capi, google_ads, google_analytics, openai_ads, convert_experiments, meta_ads]
     ActionIdQuery:
       name: action_id
       in: query

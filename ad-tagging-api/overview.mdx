@@ -1,0 +1,499 @@
+---
+title: Ad UTM Tagging
+description: >-
+  Find Meta ads whose URL parameters are missing or wrong. Apply a reviewed
+  preview or approve automatic checks at a chosen interval.
+---
+
+import ClientV1Auth from "/snippets/client-v1-auth.mdx"
+import TierGated from "/snippets/tier-gated.mdx"
+
+## Overview
+
+Attribution, channel grouping and the [Constraint Finder](/constraints-api/overview) read the UTMs a paid click arrives with. Campaign joins use `utm_id`. Ad joins use `utm_content` and the numeric `ad_id`, `adset_id` and `campaign_id` on the landing URL. Ads launched without them lose that attribution.
+
+Ad UTM tagging checks ads in the campaigns you choose. It finds missing or wrong parameters and sets them.
+
+1. Store a Meta Marketing API token for the client.
+2. Pick the ad account. Save the template, overwrite policy and filters.
+3. Run a preview. Nothing is written to Meta.
+4. Apply selected ads or approve automatic checks.
+
+## Base URL
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/ad-tagging
+```
+
+<ClientV1Auth />
+
+A location secret key (`sk_`) can read the config and run history. All other operations need an agency key or an `mcp_` key with the applicable `ad_tagging:read` or `ad_tagging:write` scope. This includes listing ad accounts and running previews.
+
+<TierGated />
+
+Off switches work on every plan. These are `PUT /meta` with only `enabled: false` and/or `auto_enabled: false`, `POST /meta/auto` with only `enabled: false`, `DELETE /meta`, and cancelling a run.
+
+## 1. Store a token
+
+Mythic needs a token that can read and edit the client's ads. A [Meta destination](/destinations-api/overview) uses a dataset-scoped Conversions API token. That token cannot read or edit ads.
+
+<Steps>
+  <Step title="Create a system user">
+    In Meta Business Settings, open **Users → System users**. Add a system user. Use an admin system user if you manage several ad accounts.
+  </Step>
+  <Step title="Assign the ad account">
+    Under **Accounts → Ad accounts**, select the client's account. Choose **Assign partners / people**. Give the system user permission to manage campaigns.
+  </Step>
+  <Step title="Generate the token">
+    Choose **Generate new token** for the system user. Select your app and tick `ads_read` and `ads_management`.
+  </Step>
+  <Step title="Store it in Mythic">
+    ```bash
+    curl -X PUT "https://mythic-analytics.gulp.workers.dev/client/v1/destinations/credentials/meta_ads?location_id=LOC" \
+      -H "Authorization: Bearer ak_..." -H "Content-Type: application/json" \
+      -d '{"credential_value": "EAA..."}'
+    ```
+    The token is never returned again.
+  </Step>
+</Steps>
+
+Test it with `GET /meta/ad-accounts`. An invalid token returns `409 credential_invalid`. Missing account access returns `409 insufficient_permission`. The message explains the fix. The optional `credential_name` query uses the saved name, or `default` if no config exists.
+
+<Callout kind="note">
+The token uses destination credential storage. Remove it with `DELETE /client/v1/destinations/credentials/meta_ads`. Deleting the tagging config does not delete the token or run history.
+</Callout>
+
+## 2. Save a config
+
+```bash
+curl -X PUT "https://mythic-analytics.gulp.workers.dev/client/v1/ad-tagging/meta?location_id=LOC" \
+  -H "Authorization: Bearer ak_..." -H "Content-Type: application/json" \
+  -d '{
+    "ad_account_id": "act_1234567890",
+    "enabled": true,
+    "overwrite": "fill_missing",
+    "ad_statuses": ["ACTIVE", "PAUSED", "IN_REVIEW"],
+    "short_links": false,
+    "auto_interval_minutes": 15,
+    "rules": {
+      "operator": "AND",
+      "conditions": [
+        { "type": "campaign_name_contains", "value": "XYZ" },
+        { "type": "campaign_created_on_or_after", "value": "2026-01-01" }
+      ]
+    }
+  }'
+```
+
+One ad account belongs to one client. A second client claiming it gets `409 ad_account_in_use`. `PUT /meta` is partial. Omitted fields keep their saved values. The defaults below apply on creation.
+
+## Options and filters reference
+
+Use this reference for API clients and custom settings screens. `GET /meta` returns `data.defaults.utm_template`, `macros`, `overwrite_policies`, `ad_statuses` and `rule_types`. Use those returned enums where available. It also returns `auto_interval_minutes: {min: 5, max: 1440, step: 5, default: 15}` in `data.defaults`. Other enums below are defined by this API reference.
+
+### Config fields
+
+| Field | Type and default | In fingerprint | Meaning |
+| --- | --- | --- | --- |
+| `ad_account_id` | String. Required on creation. No default. | Yes | Accepts `act_123` or `123`. Stored as digits only, with 1 to 32 digits. A positive safe integer is also accepted. |
+| `enabled` | Boolean. `false`. | No | Allows apply and auto mode when true. Disabling cancels queued or running writes. Previews can still run. |
+| `utm_template` | Non-empty string. Default shown below. | Yes | Query string of managed URL parameters. |
+| `overwrite` | `fill_missing` or `enforce`. `fill_missing`. | Yes | How existing managed values are treated. |
+| `ad_statuses` | Non-empty array of `ACTIVE`, `PAUSED`, `IN_REVIEW`. All three by default. | Yes | Filters ads by Meta effective status. Duplicate selections are normalized. |
+| `rules` | Object. `{version: 1, operator: "AND", conditions: []}`. | Yes | Campaign filters. At most 20 conditions. |
+| `credential_name` | Non-blank string. `default`. At most 100 characters. | No | Name of the stored `meta_ads` token. |
+| `short_links` | Boolean. `false`. | Yes | Uses this client's Mythic short links for readable destination URLs. |
+| `auto_interval_minutes` | Integer. `15`. Minimum 5, maximum 1440, multiple of 5. | No | Requested time between automatic checks. It is not a timing guarantee. |
+
+`auto_enabled` is controlled by `POST /meta/auto`. `PUT /meta` accepts `auto_enabled: false` only. It is not a way to approve auto mode. Unknown config fields are rejected.
+
+The fingerprint covers the account, template, overwrite policy, ad statuses, rules and `short_links`. It excludes `enabled`, `credential_name` and `auto_interval_minutes`.
+
+Changes to fingerprint fields bump `revision`, void earlier previews, cancel queued or running runs and revoke auto approval. Changes to `enabled` or `credential_name` also bump the revision and invalidate earlier previews and runs. They do not themselves change the fingerprint. An unchanged save does not bump the revision.
+
+**An interval-only edit preserves the revision, previews, runs and auto approval.** If the same save changes another field, that field's normal invalidation rules apply. Turning only auto mode off cancels auto runs without invalidating manual previews.
+
+The config has an immutable `generation` UUID. Deleting and recreating it creates a new generation. Even identical settings and the same revision cannot reuse a preview from before the reconnect.
+
+### Template and macros
+
+The default template is:
+
+```text
+utm_source=facebook&utm_medium=paid&utm_campaign={{campaign.name}}&utm_id={{campaign.id}}&utm_content={{ad.id}}&utm_term={{adset.name}}&campaign_id={{campaign.id}}&adset_id={{adset.id}}&ad_id={{ad.id}}
+```
+
+`facebook` and `paid` classify clicks as Paid Social. Keep `utm_id={{campaign.id}}` and `ad_id={{ad.id}}` for campaign and ad attribution.
+
+| Limit | Rule |
+| --- | --- |
+| Template length | At most 1000 characters. An optional leading `?` is accepted. |
+| Keys | At most 20 unique keys. Each matches `^[a-z][a-z0-9_]{0,63}$`. |
+| Values | Non-empty. Literal characters are `A-Z`, `a-z`, `0-9`, `_`, `.`, `-`. Only the eight macros below are allowed. |
+| Structure | Each parameter needs `key=value`. Empty parameters and duplicate keys are rejected. |
+
+All eight macros are returned by `GET /meta` in `data.defaults.macros`:
+
+| Macro | Meta value |
+| --- | --- |
+| `{{campaign.id}}` | Campaign ID |
+| `{{campaign.name}}` | Campaign name |
+| `{{adset.id}}` | Ad set ID |
+| `{{adset.name}}` | Ad set name |
+| `{{ad.id}}` | Ad ID |
+| `{{ad.name}}` | Ad name |
+| `{{placement}}` | Placement |
+| `{{site_source_name}}` | Site source name |
+
+### Overwrite policy
+
+Mythic manages only the template's keys. Unmanaged parameters stay in their existing order.
+
+| `overwrite` | Missing or empty managed value | Existing non-empty managed value |
+| --- | --- | --- |
+| `fill_missing` | Added from the template | Kept |
+| `enforce` | Added from the template | Replaced with the template value |
+
+Keys are compared after percent decoding. A managed key repeated on an ad collapses to its first position during a merge. `fill_missing` does not swap a creative just to remove duplicates. An ad whose parameters need no change is not written unless its destination still needs shortening.
+
+### Ad statuses
+
+`GET /meta` returns all three selections in `data.defaults.ad_statuses`. A new config selects all three.
+
+| Selection | Meta `effective_status` values |
+| --- | --- |
+| `ACTIVE` | `ACTIVE` |
+| `PAUSED` | `PAUSED`, `CAMPAIGN_PAUSED`, `ADSET_PAUSED` |
+| `IN_REVIEW` | `PENDING_REVIEW`, `IN_PROCESS` |
+
+An ad in review has no delivery or learning history yet. Tagging it restarts review. A swapped ad can be `IN_PROCESS` on the next scan. It is still eligible when `IN_REVIEW` is selected. Correct tags produce `already_correct`, so the scan does not swap it again unless a destination still needs shortening.
+
+### Campaign rules
+
+`rules.version` is `1`. `rules.operator` is `AND` by default. `AND` requires all conditions to match. `OR` requires at least one. Empty `conditions` includes every campaign. The maximum is 20 conditions.
+
+Each condition has `type` and `value`. `case_sensitive` is optional for name rules only. It defaults to `false`.
+
+| `type` | `value` | `case_sensitive` |
+| --- | --- | --- |
+| `campaign_name_contains` | String of 1 to 200 characters. Matches a substring. | Boolean. Allowed. |
+| `campaign_name_not_contains` | String of 1 to 200 characters. Excludes a substring. | Boolean. Allowed. |
+| `campaign_created_on_or_after` | Real calendar date as `YYYY-MM-DD`. Inclusive from 00:00 UTC. | Not allowed. |
+| `campaign_status_in` | Non-empty array of `ACTIVE`, `PAUSED`, `ARCHIVED`. | Not allowed. |
+
+Campaign statuses are separate from ad statuses. The status rule uses campaign `status`, with `effective_status` as a fallback when status is absent. Unknown rule fields are rejected.
+
+All referenced campaign fields must be readable before either `AND` or `OR` is evaluated. Missing or unknown names, dates or statuses fail closed. A matching branch of `OR` cannot authorize a write if another branch needs unreadable data. Negative name rules also fail closed.
+
+### Preview overrides
+
+`POST /meta/preview` accepts only `rules`, `utm_template`, `overwrite`, `ad_statuses` and `short_links`. It does not accept account, enabled, credential or interval overrides. Overrides do not save settings. If the effective fingerprint differs, `applies_to_saved_config` is `false`. Save those settings and preview again before applying or approving auto mode.
+
+### Short links and `link_changes`
+
+With `short_links: true`, Mythic checks main links, call-to-action links, carousel card links and video call-to-action links. Each destination gets its own short link. Readable absolute HTTP or HTTPS URLs without Meta macros can be shortened. Destination URLs must be at most 2048 characters.
+
+Mythic keeps this client's existing short links. Otherwise it reuses the oldest enabled, unexpired link to the same URL with UTM passthrough on. If none exists, it creates one during apply or auto mode. New links appear in the client's **Links** with a title like `Meta ads: <host><path>`. Previews never create links.
+
+Existing-post creatives marked `link_unverified` only get tags. Their links are not shortened. A destination that still needs shortening has action `set` even when `url_tags_after` equals `url_tags_before`.
+
+`link_changes` is null when there is no link plan. Otherwise it is an array:
+
+| `action` | Meaning and fields |
+| --- | --- |
+| `keep` | Keep `from`. A preview includes `slug` and any `problem`. After resolution it includes `slug`, `link_id`, `destination` and `resolved: true`. |
+| `reuse` | Use an existing short link for `from`. A preview includes `to` and `slug`. After resolution it also includes `link_id` and `resolved: true`. |
+| `create` | Create a short link for `from`. A preview has no new URL. After resolution it includes `to`, `slug`, `link_id` and `resolved: true`. |
+
+For example, a preview can return this plan:
+
+```json
+[
+  { "from": "https://links.example.com/r/current", "action": "keep", "slug": "current" },
+  {
+    "from": "https://example.com/landing",
+    "action": "reuse",
+    "to": "https://links.example.com/r/landing",
+    "slug": "landing"
+  },
+  { "from": "https://example.com/new-page", "action": "create" }
+]
+```
+
+Each entry requires `from` and `action`. Other fields are optional.
+
+| `problem` | Meaning for a kept link |
+| --- | --- |
+| `missing` | The link record is missing. |
+| `disabled` | The link is disabled. |
+| `expired` | The link has expired. |
+| `no_passthrough` | UTM passthrough is off. |
+
+A resolved link does not confirm the ad swap. Before each swap, every short link must still be enabled, unexpired and unchanged. Its redirect must be stored. It must route to this active client. A failed check leaves the ad on its current creative. Link-store failures retry up to three times. A new link can take up to a minute to reach every Cloudflare location.
+
+A `key=pk_...` parameter selects the client before the hostname does. Without it, the hostname selects the client. Short URLs use `https://<active custom hostname>/r/<slug>`. Otherwise they use `<Mythic origin>/r/<slug>?key=<publishable key>`. The client needs an active custom hostname or a publishable key. Any key with `ad_tagging:write` can create these links. They point only at pages already used by the client's ads.
+
+### Decisions and reasons
+
+`action` is `set` or `skip`. A normal `set` has no reason. All decision reasons are listed below. Later journal rows may carry stale or cancellation reasons instead.
+
+| `reason` | Meaning |
+| --- | --- |
+| `unsupported_creative` | No copyable creative. This includes catalog, template URL, dynamic, placement-customized, portrait, interactive, branded content, regulated disclaimer and Instagram post creatives. Unsupported enhancement settings also fail closed. |
+| `no_link` | The readable creative has no destination link. |
+| `inline_utms_in_link` | A destination URL already carries a managed parameter. Fix the link in Ads Manager. |
+| `already_correct` | Tags match and no destination needs shortening. |
+| `has_values_fill_missing` | No missing value to add. Existing values differ and `fill_missing` keeps them. |
+| `link_unverified` | An existing post hides its link. Manual preview may return `set`. Auto mode returns `skip`. |
+| `short_link_conflict` | A planned short link would receive a `key` parameter from URL tags. That parameter can select the wrong client. The ad is skipped. |
+
+### Change statuses
+
+| `status` | Meaning |
+| --- | --- |
+| `planned` | Eligible `set` item waiting for work. In a preview it is not queued for a write yet. |
+| `creative_pending` | Creative creation was journaled before dispatch. Its result may need reconciliation. |
+| `creative_created` | A copy ID is stored. The ad swap is not confirmed. |
+| `swap_pending` | The swap was journaled before dispatch. Its result may need reconciliation. |
+| `applied` | Meta confirmed the ad swap. |
+| `failed` | A known failure stopped the change. Inspect `error_code` and `error_message`. |
+| `uncertain` | A dispatched write is unresolved. Readback is required before any retry. |
+| `reconciled` | Readback confirmed the ad uses the verified new creative. |
+| `skipped` | The decision was `skip`. No write was planned. |
+| `stale` | Account, ad status, campaign, creative or plan changed, or required eligibility data is missing. No further swap is authorized. |
+| `cancelled` | Work was cancelled before a write needed reconciliation. Sent writes may remain `uncertain`. |
+
+Journal `reason` also accepts these stale and cancellation reasons. These are not additional discovery decisions.
+
+| `reason` | Meaning |
+| --- | --- |
+| `account_mismatch` | The ad's account no longer matches the run. |
+| `ad_status_changed` | The ad's effective status is no longer selected, or the required status snapshot is missing. |
+| `campaign_changed` | The campaign identity or rules no longer match, or required campaign data is missing. |
+| `creative_changed` | The ad no longer points to the original creative. |
+| `plan_changed` | A fresh tagging or short-link plan differs from the reviewed plan or is no longer writable. |
+| `cancelled_by_user` | The user cancelled the run. |
+| `cancelled_mid_write` | Cancellation found creative creation or a swap pending. The row remains uncertain because sent writes cannot be recalled. |
+| `config_changed` | The saved config no longer matches the run's binding. |
+| `config_disabled` | Tagging was switched off. |
+| `config_deleted` | The saved config was deleted. |
+| `auto_disabled` | Auto approval no longer authorizes this run. |
+| `location_disabled` | The client was disabled. |
+| `feature_not_in_plan` | The client no longer has the ad tagging entitlement. |
+| `run_failed` or a run error code | A run-level failure cancelled unstarted rows. Inspect the run error. |
+
+### Run kinds
+
+| `kind` | Meaning |
+| --- | --- |
+| `preview` | Read-only discovery with per-ad decisions. Expires for apply after 24 hours. |
+| `apply` | Selected `set` items from a reviewed saved-config preview. |
+| `auto` | Writable changes found by an approved automatic check. |
+
+### Run statuses
+
+| `status` | Meaning |
+| --- | --- |
+| `queued` | Published write journal waiting for processing. |
+| `running` | Discovery, journal creation or write processing is underway. |
+| `completed` | Complete preview or finished write work with no known failures or unresolved writes. |
+| `incomplete` | Discovery was truncated. It does not cover the full account. |
+| `partial` | Some writes succeeded and some failed, or unresolved writes remain after retries end. |
+| `failed` | A run-level error stopped work, or failed changes finished without any successful changes. |
+| `cancelled` | Work was stopped. Prior or in-flight writes may still have taken effect. |
+
+### Query filters and pagination
+
+`GET /meta/ad-accounts` accepts optional `credential_name`. It uses the config's credential name when omitted, otherwise `default` if no config exists.
+
+`GET /meta/runs` lists runs newest first. Its optional `kind` filter accepts `preview`, `apply` or `auto`. Omit it for all kinds. `limit` defaults to 20 and is clamped to 1 through 100.
+
+`GET /meta/runs/{id}` returns `run`, `changes` and `next_cursor`. The optional `status` filter accepts any change status above, not a run status. `limit` defaults to 200 and is clamped to 1 through 500. Send the returned `next_cursor` as `cursor` for the next page. Omit it for the first page. Null means the last page. Keep the same status filter while paging. Changes sort by campaign ID, ad ID and row ID. Invalid filters return `invalid_kind` or `invalid_status`. An invalid cursor returns `invalid_cursor`.
+
+Runs expose `config_generation`, `config_revision`, `config_fingerprint` and the read-only `config_auto_approval_epoch` fence. They also expose `journal_ready` and snapshots of statuses, rules, template, overwrite and short links. Counters include scanned, planned, applied, failed, uncertain, skipped and stale ads. A published journal is required before a run can be applied or processed. Config responses expose generation, revision, fingerprint, approval, cooldown, last run and last automatic check fields.
+
+`run_slot` is the read-only reserved timestamp on an auto run. It is not used for other kinds. It replaces `run_date`. The old `last_auto_date` config field is removed. No particular absent-value representation is guaranteed for `run_slot`.
+
+Auto runs journal only `set` ads. Skipped ads are counted in `ads_skipped` but have no auto change rows. Use a manual preview to inspect skipped decisions. No-op or failed scans do not create runs.
+
+### Last automatic check
+
+The config exposes these read-only fields. They describe the last check, not the final outcome of a queued run.
+
+| Field | Meaning |
+| --- | --- |
+| `last_auto_at` | Timestamp of the latest automatic scan, or null when no scan is recorded. |
+| `last_auto_status` | Outcome below, or an error code, when available. |
+| `last_auto_error` | Error detail as a string, or null when there is no error. |
+
+| `last_auto_status` | Meaning |
+| --- | --- |
+| `queued` | The scan queued `set` ads. Follow the auto run for write results. |
+| `no_changes` | The scan found no writable changes. No run was created. |
+| `incomplete` | Discovery was truncated. It was not a complete account check. |
+| `skipped_busy` | The account already has reserved apply or auto work. |
+| An error code | The check failed or could not proceed. Inspect `last_auto_error`. No failed-scan run is created. |
+
+These fields are read-only. A missing scan timestamp or error detail is not proof that a scan or write succeeded. See the errors tables below for known codes.
+
+### Errors
+
+Public route failures use `{success: false, error: {code, message, details?}}`. Numeric statuses below are HTTP statuses for route responses, not change or run statuses. Graph, credential, storage and setup codes can also appear in `Run.error_code`, `Change.error_code` or a failed automatic check. A journal or worker-only code has no HTTP status unless noted. Not every code applies to every endpoint.
+
+#### Public route errors
+
+| Code | HTTP status | Meaning |
+| --- | --- | --- |
+| `unauthorized` | 401 | Missing, malformed, invalid or inactive API key. |
+| `location_required` | 400 | An agency-wide key needs `location_id` or `X-Location-Id`. |
+| `location_not_linked` | 403 | The requested location is not linked to the key's agency. |
+| `agency_required` | 403 | A location secret key cannot make changes, preview ads or list accounts. |
+| `insufficient_scope` | 403 | An `mcp_` key lacks the route's required scope. |
+| `location_disabled` | 403 | This client is disabled. Non-off-switch mutations are blocked. Also a run cancellation code. |
+| `feature_not_in_plan` | 402 | The plan does not grant ad tagging, or entitlement lookup failed closed. Off switches bypass this gate. Also a run cancellation code. |
+| `rate_limited` | 429 | A route bucket or per-key ceiling was exceeded. See `Retry-After`. |
+| `invalid_json` | 400 | The request body is not a valid JSON object. Arrays and null are not objects for this API. |
+| `invalid_body` | 400 | On the auto route, `enabled` must be `true` or `false`. |
+| `invalid_config` | 400 | Config validation failed or a config field is unknown. Validation failures include the problems in `details`. |
+| `invalid_overrides` | 400 | Preview includes fields outside its override allowlist. |
+| `use_auto_route` | 400 | PUT cannot enable auto mode. Approve it with POST /meta/auto. |
+| `invalid_preview_id` | 400 | `preview_id` is not a UUID string. |
+| `acknowledgement_required` | 400 | Apply or auto approval requires `acknowledge_creative_swap: true`. |
+| `invalid_ad_ids` | 400 | Apply needs a non-empty array of digit-string ad IDs, at most 2000 distinct IDs, all `set` items in the preview. |
+| `invalid_kind` | 400 | The run history `kind` filter is not `preview`, `apply` or `auto`. |
+| `invalid_status` | 400 | The journal `status` filter is not a change status. |
+| `invalid_cursor` | 400 | The cursor is not a valid paging cursor. Use the returned `next_cursor`. |
+| `not_configured` | 404 | The operation requires a saved tagging config, but none exists. |
+| `not_found` | 404 | Run lookup or cancellation found no run for this client, or the run ID is not a UUID. |
+| `preview_not_found` | 404 | The referenced run is absent for this client or is not a preview. |
+| `credential_required` | 409 | No stored `meta_ads` token for the selected credential name. |
+| `credential_invalid` | 409 | Meta rejected the token. Generate a new one. |
+| `insufficient_permission` | 409 | Missing `ads_read` or `ads_management`, or access to the ad account, Page or Instagram account. Meta's message explains the problem when available. |
+| `ad_account_in_use` | 409 | Another client owns this ad account. |
+| `concurrent_update` | 409 | Config identity or revision changed during a save, delete or Meta request. Fetch the current config and retry. |
+| `config_disabled` | 409 | Enable the config before apply or auto approval. Also a run cancellation code. |
+| `config_changed` | 409 | Preview generation or revision no longer matches the saved config, or a bound config is missing. Preview again. Also a run cancellation code. |
+| `preview_expired` | 409 | The preview expired or lacks an expiry. Run a new preview. |
+| `preview_unusable` | 409 | The journal is unpublished or the preview is not completed or incomplete. Run a new preview. |
+| `preview_not_saved_config` | 409 | The preview fingerprint differs from the saved settings. Save the settings and preview again. |
+| `preview_incomplete` | 409 | Auto approval requires a complete, non-truncated preview. Manual apply may use a published truncated preview. |
+| `run_in_progress` | 409 | The account is reserved by another apply or auto run, including cancelled work awaiting quiescence or lease expiry plus grace. |
+| `run_changed` | 409 | The enqueue/journal ownership fence was lost, for example to cancellation or lease reassignment. Worker processing also stops on this code. |
+| `not_cancellable` | 409 | The run is a preview. It never writes and cannot be cancelled. |
+| `not_active` | 409 | The write run is no longer queued or running, so cancellation did not change it. |
+| `short_links_unavailable` | 409 | The client has neither an active custom hostname nor a publishable key for short URLs. Also a run or scan setup error. |
+| `upstream_throttled` | 429 | Meta rate-limited the account, or a saved account cooldown is still active. See `Retry-After`. |
+| `upstream_timeout` | 504 | A Meta request timed out or the network request failed. This is not an exact response-time guarantee. |
+| `upstream_error` | 502 | Meta returned an upstream error. Inspect the message. |
+| `invalid_request` | 502 | Meta refused the Marketing API request. This is distinct from a 400 local validation error. |
+| `upstream_malformed` | 502 | Meta returned unreadable JSON or an unexpected response shape. A malformed write response can leave the write uncertain. |
+| `writes_disabled` | 503 | Live Meta writes are not switched on. Apply is blocked, processing pauses, but previews and auto approval still work. |
+| `storage_failed` | 500 | A checked config, run, journal or short-link storage operation failed. Also a journal or scan code. |
+| `internal_error` | 500 | An unexpected route exception was not a structured tagging error. |
+
+#### Journal and scan codes
+
+| Code | Surface | Meaning |
+| --- | --- | --- |
+| `creative_copy_mismatch` | Change error | Full copy verification failed. No swap follows. |
+| `read_retry_exhausted` | Change error | Readback failures exhausted the budget. Unresolved writes stay uncertain. Known unwritten work can fail. |
+| `retry_exhausted` | Change error | Readback showed that a write still did not take effect after its one allowed retry. |
+| `account_mismatch` | Readback check / stale reason | The ad's account does not match the run. For unresolved writes the permanent read failure exhausts the read budget, so the stored error is `read_retry_exhausted`. |
+| `creative_mismatch` | Readback check | A creative read returned an unexpected ID. This permanent read failure exhausts the budget with stored `read_retry_exhausted`. |
+| `short_link_unavailable` | Change error | Link resolution or verification failed, including disabled, expired, non-passthrough or wrongly routed links, or an unreachable store. Link-store retries stop after three failures. No swap onto an unusable link follows. |
+| `cancelled_by_user` | Run cancellation | The user cancelled the run. Sent writes may still take effect. |
+| `cancelled` | Run cancellation fallback | The journal cancellation helper was called without a more specific error code. This code is separate from the run's `status: cancelled`. |
+| `config_deleted` | Run cancellation / scan precondition | The saved config was deleted. |
+| `auto_disabled` | Run cancellation / scan precondition | Auto mode, its approved fingerprint or its approval epoch no longer authorizes this work. |
+| `throttled` | Worker / scan deferral | A persisted account cooldown is still active. Not a separate public HTTP error. |
+| `deadline` | Graph helper / discovery truncation | The tick has too little time to send another request. No request was sent. Listings truncate rather than treating this as a failed scan. Not a public HTTP error. |
+| `discovery_failed` | Scan error fallback | Automatic discovery threw without a structured error code. No failed-scan run is created. |
+| `entitlement_unverified:<lookup error>` | Worker / scan deferral | Entitlements could not be verified. Known suffixes are `no_location`, `location_lookup_failed`, `location_plan_unresolved` and `agency_plan_unresolved`. Fail closed rather than authorize a write. |
+
+`last_auto_status` is an open set of named scan outcomes and error codes. Known scan errors include `credential_required`, `credential_invalid`, `insufficient_permission`, `upstream_throttled`, `upstream_timeout`, `upstream_error`, `upstream_malformed`, `invalid_request`, `short_links_unavailable`, `storage_failed`, `concurrent_update`, `run_changed` and `discovery_failed`. Preconditions can also stop or defer work with the cancellation or deferral codes above, `config_changed`, `config_disabled`, `location_disabled`, `feature_not_in_plan` or `writes_disabled`. The `ErrorCode` schema catalogs known source-backed codes, but all error-code fields allow other strings for future or upstream codes. Inspect the accompanying message or `last_auto_error` rather than assuming an unknown code is success.
+
+## 3. Preview
+
+```bash
+curl -X POST "https://mythic-analytics.gulp.workers.dev/client/v1/ad-tagging/meta/preview?location_id=LOC" \
+  -H "Authorization: Bearer ak_..."
+```
+
+Mythic reads matching campaigns, ads and creatives. The preview is stored for 24 hours. It writes nothing to Meta.
+
+See [Decisions and reasons](#decisions-and-reasons) for every `set` and `skip` outcome.
+
+Large accounts and Meta rate-limit warnings can truncate discovery. The preview has `status: incomplete` and `truncated: true`. Narrow the rules if needed. A published truncated preview can be applied to listed ads. Auto approval requires a complete preview.
+
+## 4. Apply
+
+```bash
+curl -X POST "https://mythic-analytics.gulp.workers.dev/client/v1/ad-tagging/meta/apply?location_id=LOC" \
+  -H "Authorization: Bearer ak_..." -H "Content-Type: application/json" \
+  -d '{"preview_id": "...", "ad_ids": ["120200000000000001"], "acknowledge_creative_swap": true}'
+```
+
+Meta stores URL parameters on an immutable creative. Mythic creates a copy, then points the ad at it. Ads can share a copy when the original creative, tags and resolved link changes match. Select up to 2000 distinct ad IDs from `set` items in the preview.
+
+<Callout kind="warning">
+Meta may treat the swap as a significant edit. Delivering ads may return to learning. Ads in review have no delivery or learning history yet, but the swap restarts review. Post-based creatives keep the original post and engagement. Creatives built from a link spec become a new post.
+</Callout>
+
+Apply returns `202` with a run ID. Batches process up to 25 ads every five minutes within a time budget. Only one apply or auto run per ad account can run at a time. Another returns `409 run_in_progress`.
+
+The preview must be published (`journal_ready: true`) and under 24 hours old. It must match the config generation, revision and fingerprint. The config must be enabled.
+
+Before creative creation and again before the swap, Mythic reads fresh account, effective ad status, campaign rules and original creative data. Changed or missing eligibility data makes the row `stale`. Failed reads never authorize writes.
+
+Before swapping, Mythic reads back the copy and compares it with a fresh original. Checks cover full story content, text, media, calls to action, carousel content, links, post identity, creative settings and planned parameters. Shared and recovered copies are checked too. Missing or changed content fails closed with `creative_copy_mismatch`. No swap follows a failed verification.
+
+Follow the per-ad journal using the [change statuses](#change-statuses) in the reference above.
+
+Retryable reads have a budget of three failures. Backoff is 5 minutes, then 10 minutes before the next attempt. Permanent read failures exhaust the budget immediately. `read_failures` and `next_read_at` expose this state. An exhausted unresolved write stays `uncertain` with `read_retry_exhausted`. Automatic retries stop, even after `next_read_at` passes. The run ends `partial` after other work finishes. Check the ad in Ads Manager. Uncertainty does not mean the write failed. Mythic considers at most one write retry after readback.
+
+Cancel with `POST /meta/runs/{id}/cancel`. Cancellation prevents later swaps but cannot recall sent writes. Already-tagged ads stay tagged. The account stays reserved until the worker quiesces and releases it, or its lease expires plus a 30-second grace period. A replacement run may still get `run_in_progress` while waiting.
+
+Meta cooldowns are stored in `throttled_until`. Eligible work resumes afterward. Delayed or shorter responses cannot shorten an existing cooldown.
+
+## Automatic checks
+
+```bash
+curl -X POST "https://mythic-analytics.gulp.workers.dev/client/v1/ad-tagging/meta/auto?location_id=LOC" \
+  -H "Authorization: Bearer ak_..." -H "Content-Type: application/json" \
+  -d '{"enabled": true, "preview_id": "...", "acknowledge_creative_swap": true}'
+```
+
+Auto approval needs a complete, published, unexpired preview of the enabled saved config. It binds to generation, revision and fingerprint. Reconnecting cannot reuse old approval. Changes to fingerprint fields revoke approval. An interval-only edit does not.
+
+Choose `auto_interval_minutes` with `PUT /meta`. It is an integer from 5 to 1440 in steps of 5. The default is 15 minutes. Cron checks due configs every five minutes. It takes up to 10 configs per tick within a time budget, oldest due first. Busy, skipped and failed checks consume capacity too. Large rosters and Meta cooldowns can stretch the interval.
+
+Follow queued work in run history. Use a manual preview if you need to inspect skipped ads. The [run journal fields](#query-filters-and-pagination) and [last automatic check fields](#last-automatic-check) distinguish scans from write runs.
+
+Auto mode skips `link_unverified` ads. It uses the same fresh eligibility and full copy checks as apply. Turn it off with `{"enabled": false}`. This cancels auto runs only.
+
+## Live writes switch
+
+`GET /meta` returns `data.writes_enabled`. When false, previews work, apply returns `503 writes_disabled` and queued runs are not processed. Auto approval can still be saved. `auto_enabled: true` then means approval is pending global activation. It does not mean ads are being changed.
+
+## Follow a run
+
+Use `GET /meta/runs` to find recent work, then `GET /meta/runs/{id}` to read its status and per-ad journal. Keep fetching with `next_cursor` until it is null. The [query filters and pagination](#query-filters-and-pagination), [run statuses](#run-statuses) and [errors](#errors) are defined in the reference above.
+
+## Endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/meta` | Config, defaults, credential presence and latest apply or auto run |
+| `PUT` | `/meta` | Create or partially update settings |
+| `DELETE` | `/meta` | Delete config and cancel active runs. Keep token and history. |
+| `GET` | `/meta/ad-accounts` | Test token and list accounts |
+| `POST` | `/meta/preview` | Discover and preview decisions |
+| `POST` | `/meta/apply` | Queue selected changes |
+| `POST` | `/meta/auto` | Approve or disable automatic checks |
+| `GET` | `/meta/runs` | List history |
+| `GET` | `/meta/runs/{id}` | Read run and paged change journal |
+| `POST` | `/meta/runs/{id}/cancel` | Cancel active write work |
+
+Every route is in the **Ad Tagging** reference group. See the endpoint pages for schemas. The MCP server has matching tools, including `preview_meta_ad_tagging` and `apply_meta_ad_tagging`. See [MCP tools](/mcp/tools).
+
+Graph-backed preview and account reads share a limit of 10 requests per minute per client. Other tagging routes allow 120 per minute per client. Rate-limit responses include `Retry-After`.

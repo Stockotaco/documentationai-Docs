@@ -480,7 +480,9 @@ Each destination has an optional per-destination delivery cap, set with `rate_li
 
 Credentialed destinations (`meta_capi`, `google_ads`, `google_analytics`, `openai_ads`) read their secrets from a separate, never-readable credential store keyed by `(location_id, destination_type, credential_name)`. Store or rotate a credential with `PUT /credentials/{type}`; list metadata with `GET /credentials`. Credential values are write-only — no endpoint ever returns them. Webhooks carry their auth inline in `action_config` instead.
 
-`convert_experiments` is the one type where "needs a credential to deliver" and "can store a credential" differ. Delivering to Convert needs no auth at all; **reading** Convert's report to verify a delivery does. Store that one under `credential_name: "reporting"`:
+`meta_ads` is storable but is not a destination: it is the Meta Marketing API token (system user, `ads_read` + `ads_management`) that [Ad UTM tagging](/ad-tagging-api/overview) uses to read and tag ads. Nothing delivers events with it.
+
+`convert_experiments` is the other type where "needs a credential to deliver" and "can store a credential" differ. Delivering to Convert needs no auth at all; **reading** Convert's report to verify a delivery does. Store that one under `credential_name: "reporting"`:
 
 ```json
 PUT /client/v1/destinations/credentials/convert_experiments

@@ -1,0 +1,1075 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Ad UTM Tagging
+  description: >
+    Find Meta ads whose URL parameters are missing or wrong, and have Mythic set
+    them. A client stores a Meta Marketing API token, picks the ad account,
+    defines which campaigns to tag, reviews a preview, then applies it to the
+    ads it selects or approves automatic checks at a chosen interval.
+
+
+    Meta keeps URL parameters on the ad creative, and a creative cannot be
+    edited in place. Mythic creates a copy of the creative with the merged
+    parameters and points the ad at the copy. Meta may treat that as a
+    significant edit, so every write needs `acknowledge_creative_swap: true`.
+
+
+    Reads accept an agency key (`ak_`, bind a location with `location_id` or the
+    `X-Location-Id` header) or a location secret key (`sk_`, config and run
+    history only). Everything else requires an agency key.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+paths:
+  /client/v1/ad-tagging/meta:
+    get:
+      summary: Get the config
+      operationId: getMetaAdTagging
+      description: >
+        The saved config (or `null`), whether a `meta_ads` token is stored,
+        the most recent apply or auto run, whether live writes are switched on,
+        and the defaults a custom form needs. Defaults include the template,
+        macros, overwrite policies, all three ad statuses, rule types and
+        auto interval bounds. Last automatic check fields describe scans,
+        not the final outcome of a queued run.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Config and status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      config:
+                        nullable: true
+                        allOf: [{ $ref: "#/components/schemas/Config" }]
+                      has_credential: { type: boolean }
+                      last_run:
+                        nullable: true
+                        allOf: [{ $ref: "#/components/schemas/Run" }]
+                      writes_enabled:
+                        type: boolean
+                        description: "False until live Meta writes are switched on. Previews work either way."
+                      defaults:
+                        type: object
+                        properties:
+                          utm_template: { $ref: "#/components/schemas/UtmTemplate" }
+                          macros: { type: array, items: { $ref: "#/components/schemas/MetaMacro" } }
+                          overwrite_policies: { type: array, items: { $ref: "#/components/schemas/OverwritePolicy" } }
+                          ad_statuses:
+                            type: array
+                            items: { $ref: "#/components/schemas/AdStatus" }
+                            default: [ACTIVE, PAUSED, IN_REVIEW]
+                            description: All three supported ad status selections.
+                          rule_types: { type: array, items: { $ref: "#/components/schemas/RuleType" } }
+                          auto_interval_minutes:
+                            type: object
+                            properties:
+                              min: { type: integer, enum: [5] }
+                              max: { type: integer, enum: [1440] }
+                              step: { type: integer, enum: [5] }
+                              default: { type: integer, enum: [15] }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/FeatureNotInPlan" }
+    put:
+      summary: Create or update the config
+      operationId: putMetaAdTagging
+      description: >
+        Partial: fields you omit keep their saved value (defaults on create).
+        Needs a stored `meta_ads` token. An interval-only edit preserves
+        revision, previews, runs and auto approval. Other saved config changes
+        bump `revision`, void earlier previews and cancel queued or running runs.
+        An unchanged save does not bump it. Turning only auto mode off cancels
+        auto runs without invalidating manual previews. Changing the account,
+        template, overwrite policy, statuses, rules or short_links also revokes
+        auto approval. These are the fingerprint fields. Enabled, credential name
+        and interval are not in the fingerprint. A save that changes the interval
+        and another field follows that other field's invalidation rules.
+        Each config has an immutable `generation` UUID. Recreating it creates a
+        new generation. Old previews cannot be reused even with identical settings.
+
+
+        A body of only `enabled: false` and/or `auto_enabled: false` is an off
+        switch: it works on every plan and for a disabled client.
+        `auto_enabled: true` is refused here. Use `POST /meta/auto`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigInput" }
+            example:
+              ad_account_id: act_1234567890
+              enabled: true
+              overwrite: fill_missing
+              ad_statuses: [ACTIVE, PAUSED, IN_REVIEW]
+              auto_interval_minutes: 15
+              rules:
+                operator: AND
+                conditions:
+                  - { type: campaign_name_contains, value: XYZ }
+                  - { type: campaign_created_on_or_after, value: "2026-01-01" }
+      responses:
+        "200":
+          description: Updated (or unchanged)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigResponse" }
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigResponse" }
+        "400":
+          description: "`invalid_config` (details lists every problem) or `use_auto_route`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "402": { $ref: "#/components/responses/FeatureNotInPlan" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "409":
+          description: "`credential_required` (store a `meta_ads` token first), `ad_account_in_use` (another client owns this ad account) or `concurrent_update`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      summary: Delete the config
+      operationId: deleteMetaAdTagging
+      description: >
+        Removes the config and cancels its queued or running runs. Run history
+        and the `meta_ads` token stay. Ads already tagged are not changed.
+        Sent writes may still take effect and remain uncertain. The cancelled
+        run retains its account reservation until worker quiescence and release,
+        or lease expiry plus a 30-second grace period. Recreating the config
+        gives it a new generation, invalidating old previews. Works on every plan.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      deleted: { type: boolean }
+                      cancelled_runs: { type: array, items: { type: string, format: uuid } }
+                      credential_retained: { type: boolean }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotConfigured" }
+  /client/v1/ad-tagging/meta/ad-accounts:
+    get:
+      summary: List the token's ad accounts
+      operationId: listMetaAdAccounts
+      description: >
+        The ad accounts the stored token can see. Also the way to test a token:
+        an invalid one answers `409 credential_invalid`, one without access
+        answers `409 insufficient_permission`, each with the fix in `message`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: credential_name
+          in: query
+          required: false
+          description: Named `meta_ads` credential. Default is the config's, else `default`.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Ad accounts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, example: act_1234567890 }
+                        account_id: { type: string, example: "1234567890" }
+                        name: { type: string }
+                        account_status: { type: integer }
+                        currency: { type: string }
+                  truncated: { type: boolean }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "409": { $ref: "#/components/responses/MetaCredential" }
+        "429": { $ref: "#/components/responses/MetaThrottled" }
+        "502": { $ref: "#/components/responses/MetaError" }
+        "504": { $ref: "#/components/responses/MetaTimeout" }
+  /client/v1/ad-tagging/meta/preview:
+    post:
+      summary: Preview which ads need tagging
+      operationId: previewMetaAdTagging
+      description: >
+        Reads the ad account's campaigns, the ads in the matching campaigns and
+        their creatives, and decides per ad. Writes nothing to Meta. The result
+        is stored for 24 hours as a preview run. Apply and auto mode need its ID.
+
+
+        The body may override `rules`, `utm_template`, `overwrite`,
+        `ad_statuses` or `short_links` to try them without saving. Previews never
+        create short links. If the effective settings
+        differ from the saved config, it cannot be applied
+        (`applies_to_saved_config: false`). Save the settings and preview again.
+        Account, enabled, credential and interval overrides are not accepted.
+        Large accounts or a Meta rate limit truncate discovery. The run then
+        has status `incomplete` and `truncated: true`. A published journal is
+        required for apply or auto approval.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                rules: { $ref: "#/components/schemas/Rules" }
+                utm_template: { $ref: "#/components/schemas/UtmTemplate" }
+                overwrite: { $ref: "#/components/schemas/OverwritePolicy" }
+                short_links: { type: boolean, description: Override the saved short link setting for this preview. }
+                ad_statuses:
+                  type: array
+                  minItems: 1
+                  items: { $ref: "#/components/schemas/AdStatus" }
+      responses:
+        "200":
+          description: Preview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      run: { $ref: "#/components/schemas/Run" }
+                      items: { type: array, items: { $ref: "#/components/schemas/Change" } }
+                      applies_to_saved_config: { type: boolean }
+                      writes_enabled: { type: boolean }
+                      retry_after: { type: integer, description: "Present when Meta reported the account near its rate limit (seconds)." }
+        "400":
+          description: "`invalid_overrides` or `invalid_config`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotConfigured" }
+        "409": { $ref: "#/components/responses/MetaCredential" }
+        "429": { $ref: "#/components/responses/MetaThrottled" }
+        "502": { $ref: "#/components/responses/MetaError" }
+        "504": { $ref: "#/components/responses/MetaTimeout" }
+  /client/v1/ad-tagging/meta/apply:
+    post:
+      summary: Apply a preview to selected ads
+      operationId: applyMetaAdTagging
+      description: >
+        Queues the selected `set` ads from a preview of the saved config. The
+        preview must be published (`journal_ready: true`), under 24 hours old,
+        and match the saved config's generation, revision and fingerprint.
+        A published truncated preview may be applied to its listed ads.
+        Batches process up to 25 ads every 5 minutes within a time budget.
+        Follow the run with `GET /meta/runs/{id}`. Delivering ads may return to
+        learning. In-review ads have no delivery or learning history yet, but
+        tagging restarts review. A swapped ad can be IN_PROCESS at the next
+        scan. Correct tags are skipped unless a destination still needs shortening. Before both creative creation
+        and the ad swap, Mythic freshly checks the account, effective ad status,
+        campaign rules and original creative. Changed or missing eligibility
+        data leaves the ad `stale`. A failed read never authorizes a write.
+
+
+        Before swapping, a read-only verification compares every created,
+        shared or recovered copy against a fresh original read, including the
+        full story content (text, media, calls to action and carousel content),
+        links, post identity where applicable, creative settings and planned
+        URL parameters. Missing or changed content/settings fail closed with
+        `creative_copy_mismatch`. No swap follows failed verification.
+
+
+        Unconfirmed writes are read back before considering at most one write
+        retry. Retryable reads have a budget of three failures, with increasing
+        backoff (5 then 10 minutes before the next attempt). Permanent read
+        failures exhaust it immediately. Exhausted unresolved writes remain
+        `uncertain` with `read_retry_exhausted`, stop automatic retries and leave
+        the run `partial` when other work finishes. Manual intervention in Ads
+        Manager is required. One apply or auto run per account at a time,
+        including a cancelled run whose worker has not yet quiesced or whose
+        lease plus grace period has not expired.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [preview_id, ad_ids, acknowledge_creative_swap]
+              properties:
+                preview_id: { type: string, format: uuid }
+                ad_ids: { type: array, minItems: 1, maxItems: 2000, items: { type: string, example: "120200000000000001" } }
+                acknowledge_creative_swap:
+                  type: boolean
+                  enum: [true]
+                  description: "Must be true: a new creative is created and swapped onto each ad."
+      responses:
+        "202":
+          description: Queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      run_id: { type: string, format: uuid }
+                      run: { $ref: "#/components/schemas/Run" }
+        "400":
+          description: "`acknowledgement_required`, `invalid_preview_id` or `invalid_ad_ids` (not a `set` item of that preview)"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404":
+          description: "`preview_not_found` or `not_configured`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: "`preview_expired`, `preview_unusable`, `config_changed`, `preview_not_saved_config`, `config_disabled`, `credential_required` or `run_in_progress`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: "`writes_disabled`. Live Meta writes are not switched on yet."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /client/v1/ad-tagging/meta/auto:
+    post:
+      summary: Approve or disable automatic checks
+      operationId: setMetaAdTaggingAuto
+      description: >
+        `enabled: true` approves automatic checks. Set auto_interval_minutes
+        with PUT /meta. The default is 15 minutes. It must be an integer from
+        5 to 1440 in steps of 5. Cron checks due configs every five minutes,
+        oldest due first, with up to 10 configs per tick and a time budget.
+        Busy, skipped and failed checks consume capacity too. Large rosters
+        and cooldowns can stretch the interval.
+
+
+        No-op or failed scans do not create runs. Auto runs journal only set
+        ads. Skips are counted in ads_skipped but have no auto change rows.
+        The read-only config fields last_auto_at, last_auto_status and
+        last_auto_error report the last check. A queued check is not proof
+        that writes succeeded. Auto runs have a run_slot timestamp.
+        It replaces run_date. The old last_auto_date field is removed.
+
+
+        Approval requires a complete (not truncated), published, unexpired
+        preview matching the saved config's generation, revision and fingerprint,
+        and `acknowledge_creative_swap: true`. A reconnect cannot reuse an old
+        preview. Fingerprint changes revoke approval. An interval-only edit
+        preserves revision, previews, runs and approval. Automatic checks skip
+        ads whose links Mythic cannot inspect (`link_unverified`) and uses the
+        same fresh eligibility and full copy verification as manual apply.
+
+
+        Approval can be saved while `writes_enabled` is false. In that case
+        `auto_enabled: true` means approval is pending global activation. No
+        ads change until live Meta writes are switched on.
+
+
+        `enabled: false` works on every plan and cancels a queued or running
+        auto run.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+                preview_id: { type: string, format: uuid, description: Required when enabling. }
+                acknowledge_creative_swap: { type: boolean, enum: [true], description: Required when enabling. }
+      responses:
+        "200":
+          description: Updated config
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigResponse" }
+        "400":
+          description: "`acknowledgement_required`, `invalid_preview_id` or `invalid_body`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotConfigured" }
+        "409":
+          description: "`preview_incomplete`, `preview_unusable`, `preview_expired`, `config_changed`, `preview_not_saved_config`, `config_disabled`, `credential_required` or `concurrent_update`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /client/v1/ad-tagging/meta/runs:
+    get:
+      summary: List runs
+      operationId: listMetaAdTaggingRuns
+      description: >
+        Previews, applies and auto runs for this client, newest first.
+        Omit kind for all kinds. Limit defaults to 20 and is clamped to 1 through
+        100. No-op or failed automatic scans are not runs.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: kind
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/RunKind" }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Runs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { type: array, items: { $ref: "#/components/schemas/Run" } }
+        "400":
+          description: "`invalid_kind`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /client/v1/ad-tagging/meta/runs/{id}:
+    get:
+      summary: Get a run and its per-ad journal
+      operationId: getMetaAdTaggingRun
+      description: >
+        Return the run and a page of change rows. Status filters change statuses,
+        not run statuses. Limit defaults to 200 and is clamped to 1 through 500.
+        Changes sort by campaign ID, ad ID and row ID. Keep the same status
+        filter when paging. Null next_cursor means the last page.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/RunId"
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/ChangeStatus" }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 500, default: 200 }
+        - name: cursor
+          in: query
+          required: false
+          description: "`next_cursor` from the previous page."
+          schema: { type: string }
+      responses:
+        "200":
+          description: Run and changes, ordered by campaign then ad
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      run: { $ref: "#/components/schemas/Run" }
+                      changes: { type: array, items: { $ref: "#/components/schemas/Change" } }
+                      next_cursor: { type: string, nullable: true }
+        "400":
+          description: "`invalid_status` or `invalid_cursor`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: "`not_found`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /client/v1/ad-tagging/meta/runs/{id}/cancel:
+    post:
+      summary: Cancel a queued or running run
+      operationId: cancelMetaAdTaggingRun
+      description: >
+        Ads not yet started become `cancelled`. An ad with a Meta write in
+        flight becomes `uncertain`: Meta may have applied it. Ads already
+        tagged stay tagged. Cancellation prevents subsequent swaps but cannot
+        recall writes already sent to Meta. The account reservation is retained
+        until the worker quiesces and releases it, or its lease expires plus a
+        30-second grace period. A replacement run can still get `run_in_progress`
+        meanwhile. Works on every plan.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/RunId"
+      responses:
+        "200":
+          description: Cancelled run
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: "#/components/schemas/Run" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404":
+          description: "`not_found`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: "`not_active` (already finished) or `not_cancellable` (a preview)"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Agency key (`ak_`) or location secret key (`sk_`, reads of the config and runs only).
+        Scoped keys (`mcp_`) are accepted too and need `ad_tagging:read` or `ad_tagging:write`. See [Using an mcp_ key over HTTP](/mcp/authentication).
+  parameters:
+    LocationId:
+      name: location_id
+      in: query
+      required: false
+      description: Location to scope to. Required for `ak_` keys or send `X-Location-Id`. Ignored for `sk_`.
+      schema: { type: string }
+    RunId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Unauthorized:
+      description: Missing or invalid key, or an `ak_` key with no location bound.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    AgencyRequired:
+      description: "`agency_required` or `location_disabled`. Re-enable the client for normal writes. Off switches still work."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    FeatureNotInPlan:
+      description: "`feature_not_in_plan`. Ad UTM tagging is not in this client's plan. Off switches stay open."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotConfigured:
+      description: "`not_configured`. Save a config with `PUT /meta` first."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    MetaCredential:
+      description: "`credential_required`, `credential_invalid` or `insufficient_permission`. The message says how to fix the token."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    MetaThrottled:
+      description: "`upstream_throttled` or `rate_limited`. See Retry-After. Preview and ad-account reads share 10 requests per minute per client. Other routes allow 120."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    MetaError:
+      description: "`invalid_request` (Meta's own message), `upstream_error` or `upstream_malformed`."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    MetaTimeout:
+      description: "`upstream_timeout`. A Meta request timed out or the network request failed."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    ErrorCode:
+      type: string
+      description: >
+        Known codes from the public tagging routes, Graph classifier, short-link
+        adapter and run/scan checks. Some are worker-only deferral or readback
+        codes, not HTTP errors. See the overview error tables for each meaning
+        and HTTP status where applicable. Not every code applies to every surface.
+        Error.code and journal error_code fields add an open string alternative
+        for future or upstream codes. Scan outcomes are defined by LastAutoStatus.
+      enum:
+        - unauthorized
+        - location_required
+        - location_not_linked
+        - agency_required
+        - insufficient_scope
+        - location_disabled
+        - feature_not_in_plan
+        - rate_limited
+        - invalid_json
+        - invalid_body
+        - invalid_config
+        - invalid_overrides
+        - use_auto_route
+        - invalid_preview_id
+        - acknowledgement_required
+        - invalid_ad_ids
+        - invalid_kind
+        - invalid_status
+        - invalid_cursor
+        - not_configured
+        - not_found
+        - preview_not_found
+        - credential_required
+        - credential_invalid
+        - insufficient_permission
+        - ad_account_in_use
+        - concurrent_update
+        - config_disabled
+        - config_changed
+        - preview_expired
+        - preview_unusable
+        - preview_not_saved_config
+        - preview_incomplete
+        - run_in_progress
+        - run_changed
+        - not_cancellable
+        - not_active
+        - short_links_unavailable
+        - upstream_throttled
+        - upstream_timeout
+        - upstream_error
+        - invalid_request
+        - upstream_malformed
+        - writes_disabled
+        - storage_failed
+        - internal_error
+        - creative_copy_mismatch
+        - read_retry_exhausted
+        - retry_exhausted
+        - account_mismatch
+        - creative_mismatch
+        - short_link_unavailable
+        - cancelled_by_user
+        - cancelled
+        - config_deleted
+        - auto_disabled
+        - throttled
+        - deadline
+        - discovery_failed
+        - "entitlement_unverified:no_location"
+        - "entitlement_unverified:location_lookup_failed"
+        - "entitlement_unverified:location_plan_unresolved"
+        - "entitlement_unverified:agency_plan_unresolved"
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: credential_invalid
+              anyOf:
+                - { $ref: "#/components/schemas/ErrorCode" }
+                - { type: string, description: Future or upstream error code. }
+            message: { type: string }
+            details: {}
+    MetaMacro:
+      type: string
+      enum: ["{{campaign.id}}", "{{campaign.name}}", "{{adset.id}}", "{{adset.name}}", "{{ad.id}}", "{{ad.name}}", "{{placement}}", "{{site_source_name}}"]
+      description: Returned in GET /meta data.defaults.macros.
+    OverwritePolicy:
+      type: string
+      enum: [fill_missing, enforce]
+      default: fill_missing
+      description: >
+        Returned in GET /meta data.defaults.overwrite_policies.
+        Included in the config fingerprint. fill_missing adds missing or empty managed values and keeps non-empty
+        values. enforce replaces managed values with the template value.
+        Unmanaged parameters stay in their existing order. Keys are compared
+        after percent decoding. Managed duplicates collapse during a merge.
+        fill_missing does not swap a creative just to remove duplicates.
+    AdStatus:
+      type: string
+      enum: [ACTIVE, PAUSED, IN_REVIEW]
+      description: >
+        Returned in GET /meta data.defaults.ad_statuses. New configs select all
+        three. ACTIVE maps to Meta ACTIVE. PAUSED maps to PAUSED, CAMPAIGN_PAUSED
+        and ADSET_PAUSED. IN_REVIEW maps to PENDING_REVIEW and IN_PROCESS.
+        Tagging an in-review ad restarts review. It has no delivery or learning
+        history yet. Correct tags on an IN_PROCESS ad are skipped at the next scan
+        unless a destination still needs shortening.
+    MetaAdEffectiveStatus:
+      type: string
+      enum: [ACTIVE, PAUSED, CAMPAIGN_PAUSED, ADSET_PAUSED, PENDING_REVIEW, IN_PROCESS]
+      description: Meta effective status values covered by the three AdStatus selections.
+    CampaignStatus:
+      type: string
+      enum: [ACTIVE, PAUSED, ARCHIVED]
+      description: Campaign status filter values. Separate from ad status selections.
+    RuleType:
+      type: string
+      enum: [campaign_name_contains, campaign_name_not_contains, campaign_created_on_or_after, campaign_status_in]
+      description: Returned in GET /meta data.defaults.rule_types.
+    UtmTemplate:
+      type: string
+      minLength: 1
+      maxLength: 1000
+      default: "utm_source=facebook&utm_medium=paid&utm_campaign={{campaign.name}}&utm_id={{campaign.id}}&utm_content={{ad.id}}&utm_term={{adset.name}}&campaign_id={{campaign.id}}&adset_id={{adset.id}}&ad_id={{ad.id}}"
+      description: >
+        Query string. An optional leading question mark is accepted.
+        At most 20 unique keys matching ^[a-z][a-z0-9_]{0,63}$.
+        Non-empty values contain only A-Z, a-z, 0-9, underscore, dot, hyphen
+        and the eight MetaMacro values. Each parameter needs key=value.
+        Empty parameters and duplicate keys are rejected. Template keys are
+        the only managed parameters. Other parameters stay unchanged.
+        The default is returned in GET /meta data.defaults.utm_template.
+        Included in the config fingerprint.
+    AutoInterval:
+      type: integer
+      minimum: 5
+      maximum: 1440
+      multipleOf: 5
+      default: 15
+      description: >
+        Requested minutes between automatic checks. Not in the fingerprint.
+        An interval-only edit preserves revision, previews, runs and approval.
+        Cron checks every five minutes with up to 10 configs per tick,
+        oldest due first, within a time budget. Capacity and cooldowns can stretch
+        the interval. Bounds are returned in GET /meta data.defaults.auto_interval_minutes.
+    Condition:
+      description: >
+        One of four campaign conditions. Name rules allow case_sensitive,
+        default false. Date and status rules reject case_sensitive.
+        Unknown fields are rejected.
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [type, value]
+          properties:
+            type: { type: string, enum: [campaign_name_contains] }
+            value: { type: string, minLength: 1, maxLength: 200, description: Campaign name substring to include. }
+            case_sensitive: { type: boolean, default: false }
+        - type: object
+          additionalProperties: false
+          required: [type, value]
+          properties:
+            type: { type: string, enum: [campaign_name_not_contains] }
+            value: { type: string, minLength: 1, maxLength: 200, description: Campaign name substring to exclude. }
+            case_sensitive: { type: boolean, default: false }
+        - type: object
+          additionalProperties: false
+          required: [type, value]
+          properties:
+            type: { type: string, enum: [campaign_created_on_or_after] }
+            value: { type: string, format: date, description: Real calendar date YYYY-MM-DD. Inclusive from 00:00 UTC. }
+        - type: object
+          additionalProperties: false
+          required: [type, value]
+          properties:
+            type: { type: string, enum: [campaign_status_in] }
+            value:
+              type: array
+              minItems: 1
+              items: { $ref: "#/components/schemas/CampaignStatus" }
+              description: Campaign status. Effective status is the fallback when status is absent.
+    Rules:
+      type: object
+      additionalProperties: false
+      default: { version: 1, operator: AND, conditions: [] }
+      description: >
+        Included in the fingerprint. AND requires all conditions. OR requires
+        at least one. All referenced fields must be readable before either is
+        evaluated. Missing or unknown names, dates or statuses fail closed,
+        including negative name rules. A matching OR branch cannot authorize
+        a write when another branch needs unreadable data.
+      properties:
+        version: { type: integer, enum: [1], default: 1 }
+        operator: { type: string, enum: [AND, OR], default: AND }
+        conditions:
+          type: array
+          maxItems: 20
+          default: []
+          description: Empty includes every campaign in the ad account.
+          items: { $ref: "#/components/schemas/Condition" }
+    ConfigInput:
+      type: object
+      additionalProperties: false
+      description: >
+        Partial update. Omitted fields keep saved values. Defaults apply on creation.
+        The account is required on creation. Unknown fields are rejected.
+      properties:
+        ad_account_id:
+          description: >
+            Required on creation. No default. Accept act_123 or 123 with 1 to
+            32 digits, or a positive safe integer. Stored as digits only.
+            One client per account. Included in the fingerprint.
+          oneOf:
+            - { type: string, pattern: '^(act_)?[0-9]{1,32}$' }
+            - { type: integer, minimum: 1, maximum: 9007199254740991 }
+        enabled: { type: boolean, default: false, description: "Allows apply and auto mode. Previews can run while false. Not in the fingerprint. Edits bump revision and invalidate previews and active runs." }
+        utm_template: { $ref: "#/components/schemas/UtmTemplate" }
+        overwrite: { $ref: "#/components/schemas/OverwritePolicy" }
+        ad_statuses:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/AdStatus" }
+          default: [ACTIVE, PAUSED, IN_REVIEW]
+          description: Included in the fingerprint. Duplicate selections are normalized.
+        rules: { $ref: "#/components/schemas/Rules" }
+        short_links:
+          type: boolean
+          default: false
+          description: >
+            Included in the fingerprint. Point tagged ads at this client's short
+            links and pass UTMs to the page. Keep existing client links. Reuse
+            enabled, unexpired links to the same destination with passthrough
+            or create links during apply and auto runs. New links appear in Links.
+            Previews never create links. Existing-post creatives only get tags.
+            Changing this field bumps revision, voids previews and revokes approval.
+        credential_name: { type: string, minLength: 1, maxLength: 100, default: default, description: "Non-blank name of the stored meta_ads token. Not in the fingerprint. Edits bump revision and invalidate previews and active runs." }
+        auto_interval_minutes: { $ref: "#/components/schemas/AutoInterval" }
+        auto_enabled: { type: boolean, enum: [false], description: "Only false here. Approve with POST /meta/auto." }
+    Config:
+      type: object
+      properties:
+        ad_account_id: { type: string }
+        enabled: { type: boolean }
+        short_links: { type: boolean, default: false, description: Whether tagged ads use Mythic short links with UTM passthrough. }
+        utm_template: { $ref: "#/components/schemas/UtmTemplate" }
+        overwrite: { $ref: "#/components/schemas/OverwritePolicy" }
+        ad_statuses: { type: array, minItems: 1, items: { $ref: "#/components/schemas/AdStatus" }, default: [ACTIVE, PAUSED, IN_REVIEW] }
+        rules: { $ref: "#/components/schemas/Rules" }
+        credential_name: { type: string, minLength: 1, maxLength: 100 }
+        auto_interval_minutes: { $ref: "#/components/schemas/AutoInterval" }
+        last_auto_at: { type: string, format: date-time, nullable: true, readOnly: true, description: "Timestamp of the latest automatic scan, or null when no scan is recorded. Scans without runs still update check status." }
+        last_auto_status:
+          type: string
+          nullable: true
+          readOnly: true
+          description: "Last automatic check outcome when available. No particular initial or cleared value is guaranteed."
+          allOf: [{ $ref: "#/components/schemas/LastAutoStatus" }]
+        last_auto_error: { type: string, nullable: true, readOnly: true, description: "Error detail as a string, or null when there is no error. No failed-scan run is created." }
+        generation: { type: string, format: uuid, description: "Immutable config identity. Recreating the config changes it and prevents reuse of old previews." }
+        revision: { type: integer }
+        fingerprint: { type: string, description: "Hash of account, template, overwrite, ad statuses, rules and short_links. Excludes enabled, credential_name and interval. Apply and auto approval bind to generation, revision and fingerprint." }
+        auto_enabled: { type: boolean, description: "Approval saved. While writes_enabled is false it is pending global activation and no ads change." }
+        auto_approved_fingerprint: { type: string, nullable: true }
+        auto_approved_preview_id: { type: string, nullable: true }
+        auto_approved_by: { type: string, nullable: true }
+        auto_approved_at: { type: string, format: date-time, nullable: true }
+        throttled_until: { type: string, format: date-time, nullable: true, description: "Persisted account cooldown. Delayed or shorter responses cannot shorten it. Eligible work resumes afterward." }
+        last_run_at: { type: string, format: date-time, nullable: true }
+        last_run_status:
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/RunStatus" }]
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ConfigResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { $ref: "#/components/schemas/Config" }
+        cancelled_runs: { type: array, items: { type: string, format: uuid } }
+        writes_enabled: { type: boolean }
+    LastAutoStatus:
+      type: string
+      nullable: true
+      description: >
+        Last automatic check outcome, not a run status. queued means set ads
+        were queued. no_changes means no writable changes and no run.
+        incomplete means discovery was truncated. skipped_busy means the account
+        already has reserved work. Other non-null values are error or blocked-check
+        codes. Inspect last_auto_error. Known scan errors include credential_required,
+        credential_invalid, insufficient_permission, upstream_throttled,
+        upstream_timeout, upstream_error, upstream_malformed, invalid_request,
+        short_links_unavailable, storage_failed, concurrent_update, run_changed
+        and discovery_failed. Preconditions may also stop or defer work with
+        config_deleted, config_disabled, config_changed, auto_disabled,
+        location_disabled, feature_not_in_plan, writes_disabled, throttled
+        or entitlement_unverified:<lookup error>.
+        No-op or failed scans create no runs. The open alternative admits
+        future or upstream codes, not additional successful outcomes.
+      anyOf:
+        - { type: string, enum: [queued, no_changes, incomplete, skipped_busy] }
+        - { $ref: "#/components/schemas/ErrorCode" }
+        - { type: string, nullable: true, description: "Future or upstream failed or blocked check code, or an unavailable outcome." }
+    RunKind:
+      type: string
+      enum: [preview, apply, auto]
+      description: >
+        preview is read-only discovery. apply contains selected set ads from a
+        reviewed preview. auto contains set ads found by an approved check.
+    RunStatus:
+      type: string
+      enum: [completed, incomplete, queued, running, partial, failed, cancelled]
+      description: >
+        queued is a published write journal waiting for processing. running is
+        discovery, journal creation or processing underway. completed is a full
+        preview or finished writes with no known failures or unresolved writes.
+        incomplete means discovery was truncated. partial means mixed successful
+        and failed writes or exhausted unresolved writes. failed means a run-level
+        error or failed changes without successful changes. cancelled stops work
+        but cannot recall prior or in-flight writes.
+    Run:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        kind: { $ref: "#/components/schemas/RunKind" }
+        status: { $ref: "#/components/schemas/RunStatus" }
+        location_id: { type: string }
+        ad_account_id: { type: string }
+        config_generation: { type: string, format: uuid, nullable: true, description: Config generation this run was planned from. }
+        config_auto_approval_epoch: { type: integer, nullable: true, readOnly: true, description: "Auto-approval fence captured for an auto run. Not a client input." }
+        config_revision: { type: integer }
+        config_fingerprint: { type: string }
+        run_slot: { type: string, format: date-time, nullable: true, readOnly: true, description: "Reserved timestamp for an auto run. Not used for preview or apply. Replaces run_date. No particular absent-value representation is guaranteed." }
+        journal_ready: { type: boolean, description: "The per-ad journal is fully published. False journals cannot be applied or processed." }
+        ad_statuses_snapshot: { type: array, nullable: true, items: { $ref: "#/components/schemas/AdStatus" }, description: Ad statuses used for fresh eligibility checks. }
+        rules_snapshot:
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/Rules" }]
+        template_snapshot: { type: string, nullable: true }
+        overwrite_snapshot: { type: string, nullable: true, enum: [fill_missing, enforce] }
+        short_links_snapshot: { type: boolean, description: Short link setting used for this run. }
+        attempts: { type: integer, description: Run claim attempt counter. }
+        source_preview_id: { type: string, format: uuid, nullable: true }
+        truncated: { type: boolean }
+        truncation_reason: { type: string, nullable: true }
+        campaigns_scanned: { type: integer }
+        campaigns_matched: { type: integer }
+        ads_scanned: { type: integer }
+        ads_planned: { type: integer }
+        ads_applied: { type: integer }
+        ads_failed: { type: integer }
+        ads_uncertain: { type: integer }
+        ads_skipped: { type: integer, description: "Skipped ads counted during discovery. Auto runs contain only set rows, so skipped ads have no auto journal rows." }
+        ads_stale: { type: integer }
+        expires_at: { type: string, format: date-time, nullable: true }
+        error_code:
+          type: string
+          nullable: true
+          description: "Run failure or cancellation code, when present. Includes short_links_unavailable for missing short-URL routing setup. A code on a run does not specify an HTTP response status."
+          anyOf:
+            - { $ref: "#/components/schemas/ErrorCode" }
+            - { type: string, nullable: true, description: "Future or upstream error code, or no recorded error." }
+        error_message: { type: string, nullable: true }
+        requested_by: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time, nullable: true }
+        finished_at: { type: string, format: date-time, nullable: true }
+    LinkChange:
+      type: object
+      required: [from, action]
+      properties:
+        from: { type: string, description: Destination URL before shortening. }
+        action: { type: string, enum: [keep, reuse, create], description: "keep preserves this client's short link. reuse uses an existing suitable link. create needs a new link. Previews do not create links." }
+        to: { type: string, description: "Short URL. Present for preview reuse and resolved reuse or create entries." }
+        slug: { type: string, description: Short link slug. }
+        link_id: { type: string, description: Short link id after resolution. }
+        destination: { type: string, description: "Keep entries after processing: the page the kept short link points at." }
+        problem: { type: string, enum: [missing, disabled, expired, no_passthrough], description: "Keep entries can report a missing record, disabled link, expired link or UTM passthrough off. The ad fails instead of being swapped onto an unusable link." }
+        resolved: { type: boolean, description: "True after processing. Does not confirm the ad swap." }
+    DecisionReason:
+      type: string
+      enum: [unsupported_creative, no_link, inline_utms_in_link, already_correct, has_values_fill_missing, link_unverified, short_link_conflict]
+      description: >
+        unsupported_creative means the creative cannot be safely copied.
+        no_link means a readable creative has no destination.
+        inline_utms_in_link means a destination already carries a managed key.
+        already_correct means tags match and no destination needs shortening.
+        has_values_fill_missing means no missing values and existing values are
+        kept. link_unverified means an existing post hides the link. Manual
+        previews may return set for it. Auto mode skips it. short_link_conflict
+        means URL tags would pass key to a short link and could select the wrong client.
+    ChangeStatus:
+      type: string
+      enum: [planned, creative_pending, creative_created, swap_pending, applied, failed, uncertain, reconciled, skipped, stale, cancelled]
+      description: >
+        planned waits for work. In a preview it is not queued to write yet.
+        creative_pending journals creation before dispatch. creative_created
+        stores a copy ID without a confirmed swap. swap_pending journals the
+        swap before dispatch. applied means Meta confirmed the swap. failed
+        means a known failure stopped the change. uncertain means a dispatched
+        write is unresolved. reconciled means readback confirmed the verified
+        new creative. skipped means no write was planned. stale means eligibility
+        or the plan changed or required data is missing. cancelled means work
+        stopped before a write needed reconciliation. Sent writes may remain uncertain.
+    Change:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        run_id: { type: string, format: uuid }
+        read_failures: { type: integer, minimum: 0, description: "Read-failure budget consumed. At 3 no automatic read retry remains. A permanent failure exhausts the budget immediately." }
+        next_read_at: { type: string, format: date-time, nullable: true, description: "Read-backoff timestamp. Exhausted rows are not retried even after this time." }
+        attempts: { type: integer, description: Write retry counter. }
+        campaign_id: { type: string }
+        campaign_name: { type: string }
+        adset_id: { type: string }
+        adset_name: { type: string }
+        ad_id: { type: string }
+        ad_name: { type: string }
+        ad_effective_status: { $ref: "#/components/schemas/MetaAdEffectiveStatus" }
+        old_creative_id: { type: string }
+        new_creative_id: { type: string, nullable: true }
+        url_tags_before: { type: string }
+        url_tags_after: { type: string }
+        links_known: { type: boolean }
+        link_changes:
+          type: array
+          nullable: true
+          description: >
+            Null when there is no link plan. Preview and auto-run actions are
+            keep (with slug, and problem when the link cannot carry the UTMs),
+            reuse with to and slug, or create without a new short URL. After
+            processing, reuse and create have to, slug, link_id and resolved
+            true, and keep has slug, link_id, destination and resolved true.
+            An ad needing a short link has action set even when its URL
+            parameters are unchanged.
+          items: { $ref: "#/components/schemas/LinkChange" }
+        action: { type: string, enum: [set, skip] }
+        status: { $ref: "#/components/schemas/ChangeStatus" }
+        reason:
+          type: string
+          nullable: true
+          anyOf:
+            - { $ref: "#/components/schemas/DecisionReason" }
+            - type: string
+              enum: [account_mismatch, ad_status_changed, campaign_changed, creative_changed, plan_changed, cancelled_by_user, cancelled_mid_write, config_changed, config_disabled, config_deleted, auto_disabled, location_disabled, feature_not_in_plan, run_failed]
+            - { type: string, description: Run-level error code on an unstarted cancelled row. }
+          description: "Decision reason or a stale or cancellation reason. Normal set items have null reason. link_unverified can be set in a manual preview or skip in auto mode. Run failures can cancel unstarted rows with the run error code or run_failed."
+        error_code:
+          type: string
+          nullable: true
+          description: "Change error, when present. creative_copy_mismatch prevents a swap. read_retry_exhausted can leave sent writes uncertain. retry_exhausted means a write did not take effect after one retry. short_link_unavailable covers failed link resolution or verification. The ad is never swapped onto an unusable link. Codes here are journal state, not HTTP statuses."
+          anyOf:
+            - { $ref: "#/components/schemas/ErrorCode" }
+            - { type: string, nullable: true, description: "Future or upstream error code, or no recorded error." }
+        error_message: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
