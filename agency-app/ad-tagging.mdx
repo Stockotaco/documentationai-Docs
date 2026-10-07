@@ -12,27 +12,38 @@ click arrives with. Ads launched without them lose that attribution. **Ad UTM
 tagging** checks the ads in the campaigns you choose, shows which ones need
 URL parameters, and sets them for you.
 
-Open a client and choose **Automate**, then **Ad UTM tagging**. The screen
-has five parts: the Meta token, the settings, a preview, automatic checks and
-the run history.
+Open a client and choose **Automate**, then **Ad UTM tagging**. A new client
+starts with two steps: connect Meta, then choose what to tag. After that the
+screen shows:
+
+- **Automatic tagging**: one switch, how often Mythic checks, and the result
+  of the last check.
+- **Settings**: what Mythic tags and the URL parameters it writes, in plain
+  words. **Edit** opens the full form.
+- **Activity**: **Check now** and the history of changes.
+- The Meta connection, on one line at the bottom, with **Manage**.
 
 <Callout kind="info">
-Until Mythic switches on live Meta writes, the screen says **Live Meta writes
-aren't switched on yet**. Previews work, but applying is blocked. You can
-**Save auto approval** now. The status is **Pending activation**, and no ads
-change until Mythic globally switches on live writes.
+Until Mythic switches on live Meta writes, the screen says **Meta writes aren't
+on yet**. Checks work, but applying is blocked. You can turn on automatic
+tagging now. The status reads **Approved. Starts when Mythic turns on Meta
+writes.**, and no ads change until then.
 </Callout>
+
+The client chat on the right can read and change these settings too, for
+example "check every 30 minutes" or "add a campaign name condition". Every
+change it makes asks for your approval in the chat first.
 
 <Callout kind="note">
 If the client's plan no longer includes ad tagging, the screen shows
-**Stop ad tagging** instead of settings, previews or run history. You can
+**Stop ad tagging** instead of settings, checks or history. You can
 **Turn off auto mode**, **Turn off ad tagging**, or enter a known run UUID
 under **Run ID to cancel** and click **Cancel run**. Turning off auto mode
 cancels auto runs only. Turning off tagging cancels queued and running writes.
 Already-written ads are not reverted. Read-only clients cannot use these controls.
 </Callout>
 
-## 1. Store a Meta token
+## 1. Connect Meta
 
 Ad tagging needs a Meta Marketing API token for the client's ad account. Use
 a system-user token, so it doesn't expire when someone leaves:
@@ -49,32 +60,41 @@ a system-user token, so it doesn't expire when someone leaves:
     In **Accounts**, then **Ad accounts**, assign the system user this
     client's ad account.
   </Step>
-  <Step title="Store it in Mythic">
-    Paste the token into **Meta access token** and click **Store token**.
-    Mythic keeps it and never shows it again.
+  <Step title="Connect it in Mythic">
+    Paste the token into **Connect Meta** and click **Connect**. Mythic keeps
+    it and never shows it again. **How to get a token** on the card repeats
+    these steps.
   </Step>
 </Steps>
 
-Click **Test token** to list the ad accounts it can see. If Meta rejects it,
+Later, **Manage** at the bottom of the screen opens the Meta connection.
+**Test token** lists the ad accounts the token can see. If Meta rejects it,
 the screen shows Meta's reason and the fix, such as regenerating the token or
-assigning the ad account. **Remove token** also removes this client's ad
+assigning the ad account. **Replace token** swaps in a new one. **Remove token** also removes this client's ad
 tagging settings and frees the ad account for another client. Run history
 stays. If an ad account is already in use, the message names the client that
 holds it when that client is in your agency.
 
-## 2. Choose the settings
+## 2. Choose what to tag
+
+The first time, the form appears on the screen as **Choose what to tag**. The
+defaults work for most clients: click **Set up ad tagging**. Afterwards,
+**Settings** shows the saved choices and **Edit** opens the same form.
 
 | Setting | What it does |
 | --- | --- |
 | **Ad account** | The account to tag. One ad account can belong to one client. |
-| **Tag this client's ads** | The on switch. **Turn off** stops tagging and cancels queued runs. It always works, even if the client's plan changes. |
-| **URL parameters** | The parameters to set, as a query string. Values may use letters, digits, `_ . -` and Meta's macros, such as `{{campaign.id}}`. |
-| **When an ad already has values** | **Fill missing** adds the parameters an ad lacks and keeps its values. **Enforce** sets every parameter in the template to the template's value. |
-| **Write current names** | On by default. Writes each ad's current campaign, ad set and ad names instead of Meta's name macros, and keeps them current after renames and duplicates. |
-| **Use Mythic short links** | Off by default. Points each tagged ad at one of this client's short links. The short link passes the UTMs to the page. |
-| **Which ads** | Active, paused and in-review ads. All three are selected by default. Paused includes ads paused by their campaign or ad set. In review includes Meta's `PENDING_REVIEW` and `IN_PROCESS` states. |
-| **Which campaigns** | Filter by name contains, name doesn't contain, created on or after a UTC date, or campaign status. Status choices are active, paused and archived. Choose **Match all** or **Match any**. No conditions includes every campaign. |
-| **Auto interval** | Time between automatic checks. Default 15 minutes. Choose 5 to 1440 minutes in steps of 5. The interval is not a timing guarantee. |
+| **Campaigns** | Filter by name contains, name doesn't contain, created on or after a UTC date, or campaign status. Status choices are active, paused and archived. Choose **Match all** or **Match any**. No conditions includes every campaign. |
+| **Ads** | **Active**, **Paused** and **In review**. All three are selected by default. Paused includes ads paused by their campaign or ad set. In review includes Meta's `PENDING_REVIEW` and `IN_PROCESS` states. |
+| **URL parameters** | The parameters to set, laid out like Meta's **Build a URL parameter** dialog. **Campaign source**, **Campaign medium**, **Campaign name** and **Campaign content** are `utm_source`, `utm_medium`, `utm_campaign` and `utm_content`. Anything else goes under **Custom parameters** as a name and a value. Values may use letters, digits, `_ . -` and Meta's macros, such as `{{campaign.id}}`. |
+| **Existing values** | **Keep** adds the parameters an ad lacks and keeps its values. **Replace** sets every parameter above to its value here. |
+| **Current names** | On by default. Writes each ad's current campaign, ad set and ad names instead of Meta's name macros, and keeps them current after renames and duplicates. |
+| **Short links** | Off by default. Sends each tagged ad's clicks through one of this client's short links. The short link passes the UTMs to the page. |
+
+The **Edit** dialog also holds **Turn off tagging**, which stops tagging and
+cancels queued runs. It always works, even if the client's plan changes.
+**Automatic tagging** then reads **Tagging is off**, with **Turn on**.
+**Remove** deletes the settings.
 
 Name conditions accept 1 to 200 characters. They ignore case unless you choose
 case-sensitive matching. Use at most 20 conditions. Every field referenced by
@@ -97,15 +117,15 @@ Cap amounts are left out so tuning a cap doesn't rewrite your ads. Delete
 
 For example, to tag only campaigns named "XYZ" that were created this year,
 add **Campaign name contains** `XYZ` and **Campaign created on or after**
-1 January, with **Match all**. The sentence under **Which campaigns** reads
-the rules back in plain language.
+1 January, with **Match all**. **Settings** reads the rules back in plain
+language.
 
 To add one of Meta's macros, put the cursor where it goes and click the
-macro under the field. The example below the field shows a click URL with
-sample campaign and ad names, and the blue labels list the parameters Mythic
-manages.
+value under **Insert**, such as **Campaign ID** or **Bid structure**. Hover a
+value to see the macro it inserts. **Reset to default** restores the default
+parameters.
 
-Mythic manages only the parameters in your template. Any other parameter an
+Mythic manages only the parameters listed here. Any other parameter an
 ad already has is kept. The default template sets `utm_source=facebook` and
 `utm_medium=paid`, so the clicks group as Paid Social, plus the ids
 attribution joins on. The screen warns you if your template drops
@@ -114,10 +134,10 @@ Social.
 
 Meta fills `{{campaign.name}}`, `{{adset.name}}` and `{{ad.name}}` with the
 name an ad had when it was first published. A renamed or duplicated ad keeps
-reporting the old name. With **Write current names** on, Mythic writes the
+reporting the old name. With **Current names** on, Mythic writes the
 current names into the URL instead, such as `utm_campaign=Spring%20Sale`, and
 rewrites them when a name changes. ID macros stay macros. A parameter that uses
-a name macro is always kept current, even under **Fill missing**, so a value
+a name macro is always kept current, even under **Keep**, so a value
 you set by hand on that parameter is replaced. A rename means a new creative
 and a swap, which restarts Meta review. Automatic checks fix names only on
 paused, in-review and scheduled ads (Active, but the ad set hasn't started),
@@ -125,10 +145,10 @@ where new duplicates are. A delivering ad with an
 outdated name shows **Name outdated, ad delivering**: apply it manually to
 update it.
 
-With **Use Mythic short links** on, Mythic keeps a link that already is one
+With **Short links** on, Mythic keeps a link that already is one
 of this client's short links. It reuses an enabled, unexpired short link to
 the same page if UTM passthrough is on, or creates one during apply or auto
-mode. New links appear in the client's **Links**. Previews never create links.
+mode. New links appear in the client's **Links**. Checks never create links.
 Existing-post ads marked **Link not verified** only get tags. Their links are
 not shortened. Call-to-action and carousel card links are shortened too.
 
@@ -136,30 +156,34 @@ Before each swap, Mythic checks that every short link the ad will use is still
 enabled and sends clicks to this client. If a check fails, the ad keeps its
 current creative.
 
-Click **Save settings**. Changing only the auto interval preserves the revision,
-previews, runs and auto approval. Other setting changes make earlier previews
-unusable and cancel queued or running runs. Changes to the ad account,
-parameters, overwrite policy, ad statuses, campaigns or short links also turn
-auto mode off. An unchanged save leaves the preview valid. Turning off auto
-mode alone does not invalidate a manual preview.
+Click **Save**. **Cancel** or closing the dialog discards your edits. Changing
+only how often Mythic checks preserves the revision, checks, runs and
+automatic tagging. Other setting changes make earlier checks unusable and
+cancel queued or running runs. Changes to the ad account, parameters, existing
+values, ads, campaigns or short links also turn automatic tagging off, and the
+dialog says so before you save. An unchanged save leaves the check valid.
+Turning off automatic tagging alone does not invalidate a check.
 
-Previews and approval checks bind to the saved settings' generation, revision
-and fingerprint. Disconnecting and reconnecting creates a new generation, so
-an old preview cannot be reused even if the settings look identical.
+Checks and approvals bind to the saved settings' generation, revision and
+fingerprint. Disconnecting and reconnecting creates a new generation, so an
+old check cannot be reused even if the settings look identical.
 
-## 3. Preview
+## 3. Check
 
-Click **Run preview**. Mythic reads the matching campaigns and their ads from
-Meta and decides what to do with each ad. Nothing is written to Meta. With
-unsaved changes, the button reads **Preview unsaved changes**: you can see
-the result, but you have to save before applying it.
+Under **Activity**, click **Check now**. Mythic reads the matching campaigns
+and their ads from Meta and decides what to do with each ad. Nothing is
+written to Meta. The API calls this a preview.
+
+The result is one line, such as **3 of 11 ads need tags.** or **All 11 ads
+are up to date.** When ads need tags, a table lists them. **Needs tags**,
+**Skipped** and **All** filter it. **Done** closes the check.
 
 | Decision | Meaning |
 | --- | --- |
 | **Will set** | The ad needs URL parameters or a short link. Mythic will make those changes. |
-| **Link not verified** | The ad uses an existing post, so Meta doesn't show Mythic its link. You can apply it by hand after checking the link in Ads Manager. Auto mode skips these ads. |
+| **Link not verified** | The ad uses an existing post, so Meta doesn't show Mythic its link. You can apply it by hand after checking the link in Ads Manager. Automatic tagging skips these ads. |
 | **Already correct** | Every parameter already has the template's value. |
-| **Nothing to add** | **Fill missing** has nothing to add. Some values differ from the template. **Enforce** would replace them. |
+| **Nothing to add** | **Keep** has nothing to add. Some values differ from your settings. **Replace** would overwrite them. |
 | **UTMs in link** | The ad's link already has one of your parameters, so Mythic leaves it alone rather than duplicate it. |
 | **Unsupported creative** | Catalog, template URL and dynamic creatives aren't supported yet. |
 | **No link** | The ad has no destination link. |
@@ -177,14 +201,14 @@ The same column shows each destination link change:
   apply will fail that ad instead of setting tags the page would never get.
 - **Reuses** shows an existing short URL Mythic plans to use.
 - **Creates a short link for** shows the destination page. The short URL is
-  chosen during apply or auto mode. Run details show **Created** and the short
+  chosen during apply or automatic tagging. Run details show **Created** and the short
   URL once it is resolved.
 
 An ad can be **Will set** even when its URL parameters are unchanged. Its
 destination link may still need shortening. A resolved link in run details
 does not by itself confirm the ad swap. Check the ad's state.
 
-A preview lasts 24 hours. The label at the top right counts down and turns
+A check lasts 24 hours. The label at the top right counts down and turns
 orange in the last hour. If it stopped early on a very large account, a
 banner says so. You can still apply what it lists.
 
@@ -205,7 +229,7 @@ Tick the acknowledgement to continue.
 Mythic starts right away and works through the ads one at a time, each
 taking several seconds of Meta calls. A batch that doesn't finish in the first
 minute continues every 5 minutes, about 4 minutes at a time. Watch progress
-under **Runs**. One apply or auto run can be in progress per ad account.
+under **History**. One apply or auto run can be in progress per ad account.
 
 Before creating a copy and again before swapping it onto the ad, Mythic checks
 fresh account, ad status, campaign rules and creative data. Ads no longer
@@ -216,7 +240,12 @@ carousel content and the new URL parameters. Shared or recovered copies are
 checked too. Missing or changed content fails verification. Mythic does not
 swap an unverified copy.
 
-## 5. Automatic checks
+## 5. Automatic tagging
+
+The switch on **Automatic tagging** turns it on and off. While it's on, the
+menu next to it sets how often Mythic checks, and the line under the title
+shows the last check, such as **Last check 9 minutes ago · No changes
+needed**.
 
 The default interval is 15 minutes. Choose an integer from 5 to 1440 minutes
 in steps of 5. Cron checks due accounts every five minutes. It takes up to
@@ -224,19 +253,17 @@ in steps of 5. Cron checks due accounts every five minutes. It takes up to
 and failed checks consume capacity too. Large rosters or Meta cooldowns can
 stretch the interval.
 
-Changing only the interval keeps previews, runs and auto approval valid.
+Changing only the interval keeps checks, runs and automatic tagging on.
 An in-review ad can be `IN_PROCESS` after a swap. The next check still sees
 it when in-review ads are selected. Correct tags are skipped, so it is not
 swapped again unless its destination still needs shortening.
 
-To approve it, run a preview of the saved settings, then click **Turn on auto
-mode** (or **Save auto approval** while live writes are off). The preview must
-be complete, published and unexpired, match the current saved settings, and
-the settings must be switched on. While writes are off, approval is saved as
-**Pending activation**. No ads change until global activation. Changing what
-a run would do turns auto mode off again. Auto mode skips ads whose links
-Mythic cannot inspect and uses the same fresh eligibility and copy checks as
-manual apply.
+Turning it on needs a complete, unexpired check of the saved settings. If
+there isn't one on screen, the switch runs it first, then asks you to confirm
+the creative swap. While writes are off, the approval is saved and no ads
+change until global activation. Changing what a run would do turns automatic
+tagging off again. Automatic tagging skips ads whose links Mythic cannot
+inspect and uses the same fresh eligibility and copy checks as manual apply.
 
 The last automatic check is separate from run history. It reports `queued`,
 `no_changes`, `incomplete`, `skipped_busy` or an error code. A queued check has
@@ -250,11 +277,11 @@ For API clients, the read-only config fields are `last_auto_at`,
 `last_auto_status` and `last_auto_error`. Auto runs use a `run_slot` timestamp
 instead of `run_date`. `last_auto_date` is removed. These are not editable settings.
 
-## Runs
+## History
 
-**Runs** lists applies and auto runs. **Include previews** adds previews.
-Auto runs contain only ads marked `set`. Skips are counted in `ads_skipped`
-but do not have auto journal rows. Run a preview to inspect skipped ads.
+**History** lists applies and automatic runs. Checks write nothing, so they
+aren't listed. Automatic runs contain only ads marked `set`. Skips are counted in `ads_skipped`
+but do not have auto journal rows. Run a check to inspect skipped ads.
 Click **Details** to see each ad:
 
 | State | Meaning |
