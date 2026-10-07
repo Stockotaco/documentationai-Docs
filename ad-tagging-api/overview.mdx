@@ -122,7 +122,7 @@ The config has an immutable `generation` UUID. Deleting and recreating it create
 The default template is:
 
 ```text
-utm_source=facebook&utm_medium=paid&utm_campaign={{campaign.name}}&utm_id={{campaign.id}}&utm_content={{ad.id}}&utm_term={{adset.name}}&campaign_id={{campaign.id}}&adset_id={{adset.id}}&ad_id={{ad.id}}
+utm_source=facebook&utm_medium=paid&utm_campaign={{campaign.name}}{{mythic.bid_suffix}}&utm_id={{campaign.id}}&utm_content={{ad.id}}&utm_term={{adset.name}}&campaign_id={{campaign.id}}&adset_id={{adset.id}}&ad_id={{ad.id}}
 ```
 
 `facebook` and `paid` classify clicks as Paid Social. Keep `utm_id={{campaign.id}}` and `ad_id={{ad.id}}` for campaign and ad attribution.
@@ -131,10 +131,10 @@ utm_source=facebook&utm_medium=paid&utm_campaign={{campaign.name}}&utm_id={{camp
 | --- | --- |
 | Template length | At most 1000 characters. An optional leading `?` is accepted. |
 | Keys | At most 20 unique keys. Each matches `^[a-z][a-z0-9_]{0,63}$`. |
-| Values | Non-empty. Literal characters are `A-Z`, `a-z`, `0-9`, `_`, `.`, `-`. Only the eight macros below are allowed. |
+| Values | Non-empty. Literal characters are `A-Z`, `a-z`, `0-9`, `_`, `.`, `-`. Only the nine macros below are allowed. |
 | Structure | Each parameter needs `key=value`. Empty parameters and duplicate keys are rejected. |
 
-All eight macros are returned by `GET /meta` in `data.defaults.macros`:
+All nine macros are returned by `GET /meta` in `data.defaults.macros`:
 
 | Macro | Meta value |
 | --- | --- |
@@ -146,6 +146,18 @@ All eight macros are returned by `GET /meta` in `data.defaults.macros`:
 | `{{ad.name}}` | Ad name |
 | `{{placement}}` | Placement |
 | `{{site_source_name}}` | Site source name |
+| `{{mythic.bid_suffix}}` | Filled by Mythic, not Meta: ` \| <budget>.<strategy>`, such as ` \| cbo.hv`. See [Bid structure](#bid-structure-in-utm_campaign). |
+
+### Bid structure in `utm_campaign`
+
+The default template appends `{{mythic.bid_suffix}}` to the campaign name, so a campaign named `HC | Leads` on a campaign budget with Highest volume reports as `utm_campaign=HC | Leads | cbo.hv`.
+
+| Part | Codes |
+| --- | --- |
+| Budget level | `cbo` when the campaign has a daily or lifetime budget (Advantage campaign budget). `abo` when budgets are on the ad sets. |
+| Bid strategy | `hv` Highest volume (`LOWEST_COST_WITHOUT_CAP`), `cc` Cost per result goal (`COST_CAP`), `bc` Bid cap (`LOWEST_COST_WITH_BID_CAP`), `roas` ROAS goal (`LOWEST_COST_WITH_MIN_ROAS`), `tc` retired target cost (`TARGET_COST`). CBO uses the campaign's strategy, ABO the ad set's. An unknown strategy leaves only the budget level. |
+
+Mythic always fills this macro, with or without `resolve_names`, because Meta cannot. Its value is kept current like a name: switching the bid strategy rewrites the campaign's ads, and automatic checks leave delivering ads to a manual apply (`names_outdated_delivering`). Cap and goal amounts are not included, because they change often and each change would rewrite every ad and start a new `utm_campaign` value in your reports. Remove the macro from the template to leave the bid structure out.
 
 ### Overwrite policy
 

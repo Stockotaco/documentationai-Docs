@@ -706,8 +706,11 @@ components:
             details: {}
     MetaMacro:
       type: string
-      enum: ["{{campaign.id}}", "{{campaign.name}}", "{{adset.id}}", "{{adset.name}}", "{{ad.id}}", "{{ad.name}}", "{{placement}}", "{{site_source_name}}"]
-      description: Returned in GET /meta data.defaults.macros.
+      enum: ["{{campaign.id}}", "{{campaign.name}}", "{{adset.id}}", "{{adset.name}}", "{{ad.id}}", "{{ad.name}}", "{{placement}}", "{{site_source_name}}", "{{mythic.bid_suffix}}"]
+      description: >
+        Returned in GET /meta data.defaults.macros. {{mythic.bid_suffix}} is
+        filled by Mythic, not Meta: " | <budget>.<strategy>" such as " | cbo.hv"
+        (cbo/abo; hv, cc, bc, roas, tc). Always resolved and kept current.
     OverwritePolicy:
       type: string
       enum: [fill_missing, enforce]
@@ -745,12 +748,12 @@ components:
       type: string
       minLength: 1
       maxLength: 1000
-      default: "utm_source=facebook&utm_medium=paid&utm_campaign={{campaign.name}}&utm_id={{campaign.id}}&utm_content={{ad.id}}&utm_term={{adset.name}}&campaign_id={{campaign.id}}&adset_id={{adset.id}}&ad_id={{ad.id}}"
+      default: "utm_source=facebook&utm_medium=paid&utm_campaign={{campaign.name}}{{mythic.bid_suffix}}&utm_id={{campaign.id}}&utm_content={{ad.id}}&utm_term={{adset.name}}&campaign_id={{campaign.id}}&adset_id={{adset.id}}&ad_id={{ad.id}}"
       description: >
         Query string. An optional leading question mark is accepted.
         At most 20 unique keys matching ^[a-z][a-z0-9_]{0,63}$.
         Non-empty values contain only A-Z, a-z, 0-9, underscore, dot, hyphen
-        and the eight MetaMacro values. Each parameter needs key=value.
+        and the nine MetaMacro values. Each parameter needs key=value.
         Empty parameters and duplicate keys are rejected. Template keys are
         the only managed parameters. Other parameters stay unchanged.
         The default is returned in GET /meta data.defaults.utm_template.

@@ -84,7 +84,16 @@ even with **Match any** or a negative name condition.
 The template allows at most 20 unique keys and 1000 characters. Keys match
 `^[a-z][a-z0-9_]{0,63}$`. Values must be non-empty. The allowed macros are
 `{{campaign.id}}`, `{{campaign.name}}`, `{{adset.id}}`, `{{adset.name}}`,
-`{{ad.id}}`, `{{ad.name}}`, `{{placement}}` and `{{site_source_name}}`.
+`{{ad.id}}`, `{{ad.name}}`, `{{placement}}`, `{{site_source_name}}` and
+Mythic's `{{mythic.bid_suffix}}`.
+
+The default template ends `utm_campaign` with the campaign's bid structure,
+filled by Mythic: `HC | Leads` reports as `HC | Leads | cbo.hv`. `cbo` means a
+campaign budget and `abo` ad set budgets. The strategy is `hv` (highest
+volume), `cc` (cost per result goal), `bc` (bid cap), `roas` (ROAS goal) or
+`tc` (retired target cost). Switching strategy updates the tag like a rename.
+Cap amounts are left out so tuning a cap doesn't rewrite your ads. Delete
+`{{mythic.bid_suffix}}` from the template to leave it out.
 
 For example, to tag only campaigns named "XYZ" that were created this year,
 add **Campaign name contains** `XYZ` and **Campaign created on or after**
