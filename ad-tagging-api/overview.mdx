@@ -466,7 +466,7 @@ Meta stores URL parameters on an immutable creative. Mythic creates a copy, then
 Meta may treat the swap as a significant edit. Delivering ads may return to learning. Ads in review have no delivery or learning history yet, but the swap restarts review. Post-based creatives keep the original post and engagement. Creatives built from a link spec become a new post.
 </Callout>
 
-Apply returns `202` with a run ID. Batches process up to 25 ads every five minutes within a time budget. Only one apply or auto run per ad account can run at a time. Another returns `409 run_in_progress`.
+Apply returns `202` with a run ID. Processing starts right away. Ads are processed one at a time, each taking several seconds of Meta calls; what is left continues every five minutes, for up to four minutes at a time. Only one apply or auto run per ad account can run at a time. Another returns `409 run_in_progress`.
 
 The preview must be published (`journal_ready: true`) and under 24 hours old. It must match the config generation, revision and fingerprint. The config must be enabled.
 

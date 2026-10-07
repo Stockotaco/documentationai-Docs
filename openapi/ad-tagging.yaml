@@ -289,7 +289,8 @@ paths:
         preview must be published (`journal_ready: true`), under 24 hours old,
         and match the saved config's generation, revision and fingerprint.
         A published truncated preview may be applied to its listed ads.
-        Batches process up to 25 ads every 5 minutes within a time budget.
+        Processing starts right away; ads go one at a time and what is left
+        continues every 5 minutes, up to 4 minutes at a time.
         Follow the run with `GET /meta/runs/{id}`. Delivering ads may return to
         learning. In-review ads have no delivery or learning history yet, but
         tagging restarts review. A swapped ad can be IN_PROCESS at the next
