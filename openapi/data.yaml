@@ -312,8 +312,12 @@ paths:
       operationId: getEventsBreakdown
       description: >
         True pageview volume broken down by a single dimension — the source for
-        Top Pages, Devices, Geo, and Sources reports. Reads raw events (not
-        Core Web Vitals samples), so counts are honest traffic. Each row is
+        Top Pages, Devices, Geo, and Sources reports. Reads typed event
+        columns (not Core Web Vitals samples), so counts are honest traffic.
+        Telemetry and identity events (`$replay_*`, `$heatmap`,
+        `$web_vital_*`, `$set`, `$identify`) are not counted, and `utm_*` /
+        `referrer` values are session-entry first with an event-level
+        fallback, the same rule as `/sessions`. Each row is
         `{ value, pageviews, unique_users, unique_sessions }`, ordered by
         `pageviews` descending. `value` is an empty string when the dimension
         is not set on an event. `pageviews` always counts `$pageview` events
@@ -441,12 +445,13 @@ paths:
 
 
         **Properties**: typed names resolve to columns — `$current_url`,
-        `$pathname`, `$referring_domain`, `utm_source`, `utm_medium`,
-        `utm_campaign`, `$device_type`, `$browser`, `$os`, `$geo_country`,
-        `$geo_city`, `$experiment_arm`, plus `event`, `distinct_id`,
-        `session_id`, `user_id`. Any other name is a custom event property
-        (scalar, ≤200 chars; nested objects and `meta_*` blobs are not
-        queryable). `utm_*` and `$referring_domain` are session-entry values
+        `$pathname`, `$referrer`, `$referring_domain`, `utm_source`,
+        `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`,
+        `$device_type`, `$browser`, `$os`, `$geo_country`, `$geo_city`,
+        `$experiment_arm`, plus `event`, `distinct_id`, `session_id`,
+        `user_id`. Any other name is a custom event property (scalar, ≤200
+        chars; nested objects and `meta_*` blobs are not queryable). `utm_*`,
+        `$referrer` and `$referring_domain` are session-entry values
         with an event-level fallback. Discover keys with `GET /properties` and
         values with `GET /query/values`.
 

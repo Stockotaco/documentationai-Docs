@@ -391,8 +391,9 @@ components:
           description: >-
             Event property predicates, all must pass. Same shape as the explore
             query filters: `property` is a typed name (`$pathname`,
-            `$current_url`, `$referring_domain`, `utm_source`, `utm_medium`,
-            `utm_campaign`, `$device_type`, `$browser`, `$os`, `$geo_country`,
+            `$current_url`, `$referrer`, `$referring_domain`, `utm_source`,
+            `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`,
+            `$device_type`, `$browser`, `$os`, `$geo_country`,
             `$geo_city`) or any custom event property key.
           items:
             type: object
