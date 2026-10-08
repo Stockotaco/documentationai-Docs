@@ -12,8 +12,28 @@ Meta Ads and Google Ads, together once a day. If a sync fails, the run is
 held until it is fixed. When every connection has synced, Mythic can tell
 your system that the data is in. Open a client and choose **Data pipeline**.
 
-A client needs at least one ad platform connection before it can have a
-pipeline.
+## Connect a source
+
+Click **Connect a source** to add an ad platform for this client.
+
+1. Choose the **Platform**: Google Ads, Meta Ads, Bing Ads, TikTok Ads or
+   Salesforce. A platform the client already has is marked **Already
+   connected**. Each client can have one connection per platform.
+2. Enter what the platform asks for. Meta asks for the ad account ID, with or
+   without `act_`. Google asks for the 10-digit customer ID. Enter several,
+   separated by commas, to sync them through one connection. Bing also asks
+   for your developer token and tenant ID. TikTok asks for nothing.
+3. Click **Continue to** the platform, sign in, and approve access. Use a
+   login that can see the account. Mythic never sees the password or token.
+
+You come back to this screen with a confirmation, or the reason it failed, such
+as a login that can't reach the account. The first time you connect from the
+agency app, Mythic adds the app's address to your agency's allowed return
+pages.
+
+A new connection joins the client's pipeline, and Mythic creates a daily
+pipeline if the client has none. Its first sync copies past data and can take
+a few hours.
 
 ## Set up a pipeline
 
