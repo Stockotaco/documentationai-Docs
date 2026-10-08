@@ -401,12 +401,13 @@ components:
         config:
           type: object
           description: >
-            monitor `{allow_inconclusive}`; classifier `{tags (2-30,
+            monitor `{allow_inconclusive, alert}` (alert: a yes raises a
+            central alert, source replay_vision); classifier `{tags (2-30,
             lowercase), multiple, freeform}`; scorer `{min, max, label}`;
             summarizer `{length: short|medium|long}`.
         filters:
           type: object
-          description: "Sweep filters: `device_type`, `utm_source`, `utm_medium`, `utm_campaign`, `landing_page`, `country`, `browser`, `os` (exact strings) and `min_duration_s`."
+          description: "Sweep filters: `device_type`, `utm_source`, `utm_medium`, `utm_campaign`, `landing_page`, `country`, `browser`, `os` (exact strings), `min_duration_s`, and `landing_hosts` (array of 1-20 host names; keeps sessions whose first page is on one of them, `www.` ignored)."
         sampling_rate: { type: number, minimum: 0, maximum: 1, default: 0.1 }
         model: { type: string, nullable: true, description: "Model id of the key's provider. Null uses the key's default_model." }
         monthly_scan_limit: { type: integer, minimum: 1, maximum: 100000, default: 500 }

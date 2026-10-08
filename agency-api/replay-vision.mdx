@@ -56,7 +56,7 @@ location_not_linked`).
 
 | Type | Answer | Config |
 | --- | --- | --- |
-| `monitor` | `verdict`: `yes` / `no` (or `inconclusive`) | `allow_inconclusive` |
+| `monitor` | `verdict`: `yes` / `no` (or `inconclusive`) | `allow_inconclusive`, `alert` |
 | `classifier` | `tags` from your vocabulary | `tags` (2-30), `multiple`, `freeform` |
 | `scorer` | `score` on your scale | `min`, `max`, `label` |
 | `summarizer` | `title`, `summary`, `intent`, `outcome`, `friction_points`, `keywords` | `length`: `short`, `medium`, `long` |
@@ -180,9 +180,14 @@ of credits), `last_error` on the key says so and those scans fail with
 - **Background sweep.** An enabled scanner looks at recordings that ended in
   the last few minutes, every 5 minutes. It applies the scanner's `filters`
   (`device_type`, `utm_source`, `utm_medium`, `utm_campaign`, `landing_page`,
-  `country`, `browser`, `os`, `min_duration_s`), then keeps a random
-  `sampling_rate` share. A new or re-enabled scanner starts from now; use
-  `/scan` for older recordings.
+  `country`, `browser`, `os`, `min_duration_s`, `landing_hosts`), then keeps
+  a random `sampling_rate` share. A new or re-enabled scanner starts from now;
+  use `/scan` for older recordings.
+- **Landing hosts.** `filters.landing_hosts` (1-20 host names) keeps only
+  sessions whose first page is on one of those hosts, ignoring `www.`. Use it
+  when a client's marketing site and logged-in app share one client, e.g.
+  `{"landing_hosts": ["example.com"]}` skips sessions that start on
+  `app.example.com`. The other filters are exact matches on the session.
 - **On demand.** `POST /scanners/{id}/scan` queues up to 50 recordings. It
   ignores `sampling_rate` and works on a disabled scanner.
 - **Once per recording.** A scanner observes each recording at most once.
@@ -194,6 +199,18 @@ of credits), `last_error` on the key says so and those scans fail with
 - **Versions.** A change to `prompt`, `config` or `model` increments
   `version`; re-sending the same values does not. Each observation keeps the
   scanner as it was when it was queued.
+
+## Alerts
+
+A monitor with `config.alert: true` raises a [central alert](/agency-api/alerts)
+(source `replay_vision`, severity `warning`) when it answers `yes`. The agency's
+alert rules route it to Slack or a webhook like any other source. Mythic skips
+the alert when the [decision](#decisions) read the answer and disagreed with it.
+
+There is one open alert per scanner. Each newly flagged session updates it,
+notifies again and adds to `occurrences`; the payload names the latest
+`session_id`, `observation_id` and the API paths to both. Nothing resolves it
+automatically: resolve it in the feed once you have looked.
 
 Queued scans start within a minute and most finish within a few minutes.
 Mythic retries `transient`, `rate_limited` and `render_failed` failures itself,

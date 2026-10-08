@@ -79,7 +79,7 @@ paths:
         - name: source
           in: query
           required: false
-          schema: { type: string, enum: [contracts, uptime, airbyte, drift, quota, sessions] }
+          schema: { type: string, enum: [contracts, uptime, airbyte, drift, quota, sessions, replay_vision] }
         - name: limit
           in: query
           required: false
@@ -449,7 +449,7 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
-        source: { type: string, enum: [contracts, uptime, airbyte, drift, quota, sessions] }
+        source: { type: string, enum: [contracts, uptime, airbyte, drift, quota, sessions, replay_vision] }
         fingerprint:
           type: string
           description: "Which condition this is, e.g. `uptime:<location>:<slug>`. At most one open alert per fingerprint."
@@ -482,7 +482,7 @@ components:
         name: { type: string, maxLength: 120 }
         sources:
           type: array
-          items: { type: string, enum: [contracts, uptime, airbyte, drift, quota, sessions] }
+          items: { type: string, enum: [contracts, uptime, airbyte, drift, quota, sessions, replay_vision] }
           description: Empty or omitted = every source.
         location_ids:
           type: array
