@@ -301,6 +301,41 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "503":
           $ref: "#/components/responses/AnalyticsUnavailable"
+  /links/click-id-recovery:
+    get:
+      summary: Get click ID recovery
+      operationId: getClickIdRecovery
+      description: >
+        One row per ad platform (`google`, `meta`, `microsoft`) for the
+        authenticated location. `paid_sessions` counts sessions with a paid
+        signal that survives click ID stripping: `gad_source` on the landing
+        URL, or a platform `utm_source` with a paid `utm_medium` (cpc, ppc, cpm,
+        cpv, display, or anything starting with "paid").
+        `paid_sessions_missing_click_id` counts the ones whose landing page had
+        no click ID (google: gclid, gbraid or wbraid; meta: fbclid; microsoft:
+        msclkid). This is an upper bound on browser stripping, because ads with
+        auto-tagging off are counted too. `link_sessions_with_click_id` counts
+        sessions that arrived through a Mythic short link whose redirect saw
+        the click ID. `link_sessions_restored` counts the ones whose landing page
+        lost it, so Mythic restored it for attribution and conversion uploads.
+        `restored_pct_of_missing` is restored divided by missing. Defaults to
+        the last 30 days. Returns the raw Tinybird JSON envelope.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+      responses:
+        "200":
+          description: Tinybird click ID recovery result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TinybirdResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/AnalyticsUnavailable"
   /links/stream:
     get:
       summary: Get link click stream

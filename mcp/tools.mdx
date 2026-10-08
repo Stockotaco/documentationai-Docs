@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 267 tools across
+  Every tool the Mythic MCP server exposes — 268 tools across
   29 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 267 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 268 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -341,6 +341,7 @@ Link redirects, click analytics, link webhooks and uptime.
 | `list_links`<br /><span style={{opacity: 0.7}}>List Links</span> | `links:read` | This client's link redirects, newest first, each enriched with its click_count for date_from..date_to (default: the last 30 days). | `GET /client/v1/links` |
 | `get_link_analytics`<br /><span style={{opacity: 0.7}}>Get Link Analytics</span> | `links:read` | Aggregated click analytics per link (totals by slug), optionally narrowed to one slug, a date range, or specific UTM values. | `GET /client/v1/links/analytics` |
 | `get_link_trend`<br /><span style={{opacity: 0.7}}>Get Link Click Trend</span> | `links:read` | Click counts over time for link redirects — the time-series companion to get_link_analytics. | `GET /client/v1/links/trend` |
+| `get_click_id_recovery`<br /><span style={{opacity: 0.7}}>Get Click ID Recovery</span> | `links:read` | One row per ad platform (google, meta, microsoft): paid sessions, how many arrived without their click ID (gclid/gbraid/wbraid, fbclid, msclkid), and how many of those the Mythic short link restored from the… | `GET /client/v1/links/click-id-recovery` |
 | `get_link_click_stream`<br /><span style={{opacity: 0.7}}>Get Link Click Stream</span> | `links:read` | Individual recent link clicks (real-time stream), newest first — who clicked what, with UTM detail. | `GET /client/v1/links/stream` |
 | `list_link_utm_values`<br /><span style={{opacity: 0.7}}>List Link UTM Values</span> | `links:read` | Distinct UTM values seen on link clicks — use to discover what to pass as UTM filters to the analytics/trend/stream tools. | `GET /client/v1/links/utm-values` |
 | `list_link_webhooks`<br /><span style={{opacity: 0.7}}>List Link Uptime Webhooks</span> | `links:read` | The uptime notification webhooks for this client — each fires on link_down and/or link_up when a monitored link destination goes down or recovers. | `GET /client/v1/links/webhooks` |
