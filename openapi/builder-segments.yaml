@@ -4,9 +4,18 @@ info:
   title: Segments
   description: >-
     Reusable audience definitions over resolved people. A segment is a named set
-    of person-attribute filters scoped to a single client location. Members and
-    counts are computed at read time — no membership is stored — so a segment
-    always reflects the current state of the person graph.
+    of person-attribute filters and/or event conditions ("did Purchase in the
+    last 90 days", "visited /pricing in the last 30 days") scoped to a single
+    client location.
+
+
+    Attribute-only segments are computed at read time, so they always reflect
+    the current person graph. Segments with `events` are materialized: the
+    first read computes membership and later reads are served from that run
+    until it is 15 minutes old, when the next read returns the existing run and
+    recomputes in the background. `count` and `members` responses carry
+    `computed_at` and `stale` for these segments, and the segment row carries a
+    `membership` object with the run status.
 servers:
   - url: https://mythic-analytics.gulp.workers.dev/builder
 security:
@@ -151,8 +160,10 @@ paths:
       summary: Count segment members
       operationId: countSegmentMembers
       description: >
-        Number of people currently matching the segment. Readable with either
-        key type. Computed live against the person graph.
+        Number of people matching the segment. Readable with either key type.
+        Attribute-only segments are computed live against the person graph.
+        Segments with `events` are served from the materialized run and the
+        response says when it was computed.
       parameters:
         - $ref: "#/components/parameters/SegmentId"
         - $ref: "#/components/parameters/LocationId"
@@ -167,8 +178,23 @@ paths:
                   count:
                     type: integer
                     example: 128
+                  computed_at:
+                    type: string
+                    format: date-time
+                    description: Segments with `events` only. When the served membership run was computed.
+                  stale:
+                    type: boolean
+                    description: Segments with `events` only. `true` when the run is older than 15 minutes and a recompute was started in the background.
         "404":
           description: Segment not found for this location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >-
+            `segment_too_large`: the event conditions match more than 500,000
+            identities. Narrow the definition with `within_days` or filters.
           content:
             application/json:
               schema:
@@ -178,8 +204,10 @@ paths:
       summary: List segment members
       operationId: listSegmentMembers
       description: >
-        People currently matching the segment, newest activity first, paginated
-        with `limit`/`offset`. Readable with either key type.
+        People matching the segment, newest activity first, paginated with
+        `limit`/`offset`. Readable with either key type. For segments with
+        `events` the response also carries `computed_at` and `stale` (see
+        count).
       parameters:
         - $ref: "#/components/parameters/SegmentId"
         - $ref: "#/components/parameters/LocationId"
@@ -242,9 +270,16 @@ components:
     SegmentDefinition:
       type: object
       description: >-
-        A flat object of person-attribute filters. All present filters combine
-        with AND. Any subset may be used; at least one is required. Unknown keys
-        are rejected.
+        Person-attribute filters plus an optional `events` list of event
+        conditions. Everything present combines with AND. Any subset may be
+        used; at least one filter or condition is required. Unknown keys are
+        rejected.
+
+
+        Examples: `{ "events": [{ "event": "Purchase" }] }` = people who have
+        ever done Purchase. `{ "events": [{ "event": "$pageview", "within_days":
+        30, "filters": [{ "property": "$pathname", "op": "eq", "value": "/xyz" }]
+        }] }` = people who visited /xyz in the last 30 days.
 
 
         The `attribution` field picks which touch the attribution filters
@@ -253,6 +288,19 @@ components:
         `{ "utm_source": "fb", "attribution": "session" }` = "everyone who
         ever had a session that arrived via fb".
       properties:
+        events:
+          type: array
+          maxItems: 5
+          description: >-
+            Event conditions; every condition must hold. A person matches a
+            condition when any identity of theirs has at least `min_count`
+            events named `event` inside the last `within_days` days whose
+            properties pass `filters`. Segments with event conditions are
+            materialized (see the API description). The attribute filters of
+            such a segment are evaluated at the same time as the events, not
+            live.
+          items:
+            $ref: "#/components/schemas/SegmentEventCondition"
         attribution:
           type: string
           enum: [first, last, session]
@@ -316,6 +364,79 @@ components:
           type: integer
           description: First seen within the last N days (new people).
           example: 7
+    SegmentEventCondition:
+      type: object
+      required: [event]
+      properties:
+        event:
+          type: string
+          maxLength: 128
+          description: Event name. `$pageview` for page visits; custom events as sent to the SDK or ingest API.
+          example: Purchase
+        within_days:
+          type: integer
+          minimum: 1
+          maximum: 730
+          description: Only events in the last N days count. Omit for all history.
+          example: 30
+        min_count:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 1
+          description: The person must have at least N matching events (counted per identity).
+        filters:
+          type: array
+          maxItems: 20
+          description: >-
+            Event property predicates, all must pass. Same shape as the explore
+            query filters: `property` is a typed name (`$pathname`,
+            `$current_url`, `$referring_domain`, `utm_source`, `utm_medium`,
+            `utm_campaign`, `$device_type`, `$browser`, `$os`, `$geo_country`,
+            `$geo_city`) or any custom event property key.
+          items:
+            type: object
+            required: [property, op]
+            properties:
+              property:
+                type: string
+                example: $pathname
+              op:
+                type: string
+                enum: [eq, neq, in, not_in, contains, not_contains, regex, is_set, is_not_set, gt, gte, lt, lte]
+              value:
+                description: string for eq/neq/contains/not_contains/regex; string[] for in/not_in; number for gt/gte/lt/lte; omitted for is_set/is_not_set.
+                oneOf:
+                  - type: string
+                  - type: number
+                  - type: array
+                    items:
+                      type: string
+    SegmentMembership:
+      type: object
+      nullable: true
+      description: >-
+        Materialized run status. `null` for attribute-only segments.
+      properties:
+        status:
+          type: string
+          enum: [pending, ready, too_large, error]
+          description: >-
+            `pending` until the first compute finishes (it starts right after
+            save), `ready` when a run is published, `too_large` when the
+            conditions match more than 500,000 identities, `error` when the
+            last compute failed (see `error`; the next read retries).
+        computed_at:
+          type: string
+          format: date-time
+          nullable: true
+        rows:
+          type: integer
+          nullable: true
+          description: Identity rows in the published run (one per identity of each member person).
+        error:
+          type: string
+          nullable: true
     Segment:
       type: object
       properties:
@@ -330,6 +451,8 @@ components:
           nullable: true
         definition:
           $ref: "#/components/schemas/SegmentDefinition"
+        membership:
+          $ref: "#/components/schemas/SegmentMembership"
         is_favorite:
           type: boolean
         created_at:
@@ -451,6 +574,13 @@ components:
           type: integer
         offset:
           type: integer
+        computed_at:
+          type: string
+          format: date-time
+          description: Segments with `events` only. When the served membership run was computed.
+        stale:
+          type: boolean
+          description: Segments with `events` only. `true` when a recompute was started in the background.
     SuccessResponse:
       type: object
       properties:
@@ -463,3 +593,6 @@ components:
         error:
           type: string
           example: "unknown filter: foo"
+        code:
+          type: string
+          description: Present on membership failures, e.g. `segment_too_large`, `membership_refresh_failed`.

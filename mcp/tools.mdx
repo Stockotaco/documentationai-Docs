@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 268 tools across
+  Every tool the Mythic MCP server exposes — 269 tools across
   29 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 268 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 269 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -178,8 +178,9 @@ Stored person segments — definitions, live counts, membership.
 | --- | --- | --- | --- |
 | `list_segments`<br /><span style={{opacity: 0.7}}>List Segments</span> | `segments:read` | Every stored segment for this client — reusable audience definitions over person profiles. | `GET /builder/segments` |
 | `get_segment`<br /><span style={{opacity: 0.7}}>Get Segment</span> | `segments:read` | One segment by id, including its full filter definition. | `GET /builder/segments/:id` |
-| `get_segment_count`<br /><span style={{opacity: 0.7}}>Get Segment Count</span> | `segments:read` | Live person count for a segment — how many people match its definition right now. | `GET /builder/segments/:id/count` |
+| `get_segment_count`<br /><span style={{opacity: 0.7}}>Get Segment Count</span> | `segments:read` | Person count for a segment. | `GET /builder/segments/:id/count` |
 | `list_segment_members`<br /><span style={{opacity: 0.7}}>List Segment Members</span> | `segments:read` | The people currently matching a segment, resolved live, with pagination. | `GET /builder/segments/:id/members` |
+| `preview_segment`<br /><span style={{opacity: 0.7}}>Preview Segment</span> | `segments:read` | Person count for a draft definition before saving it. | `POST /builder/segments/preview` |
 | `create_segment`<br /><span style={{opacity: 0.7}}>Create Segment</span> | `segments:write` | Create a segment from a filter definition. | `POST /builder/segments` |
 | `update_segment`<br /><span style={{opacity: 0.7}}>Update Segment</span> | `segments:write` | Update a segment. | `PATCH /builder/segments/:id` |
 | `delete_segment`<br /><span style={{opacity: 0.7}}>Delete Segment</span> | `segments:write` | Permanently delete a segment. | `DELETE /builder/segments/:id` |
