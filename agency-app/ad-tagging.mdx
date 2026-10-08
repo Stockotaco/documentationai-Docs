@@ -37,9 +37,9 @@ change it makes asks for your approval in the chat first.
 <Callout kind="note">
 If the client's plan no longer includes ad tagging, the screen shows
 **Stop ad tagging** instead of settings, checks or history. You can
-**Turn off auto mode**, **Turn off ad tagging**, or enter a known run UUID
-under **Run ID to cancel** and click **Cancel run**. Turning off auto mode
-cancels auto runs only. Turning off tagging cancels queued and running writes.
+**Turn off automatic tagging**, **Turn off ad tagging**, or enter a known run
+UUID under **Run ID to cancel** and click **Cancel run**. Turning off automatic
+tagging cancels automatic runs only. Turning off tagging cancels queued and running writes.
 Already-written ads are not reverted. Read-only clients cannot use these controls.
 </Callout>
 
@@ -160,7 +160,7 @@ Click **Save**. **Cancel** or closing the dialog discards your edits. Changing
 only how often Mythic checks preserves the revision, checks, runs and
 automatic tagging. Other setting changes make earlier checks unusable and
 cancel queued or running runs. Changes to the ad account, parameters, existing
-values, ads, campaigns or short links also turn automatic tagging off, and the
+values, ads, campaigns, current names or short links also turn automatic tagging off, and the
 dialog says so before you save. An unchanged save leaves the check valid.
 Turning off automatic tagging alone does not invalidate a check.
 
@@ -175,8 +175,11 @@ and their ads from Meta and decides what to do with each ad. Nothing is
 written to Meta. The API calls this a preview.
 
 The result is one line, such as **3 of 11 ads need tags.** or **All 11 ads
-are up to date.** When ads need tags, a table lists them. **Needs tags**,
-**Skipped** and **All** filter it. **Done** closes the check.
+are up to date.** Up to date means **Already correct** or **Nothing to add**.
+Ads skipped for any other reason are counted separately, as in **No ads need
+tags. 8 are up to date and 3 were skipped.** When ads need tags or were
+skipped, a table lists them. **Needs tags**, **Skipped** and **All** filter it,
+and **Skipped** shows each ad's reason. **Done** closes the check.
 
 | Decision | Meaning |
 | --- | --- |
@@ -247,8 +250,9 @@ menu next to it sets how often Mythic checks, and the line under the title
 shows the last check, such as **Last check 9 minutes ago · No changes
 needed**.
 
-The default interval is 15 minutes. Choose an integer from 5 to 1440 minutes
-in steps of 5. Cron checks due accounts every five minutes. It takes up to
+The default interval is 15 minutes. The menu offers every 15 minutes, every
+30 minutes, every hour and daily. The API and the client chat accept any
+multiple of 5 from 5 to 1440 minutes, and the menu then shows that value too. Cron checks due accounts every five minutes. It takes up to
 10 configs per tick, oldest due first, within a time budget. Busy, skipped
 and failed checks consume capacity too. Large rosters or Meta cooldowns can
 stretch the interval.
