@@ -35,6 +35,30 @@ A new connection joins the client's pipeline, and Mythic creates a daily
 pipeline if the client has none. Its first sync copies past data and can take
 a few hours.
 
+## Manage a connection
+
+**Connections** lists every connection the client has, whether the pipeline
+runs it, and its last sync. The **⋯** menu on a row has:
+
+- **Change tables**: choose what the connection syncs. The list is Mythic's
+  default tables for the platform plus any the connection already syncs. A
+  table you add copies its past data on the next sync. A table you remove
+  stops updating but stays in BigQuery.
+- **Rename**: the name shown here, in run details and in Airbyte.
+- **Sync now**: syncs it straight away, outside the daily run.
+- **Pause** and **Resume**: the pipeline skips a paused connection. Only
+  connections in the pipeline can be paused.
+- **Reconnect**: changes the account IDs or the login. Account IDs and the
+  login can't be changed on an existing connection, so Reconnect deletes it
+  and starts **Connect a source** with the old account IDs filled in. The
+  tables stay in BigQuery, and the new connection copies the full history
+  again.
+
+Meta's default tables are campaigns, ads, daily results by action type and by
+region, images, videos, ad creatives with their URL tags, and the account
+change log. Connections created before the change log was added don't have
+it until you add it with **Change tables**.
+
 ## Set up a pipeline
 
 1. Click **Set up pipeline**.
