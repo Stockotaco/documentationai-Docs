@@ -12,8 +12,8 @@ syncs, incrementality experiments and usage. When one of these checks finds a
 problem, it opens an **alert**. The **Alerts** screen has three tabs:
 
 - **Feed**: the alerts.
-- **Rules**: which alerts go where.
-- **Channels**: the Slack channels and webhooks alerts are sent to.
+- **Notifications**: set up and manage Slack and webhook destinations.
+- **Rules**: advanced controls for which alerts go where.
 
 Open **Alerts** from the agency menu to see every client, or from a client's
 menu to see only that client.
@@ -29,6 +29,7 @@ menu to see only that client.
 | Experiments | An incrementality experiment has new outlier days | Info | Daily |
 | Usage | Your agency passes 80% of a monthly event quota | Info | Daily |
 | Usage | Your agency reaches 100% of a monthly event quota | Warning | Daily |
+| Replay Vision | An opted-in monitor answers yes, unless the second check disagrees | Warning | After a scan |
 
 Each check decides what counts as broken. Rules only decide who hears about
 it.
@@ -42,7 +43,9 @@ how many times the check has seen it since.
 One problem is one alert. It notifies your channels when it opens, and again
 if it changes, such as a different set of failing contracts or a higher
 severity. When the check stops finding the problem, the alert resolves on its
-own. If it comes back later, a new alert opens.
+own. If it comes back later, a new alert opens. Replay Vision findings stay
+open until you resolve them. A scanner shares one open alert, which updates
+when another session is flagged.
 
 - **Resolve** closes an alert by hand. It sends no notification.
 - **Investigate** opens the chat panel with the alert, so the assistant can
@@ -50,33 +53,56 @@ own. If it comes back later, a new alert opens.
 
 ## Send alerts to Slack or a webhook
 
+Click **Set up notifications**. One guided flow connects the destination,
+tests delivery and creates its notification rule.
+
 <Steps>
-  <Step title="Add a channel">
-    On the **Channels** tab, click **Add channel** and choose:
+  <Step title="Choose a destination">
+    Choose **Slack** or **Webhook**, paste its HTTPS URL and optionally name it.
+    Slack needs an Incoming Webhook URL (`https://hooks.slack.com/services/...`).
+    Open **Get a Slack webhook** for setup instructions.
 
-    - **Slack incoming webhook**: paste the webhook URL from Slack
-      (`https://hooks.slack.com/services/...`).
-    - **HTTPS webhook (signed)**: your own endpoint. Mythic shows a signing
-      secret once. Every delivery is signed with it in the
-      `X-Mythic-Signature` header, so copy it before closing the dialog.
-
-    Click **Send test** to check the channel. A channel that fails 20 times in
-    a row is parked and stops receiving alerts.
+    Mythic stores the URL securely and shows only a masked version afterward.
   </Step>
-  <Step title="Create a rule">
-    Click **New alert rule** and choose:
+  <Step title="Test your connection">
+    For a webhook, copy the signing secret and confirm you saved it. It is
+    shown only once. Verify incoming deliveries using the
+    `X-Mythic-Signature` header.
 
-    - **Checks**: which kinds of alerts. Leave it empty for all of them.
-    - **Clients**: the clients the rule watches.
-    - **Severity**: the lowest severity to send. Critical sends only critical
-      alerts. Info sends everything.
-    - **Send to**: one or more channels.
-    - **Also notify when resolved**: sends a message when the problem clears.
+    Click **Send test**. Slack receives one test message. A webhook receives a
+    signed test request and must return a 2xx response. Continue after the
+    test succeeds. If it fails, retry or choose **Use a different URL**.
+  </Step>
+  <Step title="Choose your alerts">
+    Choose **Warnings and critical alerts**, **Replay Vision findings** or
+    **Choose specific checks** for custom sources and severity.
+
+    On a client's screen, that client is selected by default. No client
+    selection means all clients, including new ones. Click **Turn on
+    notifications** to finish.
+
+    Replay Vision sends only findings from monitor scanners with **Raise an
+    alert** turned on. Classifications, scores and summaries do not notify.
   </Step>
 </Steps>
 
-Rules can be turned off with their switch, or deleted. Deleting a rule keeps
-its alerts in the feed.
+**Finish later** keeps the destination without adding a rule. Open
+**Notifications**, choose **Manage**, then **Choose alerts** to finish.
+
+## Manage notifications
+
+Each destination shows whether it is on, not sending, paused or failing.
+**Manage** lets you send another test, edit its rules, resume paused delivery
+or remove the destination. A destination that fails 20 times in a row is
+paused automatically.
+
+For advanced routing, open **Rules** and click **New rule**. Choose checks,
+clients, minimum severity and one or more destinations. Empty checks means
+every source. **Also notify when resolved** sends a message when a problem
+clears. Replay Vision's guided preset leaves this off.
+
+Rules can be turned off with their switch or deleted. Deleting a rule or a
+destination keeps its alerts in the feed.
 
 Email isn't available as a channel yet.
 
