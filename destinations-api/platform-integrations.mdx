@@ -136,3 +136,7 @@ Values leave the browser hashed by `fbevents.js` / `gtag.js`, which is why the S
 <Callout kind="info">
   The managed pixel is isolated from any other pixel on the page: it disables Meta's automatic PageView and automatic config **for our pixel only** (`autoConfig: false`), and sends every conversion with `trackSingle`, so a pre-existing pixel never receives our events — and we never receive theirs.
 </Callout>
+
+<Callout kind="info">
+  On single-page apps, Meta's pixel fires its own `PageView` without an `eventID` on every route change, which Meta cannot deduplicate against the server copy. The managed pixel turns this off (`fbq.disablePushState = true`) before `fbevents.js` loads, so each route change sends one `PageView` carrying the Mythic event uuid. The setting applies to every Meta pixel on the page: another pixel that relied on automatic route-change PageViews must track them itself. If another pixel loaded `fbevents.js` before the SDK, the setting can no longer take effect.
+</Callout>
