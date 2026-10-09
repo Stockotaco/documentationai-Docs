@@ -318,10 +318,13 @@ paths:
         `$web_vital_*`, `$set`, `$identify`) are not counted, and `utm_*` /
         `referrer` values are session-entry first with an event-level
         fallback, the same rule as `/sessions`. Each row is
-        `{ value, pageviews, unique_users, unique_sessions }`, ordered by
-        `pageviews` descending. `value` is an empty string when the dimension
-        is not set on an event. `pageviews` always counts `$pageview` events
-        regardless of `event_type`.
+        `{ value, pageviews, events, unique_users, unique_sessions }`.
+        `pageviews` counts `$pageview` events and `events` counts every
+        matching event. Rows are ordered by `pageviews` descending, or by
+        `events` descending when `event_type` is set. `value` is an empty
+        string when the dimension is not set on an event. With `event_type`
+        set to anything other than `$pageview`, `pageviews` is `0`; read
+        `events`.
 
 
         **Segment scoping**: pass `segment_id` (a segment created via the
@@ -359,7 +362,9 @@ paths:
         - name: event_type
           in: query
           required: false
-          description: Filter to a single event type. Default counts all events.
+          description: >
+            Filter to a single event type and sort rows by `events`. Default
+            counts all events.
           schema:
             type: string
         - $ref: "#/components/parameters/SegmentId"
@@ -2348,7 +2353,12 @@ components:
           example: /pricing
         pageviews:
           type: integer
+          description: "`$pageview` events. `0` when `event_type` names another event."
           example: 1240
+        events:
+          type: integer
+          description: All events matching the filters (every event type when `event_type` is unset).
+          example: 3105
         unique_users:
           type: integer
           example: 830
