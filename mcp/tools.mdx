@@ -78,7 +78,7 @@ Session analytics — durations, engagement, breakdowns.
 
 | Tool | Scope | What it does | Proxies |
 | --- | --- | --- | --- |
-| `list_sessions`<br /><span style={{opacity: 0.7}}>List Sessions</span> | `sessions:read` | One row per website session, most recent first — landing/exit page, duration, pageviews, device/browser/geo, UTMs, engagement and bounce flags, identity link. | `GET /client/v1/data/sessions` |
+| `list_sessions`<br /><span style={{opacity: 0.7}}>List Sessions</span> | `sessions:read` | One row per website session, most recent first — landing/exit page, duration, pageviews, device/browser/geo, UTMs, engagement and bounce flags, identity link (distinct_id plus person_id, the canonical person… | `GET /client/v1/data/sessions` |
 | `get_sessions_breakdown`<br /><span style={{opacity: 0.7}}>Get Sessions Breakdown</span> | `sessions:read` | Session aggregates grouped by ONE dimension — sessions, engagement, bounce rate etc. | `GET /client/v1/data/sessions/breakdown` |
 | `get_session_health`<br /><span style={{opacity: 0.7}}>Get Session Health</span> | `sessions:read` | Checks whether the site's own code keeps starting new sessions. | `GET /client/v1/data/sessions/health` |
 | `get_bot_traffic`<br /><span style={{opacity: 0.7}}>Get Ad Platform Bot Traffic</span> | `sessions:read` | Daily count of ad platform review bots Mythic dropped before storing anything: requests from Meta's, TikTok's, LinkedIn's or X's own networks, and declared ad crawlers such as AdsBot-Google. | `GET /client/v1/data/sessions/bot-traffic` |

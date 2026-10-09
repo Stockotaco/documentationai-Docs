@@ -739,6 +739,7 @@ paths:
         - $ref: "#/components/parameters/FilterOs"
         - $ref: "#/components/parameters/FilterCountry"
         - $ref: "#/components/parameters/FilterLandingPage"
+        - $ref: "#/components/parameters/FilterExperimentArm"
         - $ref: "#/components/parameters/FilterEngaged"
         - $ref: "#/components/parameters/FilterBounce"
         - $ref: "#/components/parameters/FilterIsIdentified"
@@ -1986,6 +1987,21 @@ components:
         never apply — the path is captured without them.
       schema:
         type: string
+    FilterExperimentArm:
+      name: experiment_arm
+      in: query
+      required: false
+      description: >
+        Filter to sessions in one A/B arm (exact match). The value is the
+        raw arm label exactly as stored from the `$experiments` event
+        property; its shape depends on the testing tool (for example
+        `posthog:pricing-test:variant-b` for PostHog, or
+        `experimentId:variationId` for Convert). A session's arm is the
+        alphabetically-first non-empty `$experiments` entry of its earliest
+        event that carries one. Not supported by `/data/sessions/breakdown`.
+      schema:
+        type: string
+        example: "posthog:pricing-test:variant-b"
     FilterEngaged:
       name: engaged
       in: query
@@ -2445,7 +2461,11 @@ components:
           description: Deep-links to the session replay for this occurrence.
         distinct_id:
           type: string
-          description: Raw identity value. Canonical person_id resolution is a planned follow-up.
+          description: >
+            Raw identity value of the visitor who hit the error. Pass it to
+            `GET /people/{personId}` (which accepts any raw identity value) to
+            open the person, or as `distinct_id` on `GET /sessions` to list
+            their sessions.
         stack_frames:
           type: array
           description: Stack parsed into frames from the raw error.stack string.
@@ -2469,6 +2489,17 @@ components:
       properties:
         session_id: { type: string }
         distinct_id: { type: string }
+        person_id:
+          type: string
+          description: >
+            Canonical person id from the identity graph for this session's
+            `distinct_id`, the same id `GET /people` returns, so use it for
+            `GET /people/{personId}` and the `person_id` filter. When the graph
+            has no mapping for this `distinct_id`, it falls back to the
+            `distinct_id` itself. That fallback opens the visitor's profile
+            only if Mythic has a profile row for them, and it is not
+            guaranteed to work as a `person_id` filter; to list that
+            visitor's sessions, filter by `distinct_id` instead.
         user_id: { type: string, nullable: true }
         is_identified: { type: boolean }
         started_at: { type: string, format: date-time }

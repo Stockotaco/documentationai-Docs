@@ -56,7 +56,7 @@ paths:
 
         **Filtering**: accepts the same filters as `GET /sessions` —
         `utm_source`, `utm_medium`, `utm_campaign`, `landing_page`,
-        `device_type`, `browser`, `os`, `country`, `date_from`/`date_to`,
+        `experiment_arm`, `device_type`, `browser`, `os`, `country`, `date_from`/`date_to`,
         `engaged`, `bounce`, `is_identified`, `min_duration` — plus
         `segment_id` to scope to a saved segment's members:
 
@@ -87,6 +87,7 @@ paths:
         - $ref: "#/components/parameters/FilterOs"
         - $ref: "#/components/parameters/FilterCountry"
         - $ref: "#/components/parameters/FilterLandingPage"
+        - $ref: "#/components/parameters/FilterExperimentArm"
         - $ref: "#/components/parameters/FilterEngaged"
         - $ref: "#/components/parameters/FilterBounce"
         - $ref: "#/components/parameters/FilterIsIdentified"
@@ -337,6 +338,21 @@ components:
         never apply — the path is captured without them.
       schema:
         type: string
+    FilterExperimentArm:
+      name: experiment_arm
+      in: query
+      required: false
+      description: >
+        Filter to sessions in one A/B arm (exact match). The value is the
+        raw arm label exactly as stored from the `$experiments` event
+        property; its shape depends on the testing tool (for example
+        `posthog:pricing-test:variant-b` for PostHog, or
+        `experimentId:variationId` for Convert). A session's arm is the
+        alphabetically-first non-empty `$experiments` entry of its earliest
+        event that carries one. Not supported by `/data/sessions/breakdown`.
+      schema:
+        type: string
+        example: "posthog:pricing-test:variant-b"
     FilterEngaged:
       name: engaged
       in: query

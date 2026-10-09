@@ -16,8 +16,8 @@ and the inspector sits under **Session details**.
 
 ## The recordings list
 
-Each row shows the visitor (their user id, or "Anonymous" plus the end of the
-visitor id), how long ago the visit started, and a dot for engagement:
+Each row shows the visitor (their user id, or "Anonymous" plus the last four
+characters of the person id, the same label as on their [profile](/agency-app/people)), how long ago the visit started, and a dot for engagement:
 
 - **Engaged**: more than one page view, at least 10 seconds long, or an event
   other than a page view.
@@ -27,6 +27,20 @@ The second line shows the visitor's country, device, page views, event count,
 a play icon if the visit was recorded, and the duration. The third line is the
 landing page. Use **All / Engaged / Bounced** to filter and the refresh button
 to reload. The list is sorted newest first.
+
+## Filters
+
+Other screens open Sessions already filtered, and each filter shows as a chip
+next to **All / Engaged / Bounced**, such as **Landing page: /pricing**:
+
+- **Heatmaps**: **Sessions that landed here** filters by the page's path.
+- **Short links**: **Sessions** filters by the link's UTM source, medium and
+  campaign.
+- **Experiments**: the links under **Exposure** filter by one arm.
+- **People**: **All sessions** filters by that person.
+
+Click the **×** on a chip to remove it, or **Clear filters** to remove them
+all. Links from **Errors**, **Activity** and **Replay Vision** open one session.
 
 ## The replay
 
