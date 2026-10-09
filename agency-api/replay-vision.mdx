@@ -15,7 +15,7 @@ renders each recording to a video, sends it with a compact event timeline to
 also sent through ingestion as a `$recording_observed` event, so you can count,
 chart and filter on it like any other event.
 
-You pay your model provider directly. Mythic does not meter model spend.
+You pay your model provider directly in BYOK dollars, not credits. Mythic exposes known reported spend and cost-reporting coverage; it does not bill your model charges. `monthly_scan_limit` is a count of scans, not a dollar budget. Scouts add separate text-model spend.
 
 | Route | What it does |
 | --- | --- |
@@ -24,7 +24,13 @@ You pay your model provider directly. Mythic does not meter model spend.
 | `/scanners` | Create, list, change and delete scanners |
 | `POST /scanners/{id}/scan` | Scan up to 50 recordings now |
 | `GET /scanners/{id}/observations` | One scanner's answers |
-| `GET /observations` | Every scanner's answers for a client or one recording |
+| `GET /observations` | Agency-wide answers, optionally filtered by client, scanner or recording |
+| `GET /stats` | UTC daily completions and separate current-month scan-limit usage/spend |
+| `GET /scout-templates` | Compatible Scout templates |
+| `GET/POST /scanners/{id}/scouts` | List or create Scouts on a scanner |
+| `GET/PATCH/DELETE /scouts/{id}`, `POST /scouts/{id}/run` | Scout lifecycle and first-report-only manual run |
+| `GET /reports`, `GET /reports/{id}` | Retained Scout report summaries and frozen report details |
+| `PUT /observations/{id}/rating` | Agency-shared thumbs up/down or clear |
 | `GET /observations/{id}`, `POST /observations/{id}/retry` | One answer, or retry a failed one |
 
 The same operations are MCP tools (`list_replay_scanners`,
@@ -261,10 +267,266 @@ the cause. A retry counts against `monthly_scan_limit` like a new scan.
 
 ## Paging
 
-Observation lists are newest first, `limit` 1-200 (default 50), and take
-`status` and `agrees` (`true` or `false`) filters. When more
-remain, the response has `next_cursor`; pass it back as `cursor` for the next
-page. `next_cursor` is `null` on the last page.
+Observation lists default to newest **created** first: `order=created`.
+`GET /observations` accepts optional `location_id` (omit for the
+current agency roster), `scanner_id`, `session_id`, `status`,
+`agrees=true|false`, and `triggered_by=schedule|on_demand|retry`.
+The scanner-specific list accepts the same filters except `scanner_id`.
+
+`date_from`/`date_to` filter **created_at**; separate
+`completed_from`/`completed_to` filter **completed_at**.
+Dates are inclusive UTC `YYYY-MM-DD`; either lower or upper bound can be supplied. When both are supplied, the lower bound must not follow the upper. Observation and report filters do not impose the stats endpoint's 90-day cap.
+`order=completed` sorts by completion time and excludes unfinished rows.
+It uses a distinct `(completed_at,id)` keyset cursor; do not reuse a creation
+cursor or change filters between pages. `limit` is 1-200 (default 50).
+Pass the response's top-level `next_cursor` as `cursor`; null ends paging.
+
+### Frozen recording origin and ratings
+
+The public `scanner` includes the frozen `config` and version that
+produced the answer. Detail also exposes `scanner_snapshot`.
+`recording_start_ms` is absolute Unix **epoch milliseconds**,
+`recording_window_ids` identifies the rendered recording tracks, and both
+may be null for legacy observations. `citations[].recording_ms` is
+already **epoch milliseconds** and must not be reinterpreted as relative.
+`key_moment_ms` is relative to recording start; use
+`recording_start_ms + key_moment_ms` when both are present.
+Replay links use `?t=<epoch milliseconds>`, not video seconds.
+
+`PUT /observations/{id}/rating` takes
+`{"rating":"up"}`, `{"rating":"down"}` or `{"rating":null}`.
+Only succeeded observations can be rated (409 otherwise). Ratings are
+agency-shared, last-write-wins; they do not retrain a model or start scans.
+The success data contains `observation_id`, `rating` and `rated_at`. Clearing nulls both rating and timestamp; writing the same rating preserves the existing timestamp.
+
+```json
+{"success":true,"data":{"observation_id":"550e8400-e29b-41d4-a716-446655440000","rating":"up","rated_at":"2026-10-08T12:00:00Z"}}
+```
+
+## Statistics and cost coverage
+
+`GET /stats` accepts optional `location_id`, `scanner_id` and
+`date_from`/`date_to` (inclusive UTC, at most 90 days). Omitted `date_to`
+defaults to today; omitted `date_from` defaults to 29 days before `date_to`. The response data includes:
+
+- `timezone: "UTC"`, `date_from`, `date_to`, and zero-filled `daily[]`
+  completion-day counters, including `known_cost_usd`,
+  `cost_reported_count` and `cost_unreported_count`.
+- `month`: `start`, `resets_at`, `counted_against_limit`,
+  `scan_limit_total`, `known_cost_usd`, `cost_reported_count` and
+  `cost_unreported_count`. This is the **current UTC month**, independent
+  of the requested chart range; quota attribution uses scan creation time.
+- `scanners[]`: flat **current-month** `scanner_id`, `location_id`,
+  `name`, `type`, `enabled`, `succeeded`, `queued`, `failed`,
+  `ineligible`, `counted_against_limit`, `monthly_scan_limit`,
+  `known_cost_usd`, cost-reporting counts and `decision_disagreed`.
+  Zero-use scanners are included; there is no scanner-list cap on aggregates.
+- Additive range `totals` and legacy `this_month`/nested scanner aggregates
+  may also be present. Do not confuse range totals with flat month counters.
+
+Label scan spend **Reported spend on completed scans**, not total spend.
+It sums known succeeded-observation provider charges and excludes the second
+decision check. A zero with unreported costs is not proof of free usage.
+`GET /scanners/{id}` preserves its existing `this_month` contract and adds
+cost-reporting counts.
+
+`scoutStats` is separate from scan statistics and has `spend_label:
+"Reported spend on scout attempts"` plus two sections:
+
+- `range`: inclusive UTC `date_from`/`date_to`, `totals` and `scouts[]`.
+- `month`: current UTC month `start`/`resets_at`, `totals` and `scouts[]`,
+  independent of the requested range.
+
+Both aggregate **all RUNs by creation time**, not just successful reports.
+Usage contains `runs`, `pending`, `running`, `succeeded`, `failed`, `cancelled`,
+`provider_calls`, `reported_cost_calls`, `unreported_cost_calls`,
+`input_tokens`, `output_tokens`, `total_tokens` and `cost_usd`.
+Per-Scout rows add Scout/scanner/client IDs and names and `scanner_type`.
+`cost_usd` sums accumulated known provider charges including
+failed/cancelled/reclaimed/repair attempts; reported/unreported **call** counts
+show coverage. A zero cost with unreported calls is not proof of free usage.
+Label this **Reported spend on scout attempts**, not total spend or credits.
+The whole-roster SQL JSON aggregate is not capped at 1,000 Scouts/runs.
+Scout usage never counts against a scanner's `monthly_scan_limit`;
+scan counts and completed-scan spend stay separate.
+Scan and Scout statistics cover **current scanners only**. Deleting a scanner
+deletes its observations, Scouts and RUNs, so their charges (including failed
+attempts) leave every total; retained reports keep their own frozen
+`cost_usd`. The provider's billing is authoritative for BYOK spend.
+`daily[]` (completion day) and `month` (creation month) attribute differently:
+chart and project from one of them, never draw a curve from one and a
+projection from the other. Report detail also exposes
+cumulative RUN attempt usage and reporting coverage.
+
+### MCP pagination
+
+`list_replay_observations`, `list_scanner_observations` and
+`list_replay_scout_reports` return JSON `{data:[...],next_cursor:"..."}`.
+Pass `next_cursor` as the next call's `cursor` with the same filters/order;
+`next_cursor:null` marks the final page, including an empty page.
+Other Replay Vision tools keep their existing array or detail result shapes.
+
+## Read-only Scouts
+
+A Scout schedules text-only analysis of one scanner's existing observations
+using that scanner's resolved key/model (client override, else agency default).
+It cannot call arbitrary tools, change a scanner or start additional video
+scans. Model instructions treat visitor text and prior reports as untrusted.
+Model spend is additional BYOK dollars, not Mythic credits.
+
+### Templates and creation
+
+`GET /scout-templates?scanner_type=monitor` returns compatible templates:
+
+| Template | Scanner types | Default local schedule | Input window |
+| --- | --- | --- | --- |
+| `daily_digest` | All | Daily 09:00 | New observations |
+| `weekly_themes` | Summarizer | Monday 09:00 | New observations |
+| `root_cause` | Monitor/classifier/scorer | Monday 09:00 | Last 30 days |
+| `trend_watch` | Monitor/classifier/scorer | Monday 09:00 | 28 days vs preceding 28 |
+| `new_issue_watch` | All | Daily 09:00 | New observations |
+| `custom` | All | Daily 09:00 | New observations |
+
+`POST /scanners/{id}/scouts` returns 201 with the created Scout:
+
+```json
+{
+  "name": "Daily form friction",
+  "template": "daily_digest",
+  "instructions": "Summarize new form problems with grounded evidence.",
+  "schedule": {"kind": "daily", "time": "09:00", "timezone": "America/Denver"},
+  "delivery": {"channel_ids": []},
+  "enabled": true
+}
+```
+
+Name is 1-120 characters; instructions 1-12,000. Omitted instructions/schedule
+use template defaults; a partial schedule merges with those defaults. Omitted
+`template` selects `custom`, whose goal placeholder requires your own instructions. Replace explicit template placeholder values; normal
+uppercase words such as API and CRM are not forbidden. Up to 5 nondeleted
+Scouts per scanner and up to 5 existing active owned delivery-channel IDs.
+
+Schedule kind is `daily`, `weekdays` or `weekly`, time local `HH:mm`.
+Weekly uses ISO `day_of_week` (Monday=1, Sunday=7); a non-null day is forbidden otherwise. A patch can set it to null when switching to daily/weekdays.
+Timezone is a valid IANA zone, defaulting to the client's timezone or UTC,
+persisted on creation. Next-run times are stored in UTC. A spring DST gap
+uses the first valid local instant after the requested time; a fall overlap
+uses the first occurrence only. Missed slots coalesce into one run, not a
+backlog of model calls.
+
+### Lifecycle
+
+`GET /scanners/{id}/scouts` lists Scouts;
+`GET /scouts/{id}` returns one. Public fields include `id`, `scanner_id`,
+`location_id`, configuration above, `version`, `next_run_at`,
+`last_run_at`, `last_report_at`, `last_error`, `latest_report_id`,
+`current_run`, `can_run_now`, `created_at`, and `updated_at`.
+
+`PATCH /scouts/{id}` merges and validates the configuration, including partial schedule/delivery objects; unknown fields
+are rejected, scanner and template cannot change. `enabled:false` pauses the
+Scout and cancels pending work. Lifecycle and roster checks are repeated before
+provider calls, report finalization and delivery.
+`DELETE /scouts/{id}` soft-deletes/disables it, cancels pending runs and returns
+`{id,deleted:true,reports_retained:true}`.
+
+`POST /scouts/{id}/run` takes an empty body and is allowed **only before the
+first report**, while enabled and without outstanding work. It returns 202
+with `{run_id,status:"pending"}`. It is not an unlimited "run again" action.
+
+Errors follow `{success:false,error:{code,message,details?}}`:
+400 `invalid_scout`; 404 foreign/deleted/unlinked resource;
+409 `first_report_already_exists`, `run_in_progress`, `scout_paused` or
+`no_model_key`; 422 `invalid_delivery_channel`. Limits/version conflicts
+are also visible, not silently ignored.
+
+### Coverage, evidence and retained reports
+
+The first new-observation window begins **7 days before Scout creation**, not
+an arbitrary entire history. Context has complete-window aggregates and bounded
+oldest-first model samples: at most 100 new observations, 2KB each/64KB total,
+plus historical samples for root/trend and at most three prior reports.
+Selection also stops before 64KB of collective exact provenance (frozen
+scanner snapshot, session and recording-window IDs per input); a single input
+over 64KB fails visibly with `evidence_provenance_limit`. Unselected new
+observations stay unconsumed and are read by the next run.
+Coverage discloses totals versus selected inputs (`new_truncated`,
+`historical_truncated`, `provenance_truncated`) and `version_boundaries`,
+true only when the window mixes scanner version/config/prompt cohorts;
+a citation list is not the population. Oversized aggregate/context payloads
+fail visibly rather than silently dropping complete counts.
+Every NEW model input is consumed after success even when uncited; historical
+inputs are reusable. Retry claims reuse frozen inputs; up to three claims,
+with at most one malformed-response repair per claim. RUN attempt usage
+accumulates across all provider calls, including failures and repairs.
+
+With no new digest/new-issue/custom inputs, the deterministic report says
+**No new observations** and makes no provider call. Historical templates with
+no observations say **No observations in window**. **Nothing notable** means
+the provider ran and found nothing noteworthy; it is not a synonym for no data.
+
+`GET /reports` accepts optional `location_id`, `scanner_id`, `scout_id`,
+inclusive UTC `date_from`/`date_to` bounds (report **created_at**), `limit`
+1-200 (default 50) and opaque `cursor`. It returns report summaries in
+`data[]` with top-level `next_cursor`. `GET /reports/{id}` returns full
+frozen snapshots, `summary_md`, `sections`, priority P0-P4,
+`observation_count`, `nothing_notable`, `coverage`, `evidence`,
+provider/model/usage/known cost and publication/delivery status.
+
+Sections are ranked by distinct evidence-session count, then priority;
+report priority is the highest section priority (P4 for nothing notable).
+The server, not model-generated URLs or timestamps, builds evidence:
+observation/location/session IDs, scanner name/type/version, cited epoch,
+recording origin/window IDs and excerpt up to 500 characters.
+Evidence links open a cited recording at epoch-ms `?t=`.
+If the observation was deleted, frozen evidence preserves an archival replay
+fallback `/c/<location>/sessions?session=<id>&t=<epoch>`.
+Replay blobs still expire after 30 days: retained evidence is not retained video.
+Raw HTML/images in generated report text are rejected. External links must be
+treated as text by downstream UIs, not trusted navigation.
+
+Reports remain after Scout/scanner deletion with no automatic report TTL.
+This is not erasure: visitor-derived observation/report/evidence/input artifacts
+require manual operator review by location/session when fulfilling deletion
+requests. There is no self-serve erasure endpoint.
+
+### Publication and delivery
+
+Reports publish independently of run completion. `$scout_report_emitted`
+uses a stable report UUID event ID with IDs, priority, observation count and
+nothing-notable metadata, **no report markdown or visitor text**.
+
+Delivery reuses encrypted Slack/HTTPS webhook alert channels, but **does not
+raise a central alert**. Each report/channel is claimed before network IO:
+at most one attempt. A send left ambiguous for more than five minutes becomes
+`uncertain` and is never resent. Published reports and deliveries can progress
+independently; inspect detail status rather than assuming success means sent.
+
+Webhook type is `replay_vision.scout_report`, source `replay_vision_scout`,
+with `scout:{id,name}`, `run_id`, `filed_at` and
+`digest:{report_id,title,summary_md,priority,nothing_notable,url}`.
+The URL uses the configured agency-app origin and
+`/c/<location>/replay-vision/reports/<id>`; it does not promise that a
+Scout-report UI was built by this backend task. Existing channel signing,
+timeout and failure-parking policies apply.
+
+### Operator preflight: agency-app origin
+
+Before enabling Scouts, configure **the same `AGENCY_APP_ORIGIN` on both
+workers**: the main API/delivery worker and the Replay Vision runner worker.
+The runner builds frozen evidence links; the main worker builds delivery
+report links. Use the agency app's HTTP(S) origin only, with no credentials,
+path (other than `/`), query or fragment. Do not rely on a default or set it
+on just one worker.
+
+1. Read back both worker configurations and confirm they name the same
+   intended agency-app origin.
+2. Validate the origin format locally before running a Scout.
+3. In a controlled test, inspect a report's frozen `observation_url` and
+   `replay_url` plus the delivery `digest.url`. Confirm the origin and
+   `/c/<location>/...` scope, and that replay `?t=` is epoch milliseconds.
+4. Confirm the portal routes exist and an authorized agency user can open
+   them; generating a link does not implement a report UI. Enable scheduled
+   delivery only after those checks pass.
 
 ## `$recording_observed` events
 
@@ -286,7 +548,7 @@ decision: `scanner_decision_model`, `scanner_decision_agrees`, and
 or `scanner_decision_p_supported` by scanner type. The event's
 time is when the observation finished, not when the visit happened.
 
-Deleting a scanner deletes its observations; events already sent stay.
+Deleting a scanner deletes its observations and Scouts; immutable Scout reports and their frozen evidence are retained, and events already sent stay. Deleting a Scout is a soft delete, not personal-data erasure.
 
 ## Limits
 

@@ -190,7 +190,7 @@ paths:
     delete:
       summary: Delete a scanner
       operationId: deleteReplayScanner
-      description: Deletes its observations too. `$recording_observed` events already sent stay.
+      description: Deletes its observations and Scouts too. Frozen Scout reports/evidence and already-published events remain; this is not personal-data erasure.
       responses:
         "200": { description: Deleted, content: { application/json: { schema: { $ref: "#/components/schemas/Deleted" } } } }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -238,8 +238,16 @@ paths:
       summary: List a scanner's observations
       operationId: listScannerObservations
       parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/SessionId"
         - $ref: "#/components/parameters/Status"
         - $ref: "#/components/parameters/Agrees"
+        - $ref: "#/components/parameters/TriggeredBy"
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+        - $ref: "#/components/parameters/CompletedFrom"
+        - $ref: "#/components/parameters/CompletedTo"
+        - $ref: "#/components/parameters/ObservationOrder"
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Cursor"
       responses:
@@ -247,20 +255,21 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
   /client/v1/replay-vision/observations:
     get:
-      summary: List observations for a client
+      summary: List agency-wide observations
       operationId: listReplayObservations
-      description: Every scanner's observations for one client, optionally for one recording.
+      description: "Current roster only. Optional location/scanner/session/status/trigger/agrees filters. Created dates separate from completion dates; default order created, completed excludes unfinished rows and uses its own cursor."
       parameters:
-        - name: location_id
-          in: query
-          required: true
-          schema: { type: string }
-        - name: session_id
-          in: query
-          required: false
-          schema: { type: string }
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/ScannerId"
+        - $ref: "#/components/parameters/SessionId"
         - $ref: "#/components/parameters/Status"
         - $ref: "#/components/parameters/Agrees"
+        - $ref: "#/components/parameters/TriggeredBy"
+        - $ref: "#/components/parameters/DateFrom"
+        - $ref: "#/components/parameters/DateTo"
+        - $ref: "#/components/parameters/CompletedFrom"
+        - $ref: "#/components/parameters/CompletedTo"
+        - $ref: "#/components/parameters/ObservationOrder"
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Cursor"
       responses:
@@ -317,6 +326,329 @@ paths:
                   data: { $ref: "#/components/schemas/Observation" }
         "409": { $ref: "#/components/responses/BadRequest" }
         "429": { $ref: "#/components/responses/BadRequest" }
+  /client/v1/replay-vision/stats:
+    get:
+      summary: "Replay Vision statistics"
+      operationId: "getReplayVisionStats"
+      description: "Agency-only UTC zero-filled completed_at daily activity (default last 30 days, max90); independent current created_at month scan ceilings and flat scanner counts including zero-use scanners. Reported known BYOK spend excludes decision-model cost. scoutStats exposes separate range/current UTC month totals and per-Scout rows for all RUN attempts, including failed/cancelled/repair costs and reported/unreported call coverage, without a 1,000-row aggregate cap. Label Reported spend on scout attempts; never count against scan quota. Covers current scanners only: deleting a scanner removes its scan and Scout spend (including failed attempts) from totals."
+      parameters: [{"$ref":"#/components/parameters/LocationId"},{"$ref":"#/components/parameters/ScannerId"},{"$ref":"#/components/parameters/DateFrom"},{"$ref":"#/components/parameters/DateTo"}]
+      responses:
+        200:
+          description: "Statistics"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                properties:
+                  success:
+                    type: "boolean"
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/Stats"
+        400:
+          $ref: "#/components/responses/BadRequest"
+        403:
+          $ref: "#/components/responses/BadRequest"
+        404:
+          $ref: "#/components/responses/NotFound"
+  /client/v1/replay-vision/scout-templates:
+    get:
+      summary: "Scout templates"
+      operationId: "listReplayScoutTemplates"
+      parameters: [{"name":"scanner_type","in":"query","schema":{"type":"string","enum":["monitor","classifier","scorer","summarizer"]}}]
+      responses:
+        200:
+          description: "Compatible templates"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                properties:
+                  success:
+                    type: "boolean"
+                    example: true
+                  data:
+                    type: "array"
+                    items:
+                      $ref: "#/components/schemas/ScoutTemplate"
+        400:
+          $ref: "#/components/responses/BadRequest"
+  /client/v1/replay-vision/scanners/{id}/scouts:
+    parameters: [{"$ref":"#/components/parameters/Id"}]
+    get:
+      summary: "List Scouts"
+      operationId: "listReplayScouts"
+      responses:
+        200:
+          description: "Scouts"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                properties:
+                  success:
+                    type: "boolean"
+                    example: true
+                  data:
+                    type: "array"
+                    items:
+                      $ref: "#/components/schemas/Scout"
+        404:
+          $ref: "#/components/responses/NotFound"
+    post:
+      summary: "Create Scout"
+      operationId: "createReplayScout"
+      description: "Read-only text analysis using scanner-resolved BYOK model/key; extra spend, not scan quota. Max5 nondeleted per scanner. Bootstrap creation-minus7d. No scanner mutations, tools or additional video scans."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf: [{"$ref":"#/components/schemas/ScoutInput"},{"type":"object","required":["name"]}]
+      responses:
+        201:
+          description: "Created"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                properties:
+                  success:
+                    type: "boolean"
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/Scout"
+        400:
+          $ref: "#/components/responses/BadRequest"
+        404:
+          $ref: "#/components/responses/NotFound"
+        422:
+          $ref: "#/components/responses/BadRequest"
+  /client/v1/replay-vision/scouts/{id}:
+    parameters: [{"$ref":"#/components/parameters/Id"}]
+    get:
+      summary: "Get Scout"
+      operationId: "getReplayScout"
+      responses:
+        200:
+          description: "Scout"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                properties:
+                  success:
+                    type: "boolean"
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/Scout"
+        404:
+          $ref: "#/components/responses/NotFound"
+    patch:
+      summary: "Update Scout"
+      operationId: "updateReplayScout"
+      description: "Merged configuration; scanner/template immutable, unknown fields rejected. Pause cancels pending runs, finish rechecks lifecycle. Version conflict 409."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: "object"
+              additionalProperties: false
+              properties:
+                name:
+                  type: "string"
+                  minLength: 1
+                  maxLength: 120
+                instructions:
+                  type: "string"
+                  minLength: 1
+                  maxLength: 12000
+                  description: "Read-only text instructions; replace explicit placeholder values, not ordinary API/CRM uppercase words. Omit for template defaults."
+                schedule:
+                  $ref: "#/components/schemas/ScoutSchedule"
+                delivery:
+                  $ref: "#/components/schemas/ScoutDelivery"
+                enabled:
+                  type: "boolean"
+                  default: true
+      responses:
+        200:
+          description: "Updated"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                properties:
+                  success:
+                    type: "boolean"
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/Scout"
+        400:
+          $ref: "#/components/responses/BadRequest"
+        404:
+          $ref: "#/components/responses/NotFound"
+        409:
+          $ref: "#/components/responses/BadRequest"
+        422:
+          $ref: "#/components/responses/BadRequest"
+    delete:
+      summary: "Delete Scout"
+      operationId: "deleteReplayScout"
+      description: "Soft-delete/disable and cancel pending work. Frozen reports/evidence retained; not personal-data erasure."
+      responses:
+        200:
+          description: "Deleted; reports retained"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                properties:
+                  success:
+                    type: "boolean"
+                    example: true
+                  data:
+                    type: "object"
+                    properties:
+                      id:
+                        type: "string"
+                        format: "uuid"
+                      deleted:
+                        type: "boolean"
+                        example: true
+                      reports_retained:
+                        type: "boolean"
+                        example: true
+        404:
+          $ref: "#/components/responses/NotFound"
+        409:
+          $ref: "#/components/responses/BadRequest"
+  /client/v1/replay-vision/scouts/{id}/run:
+    parameters: [{"$ref":"#/components/parameters/Id"}]
+    post:
+      summary: "Run Scout before first report"
+      operationId: "runReplayScout"
+      description: "First-report-only, enabled, no outstanding run, resolved model key required. Empty body or {} only. 409 first_report_already_exists/run_in_progress/scout_paused/no_model_key. 422 model_provider_mismatch. Deterministic empty-input reports do not invoke provider: No new observations or No observations in window; Nothing notable requires provider analysis."
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: "object"
+              additionalProperties: false
+      responses:
+        202:
+          description: "Queued"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                properties:
+                  success:
+                    type: "boolean"
+                    example: true
+                  data:
+                    type: "object"
+                    properties:
+                      run_id:
+                        type: "string"
+                        format: "uuid"
+                      status:
+                        type: "string"
+                        enum: ["pending"]
+        400:
+          $ref: "#/components/responses/BadRequest"
+        404:
+          $ref: "#/components/responses/NotFound"
+        409:
+          $ref: "#/components/responses/BadRequest"
+        422:
+          $ref: "#/components/responses/BadRequest"
+  /client/v1/replay-vision/reports:
+    get:
+      summary: "List retained Scout reports"
+      operationId: "listReplayScoutReports"
+      description: "Current roster only; archived source scanner/scout IDs filter reports even after deletion. Report created_at UTC dates; newest-first keyset."
+      parameters: [{"$ref":"#/components/parameters/LocationId"},{"$ref":"#/components/parameters/ScannerId"},{"name":"scout_id","in":"query","schema":{"type":"string","format":"uuid"}},{"$ref":"#/components/parameters/DateFrom"},{"$ref":"#/components/parameters/DateTo"},{"$ref":"#/components/parameters/Limit"},{"$ref":"#/components/parameters/Cursor"}]
+      responses:
+        200:
+          description: "Summaries"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                properties:
+                  success:
+                    type: "boolean"
+                  data:
+                    type: "array"
+                    items:
+                      $ref: "#/components/schemas/ScoutReportSummary"
+                  next_cursor:
+                    type: "string"
+                    nullable: true
+        400:
+          $ref: "#/components/responses/BadRequest"
+  /client/v1/replay-vision/reports/{id}:
+    parameters: [{"$ref":"#/components/parameters/Id"}]
+    get:
+      summary: "Get frozen Scout report"
+      operationId: "getReplayScoutReport"
+      description: "Full frozen sections/evidence/coverage/cost/delivery. Server builds epoch-ms links; deleted observations retain archival replay fallback but video expires after30d. Reports retained after Scout/scanner deletion with no automatic TTL. Delivery at most once per channel; uncertain sends never resent."
+      responses:
+        200:
+          description: "Report"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                properties:
+                  success:
+                    type: "boolean"
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/ScoutReport"
+        404:
+          $ref: "#/components/responses/NotFound"
+  /client/v1/replay-vision/observations/{id}/rating:
+    parameters: [{"$ref":"#/components/parameters/Id"}]
+    put:
+      summary: "Rate succeeded observation"
+      operationId: "rateReplayObservation"
+      description: "Agency-shared succeeded-only rating, last-write-wins. Up/down/null; clearing nulls rated_at, same-value PUT preserves timestamp. Not training or scanning."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: "object"
+              required: ["rating"]
+              additionalProperties: false
+              properties:
+                rating:
+                  type: "string"
+                  nullable: true
+                  enum: ["up","down",null]
+      responses:
+        200:
+          description: "Rating"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                properties:
+                  success:
+                    type: "boolean"
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/RatingResult"
+        400:
+          $ref: "#/components/responses/BadRequest"
+        404:
+          $ref: "#/components/responses/NotFound"
+        409:
+          $ref: "#/components/responses/BadRequest"
 components:
   securitySchemes:
     BearerAuth:
@@ -327,6 +659,65 @@ components:
         agency_required`. Agency-wide scoped keys (`mcp_`) need
         `replay_vision:read` or `replay_vision:write`.
   parameters:
+    LocationId:
+      name: "location_id"
+      in: "query"
+      required: false
+      description: "Optional currently linked client; omit for agency-wide roster."
+      schema:
+        type: "string"
+    ScannerId:
+      name: "scanner_id"
+      in: "query"
+      required: false
+      schema:
+        type: "string"
+        format: "uuid"
+    DateFrom:
+      name: "date_from"
+      in: "query"
+      description: "Inclusive UTC YYYY-MM-DD lower bound. Observations/reports: created_at, either bound allowed without stats cap. Stats: completed_at, max90 inclusive days; omitted from defaults to29 days before to, omitted to defaults today."
+      schema:
+        type: "string"
+        format: "date"
+    DateTo:
+      name: "date_to"
+      in: "query"
+      schema:
+        type: "string"
+        format: "date"
+    CompletedFrom:
+      name: "completed_from"
+      in: "query"
+      description: "Inclusive UTC completed_at lower bound; independent of created filters. Either bound allowed, no stats range cap."
+      schema:
+        type: "string"
+        format: "date"
+    CompletedTo:
+      name: "completed_to"
+      in: "query"
+      schema:
+        type: "string"
+        format: "date"
+    ObservationOrder:
+      name: "order"
+      in: "query"
+      description: "Default created. completed excludes unfinished rows and uses separate completed_at/id cursor."
+      schema:
+        type: "string"
+        enum: ["created","completed"]
+        default: "created"
+    TriggeredBy:
+      name: "triggered_by"
+      in: "query"
+      schema:
+        type: "string"
+        enum: ["schedule","on_demand","retry"]
+    SessionId:
+      name: "session_id"
+      in: "query"
+      schema:
+        type: "string"
     Id:
       name: id
       in: path
@@ -356,6 +747,643 @@ components:
       description: "`next_cursor` from the previous page. Opaque; `400 invalid_cursor` if altered."
       schema: { type: string }
   schemas:
+    Stats:
+      type: "object"
+      properties:
+        scoutStats:
+          $ref: "#/components/schemas/ScoutStats"
+        timezone:
+          type: "string"
+          enum: ["UTC"]
+        date_from:
+          type: "string"
+          format: "date"
+        date_to:
+          type: "string"
+          format: "date"
+        spend_label:
+          type: "string"
+          example: "Reported spend on completed scans"
+        daily:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              date:
+                type: "string"
+                format: "date"
+              observations:
+                type: "integer"
+              pending:
+                type: "integer"
+              running:
+                type: "integer"
+              queued:
+                type: "integer"
+              succeeded:
+                type: "integer"
+              failed:
+                type: "integer"
+              ineligible:
+                type: "integer"
+              counted_against_limit:
+                type: "integer"
+              decision_agreed:
+                type: "integer"
+              decision_disagreed:
+                type: "integer"
+              cost_reported_count:
+                type: "integer"
+              cost_unreported_count:
+                type: "integer"
+              known_cost_usd:
+                type: "number"
+                description: "Known reported spend on completed scans; excludes decision model. Partial when cost_unreported_count > 0."
+        month:
+          type: "object"
+          properties:
+            start:
+              type: "string"
+              format: "date-time"
+            resets_at:
+              type: "string"
+              format: "date-time"
+            scan_limit_total:
+              type: "integer"
+            observations:
+              type: "integer"
+            pending:
+              type: "integer"
+            running:
+              type: "integer"
+            queued:
+              type: "integer"
+            succeeded:
+              type: "integer"
+            failed:
+              type: "integer"
+            ineligible:
+              type: "integer"
+            counted_against_limit:
+              type: "integer"
+            decision_agreed:
+              type: "integer"
+            decision_disagreed:
+              type: "integer"
+            cost_reported_count:
+              type: "integer"
+            cost_unreported_count:
+              type: "integer"
+            known_cost_usd:
+              type: "number"
+              description: "Known reported spend on completed scans; excludes decision model. Partial when cost_unreported_count > 0."
+        scanners:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              scanner_id:
+                type: "string"
+                format: "uuid"
+              location_id:
+                type: "string"
+              name:
+                type: "string"
+              type:
+                type: "string"
+              enabled:
+                type: "boolean"
+              monthly_scan_limit:
+                type: "integer"
+              observations:
+                type: "integer"
+              pending:
+                type: "integer"
+              running:
+                type: "integer"
+              queued:
+                type: "integer"
+              succeeded:
+                type: "integer"
+              failed:
+                type: "integer"
+              ineligible:
+                type: "integer"
+              counted_against_limit:
+                type: "integer"
+              decision_agreed:
+                type: "integer"
+              decision_disagreed:
+                type: "integer"
+              cost_reported_count:
+                type: "integer"
+              cost_unreported_count:
+                type: "integer"
+              known_cost_usd:
+                type: "number"
+                description: "Known reported spend on completed scans; excludes decision model. Partial when cost_unreported_count > 0."
+              totals:
+                type: "object"
+                description: "Additive requested completion-date range totals."
+              this_month:
+                type: "object"
+                description: "Additive legacy nested current-month usage."
+        totals:
+          type: "object"
+        this_month:
+          type: "object"
+        scanner_counts:
+          type: "object"
+    ScoutUsage:
+      type: "object"
+      description: "All RUNs by creation time, including pending/running/failed/cancelled and accumulated failed/reclaimed/repair provider attempts. Separate from scan quota."
+      required: [runs, pending, running, succeeded, failed, cancelled, provider_calls, reported_cost_calls, unreported_cost_calls, input_tokens, output_tokens, total_tokens, cost_usd]
+      properties:
+        runs:
+          type: "integer"
+        pending:
+          type: "integer"
+        running:
+          type: "integer"
+        succeeded:
+          type: "integer"
+        failed:
+          type: "integer"
+        cancelled:
+          type: "integer"
+        provider_calls:
+          type: "integer"
+        reported_cost_calls:
+          type: "integer"
+        unreported_cost_calls:
+          type: "integer"
+        input_tokens:
+          type: "integer"
+        output_tokens:
+          type: "integer"
+        total_tokens:
+          type: "integer"
+        cost_usd:
+          type: "number"
+          description: "Accumulated known RUN attempt costs including failed/cancelled/reclaimed/repaired calls. Partial when unreported_cost_calls > 0; no scan quota usage."
+    ScoutStats:
+      type: "object"
+      description: "Whole-roster SQL JSON aggregate without a 1,000-row list cap. Scout attempt spend is separate from scan counts and completed-scan spend."
+      required: [spend_label, range, month]
+      properties:
+        spend_label:
+          type: "string"
+          enum: ["Reported spend on scout attempts"]
+        range:
+          type: "object"
+          required: [date_from, date_to, totals, scouts]
+          properties:
+            date_from:
+              type: "string"
+              format: "date"
+            date_to:
+              type: "string"
+              format: "date"
+            totals:
+              $ref: "#/components/schemas/ScoutUsage"
+            scouts:
+              type: "array"
+              items:
+                $ref: "#/components/schemas/ScoutUsageRow"
+        month:
+          type: "object"
+          description: "Current UTC month, independent of requested range; RUN creation-time attribution."
+          required: [start, resets_at, totals, scouts]
+          properties:
+            start:
+              type: "string"
+              format: "date-time"
+            resets_at:
+              type: "string"
+              format: "date-time"
+            totals:
+              $ref: "#/components/schemas/ScoutUsage"
+            scouts:
+              type: "array"
+              items:
+                $ref: "#/components/schemas/ScoutUsageRow"
+    ScoutUsageRow:
+      allOf:
+        - $ref: "#/components/schemas/ScoutUsage"
+        - type: "object"
+          properties:
+            scout_id: { type: string, format: uuid }
+            scout_name: { type: string }
+            scanner_id: { type: string, format: uuid }
+            scanner_name: { type: string }
+            scanner_type: { type: string, enum: [monitor, classifier, scorer, summarizer] }
+            location_id: { type: string }
+            location_name: { type: string, nullable: true }
+    ScoutSchedule:
+      type: "object"
+      description: "Input schedule fields are optional and merge with template/current defaults. Public Scouts always have kind/time/timezone; weekly also has day_of_week."
+      additionalProperties: false
+      properties:
+        kind:
+          type: "string"
+          enum: ["daily","weekdays","weekly"]
+        time:
+          type: "string"
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+        day_of_week:
+          type: "integer"
+          minimum: 1
+          maximum: 7
+          nullable: true
+          description: "ISO weekday; required for weekly. Null can clear when switching to daily/weekdays."
+        timezone:
+          type: "string"
+          description: "Valid IANA zone. Client timezone or UTC default persisted. DST gap first valid instant; overlap first occurrence only. Missed slots coalesce."
+    ScoutDelivery:
+      type: "object"
+      additionalProperties: false
+      properties:
+        channel_ids:
+          type: "array"
+          maxItems: 5
+          items:
+            type: "string"
+            format: "uuid"
+          description: "Existing active owned alert channels. At most one delivery attempt per report/channel; uncertain sends never resent."
+    ScoutInput:
+      type: "object"
+      additionalProperties: false
+      properties:
+        name:
+          type: "string"
+          minLength: 1
+          maxLength: 120
+        template:
+          type: "string"
+          enum: ["daily_digest","weekly_themes","root_cause","trend_watch","new_issue_watch","custom"]
+          default: "custom"
+        instructions:
+          type: "string"
+          minLength: 1
+          maxLength: 12000
+          description: "Read-only text instructions; replace explicit placeholder values, not ordinary API/CRM uppercase words. Omit for template defaults."
+        schedule:
+          $ref: "#/components/schemas/ScoutSchedule"
+        delivery:
+          $ref: "#/components/schemas/ScoutDelivery"
+        enabled:
+          type: "boolean"
+          default: true
+    Scout:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          format: "uuid"
+        scanner_id:
+          type: "string"
+          format: "uuid"
+        location_id:
+          type: "string"
+        name:
+          type: "string"
+        template:
+          type: "string"
+        instructions:
+          type: "string"
+        schedule:
+          $ref: "#/components/schemas/ScoutSchedule"
+        delivery:
+          $ref: "#/components/schemas/ScoutDelivery"
+        enabled:
+          type: "boolean"
+        version:
+          type: "integer"
+        next_run_at:
+          type: "string"
+          format: "date-time"
+          nullable: true
+        last_run_at:
+          type: "string"
+          format: "date-time"
+          nullable: true
+        last_report_at:
+          type: "string"
+          format: "date-time"
+          nullable: true
+        last_error:
+          type: "string"
+          nullable: true
+        latest_report_id:
+          type: "string"
+          format: "uuid"
+          nullable: true
+        current_run:
+          type: "object"
+          nullable: true
+          description: "Outstanding pending/running run or null."
+          properties:
+            id: { type: string, format: uuid }
+            status: { type: string, enum: [pending, running] }
+            scheduled_for: { type: string, format: date-time }
+            triggered_by: { type: string, enum: [schedule, on_demand] }
+            attempts: { type: integer }
+        can_run_now:
+          type: "boolean"
+        created_at:
+          type: "string"
+          format: "date-time"
+        updated_at:
+          type: "string"
+          format: "date-time"
+    ScoutTemplate:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+        name:
+          type: "string"
+        description:
+          type: "string"
+        scanner_types:
+          type: "array"
+          items:
+            type: "string"
+        instructions:
+          type: "string"
+        schedule:
+          $ref: "#/components/schemas/ScoutSchedule"
+        placeholders:
+          type: "array"
+          items:
+            type: "string"
+    ScoutEvidence:
+      type: "object"
+      properties:
+        observation_id:
+          type: "string"
+          format: "uuid"
+        location_id:
+          type: "string"
+        session_id:
+          type: "string"
+        scanner:
+          type: "object"
+          properties:
+            id:
+              type: "string"
+              format: "uuid"
+            name:
+              type: "string"
+            type:
+              type: "string"
+            version:
+              type: "integer"
+        recording_ms:
+          type: "integer"
+          nullable: true
+          description: "Cited absolute epoch ms; use replay ?t=epoch, never video seconds."
+        recording_start_ms:
+          type: "integer"
+          nullable: true
+          description: "Recording-start epoch ms; legacy nullable."
+        recording_window_ids:
+          type: "array"
+          nullable: true
+          items:
+            type: "string"
+        excerpt:
+          type: "string"
+          maxLength: 500
+        observation_url:
+          type: "string"
+          nullable: true
+        citation_index:
+          type: "integer"
+        archival:
+          type: "boolean"
+        replay_url:
+          type: "string"
+    ScoutReport:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          format: "uuid"
+        run_id:
+          type: "string"
+          format: "uuid"
+          nullable: true
+        location_id:
+          type: "string"
+        scout_id:
+          type: "string"
+          format: "uuid"
+          nullable: true
+        scanner_id:
+          type: "string"
+          format: "uuid"
+          nullable: true
+        source_scout_id:
+          type: "string"
+          format: "uuid"
+        source_scanner_id:
+          type: "string"
+          format: "uuid"
+        title:
+          type: "string"
+        summary_md:
+          type: "string"
+          description: "Generated markdown; raw HTML/images rejected. Downstream UI must treat external links as text."
+        priority:
+          type: "string"
+          enum: ["P0","P1","P2","P3","P4"]
+        observation_count:
+          type: "integer"
+        nothing_notable:
+          type: "boolean"
+          description: "True only after provider analysis, never for deterministic empty-input report."
+        coverage:
+          type: "object"
+          description: "Complete-window aggregates vs bounded oldest-first model inputs. 100 new/2KB each/64KB all and 64KB collective exact provenance, historical reusable and prior 3 reports; not exhaustive evidence. new_truncated/historical_truncated/provenance_truncated disclose backlog left for later runs; version_boundaries is true only when cohorts differ."
+        provider:
+          type: "string"
+          nullable: true
+        model_used:
+          type: "string"
+          nullable: true
+        usage:
+          type: "object"
+          nullable: true
+          description: "Cumulative RUN attempts, including failures and repairs."
+        cost_usd:
+          type: "number"
+          nullable: true
+          description: "Known RUN attempt costs; may be partial or entirely unknown."
+        cost_reporting:
+          type: "object"
+          properties:
+            provider_calls:
+              type: "integer"
+            reported_cost_calls:
+              type: "integer"
+            unreported_cost_calls:
+              type: "integer"
+            coverage:
+              type: "string"
+              enum: ["no_calls","complete","partial","unreported"]
+        created_at:
+          type: "string"
+          format: "date-time"
+        publish_status:
+          type: "string"
+          enum: ["pending","published"]
+        sections:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              heading:
+                type: "string"
+              summary_md:
+                type: "string"
+              priority:
+                type: "string"
+              session_count:
+                type: "integer"
+              observation_ids:
+                type: "array"
+                items:
+                  type: "string"
+                  format: "uuid"
+              evidence:
+                type: "array"
+                items:
+                  $ref: "#/components/schemas/ScoutEvidence"
+        evidence:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/ScoutEvidence"
+        scout_snapshot:
+          type: "object"
+        scanner_snapshot:
+          type: "object"
+        deliveries:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              id:
+                type: "string"
+                format: "uuid"
+              source_channel_id:
+                type: "string"
+                format: "uuid"
+              status:
+                type: "string"
+                enum: ["pending","sending","succeeded","failed","skipped","uncertain"]
+              attempted_at:
+                type: "string"
+                format: "date-time"
+                nullable: true
+              http_status:
+                type: "integer"
+                nullable: true
+              error:
+                type: "string"
+                nullable: true
+    ScoutReportSummary:
+      allOf:
+        - type: object
+          properties:
+            cost_reporting:
+              type: object
+              properties:
+                provider_calls: { type: integer }
+                reported_cost_calls: { type: integer }
+                unreported_cost_calls: { type: integer }
+                coverage: { type: string, enum: [no_calls, complete, partial, unreported] }
+      type: "object"
+      description: "Immutable report summary without detail-only sections/evidence/snapshots/deliveries."
+      properties:
+        id:
+          type: "string"
+          format: "uuid"
+        run_id:
+          type: "string"
+          format: "uuid"
+          nullable: true
+        location_id:
+          type: "string"
+        scout_id:
+          type: "string"
+          format: "uuid"
+          nullable: true
+        scanner_id:
+          type: "string"
+          format: "uuid"
+          nullable: true
+        source_scout_id:
+          type: "string"
+          format: "uuid"
+        source_scanner_id:
+          type: "string"
+          format: "uuid"
+        title:
+          type: "string"
+        summary_md:
+          type: "string"
+          description: "Generated markdown; raw HTML/images rejected. Downstream UI must treat external links as text."
+        priority:
+          type: "string"
+          enum: ["P0","P1","P2","P3","P4"]
+        observation_count:
+          type: "integer"
+        nothing_notable:
+          type: "boolean"
+          description: "True only after provider analysis, never for deterministic empty-input report."
+        coverage:
+          type: "object"
+          description: "Complete-window aggregates vs bounded oldest-first model inputs. 100 new/2KB each/64KB all and 64KB collective exact provenance, historical reusable and prior 3 reports; not exhaustive evidence. new_truncated/historical_truncated/provenance_truncated disclose backlog left for later runs; version_boundaries is true only when cohorts differ."
+        provider:
+          type: "string"
+          nullable: true
+        model_used:
+          type: "string"
+          nullable: true
+        usage:
+          type: "object"
+          nullable: true
+          description: "Cumulative RUN attempts, including failures and repairs."
+        cost_usd:
+          type: "number"
+          nullable: true
+          description: "Known RUN attempt costs; may be partial or entirely unknown."
+        created_at:
+          type: "string"
+          format: "date-time"
+        publish_status:
+          type: "string"
+          enum: ["pending","published"]
+    RatingResult:
+      type: "object"
+      required: [observation_id, rating, rated_at]
+      example:
+        observation_id: "550e8400-e29b-41d4-a716-446655440000"
+        rating: "up"
+        rated_at: "2026-10-08T12:00:00Z"
+      properties:
+        observation_id:
+          type: "string"
+          format: "uuid"
+        rating:
+          type: "string"
+          nullable: true
+          enum: ["up","down",null]
+        rated_at:
+          type: "string"
+          format: "date-time"
+          nullable: true
     Error:
       type: object
       properties:
@@ -445,7 +1473,11 @@ components:
         failed: { type: integer }
         ineligible: { type: integer }
         counted_against_limit: { type: integer }
-        cost_usd: { type: number, description: "Spend the provider reported. OpenRouter reports it; direct Gemini does not." }
+        cost_usd: { type: number, description: "Known spend reported on succeeded scans; excludes second check and Scouts. Partial when unreported count > 0." }
+        known_cost_usd: { type: number }
+        cost_reported_count: { type: integer }
+        cost_unreported_count: { type: integer }
+        resets_at: { type: string, format: date-time }
         decision_agreed: { type: integer, description: Succeeded answers the decision model agreed with. }
         decision_disagreed: { type: integer, description: Succeeded answers the decision model disagreed with. Many usually means a vague prompt. }
     Observation:
@@ -457,7 +1489,11 @@ components:
         session_id: { type: string }
         status: { type: string, enum: [pending, running, succeeded, failed, ineligible] }
         triggered_by: { type: string, enum: [schedule, on_demand, retry] }
-        scanner: { type: object, properties: { name: { type: string }, type: { type: string }, version: { type: integer } } }
+        scanner: { type: object, description: Frozen scanner version/config, properties: { name: { type: string }, type: { type: string }, version: { type: integer }, config: { type: object } } }
+        recording_start_ms: { type: integer, nullable: true, description: "Absolute recording-start epoch ms; legacy null. Add key_moment_ms for an epoch replay link." }
+        recording_window_ids: { type: array, nullable: true, items: { type: string }, description: "Rendered recording tracks; legacy null." }
+        rating: { type: string, nullable: true, enum: [up, down, null], description: "Agency-shared last-write-wins; succeeded only." }
+        rated_at: { type: string, format: date-time, nullable: true }
         output:
           type: object
           nullable: true

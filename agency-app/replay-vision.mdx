@@ -17,7 +17,21 @@ Scans run on your own OpenRouter or Gemini key, and the provider bills you
 directly.
 
 Open **Replay Vision** from the agency menu to see every client's scanners, or
-from a client's menu to see only that client's.
+from a client's menu to see only that client's. The hub has six tabs:
+
+| Tab | What it shows |
+| --- | --- |
+| **What to watch** | The top recordings to watch from the latest answered results, ranked monitor yes first, then low scores, friction and second-check disagreements. Filter by date range, client, scanner, type and tag. |
+| **Scanners** | Results per day, scans used against the monthly limits, reported spend, and a table of scanners with an **Automatic** switch, scans this month, spend and second-check disagreements. |
+| **Usage** | Reported model spend this month, a straight-line estimate to month end, scans used and when the limit resets, per scanner and per Scout. |
+| **Reports** | Every Scout report, newest first, with its priority. |
+| **All results** | Every scanner's results, with status and second-check filters. |
+| **Model keys** | Your OpenRouter or Gemini keys. |
+
+<Callout kind="note">
+These screens arrive with the Replay Vision Scouts release of the Mythic API.
+If a tab shows an error, your agency's API is not on that release yet.
+</Callout>
 
 ## Set it up
 
@@ -39,12 +53,14 @@ from a client's menu to see only that client's.
     doesn't show enough.
   </Step>
   <Step title="Test it on a few recordings">
-    Click **Scan recordings** and pick recordings you have already watched.
+    Open the scanner, go to the **Run** tab, click **Scan recordings** and pick
+    recordings you have already watched.
     Results appear within a few minutes. Read the reasoning, and edit the
     question until the answers match what you saw.
   </Step>
   <Step title="Turn on automatic scanning">
-    Switch on **Scan new recordings automatically** and set the sample, the
+    On the scanner's **Run** tab, switch on **Scan new recordings
+    automatically** and set the sample, the
     share of new recordings to scan. Every 5 minutes the scanner picks from
     the recordings that just ended.
   </Step>
@@ -64,13 +80,30 @@ moment in the recording, with a link to the session.
 
 ## Review results
 
-Each scanner lists its results under its settings. On a client's Replay Vision
-screen, the **Results** tab lists every scanner's results for that client. A
-client's **Sessions** screen shows the results for each recording, and can
+Click a scanner to open its page:
+
+- **Overview**: the latest Scout report, status and last automatic scan, scans
+  used of this scanner's monthly limit, its settings, and findings per day.
+- **Observations**: this scanner's results. Click one to open it.
+- **Run**: scan picked recordings and turn on automatic scanning.
+- **Scouts**: the scanner's [Scouts](#scouts).
+- **Alerts**: alert settings for a Monitor scanner.
+
+A result's page shows the question, the answer with its confidence, reasoning
+and cited moments under **Summary**, and the cited moments in time order under
+**Timeline**. The recording plays beside it; clicking a cited moment seeks the
+player there. Use **Previous result** and **Next result** to move through the
+list you came from, and **Copy link** to share it.
+
+A client's **Sessions** screen shows the results for each recording, and can
 scan a single session.
 
-Filter results by status (answered, failed, not eligible, queued, scanning)
-and by the second check.
+### Rate results
+
+Mark an answered result **Useful** (thumbs up) or **Not useful** (thumbs down).
+Click again to clear it. Ratings are shared by everyone in your agency; the
+last change wins. They help you judge a scanner's question. They do not retrain
+the model.
 
 ### Second check
 
@@ -85,7 +118,7 @@ reasoning the timeline contradicts.
 
 ## Send findings to Slack or a webhook
 
-For a **Monitor** scanner, turn on **Raise an alert** and save. A yes answer
+For a **Monitor** scanner, open its **Alerts** tab, turn on **Raise an alert** and save. A yes answer
 raises a warning alert unless the second check disagrees. Classifiers,
 scorers and summarizers do not raise alerts.
 
@@ -108,10 +141,65 @@ choose the clients to receive notifications for. See [Alerts](/agency-app/alerts
 - A client can have up to 25 scanners.
 - Editing a scanner's question, settings or model starts a new version.
   Earlier results keep the version they were scanned with.
-- Deleting a scanner deletes its results. Events already sent stay in the
-  client's data.
+- Deleting a scanner deletes its results and Scouts, but frozen Scout reports/evidence are retained. Events already sent stay in the client's data.
+
+## Scouts
+
+A **Scout** is a scheduled reviewer for one scanner. Scanners review sessions;
+a Scout reviews the scanner's results. On its schedule it reads the scanner's
+new results, plus its own last three reports, and files one report: a title,
+a summary, findings ranked by how many sessions they cover, and a priority from
+P0 to P4. Each finding links to the recording at the cited moment.
+
+To add one, open a scanner's **Scouts** tab and click **Set up a scout**. Pick
+a template, then fill in:
+
+- **Instructions**: what to look for. Templates: Daily digest, Weekly themes,
+  Root cause, Trend watch, New issue watch, or start from scratch (replace the
+  placeholders in capitals).
+- **Schedule**: every day, weekdays, or weekly, at a time in a timezone.
+- **Delivery**: optional Slack or webhook channels that receive each report.
+
+**Run now** is available only before the first report. You can pause, edit or
+delete a Scout; deleting it keeps its reports. The latest report appears on the
+scanner's **Overview**, and every report is under the hub's **Reports** tab.
+
+Scouts read result text, not new recordings, using the scanner's model and
+key. They cost extra on your key but do not use the monthly scan limit. Each
+run reads up to 100 of the oldest new results; anything left over is read by
+the next run, and the report says when it covered only part of the backlog.
+Reports compare scanner versions separately.
+
+"No new observations" means there was nothing to read, so no model call was
+made. "Nothing notable" means the model read the results and found nothing
+worth reporting. Each report is delivered to each channel at most once. Scout
+reports do not raise monitor alerts.
+
+## Usage and spend
+
+The **Usage** tab shows dollars your provider reported, next to scan counts.
+There is no dollar limit; the monthly limits count scans.
+
+- The **Reported spend** card counts scans started this UTC month, the same
+  basis as the scan limits.
+- The cumulative chart and the month-end estimate use scans by the day they
+  finished. A scan started on the last day of a month and finished the next
+  day counts in the card for the first month and in the chart for the second.
+- Some providers don't report a cost (direct Gemini doesn't). The tab says how
+  many scans or Scout calls reported one, and never shows unknown cost as $0.
+- Scout spend includes retries and failed attempts.
+- Usage covers current scanners only. Deleting a scanner removes its scan and
+  Scout spend from the totals. Your provider's billing is the record of what
+  you paid.
+
+Reports can keep visitor-derived evidence after a scanner is deleted. Deleting
+a Scout is not personal-data erasure; contact Mythic for erasure.
 
 ## For developers
 
 The same scanners, keys and results are available on the
 [Replay Vision API](/agency-api/replay-vision) and as MCP tools.
+Paged observation/report MCP lists return `{data,next_cursor}`; follow the
+cursor until null. Rating responses use `observation_id`, `rating`, `rated_at`.
+Report and evidence links open in the agency app; replay links put epoch
+milliseconds in `?t=` and may outlive the 30-day recordings.
