@@ -1,42 +1,59 @@
 ---
 title: Sessions
 description: >-
-  Browse a client's visits, watch session replays, and read a step-by-step
-  timeline of what each visitor did.
+  Browse a client's visits, watch session replays, step through the events of
+  each visit, and jump to the person behind it.
 ---
 
 ## Overview
 
-A **session** is one visit to the client's site. The **Sessions** screen lists
-them newest first, with a replay and a timeline for each. Open a client and
-choose **Sessions**.
+A **session** is one visit to the client's site. The **Session replay** screen
+lists them newest first. Open a client and choose **Sessions**.
 
-## The list
+On a wide screen the page has three columns: the recordings list, the replay,
+and an inspector. On a narrow screen (or with the chat panel open) they stack,
+and the inspector sits under **Session details**.
 
-Each session shows the visitor, when the visit started, how long it lasted,
-and the landing page. The dot shows whether the visit was engaged:
+## The recordings list
+
+Each row shows the visitor (their user id, or "Anonymous" plus the end of the
+visitor id), how long ago the visit started, and a dot for engagement:
 
 - **Engaged**: more than one page view, at least 10 seconds long, or an event
   other than a page view.
 - **Bounced**: none of those.
 
-A play icon means the visit was recorded. Use **Engagement** to show only
-engaged or only bounced visits.
+The second line shows the visitor's country, device, page views, event count,
+a play icon if the visit was recorded, and the duration. The third line is the
+landing page. Use **All / Engaged / Bounced** to filter and the refresh button
+to reload. The list is sorted newest first.
 
-## A session
+## The replay
 
-Click a session to see:
+The bar above the player shows the landing page with three links:
 
-- **Session replay**: click **Play replay** to watch the visit. If the
-  visitor had more than one browser tab open, choose the tab to watch.
-- **Timeline**: each page view, click, form interaction, error and custom
-  event in order. The timeline is built from the recording.
-- **Details**: device, pages viewed, duration and traffic source.
-- **Replay Vision** results for the recording, if a scanner has watched it.
-  You can scan the session from here. See [Replay Vision](/agency-app/replay-vision).
+- **Person** opens the visitor's [profile](/agency-app/people). Anonymous
+  visitors have a profile too.
+- **Open page** opens the landing page in a new tab.
+- **Copy link** copies a link to this session.
 
-**Copy session link** copies a link to this session. **Summarize this
-session** asks the assistant in the chat panel to describe what happened.
+Click **Play replay** to watch the visit. If the visitor had more than one
+browser tab open, choose the tab to watch. **Summarize this session** asks the
+assistant in the chat panel to describe what happened.
+
+## The inspector
+
+- **Overview**: session id, visitor (links to the person), landing page (opens
+  the page), a link to the landing page's [heatmap](/agency-app/heatmaps),
+  start time, duration, pages, events, location, device, source and how long
+  the replay is kept.
+- **Events**: every page view, page exit, form interaction, identify and
+  custom event in order, with the time from the start of the session. Type in
+  **Search events** to filter. Click an event to jump the replay to that
+  moment once it has loaded. Event times are approximate (whole seconds).
+- **Observations**: [Replay Vision](/agency-app/replay-vision) results for the
+  recording, if a scanner has watched it. You can scan the session from here.
+  Shown for recorded sessions only.
 
 ## What gets recorded
 
