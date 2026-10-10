@@ -323,6 +323,6 @@ Errors use the standard envelope. `code` is stable; `details` carries the confli
 | `404` | `no_pipeline` / `run_not_found` / `client_not_found` | Nothing by that id for this agency. |
 | `409` | `run_in_flight` | A run is running. Starting or retrying another would sync the same connections twice. |
 | `409` | `run_exists_today` | Today already has a finished run. |
-| `409` | `run_changed` | The five-minute tick updated the run during your request. Read it again and retry. |
+| `409` | `run_changed` | The five-minute tick updated the run during your request, or is still finishing work on it. Read it again and retry in a few minutes. |
 | `500` | `save_failed` | The pipeline could not be saved. Schedules changed during the request were given back. |
 | `502` | `airbyte_unavailable` / `schedule_takeover_failed` | Airbyte could not be changed. Nothing was saved. |

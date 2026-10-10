@@ -1350,7 +1350,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFoundRun"
         "409":
-          description: "`run_in_flight` (another run is running) or `run_changed` (the tick advanced this run mid-request)"
+          description: "`run_in_flight` (another run is running) or `run_changed` (the tick advanced this run mid-request, or is still finishing work on it; retry in a few minutes)"
           content:
             application/json:
               schema:

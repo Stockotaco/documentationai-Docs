@@ -450,7 +450,7 @@ paths:
       operationId: adminListAirbytePipelines
       description: >
         Every orchestration pipeline and every open run, across agencies, plus
-        `last_tick_at`.
+        `last_tick_at` and the internal Tinybird copy queue.
 
 
         The orchestrator's only clock is a cron, and a cron produces no HTTP
@@ -477,10 +477,202 @@ paths:
                         description: When a tick last claimed the lock. Should be within ~5 minutes.
                       pipelines:
                         type: array
+                        description: >
+                          Every pipeline row (webhook secret removed, `has_webhook_secret`
+                          added), including the internal `copy_to_tinybird` flag.
                         items: { type: object }
                       open_runs:
                         type: array
-                        items: { type: object }
+                        description: Running and held runs, each with the internal copy fields.
+                        items:
+                          $ref: "#/components/schemas/AdminPipelineRun"
+                      copy_queue:
+                        type: array
+                        description: >
+                          Closed runs whose Tinybird copy is still pending or running (up to 100).
+                          They have left `open_runs` and would otherwise be invisible until the
+                          copy finishes.
+                        items:
+                          $ref: "#/components/schemas/AdminPipelineRun"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /admin/airbyte/pipelines/{id}:
+    patch:
+      tags: [Global]
+      summary: Turn a pipeline's Tinybird copy on or off
+      operationId: adminSetAirbytePipelineCopy
+      description: >
+        Sets the Mythic-internal `copy_to_tinybird` flag. On by default. When on,
+        each run copies a daily campaign rollup (spend, impressions, clicks, link
+        clicks) from the client's managed BigQuery dataset into Tinybird
+        `ad_spend_daily` after its syncs finish. The copy never holds a run or
+        its completion webhook, and `/client/v1` neither returns nor accepts the
+        flag.
+
+
+        Applies to runs created after the change. A run already waiting to copy
+        is skipped when it is reached with the flag off. Only
+        `copy_to_tinybird` can be changed here.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Pipeline id (uuid).
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [copy_to_tinybird]
+              additionalProperties: false
+              properties:
+                copy_to_tinybird:
+                  type: boolean
+            example:
+              copy_to_tinybird: false
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string, format: uuid }
+                      client_id: { type: string }
+                      copy_to_tinybird: { type: boolean }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /admin/airbyte/pipelines/runs/{runId}/copy/retry:
+    post:
+      tags: [Global]
+      summary: Queue a run's Tinybird copy again
+      operationId: adminRetryAirbytePipelineCopy
+      description: >
+        Re-queues the internal Tinybird copy of a closed (succeeded or failed)
+        run with a fresh two-hour deadline and five fresh attempts. The next
+        tick runs it.
+
+
+        Without a body the copy re-sends its usual window: 28 days before the
+        last successful copy, normally the trailing 28 days. `{"full": true}`
+        re-copies the client's whole history, then deletes that client's older
+        rows in Tinybird (campaigns deleted in BigQuery, superseded values).
+        Rows are re-sent first and deleted after, so readers never see an empty
+        window. Use it after an Airbyte stream reset. A full read that returns
+        zero rows deletes nothing and fails the copy.
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          description: Pipeline run id (uuid).
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full:
+                  type: boolean
+                  description: Re-copy all history and delete older rows.
+            example:
+              full: true
+      responses:
+        "200":
+          description: Queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    $ref: "#/components/schemas/AdminPipelineRun"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            `run_not_closed` (the run is still running or held), `copy_running`
+            (an attempt is in progress, retry after it finishes) or
+            `copy_changed` (the run changed during the request, re-read and retry).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/airbyte/pipelines/copy/full-recopy:
+    post:
+      tags: [Global]
+      summary: Full Tinybird re-copy for many pipelines
+      operationId: adminFullRecopyAirbytePipelines
+      description: >
+        Queues a full re-copy (see the copy retry route) on the latest closed
+        run of every pipeline with `copy_to_tinybird` on, or only the pipelines
+        of `client_ids`. Run it after a change to the rollup itself, which no
+        trailing window would ever reach. Pipelines that cannot be queued are
+        listed in `skipped` with the reason.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                client_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 500
+                  items: { type: string, format: uuid }
+            example:
+              client_ids: ["f00d4056-591c-436d-a745-32201d74883d"]
+      responses:
+        "200":
+          description: What was queued and what was not
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      queued:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            client_id: { type: string }
+                            run_id: { type: string, format: uuid }
+                      skipped:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            client_id: { type: string }
+                            run_id: { type: string, format: uuid }
+                            reason: { type: string }
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
   /admin/airbyte/pipelines/tick:
@@ -519,6 +711,25 @@ paths:
                         type: integer
                         description: Items the tick ran out of time for. Never silently dropped.
                       errors: { type: array, items: { type: object } }
+                      copies:
+                        type: object
+                        description: >
+                          The internal Tinybird copy section, run last with whatever budget
+                          is left. Absent when the tick ran out of time before it.
+                        properties:
+                          attempted: { type: integer }
+                          succeeded: { type: integer }
+                          failed: { type: integer }
+                          retrying: { type: integer }
+                          skipped: { type: integer }
+                          lost:
+                            type: integer
+                            description: Claims lost to another tick or to a run reopened mid-tick.
+                          deferred: { type: integer }
+                          capped:
+                            type: boolean
+                            description: The queue had more than this tick could read. The rest wait for the next tick.
+                          errors: { type: array, items: { type: object } }
                       skipped:
                         type: string
                         description: Present instead of the counters when another tick holds the lock.
@@ -1202,6 +1413,90 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
   schemas:
+    AdminPipelineRun:
+      type: object
+      description: >
+        A run as the public run summary shapes it, plus the Mythic-internal
+        Tinybird copy fields. Agencies see the summary only.
+      additionalProperties: true
+      properties:
+        run_id: { type: string, format: uuid }
+        client_id: { type: string }
+        run_date: { type: string, format: date }
+        status:
+          type: string
+          enum: [running, held, succeeded, failed, skipped]
+        copy_status:
+          type: string
+          nullable: true
+          enum: [pending, running, succeeded, failed, skipped]
+          description: Null when the run has no copy (legacy run, or the flag was off when it was created).
+        copy_attempts: { type: integer }
+        copy_eligible_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the run became eligible. The two-hour copy deadline counts from here.
+        copy_started_at: { type: string, format: date-time, nullable: true }
+        copy_finished_at: { type: string, format: date-time, nullable: true }
+        copy_full_requested:
+          type: boolean
+          description: A full re-copy was requested and has not succeeded yet.
+        copy_result:
+          type: object
+          nullable: true
+          description: Detail of the latest attempt.
+          properties:
+            copy_id: { type: string }
+            attempt: { type: integer }
+            copied_at:
+              type: string
+              description: "Version of every row this attempt wrote (`YYYY-MM-DD HH:MM:SS.mmm` UTC)."
+            full_requested: { type: boolean }
+            rows_written: { type: integer }
+            duration_ms: { type: integer }
+            reason: { type: string, nullable: true }
+            sources:
+              type: array
+              description: One BigQuery table per platform.
+              items:
+                type: object
+                properties:
+                  platform: { type: string, example: meta_ads }
+                  connection_id: { type: string }
+                  project: { type: string, example: mythic-data }
+                  dataset: { type: string }
+                  table: { type: string, example: meta_ads_ads_insights_action_type }
+                  window:
+                    type: object
+                    properties:
+                      full: { type: boolean }
+                      from: { type: string, format: date, nullable: true, description: Null means full history. }
+                      to: { type: string, format: date }
+                      why:
+                        type: string
+                        description: "`first copy`, `trailing 28 days`, `catching up from the last successful copy (<date>)` or `full re-copy requested`."
+                  status: { type: string }
+                  rows: { type: integer }
+                  error: { type: string, nullable: true }
+                  stale_delete:
+                    type: object
+                    description: Full re-copy only. The Tinybird delete job removing this client's older rows.
+                    properties:
+                      job_id: { type: string, nullable: true }
+                      condition: { type: string }
+            skipped:
+              type: array
+              description: Left out with nothing wrong (agency-owned warehouse, unsupported platform, sync did not succeed).
+              items: { type: object }
+            not_ready:
+              type: array
+              description: A first-time backfill was still writing the table. A later run copies it.
+              items: { type: object }
+            rejected:
+              type: array
+              description: Never read (ownership or warehouse metadata problems). Fails the copy.
+              items: { type: object }
     Platform:
       type: object
       properties:
