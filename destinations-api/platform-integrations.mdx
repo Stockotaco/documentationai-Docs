@@ -140,3 +140,7 @@ Values leave the browser hashed by `fbevents.js` / `gtag.js`, which is why the S
 <Callout kind="info">
   On single-page apps, Meta's pixel fires its own `PageView` without an `eventID` on every route change, which Meta cannot deduplicate against the server copy. The managed pixel turns this off (`fbq.disablePushState = true`) before `fbevents.js` loads, so each route change sends one `PageView` carrying the Mythic event uuid. The setting applies to every Meta pixel on the page: another pixel that relied on automatic route-change PageViews must track them itself. If another pixel loaded `fbevents.js` before the SDK, the setting can no longer take effect.
 </Callout>
+
+<Callout kind="info">
+  The managed Google tag reuses the page's Google runtime. On a page running Google Tag Manager or `gtag.js` (including a GTM snippet whose `gtm.js` is still loading), it pushes its commands to that runtime instead of loading a second `gtag.js`, and the runtime loads the Google Ads destination itself. If the page already configured the same `AW-` ID, the managed tag skips its own `config`, so remarketing hits are not doubled. Only on a page with no Google runtime does it load `gtag.js` itself.
+</Callout>
