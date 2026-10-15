@@ -227,7 +227,7 @@ paths:
           in: query
           description: >
             Comma-separated optional sections, all **off by default**:
-            `include=creative,audit,events`.
+            `include=creative,audit,events,placements`.
 
             `creative` adds each row's ad copy, destination and assets. Off by
             default because it is not free: measured on one client it scans
@@ -245,6 +245,16 @@ paths:
             that needed all three stops paying three serial round trips and pays
             the slowest one instead.
 
+            `placements` splits every row by Meta placement (`facebook`,
+            `instagram`, `audience_network`, `messenger`, `threads`) with spend,
+            impressions, link clicks, Meta landing page views and Meta leads,
+            and rolls the account up by placement under a top-level
+            `placements`. Audience Network behaves unlike the rest (measured on
+            one account: 71% of clicks, a 37% click rate, no leads), and summed
+            into a row it reads as a healthy ad with a weak page. Needs the
+            `ads_insights_delivery_platform` stream on the Meta connection;
+            without it the section is `{"unavailable": "stream_not_synced"}`.
+
             A section that fails is reported as `{"unavailable": "<reason>"}`
             inside a 200; the analysis itself is never failed by it. An unknown
             name is a `400` rather than a silent omission.
@@ -252,6 +262,24 @@ paths:
           schema:
             type: string
             example: audit,events
+        - name: timezone
+          in: query
+          description: >
+            IANA time zone the funnel's days are bucketed in, e.g.
+            `America/Los_Angeles`. Meta reports in the **ad account's** time
+            zone (its `date_start` is that account's local day), so our events
+            are moved onto the same calendar; left to UTC, a Pacific account's
+            evening clicks land on the next day on one side only (measured: a
+            day of 13 clicks read as 22 in UTC).
+
+            Default: the location's stored time zone, else UTC. The response
+            states the zone used in `window.timezone` and where it came from in
+            `window.timezone_source`. Also sets the default `to` (yesterday in
+            that zone). An unknown name is a `400`.
+          required: false
+          schema:
+            type: string
+            example: America/Los_Angeles
         - name: resolve_identities
           in: query
           description: >
@@ -352,6 +380,28 @@ paths:
                         properties:
                           from: { type: string, format: date }
                           to: { type: string, format: date }
+                          timezone:
+                            type: string
+                            description: The IANA zone both sides were bucketed in.
+                          timezone_source:
+                            type: string
+                            enum: [request, location, default]
+                          ads_synced_at:
+                            type: string
+                            format: date-time
+                            nullable: true
+                            description: When Airbyte last pulled the Meta rows in this window. Meta syncs once a day; intraday numbers do not exist.
+                          last_day_complete:
+                            type: boolean
+                            nullable: true
+                            description: >
+                              `false` when that pull happened before `to` ended in
+                              `timezone`: Meta's spend, clicks and counts for that day
+                              are partial until the next sync, while our sessions for
+                              it are complete. `null` when no sync time is known.
+                          note:
+                            type: string
+                            description: Present only when `last_day_complete` is false; says which day is partial and suggests `to` one day earlier.
                       grain: { type: string, enum: [campaign, adset, ad] }
                       campaign:
                         type: string
@@ -361,7 +411,12 @@ paths:
                       lead_event: { type: string, nullable: true }
                       steps:
                         type: array
-                        description: The funnel steps in order, and the metric each divides.
+                        description: >
+                          The funnel steps in order, and the metric each divides. The
+                          `tracking` step is `clicks` → `unique_clicks` (distinct Meta
+                          click ids that produced a visit), not sessions: one click can
+                          open several sessions, so sessions read above clicks on a
+                          healthy day and hide click loss.
                         items:
                           type: object
                           properties:
@@ -387,9 +442,21 @@ paths:
                         type: object
                         description: >
                           What the account actually does, per step — reported even where
-                          a target replaced it. A target far above the pooled rate makes
-                          every campaign report the same constraint.
+                          a target replaced it. Pooled over the rows that clear
+                          `min_impressions`, so a row too small to be judged does not
+                          set the bar (one account's two sub-floor ads ran a 39% click
+                          rate on Audience Network and dragged the pool to 6.6%, flagging
+                          its best ad). When no row clears the floor the pool is every
+                          row. A target far above the pooled rate makes every campaign
+                          report the same constraint.
                         additionalProperties: { type: number, nullable: true }
+                      pooled_rates_all_rows:
+                        type: object
+                        description: The same rates pooled over every row, for reference.
+                        additionalProperties: { type: number, nullable: true }
+                      benchmark_pool_rows:
+                        type: integer
+                        description: How many rows set the pooled benchmark.
                       stored_benchmarks:
                         type: object
                         description: >
@@ -473,6 +540,61 @@ paths:
                               the URL and are compared with escapes and punctuation
                               removed, so `GPM+%7C+Brand` matches `GPM | Brand`.
                           click_to_session_rate: { type: number, nullable: true }
+                          unique_clicks:
+                            type: integer
+                            description: Distinct Meta click ids that produced a visit, across every row. The tracking step's numerator.
+                          click_to_unique_click_rate:
+                            type: number
+                            nullable: true
+                            description: "`unique_clicks` ÷ Meta link clicks. The account's real tracking rate."
+                          meta_reported:
+                            type: object
+                            description: >
+                              Meta's own counts for the same rows, as a cross-check and
+                              NOT a benchmark. `landing_page_views` needs Meta's pixel to
+                              finish loading, so it normally reads below our sessions.
+                              `leads` is the pixel/CAPI Lead event, credited by Meta to
+                              the click's day under the account's attribution setting, so
+                              it is not the same count as our leads by submit day.
+                            properties:
+                              landing_page_views: { type: integer }
+                              leads: { type: integer }
+                              sessions_per_landing_page_view: { type: number, nullable: true }
+                              our_lead_sessions: { type: integer, description: "With a `lead_event`." }
+                              our_leads_per_meta_lead: { type: number, nullable: true }
+                              our_converting_sessions: { type: integer, description: "Without a `lead_event`." }
+                              our_conversions_per_meta_lead: { type: number, nullable: true }
+                          redirect:
+                            type: object
+                            description: >
+                              Short-link redirect clicks, when the ads point at Mythic
+                              short links. The redirect is the midpoint of the tracking
+                              step: it sees every click that left Meta before the page,
+                              consent banner or SDK could lose it. Pooled over the rows
+                              that have a redirect. Measured on one account: 556 Meta link
+                              clicks, 551 distinct click ids at the redirect, 448 visits;
+                              Audience Network lost 24% between redirect and visit,
+                              Facebook and Instagram 7%.
+                            properties:
+                              used:
+                                type: boolean
+                                description: False when no redirect clicks were found for the window (direct destination URLs).
+                              unavailable:
+                                type: string
+                                description: Present when the redirect store could not be read; the funnel is complete without it.
+                              hits: { type: integer, description: "Every redirect request, including repeats and clicks without a Meta click id." }
+                              unique_clicks: { type: integer, description: "Distinct Meta click ids seen at the redirect." }
+                              rows_with_redirect: { type: integer }
+                              click_to_redirect_rate: { type: number, nullable: true, description: "Redirect unique clicks ÷ Meta link clicks, over rows with a redirect." }
+                              redirect_to_visit_rate: { type: number, nullable: true, description: "Row `unique_clicks` ÷ redirect unique clicks, over rows with a redirect." }
+                              by_placement:
+                                type: object
+                                description: Keyed by placement (`facebook`, `instagram`, `audience_network`, `messenger`, `threads`) from the link's `utm_source` short code.
+                                additionalProperties:
+                                  type: object
+                                  properties:
+                                    hits: { type: integer }
+                                    unique_clicks: { type: integer }
                           unexpanded_macro:
                             type: object
                             description: >
@@ -631,7 +753,10 @@ paths:
                           impressions: { type: integer }
                           clicks: { type: integer }
                           spend: { type: number }
+                          meta_landing_page_views: { type: integer }
+                          meta_leads: { type: integer }
                           sessions: { type: integer }
+                          unique_clicks: { type: integer }
                           lead_sessions: { type: integer }
                           converting_sessions: { type: integer }
                           conversions: { type: integer }
@@ -662,12 +787,53 @@ paths:
                               type: integer
                               description: Outbound link clicks, not total clicks — likes and comments are not traffic.
                             spend: { type: number }
+                            meta_landing_page_views:
+                              type: integer
+                              description: Meta's `landing_page_view` actions for this row — its view of our `sessions`, as a cross-check.
+                            meta_leads:
+                              type: integer
+                              description: Meta's `lead` actions for this row, credited to the click's day under the account's attribution setting.
                             sessions: { type: integer }
+                            unique_clicks:
+                              type: integer
+                              description: Distinct Meta click ids that produced a session (a session without one counts as its own click). The tracking step's numerator.
                             lead_sessions: { type: integer }
                             converting_sessions: { type: integer }
                             conversions: { type: integer }
                             revenue: { type: number }
                             top_landing_page: { type: string, nullable: true }
+                            redirect:
+                              type: object
+                              description: Present when this row's ads pointed at a Mythic short link. Same fields as `tracking.redirect` for the row alone.
+                              properties:
+                                hits: { type: integer }
+                                unique_clicks: { type: integer }
+                                click_to_redirect_rate: { type: number, nullable: true }
+                                redirect_to_visit_rate: { type: number, nullable: true }
+                                by_placement:
+                                  type: object
+                                  additionalProperties:
+                                    type: object
+                                    properties:
+                                      hits: { type: integer }
+                                      unique_clicks: { type: integer }
+                            placements:
+                              type: array
+                              description: Present with `include=placements` when the stream is synced. Spend-descending.
+                              items:
+                                type: object
+                                properties:
+                                  placement: { type: string, description: "`facebook`, `instagram`, `audience_network`, `messenger`, `threads`." }
+                                  spend: { type: number }
+                                  impressions: { type: integer }
+                                  clicks: { type: integer }
+                                  landing_page_views: { type: integer }
+                                  leads: { type: integer }
+                                  ctr: { type: number, nullable: true }
+                                  cost_per_click: { type: number, nullable: true }
+                                  cost_per_lead: { type: number, nullable: true }
+                                  redirect_unique_clicks: { type: integer, description: "Redirect clicks from this placement, when the row has a redirect." }
+                                  click_to_redirect_rate: { type: number, nullable: true }
                             cpa: { type: number, nullable: true }
                             roas:
                               type: number
@@ -835,6 +1001,25 @@ paths:
                                   nullable: true
                                   description: Own rate ÷ benchmark. `0.4` means "at 40% of the account's normal rate".
                                 recoverable_conversions: { type: number }
+                                sub_step:
+                                  type: string
+                                  enum: [delivery, load]
+                                  description: >
+                                    Only on a `tracking` verdict for a row with redirect data.
+                                    `delivery`: the click never reached our link (dropped
+                                    before the redirect). `load`: it reached the link and the
+                                    page did not record the visit. The step and recoverable
+                                    count are unchanged; this says which half.
+                                sub_step_diagnosis: { type: string }
+                      placements:
+                        type: object
+                        description: >
+                          Present with `include=placements`. Either the account rolled up
+                          by placement (keyed by placement name, same fields as a row's
+                          `placements[]` entry) or `{"unavailable": "stream_not_synced",
+                          "message": "..."}` when the Meta connection does not sync
+                          `ads_insights_delivery_platform`.
+                        additionalProperties: true
                       summary:
                         type: object
                         properties:
@@ -949,6 +1134,12 @@ paths:
         - name: table
           in: query
           description: Override the Meta ads-insights table name.
+          required: false
+          schema:
+            type: string
+        - name: timezone
+          in: query
+          description: IANA time zone for day boundaries, matching the ad account's. Default the location's stored zone, else UTC. See `/client/v1/constraints`.
           required: false
           schema:
             type: string

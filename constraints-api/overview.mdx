@@ -22,14 +22,14 @@ Every reporting tool tells you a campaign is underperforming. None of them tell 
 The result, per campaign (or ad set, or ad):
 
 ```text
-impressions → clicks → sessions → leads → conversions
-            ad       tracking   landing    sales
+impressions → clicks → unique clicks → leads → conversions
+            ad       tracking        landing   sales
 ```
 
 A shortfall at each step means something different, and something different gets fixed:
 
 - **ad** — the creative or targeting isn't earning the click.
-- **tracking** — the click never became a tracked visit. Redirect chains, consent banners, slow pages, stripped UTMs.
+- **tracking** — the click never became a tracked visit. Redirect chains, consent banners, slow pages, stripped UTMs. Measured as Meta link clicks → **distinct Meta click IDs that produced a visit** (`unique_clicks`), not sessions: one click can open the page more than once, so sessions read above clicks on a healthy day and hide real loss. When the ads point at a Mythic short link the step splits further, see [Short links](#short-links-split-the-tracking-step).
 - **landing** — the page isn't converting the visit.
 - **sales** — leads arrive but don't close. Not a marketing problem.
 
@@ -98,7 +98,9 @@ Every endpoint here is read-only — there is nothing to create.
 
 ## How the constraint is chosen
 
-Each step's rate is compared against the **pooled rate across every row in your own account** — not an industry benchmark. Your account sets its own bar, and the big spenders set most of it (rates are pooled, so a 12-impression campaign can't drag the benchmark as hard as a 2M-impression one).
+Each step's rate is compared against the **pooled rate across the rows in your own account that clear `min_impressions`** — not an industry benchmark. Your account sets its own bar, and the big spenders set most of it (rates are pooled, so a 12-impression campaign can't drag the benchmark as hard as a 2M-impression one).
+
+Rows under the floor are left out of the pool as well as the analysis. A row too small to be judged is too small to set the bar: on one account two ads under the floor ran a 39% click rate on Audience Network, carried 70% of the clicks, and pulled the pooled rate to 6.6%, which flagged the account's best ad (2.1%, $26 a lead) as ad-constrained. `pooled_rates_all_rows` still reports the pool over every row, and `benchmark_pool_rows` says how many rows set the bar. If nothing clears the floor, every row is used.
 
 The constraint is then the step with the highest **`recoverable_conversions`**: the extra conversions that closing the gap to the pooled rate would produce, *after carrying that row's own downstream rates*. That last clause is what makes the answer actionable — doubling the click-through rate into a page that converts nobody is worth nothing, and this reports it as worth nothing.
 
@@ -109,6 +111,42 @@ Ranking by recoverable conversions rather than by the worst rate is what makes r
 A campaign at or above the pooled rate on every step returns `constraint: null` with `status: "healthy"` — the explicit status is there so a null constraint is never misread as missing data. Nothing to fix; scale it instead.
 
 Rows are returned **ordered by opportunity**, which is deliberately not spend order.
+
+## Days, time zones and the daily sync
+
+Meta reports in the **ad account's time zone**: `date_start` on an insights row is that account's local day, not UTC. The funnel buckets your events on the same calendar, so a 9pm Pacific click and its session land on the same day on both sides. The zone comes from `?timezone=` (IANA name), else the location's stored time zone, else UTC, and the response names it in `window.timezone` and `window.timezone_source`. Measured on a Pacific account: a day of 13 Meta link clicks read as 22 when our side was bucketed in UTC.
+
+Meta data arrives **once a day** through Airbyte; there is no intraday view. If that pull ran before the window's last day ended in the account's zone, that day is partial on Meta's side (spend, clicks, Meta's counts) while your sessions for it are complete. The response says so: `window.ads_synced_at`, `window.last_day_complete: false` and a `note`. For a like-for-like comparison, end the window one day earlier. The default `to` is yesterday in the account's zone.
+
+## Short links split the tracking step
+
+When an ad's destination is a Mythic short link (`/r/<slug>`), the redirect logs every click **before** the landing page, the consent banner or the SDK can lose it. That makes the redirect the midpoint of the tracking step, and a shortfall there splits into two different repairs:
+
+| Hop | Measures | A loss means |
+| --- | --- | --- |
+| **delivery** | Meta link clicks → distinct click IDs seen at the redirect | the click was dropped before our link (closed in-app browser, Meta-side discrepancy) |
+| **load** | redirect clicks → distinct click IDs that produced a visit | the page did not record the visit (load time, consent, SDK, stripped UTMs) |
+
+Rows whose ads used a short link carry `redirect` (hits, `unique_clicks`, both rates, and a split by placement), and a `tracking` verdict on such a row gains `sub_step: "delivery"` or `"load"` with its own diagnosis. The step and its recoverable count are unchanged. `tracking.redirect` pools the same over every row that had a redirect; `used: false` means no redirect clicks were found.
+
+Measured on one account: 556 Meta link clicks, 551 distinct click IDs at the redirect, 448 of them became a visit. Audience Network lost 24% between the redirect and the visit; Facebook and Instagram lost 7%.
+
+The redirect counts arrive in real time, so on a day Meta has not synced yet they are the only same-day signal.
+
+## Placements
+
+`include=placements` splits each row by where the ad ran: `facebook`, `instagram`, `audience_network`, `messenger`, `threads`, with spend, impressions, link clicks, Meta's landing page views and leads, and the redirect's clicks from that placement when both exist. The account is rolled up by placement under a top-level `placements`.
+
+The funnel row sums every placement, and Audience Network behaves unlike the rest. On one account it produced 71% of the clicks at a 37% click rate on $9 of spend and no leads; summed into the row that reads as a healthy click rate feeding a weak page. Split out, it reads as a placement to switch off.
+
+The section needs the `ads_insights_delivery_platform` stream on the Meta connection (a default for new connections; `POST /connections/:id/reconcile-streams` adds it to an existing one). Without it the response carries `placements: {"unavailable": "stream_not_synced"}` and the funnel is unaffected.
+
+## Meta's own numbers, alongside yours
+
+Every row carries `meta_landing_page_views` and `meta_leads`, Meta's `landing_page_view` and `lead` actions for the same ads, and `tracking.meta_reported` sums them with the matching figures from your side. They are cross-checks, not benchmarks:
+
+- Meta's landing page view needs its pixel to finish loading, so it normally reads **below** your sessions.
+- Meta credits a lead to the **day of the click**, up to 7 days earlier under its default attribution, in any later visit. Your leads are counted on the day of the submit, in the session that produced them. The two totals are not expected to match day by day.
 
 ## One call instead of three
 
@@ -542,6 +580,8 @@ Positional, decay, and data-driven models are deliberately absent: they change h
 - Tracked events for the location. Every client has them once the pixel or a server-side stream sends data.
 - A synced **Meta ads-insights** stream (connect Meta through the Airbyte API). The platform default is `meta_ads_ads_insights_action_type`; pass `?table=` if your connection writes elsewhere (otherwise `424`).
 - Meta traffic tagged with UTMs. Untagged traffic isn't lost — it lands in `unmatched_sessions` and drags `match_rate` down, which is the honest signal.
+- For `include=placements`: the `ads_insights_delivery_platform` stream on the Meta connection.
+- For the redirect split: ads whose destination is a Mythic short link with `ad_id`/`adset_id`/`campaign_id` in the URL, which the default ad-tagging template writes.
 
 <Callout kind="info">
 **Currency**: `spend` is in the ad account's currency and `revenue` in whatever your conversion events carry — `roas` and `cpa` divide them without converting. For USD ad accounts with USD revenue this is a non-issue; for anything else, treat cross-currency ROAS as approximate.

@@ -191,7 +191,7 @@ End-to-end paid funnel analysis and its stored benchmarks.
 
 | Tool | Scope | What it does | Proxies |
 | --- | --- | --- | --- |
-| `find_constraint`<br /><span style={{opacity: 0.7}}>Find Funnel Constraint</span> | `constraints:read` | End-to-end paid-funnel analysis (Meta spend → pixel sessions → conversions) per campaign/adset/ad: impressions→clicks (ad), clicks→sessions (tracking), sessions→leads (landing), leads→conversions (sales) — w… | `GET /client/v1/constraints` |
+| `find_constraint`<br /><span style={{opacity: 0.7}}>Find Funnel Constraint</span> | `constraints:read` | End-to-end paid-funnel analysis (Meta spend → pixel sessions → conversions) per campaign/adset/ad: impressions→clicks (ad), clicks→unique click ids that became a visit (tracking; split into delivery/load whe… | `GET /client/v1/constraints` |
 | `list_constraint_events`<br /><span style={{opacity: 0.7}}>List Constraint-Eligible Events</span> | `constraints:read` | Which events can serve as lead_event / conversion_event for the constraint finder, and — the part no other endpoint reports — what share of each actually carries a session. | `GET /client/v1/constraints/events` |
 | `get_constraint_audit`<br /><span style={{opacity: 0.7}}>Constraint Tracking Audit</span> | `constraints:read` | Tracking hygiene per campaign: WHICH campaigns are measurable at all, and WHERE the ad clicks that reached no campaign went. | `GET /client/v1/constraints/audit` |
 | `get_constraint_options`<br /><span style={{opacity: 0.7}}>Constraint Finder Options</span> | `constraints:read` | The constraint finder vocabulary — valid group_by/attribution values, benchmark steps and their precedence chain, defaults, and usage hints. | `GET /client/v1/constraints/options` |
