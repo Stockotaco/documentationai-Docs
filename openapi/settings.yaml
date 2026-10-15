@@ -517,6 +517,72 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /timezone:
+    get:
+      summary: Get the reporting time zone
+      operationId: getTimezone
+      description: >
+        The location's IANA reporting time zone. Readable with an agency key
+        (`ak_`, pass `?location_id=`) or a viewer key (`sk_`).
+
+
+        The constraint finder uses it as the default calendar for aligning
+        your events to Meta's account-local `date_start`; a call that passes
+        its own `timezone` overrides it. `effective` says what applies when
+        nothing is set (UTC). `stored_invalid` appears only when the stored
+        value is not a zone Mythic recognises, in which case UTC applies.
+      responses:
+        "200":
+          description: The current setting
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimezoneResponse"
+        "401":
+          description: Authorization key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      summary: Set the reporting time zone
+      operationId: putTimezone
+      description: >
+        Set or clear the location's reporting time zone. Requires an agency key
+        (`ak_`) and `?location_id=`; viewer keys get `403 agency_required`.
+
+
+        Pass an IANA name such as `America/Los_Angeles`, or `null` to clear.
+        Meta reports in the **ad account's** time zone, so set this to that
+        zone for a like-for-like funnel. Unknown names are refused with `400
+        invalid_timezone`. Nothing in the browser reads this value, so there is
+        no config rebuild.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TimezoneRequest"
+      responses:
+        "200":
+          description: The updated setting
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimezoneResponse"
+        "400":
+          description: Body must include a timezone field holding an IANA name or null
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Agency key required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /session-replay:
     get:
       summary: Get the session-replay capture config
@@ -1088,6 +1154,38 @@ components:
                 blocked_by_hipaa:
                   type: boolean
                   description: True when the flag is on but HIPAA mode overrides it.
+    TimezoneRequest:
+      type: object
+      required: [timezone]
+      properties:
+        timezone:
+          type: string
+          nullable: true
+          example: America/Los_Angeles
+          description: IANA time zone name, or null to clear.
+    TimezoneResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            timezone:
+              type: string
+              nullable: true
+            effective:
+              type: object
+              properties:
+                timezone:
+                  type: string
+                  description: The zone the constraint finder defaults to (UTC when unset).
+                source:
+                  type: string
+                  enum: [location, default]
+            stored_invalid:
+              type: string
+              description: Present only when the stored value is not a recognised zone.
     ContractAlertsResponse:
       type: object
       properties:

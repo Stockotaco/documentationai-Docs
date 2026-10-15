@@ -114,7 +114,7 @@ Rows are returned **ordered by opportunity**, which is deliberately not spend or
 
 ## Days, time zones and the daily sync
 
-Meta reports in the **ad account's time zone**: `date_start` on an insights row is that account's local day, not UTC. The funnel buckets your events on the same calendar, so a 9pm Pacific click and its session land on the same day on both sides. The zone comes from `?timezone=` (IANA name), else the location's stored time zone, else UTC, and the response names it in `window.timezone` and `window.timezone_source`. Measured on a Pacific account: a day of 13 Meta link clicks read as 22 when our side was bucketed in UTC.
+Meta reports in the **ad account's time zone**: `date_start` on an insights row is that account's local day, not UTC. The funnel buckets your events on the same calendar, so a 9pm Pacific click and its session land on the same day on both sides. The zone comes from `?timezone=` (IANA name), else the location's stored time zone (`PUT /client/v1/settings/timezone`, or the client's settings in the agency app), else UTC, and the response names it in `window.timezone` and `window.timezone_source`. Measured on a Pacific account: a day of 13 Meta link clicks read as 22 when our side was bucketed in UTC.
 
 Meta data arrives **once a day** through Airbyte; there is no intraday view. If that pull ran before the window's last day ended in the account's zone, that day is partial on Meta's side (spend, clicks, Meta's counts) while your sessions for it are complete. The response says so: `window.ads_synced_at`, `window.last_day_complete: false` and a `note`. For a like-for-like comparison, end the window one day earlier. The default `to` is yesterday in the account's zone.
 
