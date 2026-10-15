@@ -195,6 +195,15 @@ paths:
             JSON path to the conversion's monetary value inside the event's
             properties. `properties_json` *is* the properties object, so the
             path is `$.value`, not `$.properties.value`.
+
+
+            Pass `none` when the conversion event carries no value (the
+            `/constraints/events` inventory lists each event's `revenue_paths`).
+            Revenue is then not read at all: `revenue` is 0, `roas` is `null`
+            and `revenue_measured` is `false`. Reading the properties is most of
+            the scan on a small client (measured: 4.2 of 7.1 GB), so this makes
+            the call cheaper and faster. `conversion_event=auto` does this by
+            itself when the event it picks has no value path.
           required: false
           schema:
             type: string
@@ -409,6 +418,9 @@ paths:
                       attribution: { type: string, enum: [session, first_touch] }
                       conversion_event: { type: string }
                       lead_event: { type: string, nullable: true }
+                      revenue_measured:
+                        type: boolean
+                        description: "False when `revenue_path=none`: revenue was not read, so `revenue` is 0 and `roas` is null by request."
                       steps:
                         type: array
                         description: >
