@@ -135,7 +135,7 @@ The redirect counts arrive in real time, so on a day Meta has not synced yet the
 
 ## Placements
 
-`include=placements` splits each row by where the ad ran: `facebook`, `instagram`, `audience_network`, `messenger`, `threads`, with spend, impressions, link clicks, Meta's landing page views and leads, and the redirect's clicks from that placement when both exist. The account is rolled up by placement under a top-level `placements`.
+`include=placements` splits each row by where the ad ran: `facebook`, `instagram`, `audience_network`, `messenger`, `threads`, with spend, impressions, link clicks, Meta's landing page views and leads, and the redirect's clicks from that placement when both exist. A top-level `placements` rolls up **every** ad in the window by placement, including ads under `min_impressions`, because the small ads are where a placement problem hides.
 
 The funnel row sums every placement, and Audience Network behaves unlike the rest. On one account it produced 71% of the clicks at a 37% click rate on $9 of spend and no leads; summed into the row that reads as a healthy click rate feeding a weak page. Split out, it reads as a placement to switch off.
 

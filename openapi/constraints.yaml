@@ -1026,9 +1026,11 @@ paths:
                       placements:
                         type: object
                         description: >
-                          Present with `include=placements`. Either the account rolled up
-                          by placement (keyed by placement name, same fields as a row's
-                          `placements[]` entry) or `{"unavailable": "stream_not_synced",
+                          Present with `include=placements`. Either every ad in the window
+                          rolled up by placement (keyed by placement name, same fields as a
+                          row's `placements[]` entry; includes ads under `min_impressions`
+                          and ignores the campaign/account filters, because the small ads
+                          are where a placement problem hides) or `{"unavailable": "stream_not_synced",
                           "message": "..."}` when the Meta connection does not sync
                           `ads_insights_delivery_platform`.
                         additionalProperties: true
