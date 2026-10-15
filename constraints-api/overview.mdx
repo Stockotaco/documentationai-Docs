@@ -578,7 +578,7 @@ Positional, decay, and data-driven models are deliberately absent: they change h
 ## Requirements
 
 - Tracked events for the location. Every client has them once the pixel or a server-side stream sends data.
-- A synced **Meta ads-insights** stream (connect Meta through the Airbyte API). The platform default is `meta_ads_ads_insights_action_type`; pass `?table=` if your connection writes elsewhere (otherwise `424`).
+- A synced **Meta ads-insights** stream (connect Meta through the Airbyte API). The platform default is `meta_ads_ads_insights_action_type`; pass `?table=` if your connection writes elsewhere (otherwise `424`). While a sync is rewriting the tables the call returns `503 ads_sync_in_progress` with `Retry-After`; retry in a minute.
 - Meta traffic tagged with UTMs. Untagged traffic isn't lost — it lands in `unmatched_sessions` and drags `match_rate` down, which is the honest signal.
 - For `include=placements`: the `ads_insights_delivery_platform` stream on the Meta connection.
 - For the redirect split: ads whose destination is a Mythic short link with `ad_id`/`adset_id`/`campaign_id` in the URL, which the default ad-tagging template writes.
