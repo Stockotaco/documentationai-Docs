@@ -56,8 +56,14 @@ out the visitors each version needs to detect that lift with 80% power at 5%
 significance, then divides the shortfall by each version's daily traffic. It
 also shows a range for the uncertain baseline rate and the smallest lift
 today's visitors could detect. Mida calls winners with its own Bayesian
-statistics, so it may call one earlier or later. The estimate needs a full day
-of traffic.
+statistics, so it may call one earlier or later.
+
+A new test has little data of its own, so the estimate starts from the page's
+last 28 days before the test: its typical daily visitors and how often they
+did the goal. The test's own numbers take over as it runs, fully after a week
+and 30 conversions. This works when the test covers everyone on one page.
+For a test with targeting rules, the estimate waits for a day of the test's own
+traffic.
 
 ## Server-side conversions to Mida
 

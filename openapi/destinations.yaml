@@ -952,9 +952,25 @@ paths:
         set the allocation). The baseline is Control's rate once Control has
         10 conversions, otherwise the pooled rate. Days remaining are the
         slowest arm's shortfall divided by that arm's observed visitors per
-        day, once the test has run a full day. `days_remaining_range` repeats the calculation at both ends of the
+        day. `days_remaining_range` repeats the calculation at both ends of the
         baseline's 95% Wilson interval. `detectable_lift_now` is the smallest
         relative lift the visitors already in can detect.
+
+
+        **Early on, the page's history fills in.** When a live test covers
+        everyone on one URL (no Mida targeting rules, one URL), Mythic reads
+        the 28 days before the test started on that path: the typical day
+        (median of the last 7 days' distinct viewers, scaled down by how often
+        viewers return) and the share of viewers who did the goal's Mythic
+        event within 30 days. The goal's event is the one a `mida_experiments`
+        destination forwards under the goal's name, else the goal's own name.
+        These are blended in as priors: traffic as a Gamma-Poisson prior worth
+        7 days, dropped once the test has run 7 days; the baseline as a Beta
+        power prior worth at most 30 conversions, dropped once the test has 30
+        of its own. `history` reports what was read or why it was not, and
+        `planning.baseline.history_share` / `planning.traffic.history_share`
+        how much of each estimate it supplied. Without history, days remaining
+        wait for a full day of the test's own traffic.
 
 
         Mida decides winners with a Bayesian engine whose threshold relaxes as
@@ -2077,6 +2093,26 @@ components:
         total_revenue: { type: number, nullable: true }
         currency: { type: string, nullable: true }
         result_error: { type: string, nullable: true, description: Why results are missing for a non-draft test. }
+        traffic_allocation: { type: number, nullable: true, description: "0-1 share of eligible visitors Mida puts in the test." }
+        targeting:
+          type: object
+          properties:
+            simple: { type: boolean, description: "True when the test covers everyone on one URL, the only case where the page's history is used." }
+            rules: { type: array, items: { type: string }, description: "Mida targeting fields that are set, or `multiple_urls` / `unknown`." }
+        history:
+          type: object
+          description: "The page's history before the test, as used for planning."
+          properties:
+            used: { type: boolean }
+            reason: { type: string, description: "When not used: `not_running`, `targeted`, `no_url_or_start`, `no_goal_event`, `test_has_own_data`, `no_traffic` or `unavailable`." }
+            paths: { type: array, items: { type: string } }
+            goal_event: { type: string, description: The Mythic event counted as the goal. }
+            window: { type: object, properties: { from: { type: string, format: date }, to: { type: string, format: date } } }
+            typical_day: { type: number, description: "Median distinct viewers per day over the window's last 7 days." }
+            distinct_ratio: { type: number, description: "Distinct viewers over the window ÷ the sum of daily distinct viewers." }
+            daily_visitors: { type: number, description: "typical_day × distinct_ratio: new visitors per day." }
+            visitors: { type: integer, description: Distinct viewers over the window. }
+            conversions: { type: integer, description: Viewers who did the goal event within 30 days. }
         arms:
           type: array
           items:
@@ -2107,7 +2143,7 @@ components:
             reason:
               type: string
               nullable: true
-              description: "`no_results`, `no_conversions`, `lift_exceeds_100_percent`, `multi_armed_bandit`, `test_not_running`, `no_traffic_rate`, `under_one_day` (sizes are planned, but under a day of traffic is too little to estimate days), or null."
+              description: "`no_results`, `no_conversions`, `lift_exceeds_100_percent`, `multi_armed_bandit`, `test_not_running`, `no_traffic_rate`, `under_one_day` (sizes are planned, but with no history and under a day of traffic there is no rate to estimate days from), or null."
             inputs:
               type: object
               properties:
@@ -2120,10 +2156,16 @@ components:
               type: object
               properties:
                 rate: { type: number }
-                source: { type: string, enum: [control, pooled] }
-                conversions: { type: integer }
-                visitors: { type: integer }
+                source: { type: string, enum: [control, pooled, history, blend] }
+                conversions: { type: number, description: "Effective conversions (history's are weighted)." }
+                visitors: { type: number }
+                history_share: { type: number, description: "0-1 share of the baseline's visitors that came from history." }
                 ci95: { type: array, items: { type: number }, description: 95% Wilson interval. }
+            traffic:
+              type: object
+              properties:
+                source: { type: string, nullable: true, enum: [test, history, blend, null] }
+                history_share: { type: number }
             required_per_arm: { type: object, additionalProperties: { type: integer } }
             current_per_arm: { type: object, additionalProperties: { type: integer } }
             daily_visitors_per_arm: { type: object, additionalProperties: { type: number, nullable: true } }
@@ -2158,7 +2200,7 @@ components:
               type: array
               items:
                 type: string
-                enum: [baseline_pooled, baseline_few_conversions, partial_week_traffic, tool_uses_bayesian]
+                enum: [baseline_pooled, baseline_few_conversions, partial_week_traffic, history_prior, tool_uses_bayesian]
             method: { type: string, description: Plain-language statement of the calculation used. }
     PlatformIntegrationStatus:
       type: object
