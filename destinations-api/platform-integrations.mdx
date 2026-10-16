@@ -134,7 +134,7 @@ Values leave the browser hashed by `fbevents.js` / `gtag.js`, which is why the S
 </Callout>
 
 <Callout kind="info">
-  The managed pixel is isolated from any other pixel on the page: it disables Meta's automatic PageView and automatic config **for our pixel only** (`autoConfig: false`), and sends every conversion with `trackSingle`, so a pre-existing pixel never receives our events — and we never receive theirs.
+  The managed pixel is isolated from any other pixel on the page: it disables Meta's automatic PageView and automatic config **for our pixel only** (`autoConfig: false`), and sends every conversion with `trackSingle` (or `trackSingleCustom` when the mapped name is not one of Meta's standard events, matched case-sensitively), so a pre-existing pixel never receives our events — and we never receive theirs.
 </Callout>
 
 <Callout kind="info">
