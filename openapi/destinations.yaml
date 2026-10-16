@@ -924,6 +924,101 @@ paths:
         "409": { description: "Config is incomplete, or no reporting credential is stored for this location" }
         "503": { description: Verification is not available in this environment }
 
+  /client/v1/destinations/mida/experiments:
+    get:
+      summary: Mida's own test results, with time left to a result
+      operationId: getMidaExperiments
+      description: >
+        Reads your Mida project's experiments and results through Mida's REST
+        API with the stored `mida_experiments` credential, and adds a
+        time-to-result plan to each test. Mida reports results but no time
+        remaining.
+
+
+        **Every test Mida lists is returned.** A test deleted in Mida is
+        absent, so Mythic exposures recorded for it (`$experiment_arm`
+        `mida:<testId>:<variant>`) are history, not a running test. Drafts are
+        listed without results. Results are read for up to 20 non-draft tests,
+        most recently updated first; `truncated` is true when there were more.
+        Each arm carries `mythic_arm`, the exact `$experiment_arm` value Mythic
+        records, so Mida's counts can be put next to Mythic's.
+
+
+        **Planning is a fixed-horizon power calculation.** For each variant
+        against Control: the visitors per arm a two-sided two-proportion
+        z-test needs to detect a relative lift of `mde` with probability
+        `power` at significance `alpha` (Fleiss, no continuity correction;
+        `alpha` is Bonferroni-split across variants; the arms' traffic weights
+        set the allocation). The baseline is Control's rate once Control has
+        10 conversions, otherwise the pooled rate. Days remaining are the
+        slowest arm's shortfall divided by that arm's observed visitors per
+        day. `days_remaining_range` repeats the calculation at both ends of the
+        baseline's 95% Wilson interval. `detectable_lift_now` is the smallest
+        relative lift the visitors already in can detect.
+
+
+        Mida decides winners with a Bayesian engine whose threshold relaxes as
+        a test ages (`confidence_needed_today`), so the plan answers "when
+        could a fixed-horizon test detect this lift", not "when will Mida call
+        a winner".
+
+
+        Mida is read at most once a minute per project; changing `mde`,
+        `power` or `alpha` re-plans without re-reading Mida.
+      tags: [Destinations]
+      parameters:
+        - name: mde
+          in: query
+          required: false
+          description: Minimum detectable effect as a relative lift. `0.2` = +20%. Values outside the range are a `400`, not clamped.
+          schema: { type: number, default: 0.2, minimum: 0.01, maximum: 5 }
+        - name: power
+          in: query
+          required: false
+          schema: { type: number, default: 0.8, minimum: 0.5, maximum: 0.99 }
+        - name: alpha
+          in: query
+          required: false
+          description: Two-sided significance level for the whole test, split across variants.
+          schema: { type: number, default: 0.05, minimum: 0.001, maximum: 0.2 }
+        - name: project_key
+          in: query
+          required: false
+          description: Mida project key. Defaults to the project of this location's most recently updated `mida_experiments` destination.
+          schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,64}$" }
+        - name: region
+          in: query
+          required: false
+          description: Mida API region. Defaults to the destination's `region`, else `us`.
+          schema: { type: string, pattern: "^[a-z]{2}$" }
+      responses:
+        "200":
+          description: Mida's tests with results and plans
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      project_key: { type: string }
+                      region: { type: string }
+                      planning_options:
+                        type: object
+                        properties:
+                          mde: { type: number }
+                          power: { type: number }
+                          alpha: { type: number }
+                      truncated: { type: boolean }
+                      tests:
+                        type: array
+                        items: { $ref: "#/components/schemas/MidaTest" }
+        "400": { description: "`mde`, `power`, `alpha`, `project_key` or `region` is invalid" }
+        "409": { description: "`mida_not_configured` (no destination names a project and no `project_key` given), `no_mida_credential`, or `mida_key_rejected` (Mida answered 401)" }
+        "502": { description: "`mida_unavailable`: Mida could not be reached or returned an error" }
+        "503": { description: Not available in this environment }
+
   /client/v1/destinations/{id}/quality:
     get:
       summary: Meta's own verdict on the data you send
@@ -1947,6 +2042,124 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
   schemas:
+    MidaTest:
+      type: object
+      properties:
+        test_id: { type: integer }
+        test_name: { type: string }
+        status: { type: string, enum: [live, inactive, draft, unknown] }
+        is_aa: { type: boolean, nullable: true, description: Mida A/A test (every arm identical). }
+        is_completed: { type: boolean }
+        serving_variant_id: { type: string, nullable: true, description: Set when Mida serves a winner to all traffic instead of splitting. }
+        url: { type: string, nullable: true }
+        start_date: { type: string, format: date-time, nullable: true }
+        end_date: { type: string, format: date-time, nullable: true }
+        days_running: { type: number, nullable: true }
+        stats_engine: { type: string, nullable: true, description: "Mida's engine, e.g. `bayesian`." }
+        confidence_threshold: { type: number, nullable: true, description: "0-1. Chance to beat Control Mida needs to call a winner." }
+        confidence_needed_today: { type: number, nullable: true, description: "0-1. Today's threshold; higher while the test is young." }
+        stop_rules:
+          type: object
+          properties:
+            end_test_date: { type: string, nullable: true }
+            completion_visitor: { type: integer, nullable: true }
+            completion_after_period_days: { type: integer, nullable: true }
+        primary_goal:
+          type: object
+          nullable: true
+          properties:
+            name: { type: string }
+            type: { type: string }
+            value: { type: string, description: "For an event goal, the event name." }
+        total_visitors: { type: integer, nullable: true }
+        total_conversions: { type: integer, nullable: true }
+        has_revenue: { type: boolean }
+        total_revenue: { type: number, nullable: true }
+        currency: { type: string, nullable: true }
+        result_error: { type: string, nullable: true, description: Why results are missing for a non-draft test. }
+        arms:
+          type: array
+          items:
+            type: object
+            properties:
+              arm: { type: string, description: "`Control` or the variant name." }
+              mythic_arm: { type: string, description: "The `$experiment_arm` value Mythic records: `mida:<testId>:<arm>`." }
+              variant_id: { type: string }
+              name: { type: string, nullable: true, description: Dashboard nickname. }
+              is_control: { type: boolean }
+              visitors: { type: integer }
+              conversions: { type: integer }
+              conversion_rate: { type: number, nullable: true, description: "0-1." }
+              traffic_weight: { type: number, nullable: true, description: "0-1 share of the test's traffic." }
+              chance_to_beat_control: { type: number, nullable: true, description: "0-1, Mida's Bayesian figure. Null on Control." }
+              improvement: { type: number, nullable: true, description: "Relative lift vs Control; 0.12 = +12%. Null on Control." }
+              meets_winner_rule: { type: boolean, nullable: true }
+              revenue: { type: number, nullable: true }
+        planning:
+          type: object
+          nullable: true
+          description: Null for drafts.
+          properties:
+            status:
+              type: string
+              enum: [estimating, reached, not_running, insufficient_data, not_applicable]
+              description: "`not_running`: inactive, completed or serving a winner (sizes are planned, no days left). `not_applicable`: multi-armed bandit."
+            reason:
+              type: string
+              nullable: true
+              description: "`no_results`, `no_conversions`, `lift_exceeds_100_percent`, `multi_armed_bandit`, `test_not_running`, `no_traffic_rate`, or null."
+            inputs:
+              type: object
+              properties:
+                mde: { type: number }
+                power: { type: number }
+                alpha: { type: number }
+                alpha_per_comparison: { type: number }
+                comparisons: { type: integer }
+            baseline:
+              type: object
+              properties:
+                rate: { type: number }
+                source: { type: string, enum: [control, pooled] }
+                conversions: { type: integer }
+                visitors: { type: integer }
+                ci95: { type: array, items: { type: number }, description: 95% Wilson interval. }
+            required_per_arm: { type: object, additionalProperties: { type: integer } }
+            current_per_arm: { type: object, additionalProperties: { type: integer } }
+            daily_visitors_per_arm: { type: object, additionalProperties: { type: number, nullable: true } }
+            elapsed_days: { type: number, nullable: true }
+            days_remaining: { type: integer, nullable: true }
+            days_remaining_range: { type: array, nullable: true, items: { type: integer }, description: "Days remaining at the baseline's 95% interval: [optimistic, pessimistic]." }
+            estimated_end_date: { type: string, format: date, nullable: true }
+            detectable_lift_now: { type: number, nullable: true, description: "Smallest relative lift the current visitors can detect at the same power and alpha." }
+            stop_rules:
+              type: object
+              description: Progress on the Mida stop rules that are set.
+              properties:
+                visitors:
+                  type: object
+                  properties:
+                    target: { type: integer }
+                    current: { type: integer }
+                    progress: { type: number }
+                    days_remaining: { type: integer, nullable: true }
+                period:
+                  type: object
+                  properties:
+                    target_days: { type: integer }
+                    elapsed_days: { type: number, nullable: true }
+                    days_remaining: { type: integer, nullable: true }
+                end_date:
+                  type: object
+                  properties:
+                    date: { type: string }
+                    days_remaining: { type: integer, nullable: true }
+            warnings:
+              type: array
+              items:
+                type: string
+                enum: [baseline_pooled, baseline_few_conversions, partial_week_traffic, tool_uses_bayesian]
+            method: { type: string, description: Plain-language statement of the calculation used. }
     PlatformIntegrationStatus:
       type: object
       properties:

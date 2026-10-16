@@ -140,6 +140,17 @@ PUT /client/v1/destinations/credentials/mida_experiments
   Mida's server-side SDKs (`setEvent`) use a different endpoint keyed by your own user id, meant for **server-side** Mida experiments. It does not credit the browser tests this destination is for, which is why the destination needs your API key.
 </Callout>
 
+#### Reading Mida's results
+
+`GET /client/v1/destinations/mida/experiments` returns your Mida project's tests and results, read from Mida with the same API key. Each arm carries `mythic_arm` (`mida:<testId>:<variant>`) so Mida's counts sit next to Mythic's. A test deleted in Mida is not listed.
+
+Each running test also gets a `planning` block, because Mida reports no time remaining. It is a fixed-horizon power calculation: the visitors per arm a two-sided two-proportion test needs to detect a relative lift of `mde` (default `0.2`, +20%) with `power` (default `0.8`) at `alpha` (default `0.05`, split across variants), then days left at each arm's observed traffic. `days_remaining_range` repeats it across the baseline rate's 95% interval, and `detectable_lift_now` is the smallest lift the visitors already in can detect. Mida calls winners with a Bayesian engine, so this estimates when a fixed-horizon test could detect the lift, not when Mida will declare a winner.
+
+```bash
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/destinations/mida/experiments?mde=0.3" \
+  -H "Authorization: Bearer $MYTHIC_API_KEY"
+```
+
 ### OpenAI (ChatGPT) Ads
 
 Requires a `pixel_id` and an `event_mapping`. Optional `data_mapping`, `action_source`, `default_source_url`, `default_country_code`, `validate_only`, `credential_name`, `timeout_ms`, and `enrichment`. The credential is the Conversions API key from the Conversions tab in OpenAI Ads Manager, stored separately as an `openai_ads` credential.

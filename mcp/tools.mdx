@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 280 tools across
+  Every tool the Mythic MCP server exposes — 281 tools across
   29 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 280 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 281 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -257,6 +257,7 @@ Activation destinations events are forwarded to, their credentials and deliverie
 | `get_destination_delivery_status`<br /><span style={{opacity: 0.7}}>Get Destination Delivery Status</span> | `destinations:read` | What Google did with a delivery AFTER accepting it — google_ads / google_analytics destinations only. | `GET /client/v1/destinations/:id/deliveries/:eventUuid/status` |
 | `get_destination_health`<br /><span style={{opacity: 0.7}}>Get Destination Health</span> | `destinations:read` | Per-destination delivery health rollup over a recent window: success/failure/skip counts, success rate, latency (avg + p95), queue lag, last error, and a credential_ok flag (false when the most recent failur… | `GET /client/v1/destinations/health` |
 | `verify_destination`<br /><span style={{opacity: 0.7}}>Verify Destination</span> | `destinations:read` | Did deliveries actually COUNT downstream? convert_experiments destinations only. | `GET /client/v1/destinations/:id/verification` |
+| `get_mida_experiments`<br /><span style={{opacity: 0.7}}>Get Mida Experiments</span> | `destinations:read` | Mida's OWN readout for this client's Mida (mida.so) project, plus how long each running test still needs. | `GET /client/v1/destinations/mida/experiments` |
 | `get_destination_quality`<br /><span style={{opacity: 0.7}}>Get Destination Quality</span> | `destinations:read` | Meta's OWN verdict on the data this client sends — meta_capi destinations only. | `GET /client/v1/destinations/:id/quality` |
 | `get_destination_quality_trend`<br /><span style={{opacity: 0.7}}>Get Destination Quality Trend</span> | `destinations:read` | Meta match quality for one destination DAY BY DAY — event match quality, server-vs-browser coverage, dedupe-key coverage on both halves, and the findings that stood on each day. | `GET /client/v1/destinations/:id/quality/trend` |
 | `get_destination_quality_match_keys`<br /><span style={{opacity: 0.7}}>Get Destination Match Key Coverage</span> | `destinations:read` | Per-PARAMETER match coverage over time for one Meta destination: email, phone, fn, ln, fbp, fbc, external_id, ip_address, ct, st, zip, country — each as a daily percentage. | `GET /client/v1/destinations/:id/quality/match-keys` |
