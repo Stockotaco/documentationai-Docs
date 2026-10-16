@@ -400,8 +400,9 @@ paths:
         Accepted values for `experiment_conversions`: `null`/`false` (off),
         `true` (on with SDK defaults), or an object `{enabled, goals,
         oncePerSession, maxPerSession}` where `goals` maps Mythic event names to
-        1–10 targets each. Targets carry `platform` (`convert`, `growthbook`, or
-        `custom`) plus `goalId` (convert) / `name` (growthbook, custom).
+        1–10 targets each. Targets carry `platform` (`convert`, `growthbook`,
+        `mida`, or `custom`) plus `goalId` (convert) / `name` (growthbook, mida,
+        custom). A mida `name` is the event name of a Mida event goal.
         Unknown keys, unverified platforms, missing ids, and out-of-range caps
         are rejected rather than ignored.
 
@@ -985,7 +986,7 @@ components:
             platforms:
               type: array
               items: { type: string }
-              example: [convert, growthbook, custom]
+              example: [convert, growthbook, mida, custom]
     ExperimentConversionsRequest:
       type: object
       required:

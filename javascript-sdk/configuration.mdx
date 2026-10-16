@@ -287,19 +287,21 @@ The full set of options you can pass to `init(key, config)`.
 ### A/B experiments
 
 <ParamField body="capture_experiments" param-type="boolean|object" required="false" show-location="false" deprecated="false">
-  Detect that a third-party split-testing tool has bucketed this visitor and attach the assignment to the session. Default: `true` (on). Supported platforms: **Convert.com** and **PostHog experiments**. Pass `false` to disable, or an object for control:
+  Detect that a third-party split-testing tool has bucketed this visitor and attach the assignment to the session. Default: `true` (on). Supported platforms: **Convert.com**, **PostHog experiments** and **Mida**. Pass `false` to disable, or an object for control:
 
   - `trackExposures` (boolean) — emit the `$experiment_viewed` event. Default: `true`.
   - `pollWindowMs` (number) — how long after init to keep re-reading the testing tool's cookie, in milliseconds. The tool usually buckets within a second; the window exists because it runs *after* the SDK on a normal page load. Default: `10000`.
   - `dataLayerName` (string) — the dataLayer global to observe. Default: `'dataLayer'`.
 
-  Nothing needs tagging on the page. Every event after detection carries two super properties — `$experiments` (an array of arms) and `$ab_platform` (`convert`, `posthog`, or `convert+posthog`) — and each assignment produces one `$experiment_viewed` event per session, with `experiment_id`, `variation_id` and `variation_name` where the tool exposes them.
+  Nothing needs tagging on the page. Every event after detection carries two super properties — `$experiments` (an array of arms) and `$ab_platform` (`convert`, `posthog`, `mida`, or a `+`-joined list such as `convert+mida` when several tools run on one page) — and each assignment produces one `$experiment_viewed` event per session, with `experiment_id`, `variation_id`, and `variation_name` / `experiment_name` where the tool exposes them.
 
-  An arm reads `"<experimentId>:<variationId>"` for Convert.com and `"posthog:<flagKey>:<variant>"` for PostHog. Only PostHog arms carry a platform prefix, so filters written against Convert assignments keep working unchanged.
+  An arm reads `"<experimentId>:<variationId>"` for Convert.com, `"posthog:<flagKey>:<variant>"` for PostHog and `"mida:<testId>:<variant name>"` for Mida (for example `mida:36816:Variant 1` or `mida:36816:Control`). Convert arms carry no platform prefix, so filters written against Convert assignments keep working unchanged.
 
   Convert.com assignments are read from its own cookie, which holds the authoritative experiment-to-variation mapping and is already populated for visitors who arrived through a split-URL redirect; its `dataLayer` announcement is observed as well, to catch bucketing that happens later in a single-page app and to pick up variation names.
 
   PostHog assignments are read from posthog.js's own persisted state (`ph_<projectToken>_posthog__flags` for the flags, `ph_<projectToken>_posthog` for the visitor id and any local overrides), refreshed through the public `posthog.onFeatureFlags` subscription when flags load or reload. A redirect-style split test needs nothing extra: the flag is already stored by the time the variant page loads, so the assignment is attached before that page's first pageview. A flag counts as an experiment when PostHog reports it as experiment-linked, and otherwise when it is multivariate: **boolean feature flags are rollouts, not tests, and are excluded**, so a kill switch does not become an arm on every event. Flags you have overridden locally (`overrideFeatureFlags()`, or the PostHog toolbar) are skipped as QA. The SDK never calls `getFeatureFlag()` or `isFeatureEnabled()` — those would write `$feature_flag_called` events into your PostHog project.
+
+  Mida assignments are read from Mida's own stored assignment (`_variant_result`, in localStorage, or sessionStorage when Mida runs in cookie-banner mode) and its cached test list, which supplies the test name and drops tests that have stopped or are serving a winner to everyone. Mida's variant names are the variation ids, and personalization campaigns are not counted as experiments. Nothing of Mida's is patched or called.
 
   Sessions the SDK identifies as bots record no assignment — a crawler executing a testing tool would otherwise count as an exposure in whichever arm it landed in.
 </ParamField>
@@ -309,7 +311,7 @@ The full set of options you can pass to `init(key, config)`.
 </Callout>
 
 <Callout kind="note">
-  Sessions in the tool's visual editor or with a forced variation (Convert's `convert_action`, `_conv_eforce`, `visualEditor` parameters) are treated as QA and record no assignment — counting them would inflate whichever variation the tester picked.
+  Sessions in the tool's visual editor or with a forced variation (Convert's `convert_action`, `_conv_eforce`, `visualEditor` parameters; Mida's `test-preview`, `test-variant`, `editor` parameters) are treated as QA and record no assignment — counting them would inflate whichever variation the tester picked.
 </Callout>
 
 <Callout kind="warning">
@@ -325,17 +327,18 @@ The full set of options you can pass to `init(key, config)`.
     ```javascript
     { goals: {
         order_completed: [{ platform: 'convert', goalId: '<dashboard goal id>' }],
+        signup: [{ platform: 'mida', name: 'signup_completed' }],
         purchase: [{ platform: 'growthbook', name: 'purchase' }]
     } }
     ```
   - `oncePerSession` (boolean) — forward each goal at most once per session. Default: `true`.
   - `maxPerSession` (number) — hard cap on forwards per session. Default: `10`.
 
-  Platform support: **Convert.com** (`goalId` is the dashboard goal id; queued through Convert's `_conv_q` so it works whether Convert loads before or after us), **GrowthBook** (`.track(name)`), and a generic **custom** platform that dispatches a `mythic:ab_conversion` CustomEvent on `window` for tools without a native adapter. VWO and Mida are not wired yet — their programmatic goal APIs are unverified, and guessed API shapes produce silent no-ops.
+  Platform support: **Convert.com** (`goalId` is the dashboard goal id; queued through Convert's `_conv_q` so it works whether Convert loads before or after us), **Mida** (`name` is the event name of a Mida *event* goal; queued as a `track` command on Mida's `mdq` queue, so it works whether Mida loads before or after us), **GrowthBook** (`.track(name)`), and a generic **custom** platform that dispatches a `mythic:ab_conversion` CustomEvent on `window` for tools without a native adapter. VWO is not wired yet — its programmatic goal API is unverified, and guessed API shapes produce silent no-ops.
 </ParamField>
 
 <Callout kind="info">
-  Forwarding rides the normal capture pipeline: consent gating, opt-out, HIPAA mode, and `before_send` all apply. A tool that loads after the conversion still receives it (Convert replays queued commands on init). An absent or failing tool does not consume the once-per-session slot — the next matching event retries.
+  Forwarding rides the normal capture pipeline: consent gating, opt-out, HIPAA mode, and `before_send` all apply. A tool that loads after the conversion still receives it (Convert and Mida replay queued commands on init). An absent or failing tool does not consume the once-per-session slot — the next matching event retries.
 </Callout>
 
 <Callout kind="tip">

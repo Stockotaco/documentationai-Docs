@@ -29,7 +29,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads, convert_experiments]
+            enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads, convert_experiments, mida_experiments]
         - name: enabled
           in: query
           description: Filter by enabled state. Pass `true` or `false`.
@@ -1859,7 +1859,7 @@ components:
         reads. Nothing delivers events with it.
       schema:
         type: string
-        enum: [meta_capi, google_ads, google_analytics, openai_ads, convert_experiments, meta_ads]
+        enum: [meta_capi, google_ads, google_analytics, openai_ads, convert_experiments, mida_experiments, meta_ads]
     ActionIdQuery:
       name: action_id
       in: query
@@ -2617,15 +2617,15 @@ components:
           example: Purchase → Meta
         action_type:
           type: string
-          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads, convert_experiments]
+          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads, convert_experiments, mida_experiments]
         trigger_rules:
           $ref: "#/components/schemas/TriggerRules"
         action_config:
           type: object
           description: >
             Type-specific configuration. See `WebhookConfig`, `MetaCapiConfig`,
-            `GoogleAdsConfig`, `GoogleAnalyticsConfig`, `OpenAiAdsConfig` and
-            `ConvertExperimentsConfig`.
+            `GoogleAdsConfig`, `GoogleAnalyticsConfig`, `OpenAiAdsConfig`,
+            `ConvertExperimentsConfig` and `MidaExperimentsConfig`.
             Webhook secrets are redacted for viewer keys.
         enabled:
           type: boolean
@@ -2705,6 +2705,58 @@ components:
             `revenue`. The amount comes from the conversion event's value; a
             missing, zero or unparseable value sends no revenue rather than a
             figure we cannot stand behind.
+        timeout_ms:
+          type: number
+          default: 10000
+          description: Request timeout in milliseconds. 1-30000.
+    MidaExperimentsConfig:
+      type: object
+      description: >
+        `action_config` for `action_type: mida_experiments` — records a
+        conversion that never touched the browser (a CRM close, a booked call)
+        in Mida under the visitor Mida bucketed, so Mida credits it to the test
+        variant that visitor saw.
+
+
+        The Mythic SDK reads Mida's visitor id and variant from Mida's own
+        storage and keeps both on the person profile. This destination posts the
+        conversion to Mida's REST API (`POST /v2/project/{project_key}/event`)
+        under that id. People who were never in a Mida test are logged as
+        `skipped`, which is a normal state.
+
+
+        Needs the `mida_experiments` credential: your Mida API key (Mida
+        dashboard, Settings → API). `200` means Mida recorded the event against
+        a known visitor; `400 Visitor not found` and `401` are not retried.
+      required:
+        - project_key
+        - event_name
+      properties:
+        project_key:
+          type: string
+          description: The Mida project key (the `key=` on `optimize.js`).
+          example: "34MV9Wnqd0gApBXrGNLpJw"
+        event_name:
+          type: string
+          description: >
+            Event name of an `event` or `revenue` goal in the Mida project.
+            Which Mythic events send it is decided by `trigger_rules`.
+          example: booked_call
+        region:
+          type: string
+          default: us
+          description: Mida API region (`api-<region>.mida.so`). `eu` for EU projects.
+        send_revenue:
+          type: boolean
+          default: false
+          description: >
+            Send the conversion value as Mida's `revenue` property (with
+            `currency`). Mida reports it on a revenue goal. A missing, zero or
+            unparseable value sends no revenue.
+        currency:
+          type: string
+          description: ISO 4217 code sent with revenue. Defaults to the event's own currency.
+          example: USD
         timeout_ms:
           type: number
           default: 10000
@@ -2800,7 +2852,7 @@ components:
           example: Purchase → Meta
         action_type:
           type: string
-          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads, convert_experiments]
+          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads, convert_experiments, mida_experiments]
         trigger_rules:
           $ref: "#/components/schemas/TriggerRules"
         action_config:
@@ -2811,6 +2863,7 @@ components:
             - $ref: "#/components/schemas/GoogleAnalyticsConfig"
             - $ref: "#/components/schemas/OpenAiAdsConfig"
             - $ref: "#/components/schemas/ConvertExperimentsConfig"
+            - $ref: "#/components/schemas/MidaExperimentsConfig"
         enabled:
           type: boolean
           default: true
@@ -2892,7 +2945,7 @@ components:
           type: string
         destination_type:
           type: string
-          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads, convert_experiments]
+          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads, convert_experiments, mida_experiments]
         event_name:
           type: string
           description: Source event name that triggered the delivery.
@@ -2942,7 +2995,7 @@ components:
           type: string
         destination_type:
           type: string
-          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads, convert_experiments]
+          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads, convert_experiments, mida_experiments]
         destination_event_name:
           type: string
         status:
@@ -3008,7 +3061,7 @@ components:
           type: string
         destination_type:
           type: string
-          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads, convert_experiments]
+          enum: [webhook, meta_capi, google_ads, google_analytics, openai_ads, convert_experiments, mida_experiments]
         enabled:
           type: boolean
         trigger_count:

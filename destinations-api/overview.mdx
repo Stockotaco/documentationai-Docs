@@ -30,9 +30,10 @@ Six destination types are supported. The `action_config` you send is validated a
 | **Google Analytics 4** | `google_analytics` | Sends events to a GA4 property via the same Data Manager API | Stored separately (`google_analytics`) |
 | **OpenAI (ChatGPT) Ads** | `openai_ads` | Sends server-side conversions to an OpenAI Ads pixel | Stored separately (`openai_ads`) |
 | **Convert.com experiments** | `convert_experiments` | Credits an off-browser conversion to the A/B variation the visitor was in | None for delivery (see [Convert.com experiments](#convertcom-experiments)) |
+| **Mida experiments** | `mida_experiments` | Credits an off-browser conversion to the Mida test variant the visitor saw | Stored separately (`mida_experiments`, your Mida API key) |
 
 <Callout kind="info">
-  `tiktok_events` is recognized by the schema but has no executor yet, so creating it returns `unsupported_destination_type`. Only `webhook`, `meta_capi`, `google_ads`, `google_analytics`, `openai_ads` and `convert_experiments` are live.
+  `tiktok_events` is recognized by the schema but has no executor yet, so creating it returns `unsupported_destination_type`. Only `webhook`, `meta_capi`, `google_ads`, `google_analytics`, `openai_ads`, `convert_experiments` and `mida_experiments` are live.
 </Callout>
 
 <Callout kind="info">
@@ -103,6 +104,41 @@ It follows that the destination only fires for people who were in a **running** 
 **There is no delivery credential.** Deliveries use Convert's documented `sendTrackingEvents` operation, `POST /track/{account_id}/{project_id}`, which their own spec marks as taking no authentication. That also means anyone who knows your account and project ids can write conversions into your project — that is Convert's design for this operation, not something this destination can configure away. Convert's spec does list a second, authenticated operation on a different path; this destination does not use it, so there is one delivery path and it is the documented one.
 
 The endpoint returns `200` for everything, including payloads it discards — so a success in the delivery log means "accepted", never "counted". Use [verification](#verifying-a-convert-destination) to find out what actually landed.
+
+### Mida experiments
+
+Requires `project_key` (the `key=` on Mida's `optimize.js`) and `event_name` (the event name of an **event** or **revenue** goal in your Mida project). Optional `region` (`us` by default; `eu` for EU projects), `send_revenue`, `currency` and `timeout_ms`. Which events reach the goal is decided by `trigger_rules`; there is no `event_mapping`. Store your Mida API key (Mida dashboard, **Settings → API**) as the `mida_experiments` credential before creating the destination.
+
+This is for conversions Mida's script cannot see: a CRM close, a booked call, a phone sale. The Mythic SDK reads Mida's visitor id and the variant from Mida's own storage and keeps both on the person profile (`$mida_visitor_id`, `$mida_experiments`); this destination records the conversion in Mida under that visitor whenever it arrives, using Mida's REST API (`POST /v2/project/{project_key}/event`). Mida then credits it to whichever running test the visitor is in, exactly as if the event had happened in the browser.
+
+People who were never in a Mida test are logged as `skipped` with a reason (`no $mida_visitor_id on person` / `no $mida_experiments on person`). That is the normal state for most traffic.
+
+```json
+{
+  "name": "Booked call → Mida",
+  "action_type": "mida_experiments",
+  "trigger_rules": { "operator": "AND", "rules": [
+    { "type": "mythic_event", "eventName": "appointment_booked", "operator": "equals" }
+  ]},
+  "action_config": {
+    "project_key": "34MV9Wnqd0gApBXrGNLpJw",
+    "event_name": "booked_call"
+  }
+}
+```
+
+```json
+PUT /client/v1/destinations/credentials/mida_experiments
+{ "credential_value": "mk-v1-…" }
+```
+
+**Mida answers, so the delivery log means something.** A `200` means Mida recorded the event against a visitor it knows. `400 Visitor not found` means the visitor id was never seen by this Mida project (for example, a key for a different project) and is not retried. `401` means the API key is wrong. A recorded event still only counts when the visitor is in a live test whose goal matches `event_name`, and Mida's results take a few minutes to update.
+
+**Conversions are counted per visitor**, so a retry or a repeat purchase does not add a second conversion. With `send_revenue: true` the conversion's value is sent as Mida's `revenue` property (with `currency`). Mida reports revenue only on a **revenue** goal, so point `event_name` at one; an event goal counts the conversion and ignores the amount. Each delivery carries the Mythic event id as `transaction_id`, and Mida does not add revenue twice for the same one, so a retried delivery cannot inflate revenue. A missing, zero or unparseable value sends no revenue.
+
+<Callout kind="info">
+  Mida's server-side SDKs (`setEvent`) use a different endpoint keyed by your own user id, meant for **server-side** Mida experiments. It does not credit the browser tests this destination is for, which is why the destination needs your API key.
+</Callout>
 
 ### OpenAI (ChatGPT) Ads
 
@@ -478,7 +514,7 @@ Each destination has an optional per-destination delivery cap, set with `rate_li
 
 ## Credentials
 
-Credentialed destinations (`meta_capi`, `google_ads`, `google_analytics`, `openai_ads`) read their secrets from a separate, never-readable credential store keyed by `(location_id, destination_type, credential_name)`. Store or rotate a credential with `PUT /credentials/{type}`; list metadata with `GET /credentials`. Credential values are write-only — no endpoint ever returns them. Webhooks carry their auth inline in `action_config` instead.
+Credentialed destinations (`meta_capi`, `google_ads`, `google_analytics`, `openai_ads`, `mida_experiments`) read their secrets from a separate, never-readable credential store keyed by `(location_id, destination_type, credential_name)`. Store or rotate a credential with `PUT /credentials/{type}`; list metadata with `GET /credentials`. Credential values are write-only — no endpoint ever returns them. Webhooks carry their auth inline in `action_config` instead.
 
 `meta_ads` is storable but is not a destination: it is the Meta Marketing API token (system user, `ads_read` + `ads_management`) that [Ad UTM tagging](/ad-tagging-api/overview) uses to read and tag ads. Nothing delivers events with it.
 
