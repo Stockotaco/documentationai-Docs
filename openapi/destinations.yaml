@@ -952,7 +952,7 @@ paths:
         set the allocation). The baseline is Control's rate once Control has
         10 conversions, otherwise the pooled rate. Days remaining are the
         slowest arm's shortfall divided by that arm's observed visitors per
-        day. `days_remaining_range` repeats the calculation at both ends of the
+        day, once the test has run a full day. `days_remaining_range` repeats the calculation at both ends of the
         baseline's 95% Wilson interval. `detectable_lift_now` is the smallest
         relative lift the visitors already in can detect.
 
@@ -2107,7 +2107,7 @@ components:
             reason:
               type: string
               nullable: true
-              description: "`no_results`, `no_conversions`, `lift_exceeds_100_percent`, `multi_armed_bandit`, `test_not_running`, `no_traffic_rate`, or null."
+              description: "`no_results`, `no_conversions`, `lift_exceeds_100_percent`, `multi_armed_bandit`, `test_not_running`, `no_traffic_rate`, `under_one_day` (sizes are planned, but under a day of traffic is too little to estimate days), or null."
             inputs:
               type: object
               properties:

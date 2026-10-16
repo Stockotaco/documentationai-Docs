@@ -1,8 +1,8 @@
 ---
 title: Experiments
 description: >-
-  See A/B test results from Convert and PostHog, and track incrementality
-  holdouts.
+  See A/B test results from Convert, PostHog and Mida, and track
+  incrementality holdouts.
 ---
 
 ## Overview
@@ -10,11 +10,12 @@ description: >-
 The **Experiments** screen shows a client's A/B tests and incrementality
 holdouts. Open a client and choose **Experiments**. Pick the **Goal** event
 that counts as a conversion, such as a form submission or a purchase. A/B
-results need a goal event other than a page view.
+results need a goal event other than a page view. When the client forwards
+conversions to Mida, the page opens on the forwarded event.
 
 ## A/B tests
 
-Mythic detects Convert and PostHog experiments on its own. The tracking
+Mythic detects Convert, PostHog and Mida experiments on its own. The tracking
 snippet reads which version each visitor was shown and tags their events with
 it. There is nothing to set up. A test appears once a visitor is placed in
 it. **Detect A/B tests** turns detection on or off for the client. It is off
@@ -25,34 +26,69 @@ The table covers the last 90 days:
 | Column | Meaning |
 | --- | --- |
 | **Experiment** | The test name. |
-| **Platform** | Convert or PostHog. |
+| **Platform** | Convert, PostHog or Mida. |
 | **People exposed** | People who saw any version. |
 | **Arms** | The number of versions. |
+| **Split** | Whether visitors divide evenly between versions. **Uneven** means the gap is too large to be chance (p < 0.01), which points at the test's setup. **Too early** under 100 people. |
 | **Lift** | How much better the best version converts than the baseline. |
 | **Confidence** | How sure Mythic is that the best version beats the baseline. |
 
 A person counts as converted if they did the goal within 30 days of first
-seeing the test. The baseline is PostHog's `control` arm, or the lowest
-Convert variation id.
+seeing the test. The baseline is the `control` arm in PostHog and Mida, or the
+lowest Convert variation id. A Mida test deleted in Mida is hidden, and the
+note under the table lists its id.
 
 Click a test to see **Exposure**, daily sessions per version, and a
 **Confidence** gauge. The links under **Exposure** open
 [Sessions](/agency-app/sessions) for one version. Above 50% the variant is ahead, below 50% the baseline
 is. With too few conversions, Mythic does not compare the versions.
 
-## Conversion forwarding
+### Mida's results
+
+For a Mida test, **Mida's results** shows Mida's own numbers next to
+Mythic's: per version, Mida's visitors, conversions, rate and its chance to
+beat Control, then the people Mythic saw exposed and converted. The two count
+differently, so they do not have to match.
+
+**Time to a result** estimates how many more days the test needs, because Mida
+does not report it. Pick the **lift to detect** (default 20%). Mythic works
+out the visitors each version needs to detect that lift with 80% power at 5%
+significance, then divides the shortfall by each version's daily traffic. It
+also shows a range for the uncertain baseline rate and the smallest lift
+today's visitors could detect. Mida calls winners with its own Bayesian
+statistics, so it may call one earlier or later. The estimate needs a full day
+of traffic.
+
+## Server-side conversions to Mida
+
+When Mythic receives an event that never happens in the browser, such as a
+CRM stage or a booked call, it can record it in Mida for the visitor Mida
+bucketed. Mida's results then include it.
+
+1. Pick the **Mythic event**.
+2. Enter the **Mida goal event name**, or leave it blank to use the Mythic
+   event name. It must match an event goal in Mida.
+3. The first time, enter the **Mida project key** (the `key=` on Mida's
+   script) and the **Mida API key** (Mida **Settings > API**).
+4. Click **Add**.
+
+Each row shows deliveries in the last 7 days. **Skipped** means the person was
+never in a Mida test.
+
+## Conversion forwarding in the browser
 
 Conversion forwarding credits a goal in the client's testing tool whenever a
 Mythic event fires, so the tool's own results count conversions Mythic
 already tracks. The client keeps the conversion in one place instead of
-tagging it in both. It works with Convert and GrowthBook. PostHog is not
-supported.
+tagging it in both. It works with Convert, Mida and GrowthBook. PostHog is
+not supported.
 
 1. Pick the **Mythic event**, such as `order_completed`.
-2. Pick the **Tool**: **Convert**, **GrowthBook**, or **Custom event** for
-   other tools, which fires a `mythic:ab_conversion` event on the page.
-3. Enter the **Convert goal ID** from Convert's dashboard, or the
-   **GrowthBook event name**.
+2. Pick the **Tool**: **Convert**, **Mida**, **GrowthBook**, or **Custom
+   event** for other tools, which fires a `mythic:ab_conversion` event on the
+   page.
+3. Enter the **Convert goal ID** from Convert's dashboard, the **Mida event
+   goal name**, or the **GrowthBook event name**.
 4. Click **Add**.
 
 By default each goal is credited once per visit. **Remove** stops forwarding
@@ -73,6 +109,7 @@ through the Incrementality API.
 
 ## For developers
 
-See the [Incrementality API](/incrementality-api/overview), and
+See the [Incrementality API](/incrementality-api/overview), the
+[Destinations API](/destinations-api/overview) for Mida's results, and
 [configuration](/javascript-sdk/configuration) for the snippet's experiment
 settings.
