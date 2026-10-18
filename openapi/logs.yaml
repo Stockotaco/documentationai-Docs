@@ -1,0 +1,746 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Logs
+  description: >
+    OpenTelemetry log records a client's software sends over OTLP/HTTP, and the
+    read API over them: search, one record, volume, services, attribute keys and
+    values, patterns and a bounded digest for agents.
+
+
+    Ingestion (`POST /i/v1/logs`) uses the location's publishable key (`pk_`).
+    The read API is read-only and accepts an agency key (`ak_`, bind a location
+    with `location_id` or the `X-Location-Id` header), a location secret key
+    (`sk_`), or a scoped key (`mcp_`) holding `logs:read`.
+
+
+    Sold wherever error tracking is; without it every read answers
+    402 `feature_not_in_plan` and ingestion answers 403. Not available on HIPAA
+    locations. Records are kept 30 days.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+paths:
+  /i/v1/logs:
+    post:
+      summary: Send logs (OTLP/HTTP)
+      operationId: exportLogs
+      description: >
+        An OTLP/HTTP `ExportLogsServiceRequest`, protobuf or OTLP/JSON, optionally
+        gzip-compressed. `POST /v1/logs` is the same endpoint. Point an
+        OpenTelemetry Collector `otlphttp` exporter at `https://mythic-analytics.gulp.workers.dev/i`,
+        or an SDK log exporter at this full URL.
+
+
+        Limits: 1 MB on the wire, 4 MB after gzip, 1,000 records per request,
+        64 KB per record, 30 days of age. Delivery is at least once.
+      security:
+        - PublishableKey: []
+        - PublishableKeyHeader: []
+      requestBody:
+        required: true
+        content:
+          application/x-protobuf:
+            schema: { type: string, format: binary, description: "opentelemetry.proto.collector.logs.v1.ExportLogsServiceRequest" }
+          application/json:
+            schema: { $ref: "#/components/schemas/ExportLogsServiceRequest" }
+      parameters:
+        - name: Content-Encoding
+          in: header
+          required: false
+          schema: { type: string, enum: [gzip, identity] }
+      responses:
+        "200":
+          description: "Accepted. A partial success counts rejected records; the message lists reason codes only."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExportLogsServiceResponse" }
+            application/x-protobuf:
+              schema: { type: string, format: binary, description: "ExportLogsServiceResponse; empty on full success." }
+        "400": { $ref: "#/components/responses/OtlpError" }
+        "401": { $ref: "#/components/responses/OtlpError" }
+        "403": { $ref: "#/components/responses/OtlpError" }
+        "413": { $ref: "#/components/responses/OtlpError" }
+        "415": { $ref: "#/components/responses/OtlpError" }
+        "429": { $ref: "#/components/responses/OtlpError" }
+        "503": { $ref: "#/components/responses/OtlpError" }
+  /client/v1/logs:
+    get:
+      summary: Search log records
+      operationId: searchLogs
+      description: >
+        Records for the window, newest first by default, keyset-paged with
+        `next_cursor`. Bodies are cut to `body_max_bytes` and flagged
+        `body_truncated`. A page is bounded to about 4 MB; `meta.truncated` says
+        it was cut and `next_cursor` continues after the last record returned.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/Levels"
+        - $ref: "#/components/parameters/Services"
+        - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/Attr"
+        - $ref: "#/components/parameters/DistinctId"
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/PatternIdFilter"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Order"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/BodyMaxBytes"
+      responses:
+        "200":
+          description: A page of records
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordPage" }
+        "400": { $ref: "#/components/responses/BadParams" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/NotInPlan" }
+        "403": { $ref: "#/components/responses/Hipaa" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/QueryFailed" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/logs/records/{uuid}:
+    get:
+      summary: Get one log record
+      operationId: getLogRecord
+      description: One record with its full body.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: uuid
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The record
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/LogRecord" }
+        "400": { $ref: "#/components/responses/BadParams" }
+        "403": { $ref: "#/components/responses/Hipaa" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /client/v1/logs/sparkline:
+    get:
+      summary: Log volume over time
+      operationId: getLogSparkline
+      description: >
+        Record counts per bucket and level, zero-filled. The bucket is chosen to
+        keep at most 120 points unless `bucket_seconds` is given (at most 2,000
+        buckets).
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/Levels"
+        - $ref: "#/components/parameters/Services"
+        - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/Attr"
+        - $ref: "#/components/parameters/DistinctId"
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/PatternIdFilter"
+        - name: bucket_seconds
+          in: query
+          schema: { type: integer, minimum: 60, maximum: 86400 }
+      responses:
+        "200":
+          description: The series
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      bucket_seconds: { type: integer, example: 300 }
+                      from: { type: string, format: date-time }
+                      to: { type: string, format: date-time }
+                      series: { type: array, items: { $ref: "#/components/schemas/SparkPoint" } }
+        "400": { $ref: "#/components/responses/BadParams" }
+  /client/v1/logs/services:
+    get:
+      summary: List services
+      operationId: listLogServices
+      description: Services (OpenTelemetry `service.name`) in the window with record, error and warning counts.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/Levels"
+        - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/Attr"
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 200 }
+      responses:
+        "200":
+          description: Services
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      from: { type: string, format: date-time }
+                      to: { type: string, format: date-time }
+                      services:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            service: { type: string, example: checkout }
+                            count: { type: integer, example: 1200 }
+                            errors: { type: integer, example: 4 }
+                            warnings: { type: integer, example: 31 }
+                            last_seen: { type: string, format: date-time }
+  /client/v1/logs/attributes:
+    get:
+      summary: List attribute keys
+      operationId: listLogAttributes
+      description: Attribute keys in the window with how many records carry each. Resource attributes are listed as `resource.<key>`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/Levels"
+        - $ref: "#/components/parameters/Services"
+        - name: key_prefix
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 200 }
+      responses:
+        "200":
+          description: Keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      attributes:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            key: { type: string, example: http.status_code }
+                            count: { type: integer, example: 840 }
+  /client/v1/logs/attributes/values:
+    get:
+      summary: List values of one attribute
+      operationId: listLogAttributeValues
+      description: Top values of one key. Strings come back as strings; numbers, booleans and objects as their JSON text.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: key
+          in: query
+          required: true
+          schema: { type: string, example: http.status_code }
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/Levels"
+        - $ref: "#/components/parameters/Services"
+        - name: value_prefix
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        "200":
+          description: Values
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      key: { type: string }
+                      values:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            value: { type: string, example: "500" }
+                            count: { type: integer, example: 12 }
+        "400": { $ref: "#/components/responses/BadParams" }
+  /client/v1/logs/patterns:
+    get:
+      summary: List patterns
+      operationId: listLogPatterns
+      description: >
+        Records grouped by pattern: bodies that differ only in ISO dates, UUIDs,
+        hex ids and numbers of 4 or more digits. Short numbers are kept, so
+        status codes stay apart. `new_only=1` keeps patterns with no record in
+        the `lookback_days` before `from` and adds `baseline`, which says how
+        much of that lookback the 30-day retention still covers.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/Levels"
+        - $ref: "#/components/parameters/Services"
+        - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/Attr"
+        - name: new_only
+          in: query
+          schema: { type: string, enum: ["1", "true"] }
+        - $ref: "#/components/parameters/LookbackDays"
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 10000, default: 0 }
+      responses:
+        "200":
+          description: Patterns
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      from: { type: string, format: date-time }
+                      to: { type: string, format: date-time }
+                      patterns: { type: array, items: { $ref: "#/components/schemas/Pattern" } }
+                      baseline: { $ref: "#/components/schemas/Baseline" }
+        "400": { $ref: "#/components/responses/BadParams" }
+  /client/v1/logs/patterns/{id}:
+    get:
+      summary: Get one pattern
+      operationId: getLogPattern
+      description: One pattern in the window with its volume series. 404 when it has no records in the window.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/PatternId"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Range"
+      responses:
+        "200":
+          description: The pattern
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/Pattern"
+                      - type: object
+                        properties:
+                          bucket_seconds: { type: integer }
+                          series: { type: array, items: { $ref: "#/components/schemas/SparkPoint" } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /client/v1/logs/patterns/{id}/occurrences:
+    get:
+      summary: List a pattern's records
+      operationId: listLogPatternOccurrences
+      description: The pattern's records, paged exactly like the search.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/PatternId"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Order"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/BodyMaxBytes"
+      responses:
+        "200":
+          description: A page of records
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordPage" }
+  /client/v1/logs/digest:
+    get:
+      summary: Get a log digest
+      operationId: getLogDigest
+      description: >
+        A summary of the window for an agent to read whole, at most 64 KB:
+        totals by level, services, the top patterns, error and fatal patterns,
+        and patterns new against the previous `lookback_days`. Every pattern
+        carries its id, counts and one sample record (uuid and at most 2 KB of
+        body). Default window 24 hours. `truncated` is true when lists were
+        shortened to fit.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/Levels"
+        - $ref: "#/components/parameters/Services"
+        - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/Attr"
+        - $ref: "#/components/parameters/DistinctId"
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/TraceId"
+        - $ref: "#/components/parameters/PatternIdFilter"
+        - $ref: "#/components/parameters/LookbackDays"
+      responses:
+        "200":
+          description: The digest
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Digest" }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Agency key (`ak_`) or location secret key (`sk_`).
+        Scoped keys (`mcp_`) are accepted too and need `logs:read`. See [Using an mcp_ key over HTTP](/mcp/authentication).
+    PublishableKey:
+      type: http
+      scheme: bearer
+      description: The location's publishable key (`pk_`). Ingestion only.
+    PublishableKeyHeader:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: The location's publishable key (`pk_`), as a header. Ingestion only.
+  parameters:
+    LocationId:
+      name: location_id
+      in: query
+      required: false
+      description: Location to scope to. Required for `ak_` keys (or send the `X-Location-Id` header); ignored for `sk_`.
+      schema: { type: string }
+    From:
+      name: from
+      in: query
+      description: Window start, ISO 8601 or epoch milliseconds. Default is `range` (or 1 hour) before `to`.
+      schema: { type: string, example: "2026-10-18T10:00:00Z" }
+    To:
+      name: to
+      in: query
+      description: Window end, exclusive. Default now.
+      schema: { type: string }
+    Range:
+      name: range
+      in: query
+      description: Preset window ending at `to`. Ignored when `from` is set. At most 30 days.
+      schema: { type: string, enum: [15m, 1h, 6h, 24h, 7d, 30d] }
+    Levels:
+      name: levels
+      in: query
+      description: Comma list of levels.
+      schema: { type: string, example: "error,fatal" }
+    Services:
+      name: services
+      in: query
+      description: Comma list of service names, at most 20.
+      schema: { type: string, example: checkout }
+    Q:
+      name: q
+      in: query
+      description: Case-insensitive body search. Whitespace-separated terms must all match; double quotes keep a phrase. At most 5 terms.
+      schema: { type: string, example: "timeout \"connection reset\"" }
+    Attr:
+      name: attr
+      in: query
+      description: Repeatable attribute filter, `key=value` or a bare `key`. Resource attributes are `resource.<key>`. At most 5.
+      style: form
+      explode: true
+      schema: { type: array, items: { type: string }, example: ["http.status_code=500"] }
+    DistinctId:
+      name: distinct_id
+      in: query
+      schema: { type: string }
+    SessionId:
+      name: session_id
+      in: query
+      schema: { type: string }
+    TraceId:
+      name: trace_id
+      in: query
+      description: 32 hex characters. A filter only.
+      schema: { type: string }
+    PatternIdFilter:
+      name: pattern_id
+      in: query
+      schema: { type: string, example: "v1:892ea82429dfa0bf975caecb03a9e5ea" }
+    PatternId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, example: "v1:892ea82429dfa0bf975caecb03a9e5ea" }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+    Order:
+      name: order
+      in: query
+      schema: { type: string, enum: [desc, asc], default: desc }
+    Cursor:
+      name: cursor
+      in: query
+      description: "`next_cursor` from the previous page."
+      schema: { type: string }
+    BodyMaxBytes:
+      name: body_max_bytes
+      in: query
+      schema: { type: integer, minimum: 64, maximum: 32768, default: 2048 }
+    LookbackDays:
+      name: lookback_days
+      in: query
+      description: Baseline for new patterns.
+      schema: { type: integer, minimum: 1, maximum: 7, default: 7 }
+  responses:
+    OtlpError:
+      description: "A google.rpc.Status in the request's encoding. 429 and 503 carry Retry-After and should be retried."
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              code: { type: integer, example: 14 }
+              message: { type: string, example: "logs ingestion temporarily unavailable; retry" }
+    BadParams:
+      description: "A parameter is invalid; `error.code` names it (for example `window_too_large`, `invalid_level`, `invalid_cursor`)."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing or invalid key, or an `ak_` key with no location bound.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotInPlan:
+      description: "`feature_not_in_plan` — the plan does not include logs."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Hipaa:
+      description: "`hipaa_restricted` — logs are not available on HIPAA locations."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: "`not_found`"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: "`rate_limited` — 120 requests per minute per location."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    QueryFailed:
+      description: "`query_failed` — the log store did not answer."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unavailable:
+      description: "`privacy_unknown` (the location's configuration could not be read) or `not_configured`. Retry."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string, example: window_too_large }
+            message: { type: string }
+    ExportLogsServiceRequest:
+      type: object
+      description: OTLP/JSON. Field names are lowerCamelCase; 64-bit integers are decimal strings; trace and span ids are hex.
+      properties:
+        resourceLogs:
+          type: array
+          items:
+            type: object
+            properties:
+              resource:
+                type: object
+                properties:
+                  attributes: { type: array, items: { $ref: "#/components/schemas/KeyValue" } }
+              scopeLogs:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    scope:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        version: { type: string }
+                    logRecords:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          timeUnixNano: { type: string, example: "1789898400000000000" }
+                          observedTimeUnixNano: { type: string }
+                          severityNumber: { type: integer, example: 17 }
+                          severityText: { type: string, example: ERROR }
+                          body: { $ref: "#/components/schemas/AnyValue" }
+                          attributes: { type: array, items: { $ref: "#/components/schemas/KeyValue" } }
+                          traceId: { type: string, example: 5b8efff798038103d269b633813fc60c }
+                          spanId: { type: string, example: eee19b7ec3c1b174 }
+                          eventName: { type: string }
+    KeyValue:
+      type: object
+      properties:
+        key: { type: string, example: mythic.distinct_id }
+        value: { $ref: "#/components/schemas/AnyValue" }
+    AnyValue:
+      type: object
+      description: "Exactly one of stringValue, boolValue, intValue, doubleValue, arrayValue, kvlistValue, bytesValue."
+      properties:
+        stringValue: { type: string }
+        boolValue: { type: boolean }
+        intValue: { type: string }
+        doubleValue: { type: number }
+        arrayValue: { type: object }
+        kvlistValue: { type: object }
+        bytesValue: { type: string, format: byte }
+    ExportLogsServiceResponse:
+      type: object
+      description: Empty object on full success.
+      properties:
+        partialSuccess:
+          type: object
+          properties:
+            rejectedLogRecords: { type: string, example: "2" }
+            errorMessage: { type: string, example: "rejected log records: too_old=2" }
+    LogRecord:
+      type: object
+      properties:
+        uuid: { type: string }
+        timestamp: { type: string, format: date-time }
+        observed_at: { type: string, format: date-time }
+        received_at: { type: string, format: date-time, description: When Mythic accepted the record. }
+        level: { type: string, enum: [trace, debug, info, warn, error, fatal] }
+        severity_number: { type: integer }
+        severity_text: { type: string }
+        service: { type: string, example: checkout }
+        scope_name: { type: string }
+        scope_version: { type: string }
+        event_name: { type: string }
+        body: { type: string }
+        body_bytes: { type: integer }
+        body_truncated: { type: boolean, description: "In lists: the body was cut to body_max_bytes." }
+        attributes: { type: object, additionalProperties: true }
+        resource_attributes: { type: object, additionalProperties: true }
+        trace_id: { type: string, nullable: true }
+        span_id: { type: string, nullable: true }
+        distinct_id: { type: string, nullable: true }
+        session_id: { type: string, nullable: true }
+        pattern_id: { type: string }
+    RecordPage:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            records: { type: array, items: { $ref: "#/components/schemas/LogRecord" } }
+            next_cursor: { type: string, nullable: true }
+            meta:
+              type: object
+              properties:
+                from: { type: string, format: date-time }
+                to: { type: string, format: date-time }
+                order: { type: string }
+                limit: { type: integer }
+                truncated: { type: boolean, description: The ~4 MB response bound cut this page. }
+    SparkPoint:
+      type: object
+      properties:
+        bucket: { type: string, format: date-time }
+        total: { type: integer }
+        trace: { type: integer }
+        debug: { type: integer }
+        info: { type: integer }
+        warn: { type: integer }
+        error: { type: integer }
+        fatal: { type: integer }
+    Pattern:
+      type: object
+      properties:
+        pattern_id: { type: string, example: "v1:892ea82429dfa0bf975caecb03a9e5ea" }
+        template: { type: string, example: "order <num> placed for user 42" }
+        count: { type: integer }
+        errors: { type: integer }
+        first_seen: { type: string, format: date-time }
+        last_seen: { type: string, format: date-time }
+        service: { type: string }
+        level: { type: string }
+        services: { type: integer }
+        sample:
+          type: object
+          properties:
+            uuid: { type: string }
+            body: { type: string }
+    Baseline:
+      type: object
+      description: Present with new_only. How much of the lookback the retention still holds.
+      properties:
+        baseline_from: { type: string, format: date-time }
+        baseline_to: { type: string, format: date-time }
+        retained_from: { type: string, format: date-time }
+        complete: { type: boolean }
+        covered_days: { type: number }
+    Digest:
+      type: object
+      properties:
+        window:
+          type: object
+          properties:
+            from: { type: string, format: date-time }
+            to: { type: string, format: date-time }
+        generated_at: { type: string, format: date-time }
+        totals:
+          type: object
+          properties:
+            records: { type: integer }
+            by_level: { type: object, additionalProperties: { type: integer } }
+        services: { type: array, items: { type: object } }
+        top_patterns: { type: array, items: { $ref: "#/components/schemas/Pattern" } }
+        error_patterns: { type: array, items: { $ref: "#/components/schemas/Pattern" } }
+        new_patterns: { type: array, items: { $ref: "#/components/schemas/Pattern" } }
+        new_patterns_baseline: { $ref: "#/components/schemas/Baseline" }
+        truncated: { type: boolean }

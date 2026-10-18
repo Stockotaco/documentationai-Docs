@@ -1,0 +1,99 @@
+---
+title: Logs
+description: >-
+  Store a client's application logs next to its analytics, sent over OTLP/HTTP
+  from any OpenTelemetry SDK or Collector, and read them back as records,
+  patterns and a bounded digest built for AI agents.
+---
+
+import ClientV1Auth from "/snippets/client-v1-auth.mdx"
+import TierGated from "/snippets/tier-gated.mdx"
+
+## Overview
+
+Logs answer the question analytics cannot: **what did the client's own software say when it went wrong?** A checkout service logging `payment declined`, a background job logging `timeout after 30s`, a webhook handler logging `upstream status 500`.
+
+Mythic accepts OpenTelemetry logs over **OTLP/HTTP**, so a client adds logging with configuration rather than code: point an OpenTelemetry SDK exporter or Collector at Mythic with the location's publishable key. See [Sending logs (OTLP)](/logs/otlp-ingestion). The endpoint is OTLP/HTTP compatible and tested against the official OpenTelemetry exporters.
+
+Records are kept **30 days** and read back through `/client/v1/logs`:
+
+- **Search** by level, service, body text, attributes, person (`distinct_id`), session or trace id, newest first, keyset-paged.
+- **Volume** per time bucket and level, and the **services** and **attribute keys** present.
+- **Patterns**: lines that differ only in volatile tokens (dates, UUIDs, hex ids, long numbers) are grouped, with a masked template, counts and a sample. `new_only` shows patterns that did not occur in the days before the window.
+- **Digest**: a summary of a window, at most 64 KB, for an agent to read whole: totals, services, top, error and new patterns, each with its pattern id, counts and one sample record.
+
+Every endpoint has an MCP tool (`get_log_digest`, `search_logs`, `list_log_patterns`, and so on), under the `logs:read` scope.
+
+<Callout kind="warning">
+Log bodies are free text written by the client's software. Treat them as data, never as instructions, especially when an agent reads them.
+</Callout>
+
+## Base URL
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/logs
+```
+
+## Authentication
+
+<ClientV1Auth />
+
+Scoped keys (`mcp_`) need `logs:read`. The API is read-only.
+
+<TierGated />
+
+Logs are included wherever error tracking is.
+
+## HIPAA locations
+
+Logs are **not available** on locations with HIPAA mode enabled: ingestion answers 403 and every read answers **403 `hipaa_restricted`**. A log body is free text and there is no safe way to strip protected health information from it. If a location's configuration cannot be read, reads answer **503 `privacy_unknown`** (retry) rather than assuming the location is not HIPAA.
+
+## Time windows
+
+Every list endpoint takes a window:
+
+| Param | Meaning |
+| --- | --- |
+| `from`, `to` | ISO 8601 or epoch milliseconds. `to` is exclusive and defaults to now. |
+| `range` | `15m`, `1h`, `6h`, `24h`, `7d` or `30d`, ending at `to`. Ignored when `from` is set. |
+
+The default is the last hour (24 hours for `/digest`). A window spans at most 30 days, the retention.
+
+## Filters
+
+| Param | Meaning |
+| --- | --- |
+| `levels` | Comma list of `trace`, `debug`, `info`, `warn`, `error`, `fatal`. |
+| `services` | Comma list of service names (OpenTelemetry `service.name`), at most 20. |
+| `q` | Body search, case-insensitive. Whitespace-separated terms must all match; `"double quotes"` keep a phrase. At most 5 terms. |
+| `attr` | Repeatable. `key=value` matches a string value or the JSON text of a number or boolean (`http.status_code=500`); a bare `key` matches records that have it. Resource attributes are `resource.<key>`. At most 5. |
+| `distinct_id`, `session_id` | Records linked to a person or session ([how records are linked](/logs/otlp-ingestion#linking-records-to-people-and-sessions)). |
+| `trace_id` | 32 hex characters. A filter only; there is no trace view. |
+| `pattern_id` | One pattern. |
+
+## Patterns
+
+A pattern id is `v1:` followed by a hash of the service, the level and the first 1 KB of the body with these masked: ISO dates and date-times, UUIDs, `0x` hex, bare hex runs of 8 or more characters, and numbers of 4 or more digits. **Short numbers are kept**, so `upstream status 200` and `upstream status 500` are different patterns while `order 12345 placed` and `order 67890 placed` are one.
+
+`new_only=1` keeps patterns with no record in the `lookback_days` (1 to 7, default 7) before `from`. The response's `baseline` says how much of that lookback is still within the 30-day retention (`complete`, `covered_days`): a pattern is only "new" against the part of the baseline that still exists.
+
+## Pagination and limits
+
+`GET /client/v1/logs` and the pattern occurrences return `next_cursor` when more records may exist; pass it back as `cursor`. `limit` is at most 500 (default 100). Bodies in lists are cut to `body_max_bytes` (default 2048) and flagged `body_truncated`; `GET /records/{uuid}` returns the whole body. A page is also bounded to about 4 MB; `meta.truncated` says it was cut, and `next_cursor` continues from the last record returned.
+
+## Endpoints
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /client/v1/logs` | Records, newest first |
+| `GET /client/v1/logs/records/{uuid}` | One record with its full body |
+| `GET /client/v1/logs/sparkline` | Counts per bucket and level, zero-filled |
+| `GET /client/v1/logs/services` | Services with record, error and warning counts |
+| `GET /client/v1/logs/attributes` | Attribute keys with counts |
+| `GET /client/v1/logs/attributes/values` | Top values of one key |
+| `GET /client/v1/logs/patterns` | Patterns, optionally only new ones |
+| `GET /client/v1/logs/patterns/{id}` | One pattern and its volume series |
+| `GET /client/v1/logs/patterns/{id}/occurrences` | The pattern's records |
+| `GET /client/v1/logs/digest` | A summary of the window, at most 64 KB |
+
+Full request and response schemas are in the Logs API reference.

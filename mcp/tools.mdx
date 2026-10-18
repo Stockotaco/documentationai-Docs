@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 281 tools across
-  29 scope families — with the scope each one needs and the
+  Every tool the Mythic MCP server exposes — 291 tools across
+  30 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 281 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 291 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -102,6 +102,23 @@ Grouped JavaScript exceptions, occurrences and digests.
 | `get_exception_issue`<br /><span style={{opacity: 0.7}}>Get Exception Issue</span> | `exceptions:read` | Detail header for ONE grouped error issue by its stable issue_id (from list_exception_issues): counts, first/last seen and volume series over the window. | `GET /client/v1/data/exceptions/issues/:id` |
 | `list_exception_occurrences`<br /><span style={{opacity: 0.7}}>List Exception Occurrences</span> | `exceptions:read` | Raw occurrences of ONE error issue — individual events with parsed stack frames, page URL and session_id, newest first. | `GET /client/v1/data/exceptions/issues/:id/occurrences` |
 | `get_exception_digest`<br /><span style={{opacity: 0.7}}>Get Exception Digest</span> | `exceptions:read` | Weekly error digest in one call: summary with week-over-week deltas, a daily bar series, the top issues, and issues NEW this week (new = not seen in the preceding `new_lookback_days`, default 90). | `GET /client/v1/data/exceptions/digest` |
+
+## Logs
+
+OpenTelemetry log records sent over OTLP: search, record detail, volume, services, attributes, patterns and a bounded digest.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `search_logs`<br /><span style={{opacity: 0.7}}>Search Logs</span> | `logs:read` | A client's log records, newest first, filtered by level, service, body text, attributes, distinct_id, session_id or trace_id. | `GET /client/v1/logs` |
+| `get_log_record`<br /><span style={{opacity: 0.7}}>Get Log Record</span> | `logs:read` | One log record by uuid (from search_logs, a pattern sample, or the digest) with its FULL body, attributes and resource attributes. | `GET /client/v1/logs/records/:uuid` |
+| `get_log_sparkline`<br /><span style={{opacity: 0.7}}>Get Log Volume</span> | `logs:read` | Log record counts per time bucket, split by level and zero-filled, for the filtered window. | `GET /client/v1/logs/sparkline` |
+| `list_log_services`<br /><span style={{opacity: 0.7}}>List Log Services</span> | `logs:read` | Services (OTel service.name) that sent logs in the window, with record, error and warning counts and last-seen time. | `GET /client/v1/logs/services` |
+| `list_log_attributes`<br /><span style={{opacity: 0.7}}>List Log Attributes</span> | `logs:read` | Attribute keys present on log records in the window, with how many records carry each. | `GET /client/v1/logs/attributes` |
+| `list_log_attribute_values`<br /><span style={{opacity: 0.7}}>List Log Attribute Values</span> | `logs:read` | Top values of ONE attribute key in the window with counts. | `GET /client/v1/logs/attributes/values` |
+| `list_log_patterns`<br /><span style={{opacity: 0.7}}>List Log Patterns</span> | `logs:read` | Log lines grouped into patterns: bodies that differ only in volatile tokens (dates, UUIDs, hex ids, numbers of 4+ digits; short numbers like status codes are kept) share a pattern_id. | `GET /client/v1/logs/patterns` |
+| `get_log_pattern`<br /><span style={{opacity: 0.7}}>Get Log Pattern</span> | `logs:read` | One pattern by pattern_id: template, counts, first/last seen, sample, and its volume series over the window. | `GET /client/v1/logs/patterns/:id` |
+| `list_log_pattern_occurrences`<br /><span style={{opacity: 0.7}}>List Log Pattern Occurrences</span> | `logs:read` | The records of ONE pattern, paged exactly like search_logs (next_cursor). | `GET /client/v1/logs/patterns/:id/occurrences` |
+| `get_log_digest`<br /><span style={{opacity: 0.7}}>Get Log Digest</span> | `logs:read` | START HERE for logs. | `GET /client/v1/logs/digest` |
 
 ## Heatmaps
 

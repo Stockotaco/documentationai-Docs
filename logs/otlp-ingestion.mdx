@@ -1,0 +1,162 @@
+---
+title: Sending logs (OTLP)
+description: >-
+  Point an OpenTelemetry Collector or SDK log exporter at Mythic with the
+  location's publishable key.
+---
+
+## Endpoint
+
+```text
+POST https://mythic-analytics.gulp.workers.dev/i/v1/logs
+```
+
+`POST /v1/logs` on the same host is the same endpoint, for exporters that append the default path to a bare host.
+
+| | |
+| --- | --- |
+| Protocol | OTLP/HTTP. Body is an `ExportLogsServiceRequest`. |
+| Encoding | `Content-Type: application/x-protobuf` or `application/json` (OTLP/JSON) |
+| Compression | `Content-Encoding: gzip`, or none |
+| Auth | The location's **publishable key**: `Authorization: Bearer pk_…` or `X-Api-Key: pk_…` |
+| Response | `ExportLogsServiceResponse` in the request's encoding. Errors are a `google.rpc.Status` (`code`, `message`). |
+
+The endpoint is OTLP/HTTP compatible and tested against the official OpenTelemetry exporters. gRPC is not supported.
+
+<Callout kind="info">
+The publishable key is the same `pk_` key the browser snippet uses. It identifies the location; it is not a secret. A location receives logs only when its plan includes logs.
+</Callout>
+
+## OpenTelemetry Collector
+
+The `otlphttp` exporter appends `/v1/logs` to its `endpoint`, so give it the `/i` base:
+
+```yaml
+exporters:
+  otlphttp/mythic:
+    endpoint: https://mythic-analytics.gulp.workers.dev/i
+    headers:
+      Authorization: Bearer pk_your_publishable_key
+    compression: gzip
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/mythic]
+```
+
+## Environment variables
+
+Any OpenTelemetry SDK that reads the standard variables:
+
+```bash
+OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=http/protobuf
+OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=https://mythic-analytics.gulp.workers.dev/i/v1/logs
+OTEL_EXPORTER_OTLP_LOGS_HEADERS=Authorization=Bearer%20pk_your_publishable_key
+OTEL_SERVICE_NAME=checkout
+```
+
+## Python
+
+```python
+import logging
+from opentelemetry._logs import set_logger_provider
+from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry.sdk.resources import Resource
+
+provider = LoggerProvider(resource=Resource.create({"service.name": "checkout"}))
+provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter(
+    endpoint="https://mythic-analytics.gulp.workers.dev/i/v1/logs",
+    headers={"Authorization": "Bearer pk_your_publishable_key"},
+)))
+set_logger_provider(provider)
+logging.getLogger().addHandler(LoggingHandler(logger_provider=provider))
+
+log = logging.getLogger("checkout")
+log.error("payment declined", extra={"mythic.distinct_id": user_id, "order.id": order_id})
+```
+
+## Node.js
+
+```javascript
+import { LoggerProvider, BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
+import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
+import { resourceFromAttributes } from '@opentelemetry/resources';
+import { SeverityNumber } from '@opentelemetry/api-logs';
+
+const provider = new LoggerProvider({
+  resource: resourceFromAttributes({ 'service.name': 'checkout' }),
+  processors: [
+    new BatchLogRecordProcessor(new OTLPLogExporter({
+      url: 'https://mythic-analytics.gulp.workers.dev/i/v1/logs',
+      headers: { Authorization: 'Bearer pk_your_publishable_key' },
+    })),
+  ],
+});
+
+const logger = provider.getLogger('checkout');
+logger.emit({
+  severityNumber: SeverityNumber.ERROR,
+  severityText: 'ERROR',
+  body: 'payment declined',
+  attributes: { 'mythic.distinct_id': userId, 'order.id': orderId },
+});
+```
+
+Flush the provider (`await provider.forceFlush()`) before a short-lived process exits, or the last batch is lost.
+
+## Linking records to people and sessions
+
+Set one of these attributes on the log record (or on the resource) to make the record filterable by person or session, and to have it deleted with the person on an erasure request:
+
+| Field | Attributes read, first match wins |
+| --- | --- |
+| `distinct_id` | `mythic.distinct_id`, `distinct_id`, `user.id`, `enduser.id` |
+| `session_id` | `mythic.session_id`, `$session_id`, `session.id` |
+
+Use the same `distinct_id` the Mythic SDK or `/ingest` uses for that person. The original attributes are kept as sent.
+
+`service` is the resource's `service.name`, falling back to a record attribute `service.name`, then `unknown`.
+
+## Levels
+
+The level comes from `severityNumber`: 1–4 `trace`, 5–8 `debug`, 9–12 `info`, 13–16 `warn`, 17–20 `error`, 21–24 `fatal`. When it is unset, from `severityText`: `warning` is `warn`, `err` is `error`, `critical`, `emerg` and `alert` are `fatal`, and anything unrecognized is `info`.
+
+## Limits
+
+| Limit | Value |
+| --- | --- |
+| Request body on the wire | 1 MB (413) |
+| Request body after gzip | 4 MB (413) |
+| Records per request | 1,000 (400) |
+| Records per location | 20,000 per 10 seconds (429), a burst guard |
+| Record body | 32 KB; longer bodies are cut and get `mythic.body_truncated = true` |
+| Attribute key / value | 256 bytes / 4 KB |
+| Attributes per record or resource | 128; extra keys are dropped and counted in `mythic.attributes_dropped`. Person, session and `service.name` keys are always kept, wherever they appear |
+| Service, scope, event name, severity text | 256 bytes each |
+| Whole record | 64 KB; a larger record is rejected |
+| Record age | 30 days; older records are rejected |
+| Clock skew | A timestamp more than 60 seconds in the future is replaced by the receive time |
+
+Sizes are UTF-8 bytes, and cuts never split a character. A missing timestamp falls back to the observed time, then to the receive time.
+
+## Responses
+
+| Status | When | Retry |
+| --- | --- | --- |
+| 200 | Accepted. `partialSuccess.rejectedLogRecords` counts rejected records and `errorMessage` lists reason codes (`too_old`, `record_too_large`), never record content. | No |
+| 400 | Malformed body, or more than 1,000 records | No |
+| 401 / 403 | Missing or unknown key, inactive location, plan without logs (or no plan), HIPAA location | No |
+| 413 / 415 | Body too large; unsupported content type or encoding | No |
+| 429 | Too many records | Yes, after `Retry-After` |
+| 503 | Temporarily unable to accept logs | Yes, after `Retry-After` |
+
+## Delivery and retention
+
+Delivery is **at least once**: a record is stored once it is accepted, and a client retry after a 503, or a redelivery inside Mythic, can store it twice. Counts are of received records. Records are kept **30 days**.
+
+Logs are **not accepted** for locations with HIPAA mode enabled (403).

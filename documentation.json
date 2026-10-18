@@ -465,6 +465,33 @@
             ]
           },
           {
+            "tab": "Logs",
+            "icon": "scroll-text",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "logs/overview",
+                    "icon": "file-text"
+                  },
+                  {
+                    "title": "Sending logs (OTLP)",
+                    "path": "logs/otlp-ingestion",
+                    "icon": "upload"
+                  }
+                ]
+              },
+              {
+                "group": "Logs",
+                "icon": "scroll-text",
+                "openapi": "openapi/logs.yaml"
+              }
+            ]
+          },
+          {
             "tab": "Event Contracts",
             "icon": "file-check",
             "groups": [
