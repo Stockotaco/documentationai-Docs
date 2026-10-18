@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 291 tools across
+  Every tool the Mythic MCP server exposes — 293 tools across
   30 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 291 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 293 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -52,6 +52,7 @@ Person profiles, identities, merges and merge warnings.
 | `list_identities`<br /><span style={{opacity: 0.7}}>List Identities</span> | `people:read` | Bulk identity mappings (identity_value -&gt; canonical person_id) for agencies maintaining their own identity graph. | `GET /client/v1/data/identities` |
 | `list_merges`<br /><span style={{opacity: 0.7}}>List Person Merges</span> | `people:read` | Authoritative person-merge history for this client (source_person_id merged into target_person_id, with reason and timestamp), oldest first. | `GET /client/v1/data/merges` |
 | `get_person_merges`<br /><span style={{opacity: 0.7}}>Get Person Merges</span> | `people:read` | Merge history touching ONE person — every merge where they were the source or the target, oldest first. | `GET /client/v1/data/people/:personId/merges` |
+| `get_person_logs`<br /><span style={{opacity: 0.7}}>Get Person Logs</span> | `people:read` + `logs:read` | One person's server log records across ALL of their identities (every distinct_id, user_id and email the identity graph links to them, up to 50; meta.identities_omitted &gt; 0 says some were left out). | `GET /client/v1/data/people/:personId/logs` |
 | `list_merge_warnings`<br /><span style={{opacity: 0.7}}>List Merge Warnings</span> | `people:read` | Merges the identity processor REFUSED or flagged as suspicious — each row names the event, the identity value, and the reason. | `GET /client/v1/data/merge-warnings` |
 
 ## Events & Explore
@@ -91,6 +92,7 @@ Compact, LLM-ready timelines of recorded visitor sessions (no PII).
 | --- | --- | --- | --- |
 | `list_replays`<br /><span style={{opacity: 0.7}}>List Replays</span> | `replays:read` | Index of sessions that have a screen recording, with interaction counters merged in where available (duration, clicks, keypresses, console_errors, network_count, last_url). | `GET /client/v1/data/replays` |
 | `get_session_timeline`<br /><span style={{opacity: 0.7}}>Get Session Timeline</span> | `replays:read` | Compact, chronological timeline of one visitor session for the active client — page journey, dwell time, form submissions, field inputs, identify, custom events and errors. | `GET /client/v1/data/replays/:sessionId/timeline` |
+| `get_session_logs`<br /><span style={{opacity: 0.7}}>Get Session Logs</span> | `replays:read` + `logs:read` | One visitor session's server log records: records the producer sent with this session's id as mythic.session_id (the browser's Mythic session id, forwarded with each request). | `GET /client/v1/data/replays/:sessionId/logs` |
 
 ## Error Tracking
 

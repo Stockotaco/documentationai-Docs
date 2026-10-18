@@ -362,6 +362,159 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/RateLimited"
+  /people/{personId}/logs:
+    get:
+      summary: List a person's logs
+      operationId: getPersonLogs
+      description: >
+        Server log records (sent over OTLP to `POST /i/v1/logs`) for one
+        person, across ALL of their identities. The person is resolved through
+        the identity graph (a merged-away id resolves to the surviving person,
+        and `resolved_from` says so), then the records whose `distinct_id` is
+        any of the person's identity values are returned: every `distinct_id`,
+        `user_id`, `email` and other identity the graph links to them, plus the
+        canonical person id, at most 50. Device ids are never queried.
+        `meta.identities_queried`, `identities_total` and `identities_omitted`
+        say how many were used; values over the cap, or containing a comma or
+        longer than 256 bytes, are omitted and counted.
+
+
+        Logs are read through the graph at query time and never create or
+        change identity links. A record appears here only when its producer
+        sent one of the person's identity values (see
+        [Link logs to people and sessions](/logs/otlp-ingestion#link-logs-to-people-and-sessions));
+        records carrying only a session id do not appear on the person in this
+        version, use `GET /replays/{sessionId}/logs`.
+
+
+        Newest first by default, keyset-paged: pass `next_cursor` back as
+        `cursor`, and keep the first page's `meta.from`/`meta.to` as
+        `from`/`to` so later pages read the same window. Default window 7 days,
+        at most 30 (the retention).
+
+
+        Needs the **Logs** feature in the plan (`402 feature_not_in_plan`)
+        and, for a scoped `mcp_` key, BOTH `people:read` and `logs:read`
+        (`403 insufficient_scope` names the missing one). HIPAA locations are
+        refused (`403 hipaa_restricted`); a location whose configuration
+        cannot be read answers `503 privacy_unknown`, retryable. Shares the
+        logs read budget (120 requests per minute per location) with
+        `/client/v1/logs`.
+      parameters:
+        - $ref: "#/components/parameters/PersonId"
+        - $ref: "#/components/parameters/LocationId"
+        - name: from
+          in: query
+          required: false
+          description: Window start, ISO 8601 or epoch milliseconds. Default `range` (7 days) before `to`.
+          schema: { type: string }
+        - name: to
+          in: query
+          required: false
+          description: Window end, exclusive. Default now.
+          schema: { type: string }
+        - name: range
+          in: query
+          required: false
+          description: Preset window ending at `to`. Ignored when `from` is set. Default `7d`.
+          schema: { type: string, enum: [15m, 1h, 6h, 24h, 7d, 30d], default: 7d }
+        - name: levels
+          in: query
+          required: false
+          description: "Comma list of levels: trace, debug, info, warn, error, fatal. Use `warn,error,fatal` for warnings and worse."
+          schema: { type: string, example: "warn,error,fatal" }
+        - name: services
+          in: query
+          required: false
+          description: Comma list of service names, at most 20.
+          schema: { type: string }
+        - name: q
+          in: query
+          required: false
+          description: Case-insensitive body search, at most 5 terms (all must match).
+          schema: { type: string }
+        - name: attr
+          in: query
+          required: false
+          description: Repeatable attribute filter, `key=value` or a bare `key`. At most 5.
+          style: form
+          explode: true
+          schema: { type: array, items: { type: string } }
+        - name: trace_id
+          in: query
+          required: false
+          description: 32 hex characters.
+          schema: { type: string }
+        - name: received_before
+          in: query
+          required: false
+          description: Only records Mythic accepted strictly before this instant.
+          schema: { type: string }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+        - name: order
+          in: query
+          required: false
+          schema: { type: string, enum: [desc, asc], default: desc }
+        - name: cursor
+          in: query
+          required: false
+          description: "`next_cursor` from the previous page."
+          schema: { type: string }
+        - name: body_max_bytes
+          in: query
+          required: false
+          schema: { type: integer, minimum: 64, maximum: 32768, default: 2048 }
+      responses:
+        "200":
+          description: A page of the person's log records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PersonLogsResponse"
+        "400":
+          description: >
+            A parameter is invalid (`error.code` names it), `distinct_id`,
+            `distinct_ids` or `session_id` was passed (`param_not_allowed`:
+            the person fixes them), or the agency key named no location.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          description: "`feature_not_in_plan`: the plan does not include Logs."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: >
+            `insufficient_scope` (an `mcp_` key without both `people:read` and
+            `logs:read`), `hipaa_restricted`, or `location_not_linked`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          description: "`query_failed` or `upstream_error`: the log or person store did not answer."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: "`privacy_unknown`: the location's configuration could not be read. Retry."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /identities:
     get:
       summary: List identity mappings
@@ -1010,6 +1163,53 @@ components:
               type: string
               description: The canonical person the requested id was merged into.
               example: 8f3c1e00-4a2b-4c9d-9e11-1a2b3c4d5e6f
+    PersonLogRecord:
+      type: object
+      description: One OTLP log record, the same shape as `GET /client/v1/logs` returns.
+      properties:
+        uuid: { type: string }
+        timestamp: { type: string, format: date-time, description: "The producer's event time." }
+        observed_at: { type: string, format: date-time }
+        received_at: { type: string, format: date-time, description: When Mythic accepted the record. }
+        level: { type: string, enum: [trace, debug, info, warn, error, fatal] }
+        severity_number: { type: integer }
+        severity_text: { type: string }
+        service: { type: string, example: hc-api }
+        scope_name: { type: string }
+        scope_version: { type: string }
+        event_name: { type: string }
+        body: { type: string }
+        body_bytes: { type: integer }
+        body_truncated: { type: boolean }
+        attributes: { type: object, additionalProperties: true }
+        resource_attributes: { type: object, additionalProperties: true }
+        trace_id: { type: string, nullable: true }
+        span_id: { type: string, nullable: true }
+        distinct_id: { type: string, nullable: true, description: Which of the person's identities matched. }
+        session_id: { type: string, nullable: true }
+        pattern_id: { type: string }
+    PersonLogsResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            person_id: { type: string, description: The canonical person id the identities came from. }
+            resolved_from: { type: string, description: Present when the requested id was merged into person_id. }
+            records: { type: array, items: { $ref: "#/components/schemas/PersonLogRecord" } }
+            next_cursor: { type: string, nullable: true }
+            meta:
+              type: object
+              properties:
+                from: { type: string, format: date-time }
+                to: { type: string, format: date-time }
+                order: { type: string, enum: [desc, asc] }
+                limit: { type: integer }
+                truncated: { type: boolean, description: The ~4 MB response bound cut this page. }
+                identities_queried: { type: integer, description: Identity values the records were matched against. }
+                identities_total: { type: integer, description: "The person's distinct identity values, device ids excluded, plus the person id." }
+                identities_omitted: { type: integer, description: "identities_total - identities_queried: over the cap of 50, or not transportable (a comma, or over 256 bytes)." }
     ErrorResponse:
       type: object
       properties:

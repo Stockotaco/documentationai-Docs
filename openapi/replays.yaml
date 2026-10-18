@@ -207,6 +207,17 @@ paths:
         metadata. `sessionId` must be a UUIDv7 (all recording session ids are).
         Feed `data` to a model to summarize what the visitor did and where they
         dropped off.
+
+
+        With `include=logs`, each log row keeps its absolute time (`t` with
+        milliseconds, and `timestamp`). Inside the timeline (from its first to
+        its last event) it also carries `seconds_from_start`, measured from the
+        same origin as the events, and `in_recording: true`. A log before the
+        first or after the last event is still listed, with
+        `in_recording: false` and no `seconds_from_start`: it is never clamped
+        onto the session's first or last moment. Event times come from the
+        visitor's browser, log times from your server, so a skewed server clock
+        shifts its log rows.
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
@@ -224,6 +235,25 @@ paths:
             type: integer
             default: 500
             maximum: 2000
+        - name: include
+          in: query
+          required: false
+          description: >
+            `logs` merges the session's server log records into `data` (rows
+            with `event: log`; up to 500, and never past 2000 rows in total).
+            They are added only when the key may read logs (`logs:read` for an
+            `mcp_` key), the plan includes Logs and the location is not HIPAA.
+            Otherwise the timeline is returned without them and `meta.logs`
+            says why. Without `include` the response is unchanged.
+          schema:
+            type: string
+            enum: [logs]
+        - name: log_levels
+          in: query
+          required: false
+          description: "With `include=logs`: comma list of levels to merge, e.g. `warn,error,fatal`. Default all."
+          schema:
+            type: string
       responses:
         "200":
           description: Session timeline
@@ -231,10 +261,136 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReplayTimelineResponse"
+        "400":
+          description: "`invalid_session_id`, `invalid_include` or `invalid_level` (a bad `log_levels`)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /replays/{sessionId}/logs:
+    get:
+      summary: List a session's logs
+      operationId: getReplayLogs
+      description: >
+        Server log records (sent over OTLP to `POST /i/v1/logs`) whose
+        `session_id` is this session: what your backend logged for the
+        visitor's requests, when it forwards the browser's Mythic session id
+        (see [Link logs to people and sessions](/logs/otlp-ingestion#link-logs-to-people-and-sessions)).
+        Works for any session id, recorded or not. Oldest first by default,
+        keyset-paged with `next_cursor`.
+
+
+        The search window is the session id's embedded time minus 24 hours to
+        plus 48 hours (`meta.from`/`meta.to`). The id is minted from the
+        visitor's clock, so this is where to look, not the session's start.
+
+
+        Needs the **Logs** feature in the plan (`402 feature_not_in_plan`) and,
+        for a scoped `mcp_` key, BOTH `replays:read` and `logs:read`. HIPAA
+        locations are refused (`403 hipaa_restricted`); a location whose
+        configuration cannot be read answers `503 privacy_unknown`, retryable.
+        Shares the logs read budget (120 requests per minute per location)
+        with `/client/v1/logs`.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - name: sessionId
+          in: path
+          required: true
+          description: The session id (UUIDv7).
+          schema:
+            type: string
+        - name: levels
+          in: query
+          required: false
+          description: "Comma list of levels, e.g. `warn,error,fatal`."
+          schema: { type: string }
+        - name: services
+          in: query
+          required: false
+          description: Comma list of service names, at most 20.
+          schema: { type: string }
+        - name: q
+          in: query
+          required: false
+          description: Case-insensitive body search, at most 5 terms (all must match).
+          schema: { type: string }
+        - name: attr
+          in: query
+          required: false
+          description: Repeatable attribute filter, `key=value` or a bare `key`. At most 5.
+          style: form
+          explode: true
+          schema: { type: array, items: { type: string } }
+        - name: trace_id
+          in: query
+          required: false
+          schema: { type: string }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 500, default: 200 }
+        - name: order
+          in: query
+          required: false
+          schema: { type: string, enum: [asc, desc], default: asc }
+        - name: cursor
+          in: query
+          required: false
+          description: "`next_cursor` from the previous page."
+          schema: { type: string }
+        - name: body_max_bytes
+          in: query
+          required: false
+          schema: { type: integer, minimum: 64, maximum: 32768, default: 2048 }
+      responses:
+        "200":
+          description: A page of the session's log records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionLogsResponse"
+        "400":
+          description: >
+            `invalid_session_id` (not a UUIDv7), another invalid parameter, or
+            `param_not_allowed` for `from`, `to`, `range`, `session_id`,
+            `distinct_id` and `distinct_ids` (the session fixes them).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          description: "`feature_not_in_plan`: the plan does not include Logs."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "`insufficient_scope`, `hipaa_restricted` or `location_not_linked`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          description: "`query_failed`: the log store did not answer."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: "`privacy_unknown`: the location's configuration could not be read. Retry."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   securitySchemes:
     BearerAuth:
@@ -243,7 +399,9 @@ components:
       description: >
         Agency key (`ak_`) or location secret key (`sk_`) as a bearer token.
         Format: `Bearer ak_...` or `Bearer sk_...`.
-        Scoped keys (`mcp_`) are accepted too and need `replays:read`. See [Using an mcp_ key over HTTP](/mcp/authentication).
+        Scoped keys (`mcp_`) are accepted too and need `replays:read`; the
+        session logs route, and `include=logs` on the timeline, also need
+        `logs:read`. See [Using an mcp_ key over HTTP](/mcp/authentication).
   parameters:
     LocationIdHeader:
       name: X-Location-Id
@@ -571,20 +729,46 @@ components:
       properties:
         t:
           type: string
-          description: Event timestamp (UTC).
+          description: "Event timestamp (UTC), `YYYY-MM-DD HH:MM:SS`; log rows add milliseconds."
         seconds_from_start:
-          type: integer
-          description: Seconds elapsed since the first event in the session.
+          type: number
+          description: >
+            Seconds elapsed since the first event in the session (whole seconds
+            for events, 0.1 s for log rows). Absent on a log row outside the
+            timeline (`in_recording: false`).
+        timestamp:
+          type: string
+          format: date-time
+          description: Log rows only. The record's absolute time.
+        in_recording:
+          type: boolean
+          description: Log rows only. True when the log falls between the first and last event.
+        level:
+          type: string
+          description: Log rows only.
+        service:
+          type: string
+          description: Log rows only.
+        uuid:
+          type: string
+          description: Log rows only. The log record id (`GET /client/v1/logs/records/{uuid}` has the full body).
+        trace_id:
+          type: string
+          nullable: true
+          description: Log rows only.
         event:
           type: string
           example: $pageview
-          description: Event type ($pageview, $pageleave, form_submitted, input_captured, $identify, custom_event).
+          description: Event type ($pageview, $pageleave, form_submitted, input_captured, $identify, custom_event), or `log` for a merged server log record.
         path:
           type: string
           description: URL path the event occurred on.
         detail:
           type: string
-          description: Compact, human-readable summary of the event (no PII).
+          description: >
+            Compact, human-readable summary of the event (no PII). For a log
+            row, `<level> <service>: <body>` with the body cut to 200 bytes;
+            log bodies are your server's own text and are not scrubbed.
     ReplayTimelineResponse:
       type: object
       properties:
@@ -602,6 +786,56 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TimelineEvent"
+        meta:
+          type: object
+          description: Present only with `include=logs`.
+          properties:
+            logs:
+              type: string
+              enum: [ok, forbidden, not_entitled, unavailable]
+              description: >
+                `ok`: merged. `forbidden`: the key lacks `logs:read`.
+                `not_entitled`: the plan has no Logs. `unavailable`: HIPAA,
+                unreadable configuration, the logs read budget, or a failed log
+                read. Only `ok` carries log rows.
+            logs_count: { type: integer }
+            logs_truncated: { type: boolean, description: More logs exist than were merged. }
+    SessionLogsResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: object
+          properties:
+            session_id: { type: string }
+            records:
+              type: array
+              description: Log records, the same shape as `GET /client/v1/logs` returns.
+              items:
+                type: object
+                properties:
+                  uuid: { type: string }
+                  timestamp: { type: string, format: date-time }
+                  received_at: { type: string, format: date-time }
+                  level: { type: string, enum: [trace, debug, info, warn, error, fatal] }
+                  service: { type: string }
+                  body: { type: string }
+                  body_truncated: { type: boolean }
+                  attributes: { type: object, additionalProperties: true }
+                  resource_attributes: { type: object, additionalProperties: true }
+                  trace_id: { type: string, nullable: true }
+                  distinct_id: { type: string, nullable: true }
+                  session_id: { type: string }
+                  pattern_id: { type: string }
+            next_cursor: { type: string, nullable: true }
+            meta:
+              type: object
+              properties:
+                from: { type: string, format: date-time, description: Scan window start (id time - 24 h). }
+                to: { type: string, format: date-time, description: Scan window end (id time + 48 h). }
+                order: { type: string }
+                limit: { type: integer }
+                truncated: { type: boolean }
     ErrorResponse:
       type: object
       properties:

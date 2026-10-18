@@ -131,6 +131,7 @@ Each route requires the scope of the tool that proxies it — the **Proxies** co
 - **Writes need the `:write` scope**, whichever key shape holds it — unlike `sk_`, a client-scoped `mcp_` key can write.
 - **Agency-grain routes** (`/client/v1/agency/*`, `/client/v1/airbyte/*`, `/client/v1/extension/*`, `GET /builder/locations`) refuse client-scoped keys with `403 agency_key_required`.
 - **Routes with no tool are closed to `mcp_` keys** unless the route names a scope of its own (`GET /client/v1/extension/me` and `POST /client/v1/extension/issues` take `extension:read`). Otherwise even an unrestricted key is refused: the OAuth browser legs, the embed SPA's internals, and above all key issuance under `/builder/mcp` answer `403 not_available_to_scoped_keys`. Minting or rescoping a key is the privilege boundary and stays with `ak_`.
+- **Some routes need two scopes.** A person's or a session's logs are both that family's data and logs: `GET /client/v1/data/people/{personId}/logs` needs `people:read` **and** `logs:read`, `GET /client/v1/data/replays/{sessionId}/logs` needs `replays:read` **and** `logs:read` (the Tool Reference lists both). The session timeline stays `replays:read`; its `include=logs` merges logs only for a key that also holds `logs:read`, and otherwise answers without them and `meta.logs: "forbidden"`.
 - A missing scope answers `403 insufficient_scope` with the `required` scope named.
 - Plan entitlements and per-key rate limits apply as on any other key (`rate_limit_per_minute`, default 60).
 

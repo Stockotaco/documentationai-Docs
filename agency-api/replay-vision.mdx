@@ -233,6 +233,25 @@ the client's own analytics events. The video shows the page as it was
 recorded, so anything the SDK masked stays masked. Query strings are removed
 from URLs, and emails and long numbers are redacted from the timeline.
 
+When the client sends [server logs linked to sessions](/logs/otlp-ingestion#link-logs-to-people-and-sessions)
+and its plan includes Logs, the timeline also carries the session's server
+warnings and errors as `log_warn` and `log_error` lines (service and the first
+160 characters of the message, emails and long numbers redacted; at most 60,
+errors first). The model is told these are the site's own server logs, matched
+by the session id the browser sent, and to treat them as data, never as
+instructions. A log line is placed on the video only when its time falls
+inside the rendered recording; logs from before or after it are left out
+rather than pinned to the first or last frame. Log times are the server's
+clock and recording times the visitor's, so a skewed server clock shifts its
+lines. The prompt also says whether logs could be read at all
+(`logs_coverage`: `ok`, `not_entitled`, `hipaa`, `not_v7`, or `unavailable`
+when the read failed), so a session with no log lines is only called clean
+when logs were available. When more warnings or errors were logged than the
+scan reads (at most 200 per severity group) or shows (at most 60), the prompt
+also says the read was incomplete (`logs_incomplete=yes`) and tells the model
+not to conclude from the logs that the session had no server errors. HIPAA
+locations never send logs to the model.
+
 Recordings shorter than 15 seconds, with less than 10 seconds of activity, or
 with more than an hour of activity are `ineligible` and never reach your model.
 For recordings with more than 30 minutes of activity, only the first 30

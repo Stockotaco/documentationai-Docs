@@ -67,7 +67,9 @@ The default is the last hour (24 hours for `/digest`). A window spans at most 30
 | `services` | Comma list of service names (OpenTelemetry `service.name`), at most 20. |
 | `q` | Body search, case-insensitive. Whitespace-separated terms must all match; `"double quotes"` keep a phrase. At most 5 terms. |
 | `attr` | Repeatable. `key=value` matches a string value or the JSON text of a number or boolean (`http.status_code=500`); a bare `key` matches records that have it. Resource attributes are `resource.<key>`. At most 5. |
-| `distinct_id`, `session_id` | Records linked to a person or session ([how records are linked](/logs/otlp-ingestion#linking-records-to-people-and-sessions)). |
+| `distinct_id`, `session_id` | Records linked to a person or session ([how records are linked](/logs/otlp-ingestion#link-logs-to-people-and-sessions)). |
+| `distinct_ids` | Records linked to any of these distinct ids: a comma list or the param repeated, at most 50 values of at most 256 bytes, none containing a comma. |
+| `received_before` | Records Mythic accepted strictly before this instant, so late-arriving records cannot change a read you have pinned. |
 | `trace_id` | 32 hex characters. A filter only; there is no trace view. |
 | `pattern_id` | One pattern. |
 
@@ -95,5 +97,15 @@ A pattern id is `v1:` followed by a hash of the service, the level and the first
 | `GET /client/v1/logs/patterns/{id}` | One pattern and its volume series |
 | `GET /client/v1/logs/patterns/{id}/occurrences` | The pattern's records |
 | `GET /client/v1/logs/digest` | A summary of the window, at most 64 KB |
+
+A person's and a session's logs are also read from the Data API, with the same records and gates (the plan must include Logs; a scoped `mcp_` key also needs `logs:read`):
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /client/v1/data/people/{personId}/logs` | The person's records across all of their identities, default 7 days |
+| `GET /client/v1/data/replays/{sessionId}/logs` | The session's records, oldest first |
+| `GET /client/v1/data/replays/{sessionId}/timeline?include=logs` | The session timeline with its records merged in |
+
+See [Link logs to people and sessions](/logs/otlp-ingestion#link-logs-to-people-and-sessions).
 
 Full request and response schemas are in the Logs API reference.

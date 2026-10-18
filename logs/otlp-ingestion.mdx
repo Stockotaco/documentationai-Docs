@@ -109,18 +109,83 @@ logger.emit({
 
 Flush the provider (`await provider.forceFlush()`) before a short-lived process exits, or the last batch is lost.
 
-## Linking records to people and sessions
+## Link logs to people and sessions
 
-Set one of these attributes on the log record (or on the resource) to make the record filterable by person or session, and to have it deleted with the person on an erasure request:
+A log record is linked to a person and a session by two attributes your code sets. Mythic reads them at ingestion; nothing else about the record changes.
 
 | Field | Attributes read, first match wins |
 | --- | --- |
 | `distinct_id` | `mythic.distinct_id`, `distinct_id`, `user.id`, `enduser.id` |
 | `session_id` | `mythic.session_id`, `$session_id`, `session.id` |
 
-Use the same `distinct_id` the Mythic SDK or `/ingest` uses for that person. The original attributes are kept as sent.
+Set them on the log record (or on the resource). The original attributes are kept as sent. `service` is the resource's `service.name`, falling back to a record attribute `service.name`, then `unknown`.
 
-`service` is the resource's `service.name`, falling back to a record attribute `service.name`, then `unknown`.
+Linked records:
+
+- appear on the person: `GET /client/v1/data/people/{personId}/logs` ([Data API](/data-api/overview), People & Identity) returns the records whose `distinct_id` is **any** of the person's identities, read through the identity graph at query time,
+- appear on the session: `GET /client/v1/data/replays/{sessionId}/logs` (Session Replays), and merged into the session timeline with `?include=logs`,
+- reach Replay Vision scanners as warning and error lines on the recording's timeline,
+- are deleted with the person on an erasure request.
+
+### Send the browser's ids with each request
+
+Your server only knows the visitor's Mythic ids if the browser sends them. Read them from the SDK and add them as request headers, then copy them onto every log record written while handling that request.
+
+```javascript
+// Browser: next to your other API headers
+function mythicIds() {
+  const m = window.mythic;
+  try {
+    const distinctId = m && m.getDistinctId && m.getDistinctId();
+    const sessionId = m && m.getSessionId && m.getSessionId();
+    return {
+      // Before the SDK has loaded, the stub returns itself, not a string: skip it.
+      ...(typeof distinctId === 'string' && distinctId ? { 'X-Mythic-Distinct-Id': distinctId } : {}),
+      ...(typeof sessionId === 'string' && sessionId ? { 'X-Mythic-Session-Id': sessionId } : {}),
+    };
+  } catch {
+    return {};
+  }
+}
+
+fetch('/api/checkout', { method: 'POST', headers: { ...mythicIds(), 'Content-Type': 'application/json' }, body });
+```
+
+```javascript
+// Server (Node): keep the ids for the request, attach them to every record
+import { AsyncLocalStorage } from 'node:async_hooks';
+const request = new AsyncLocalStorage();
+
+app.use((req, res, next) => request.run({
+  distinctId: req.get('X-Mythic-Distinct-Id'),
+  sessionId: req.get('X-Mythic-Session-Id'),
+}, next));
+
+function log(severityNumber, body, attributes = {}) {
+  const ids = request.getStore() || {};
+  logger.emit({
+    severityNumber, body,
+    attributes: {
+      ...attributes,
+      ...(ids.distinctId ? { 'mythic.distinct_id': ids.distinctId } : {}),
+      ...(ids.sessionId ? { 'mythic.session_id': ids.sessionId } : {}),
+    },
+  });
+}
+```
+
+Never block a request waiting for the SDK: send no header when the ids are not there yet. A cross-origin API must allow both headers in its CORS `Access-Control-Allow-Headers`.
+
+### Rules
+
+- **Use the identity the SDK uses.** The person's logs are matched against the identity values Mythic holds for them: the SDK's distinct ids, and the `user_id` or `email` you pass to `identify()`. A server-side id that never reached Mythic (an internal database key, a JWT subject) matches nobody. If the browser header is missing on an authenticated request, send the same value you pass to `identify()`.
+- **Only the person who made the request.** Set `mythic.distinct_id` to the visitor whose request this is. A record about someone else, such as a lead or contact your system processes, must not carry their id as the requester's: it would show up on the wrong person.
+- **The ids are hints, not proof.** Anyone can send any header, so a record's link says what the client claimed, not who it was. Do not use it for authorization, and do not log secrets or other people's data on the strength of it.
+- **Session-only records do not appear on the person.** A record with `mythic.session_id` but no `mythic.distinct_id` shows on the session and its timeline, not on the person, in this version. Send both.
+- **Up to 50 identities per person.** A person with more identity values than that is read through the first 50 (`distinct_id`, `user_id` and `email` first). The response says how many were left out (`meta.identities_omitted`). Device ids are never used, and a value containing a comma, or longer than 256 bytes, cannot be matched.
+- **Logs never change identity.** A record does not create, merge or split people. It is read through the identity graph as it stands when you query.
+
+Server and browser clocks differ. On a session timeline, logs keep their own absolute time; see `GET /client/v1/data/replays/{sessionId}/timeline` in the [Data API](/data-api/overview).
 
 ## Levels
 

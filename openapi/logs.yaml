@@ -84,6 +84,8 @@ paths:
         - $ref: "#/components/parameters/Q"
         - $ref: "#/components/parameters/Attr"
         - $ref: "#/components/parameters/DistinctId"
+        - $ref: "#/components/parameters/DistinctIds"
+        - $ref: "#/components/parameters/ReceivedBefore"
         - $ref: "#/components/parameters/SessionId"
         - $ref: "#/components/parameters/TraceId"
         - $ref: "#/components/parameters/PatternIdFilter"
@@ -146,6 +148,8 @@ paths:
         - $ref: "#/components/parameters/Q"
         - $ref: "#/components/parameters/Attr"
         - $ref: "#/components/parameters/DistinctId"
+        - $ref: "#/components/parameters/DistinctIds"
+        - $ref: "#/components/parameters/ReceivedBefore"
         - $ref: "#/components/parameters/SessionId"
         - $ref: "#/components/parameters/TraceId"
         - $ref: "#/components/parameters/PatternIdFilter"
@@ -405,6 +409,8 @@ paths:
         - $ref: "#/components/parameters/Q"
         - $ref: "#/components/parameters/Attr"
         - $ref: "#/components/parameters/DistinctId"
+        - $ref: "#/components/parameters/DistinctIds"
+        - $ref: "#/components/parameters/ReceivedBefore"
         - $ref: "#/components/parameters/SessionId"
         - $ref: "#/components/parameters/TraceId"
         - $ref: "#/components/parameters/PatternIdFilter"
@@ -483,7 +489,26 @@ components:
     DistinctId:
       name: distinct_id
       in: query
+      description: Records linked to this distinct_id (from `mythic.distinct_id`, `distinct_id`, `user.id` or `enduser.id`).
       schema: { type: string }
+    DistinctIds:
+      name: distinct_ids
+      in: query
+      description: >-
+        Records linked to ANY of these distinct_ids: a comma list, or the param
+        repeated. At most 50 values of at most 256 bytes. A value cannot contain
+        a comma. To read one person's logs across all their identities, use
+        `GET /client/v1/data/people/{personId}/logs`, which fills this in from
+        the identity graph.
+      schema: { type: string, example: "user_42,jane@example.com" }
+    ReceivedBefore:
+      name: received_before
+      in: query
+      description: >-
+        Only records Mythic accepted strictly before this instant (ISO 8601 or
+        epoch milliseconds). Pins a read so that records arriving late cannot
+        change it.
+      schema: { type: string, example: "2026-10-18T11:00:00Z" }
     SessionId:
       name: session_id
       in: query
