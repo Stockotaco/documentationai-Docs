@@ -398,7 +398,7 @@ paths:
     post:
       summary: "Create Scout"
       operationId: "createReplayScout"
-      description: "Read-only text analysis using scanner-resolved BYOK model/key; extra spend, not scan quota. Max5 nondeleted per scanner. Bootstrap creation-minus7d. No scanner mutations, tools or additional video scans."
+      description: "Read-only text analysis using scanner-resolved BYOK model/key; extra spend, not scan quota. Max5 nondeleted per scanner. Bootstrap creation-minus7d. No scanner mutations, tools or additional video scans. With sources [observations, logs] (or template friction_trace) the Scout also reads server logs and needs logs:read (mcp_ keys), the Logs plan feature and a non-HIPAA client."
       requestBody:
         required: true
         content:
@@ -406,6 +406,12 @@ paths:
             schema:
               allOf: [{"$ref":"#/components/schemas/ScoutInput"},{"type":"object","required":["name"]}]
       responses:
+        402:
+          $ref: "#/components/responses/LogsPaymentRequired"
+        403:
+          $ref: "#/components/responses/LogsForbidden"
+        503:
+          $ref: "#/components/responses/LogsUnavailable"
         201:
           description: "Created"
           content:
@@ -447,7 +453,7 @@ paths:
     patch:
       summary: "Update Scout"
       operationId: "updateReplayScout"
-      description: "Merged configuration; scanner/template immutable, unknown fields rejected. Pause cancels pending runs, finish rechecks lifecycle. Version conflict 409."
+      description: "Merged configuration; scanner/template/sources immutable (422 sources_immutable), unknown fields rejected. Pause cancels pending runs, finish rechecks lifecycle. Version conflict 409. Any PATCH of a Scout that reads server logs re-checks logs:read, the Logs plan feature and privacy; a pause-only PATCH ({enabled:false}) skips the plan and privacy checks."
       requestBody:
         required: true
         content:
@@ -460,6 +466,12 @@ paths:
                   type: "string"
                   minLength: 1
                   maxLength: 120
+                sources:
+                  type: "array"
+                  description: "Immutable: may only restate the Scout's current sources; a change is 422 sources_immutable."
+                  items:
+                    type: "string"
+                    enum: ["observations","logs"]
                 instructions:
                   type: "string"
                   minLength: 1
@@ -489,6 +501,12 @@ paths:
           $ref: "#/components/responses/BadRequest"
         404:
           $ref: "#/components/responses/NotFound"
+        402:
+          $ref: "#/components/responses/LogsPaymentRequired"
+        403:
+          $ref: "#/components/responses/LogsForbidden"
+        503:
+          $ref: "#/components/responses/LogsUnavailable"
         409:
           $ref: "#/components/responses/BadRequest"
         422:
@@ -569,7 +587,7 @@ paths:
     get:
       summary: "List retained Scout reports"
       operationId: "listReplayScoutReports"
-      description: "Current roster only; archived source scanner/scout IDs filter reports even after deletion. Report created_at UTC dates; newest-first keyset."
+      description: "Current roster only; archived source scanner/scout IDs filter reports even after deletion. Report created_at UTC dates; newest-first keyset. Logs-sensitive rows the caller may not read stay in the page with summary_md empty and restricted {reason, required?}."
       parameters: [{"$ref":"#/components/parameters/LocationId"},{"$ref":"#/components/parameters/ScannerId"},{"name":"scout_id","in":"query","schema":{"type":"string","format":"uuid"}},{"$ref":"#/components/parameters/DateFrom"},{"$ref":"#/components/parameters/DateTo"},{"$ref":"#/components/parameters/Limit"},{"$ref":"#/components/parameters/Cursor"}]
       responses:
         200:
@@ -595,8 +613,12 @@ paths:
     get:
       summary: "Get frozen Scout report"
       operationId: "getReplayScoutReport"
-      description: "Full frozen sections/evidence/coverage/cost/delivery. Server builds epoch-ms links; deleted observations retain archival replay fallback but video expires after30d. Reports retained after Scout/scanner deletion with no automatic TTL. Delivery at most once per channel; uncertain sends never resent."
+      description: "Full frozen sections/evidence/coverage/cost/delivery. Server builds epoch-ms links; deleted observations retain archival replay fallback but video expires after30d. Reports retained after Scout/scanner deletion with no automatic TTL. Delivery at most once per channel; uncertain sends never resent. A logs-sensitive report (filed by a Scout that reads server logs) needs logs:read for mcp_ keys and a non-HIPAA client: 403 insufficient_scope/hipaa_restricted, 503 privacy_unknown."
       responses:
+        403:
+          $ref: "#/components/responses/LogsForbidden"
+        503:
+          $ref: "#/components/responses/LogsUnavailable"
         200:
           description: "Report"
           content:
@@ -1020,8 +1042,14 @@ components:
           maxLength: 120
         template:
           type: "string"
-          enum: ["daily_digest","weekly_themes","root_cause","trend_watch","new_issue_watch","custom"]
+          enum: ["daily_digest","weekly_themes","root_cause","trend_watch","new_issue_watch","custom","friction_trace"]
           default: "custom"
+        sources:
+          type: "array"
+          description: "Create only; immutable. [observations] (default) or [observations, logs] to also read server logs. friction_trace requires logs."
+          items:
+            type: "string"
+            enum: ["observations","logs"]
         instructions:
           type: "string"
           minLength: 1
@@ -1078,6 +1106,12 @@ components:
           type: "string"
           format: "uuid"
           nullable: true
+        sources:
+          type: "array"
+          description: "Present only on Scouts that read server logs: [observations, logs]."
+          items:
+            type: "string"
+            enum: ["observations","logs"]
         current_run:
           type: "object"
           nullable: true
@@ -1117,6 +1151,32 @@ components:
           type: "array"
           items:
             type: "string"
+        sources:
+          type: "array"
+          items:
+            type: "string"
+            enum: ["observations","logs"]
+    ScoutLogEvidence:
+      type: "object"
+      description: "Server-built citation of a frozen server log sample."
+      properties:
+        log_uuid: { type: string }
+        location_id: { type: string }
+        session_id: { type: string, nullable: true }
+        distinct_id: { type: string, nullable: true }
+        pattern_id: { type: string }
+        service: { type: string }
+        level: { type: string }
+        timestamp: { type: string, format: date-time }
+        excerpt: { type: string, maxLength: 500 }
+        log_url: { type: string, description: "Agency-app Logs page for the record." }
+        archival: { type: boolean }
+    ScoutReportRestriction:
+      type: "object"
+      description: "Present when the caller may not read this logs-sensitive report; summary_md is empty and sections/evidence/log_evidence are null."
+      properties:
+        reason: { type: string, enum: [insufficient_scope, hipaa_restricted, privacy_unknown] }
+        required: { type: string, description: "The missing scope (logs:read) for insufficient_scope." }
     ScoutEvidence:
       type: "object"
       properties:
@@ -1205,7 +1265,7 @@ components:
           description: "True only after provider analysis, never for deterministic empty-input report."
         coverage:
           type: "object"
-          description: "Complete-window aggregates vs bounded oldest-first model inputs. 100 new/2KB each/64KB all and 64KB collective exact provenance, historical reusable and prior 3 reports; not exhaustive evidence. new_truncated/historical_truncated/provenance_truncated disclose backlog left for later runs; version_boundaries is true only when cohorts differ."
+          description: "Complete-window aggregates vs bounded oldest-first model inputs. 100 new/2KB each/64KB all and 64KB collective exact provenance, historical reusable and prior 3 reports; not exhaustive evidence. new_truncated/historical_truncated/provenance_truncated disclose backlog left for later runs; version_boundaries is true only when cohorts differ. Scouts that read server logs add coverage.logs {status, patterns_total, citable_samples, non_v7_sample_sessions, window {received_from, received_before, retained_from, backlog_gap, first_run}, baseline {complete, covered_days}, sessions {requested, queried, omitted, not_v7, expired}, query_caps (rows beyond the queries' list and 5-per-session/60-overall pair limits), truncated (per-list counts dropped for the size budget), bytes}; counts are N of the M sampled sessions, never site-wide."
         provider:
           type: "string"
           nullable: true
@@ -1238,6 +1298,20 @@ components:
         publish_status:
           type: "string"
           enum: ["pending","published"]
+        sources:
+          type: "array"
+          description: "Logs-sensitive reports only."
+          items: { type: string, enum: [observations, logs] }
+        logs_sensitive:
+          type: "boolean"
+          description: "Present (true) only on reports filed by a Scout that reads server logs."
+        redacted_at:
+          type: "string"
+          format: "date-time"
+          nullable: true
+          description: "Logs-sensitive reports only: set when redacted for a personal-data erasure."
+        restricted:
+          $ref: "#/components/schemas/ScoutReportRestriction"
         sections:
           type: "array"
           items:
@@ -1260,10 +1334,19 @@ components:
                 type: "array"
                 items:
                   $ref: "#/components/schemas/ScoutEvidence"
+              log_evidence:
+                type: "array"
+                items:
+                  $ref: "#/components/schemas/ScoutLogEvidence"
         evidence:
           type: "array"
           items:
             $ref: "#/components/schemas/ScoutEvidence"
+        log_evidence:
+          type: "array"
+          description: "Logs-sensitive reports only."
+          items:
+            $ref: "#/components/schemas/ScoutLogEvidence"
         scout_snapshot:
           type: "object"
         scanner_snapshot:
@@ -1344,7 +1427,7 @@ components:
           description: "True only after provider analysis, never for deterministic empty-input report."
         coverage:
           type: "object"
-          description: "Complete-window aggregates vs bounded oldest-first model inputs. 100 new/2KB each/64KB all and 64KB collective exact provenance, historical reusable and prior 3 reports; not exhaustive evidence. new_truncated/historical_truncated/provenance_truncated disclose backlog left for later runs; version_boundaries is true only when cohorts differ."
+          description: "Complete-window aggregates vs bounded oldest-first model inputs. 100 new/2KB each/64KB all and 64KB collective exact provenance, historical reusable and prior 3 reports; not exhaustive evidence. new_truncated/historical_truncated/provenance_truncated disclose backlog left for later runs; version_boundaries is true only when cohorts differ. Scouts that read server logs add coverage.logs {status, patterns_total, citable_samples, non_v7_sample_sessions, window {received_from, received_before, retained_from, backlog_gap, first_run}, baseline {complete, covered_days}, sessions {requested, queried, omitted, not_v7, expired}, query_caps (rows beyond the queries' list and 5-per-session/60-overall pair limits), truncated (per-list counts dropped for the size budget), bytes}; counts are N of the M sampled sessions, never site-wide."
         provider:
           type: "string"
           nullable: true
@@ -1365,6 +1448,20 @@ components:
         publish_status:
           type: "string"
           enum: ["pending","published"]
+        sources:
+          type: "array"
+          description: "Logs-sensitive reports only."
+          items: { type: string, enum: [observations, logs] }
+        logs_sensitive:
+          type: "boolean"
+          description: "Present (true) only on reports filed by a Scout that reads server logs."
+        redacted_at:
+          type: "string"
+          format: "date-time"
+          nullable: true
+          description: "Logs-sensitive reports only: set when redacted for a personal-data erasure."
+        restricted:
+          $ref: "#/components/schemas/ScoutReportRestriction"
     RatingResult:
       type: "object"
       required: [observation_id, rating, rated_at]
@@ -1392,6 +1489,7 @@ components:
           type: object
           properties:
             code: { type: string }
+            required: { type: string, description: "The missing scope, on 403 insufficient_scope (e.g. logs:read)." }
             message: { type: string }
             details: { type: array, items: { type: string } }
     Deleted:
@@ -1557,4 +1655,18 @@ components:
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     NotFound:
       description: Not found
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    LogsForbidden:
+      description: "Server logs refused: insufficient_scope (required logs:read) or hipaa_restricted."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    LogsPaymentRequired:
+      description: "feature_not_in_plan: the client's plan does not include Logs."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    LogsUnavailable:
+      description: "privacy_unknown or entitlements_unavailable; retry after Retry-After seconds."
+      headers:
+        Retry-After: { schema: { type: integer, example: 30 } }
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Conflict:
+      description: "State conflict, e.g. version_conflict or input_redacted."
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }

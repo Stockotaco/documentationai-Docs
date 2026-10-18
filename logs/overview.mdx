@@ -48,6 +48,10 @@ Logs are included wherever error tracking is.
 
 Logs are **not available** on locations with HIPAA mode enabled: ingestion answers 403 and every read answers **403 `hipaa_restricted`**. A log body is free text and there is no safe way to strip protected health information from it. If a location's configuration cannot be read, reads answer **503 `privacy_unknown`** (retry) rather than assuming the location is not HIPAA.
 
+## Replay Vision Scouts
+
+A [Replay Vision Scout](/agency-api/replay-vision#scouts-that-read-server-logs) created with `sources: ["observations","logs"]` (or the `friction_trace` template) reads a bounded digest of this location's logs on each run: patterns of records **received** since its last report, the patterns of the sessions it sampled, and a few sample records it can cite. The same rules apply as for reading logs here: `logs:read` on scoped keys, Logs in the plan, and no HIPAA mode. Reading a report built from logs needs the same.
+
 ## Time windows
 
 Every list endpoint takes a window:

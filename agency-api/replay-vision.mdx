@@ -405,6 +405,9 @@ Model spend is additional BYOK dollars, not Mythic credits.
 | `trend_watch` | Monitor/classifier/scorer | Monday 09:00 | 28 days vs preceding 28 |
 | `new_issue_watch` | All | Daily 09:00 | New observations |
 | `custom` | All | Daily 09:00 | New observations |
+| `friction_trace` | All | Daily 09:00 | New observations + server logs received since the last report (requires `sources` with `logs`) |
+
+Each template carries its `sources`. See [Scouts that read server logs](#scouts-that-read-server-logs).
 
 `POST /scanners/{id}/scouts` returns 201 with the created Scout:
 
@@ -437,12 +440,12 @@ backlog of model calls.
 
 `GET /scanners/{id}/scouts` lists Scouts;
 `GET /scouts/{id}` returns one. Public fields include `id`, `scanner_id`,
-`location_id`, configuration above, `version`, `next_run_at`,
+`location_id`, configuration above, `sources` (only on Scouts that read server logs), `version`, `next_run_at`,
 `last_run_at`, `last_report_at`, `last_error`, `latest_report_id`,
 `current_run`, `can_run_now`, `created_at`, and `updated_at`.
 
 `PATCH /scouts/{id}` merges and validates the configuration, including partial schedule/delivery objects; unknown fields
-are rejected, scanner and template cannot change. `enabled:false` pauses the
+are rejected, scanner, template and `sources` cannot change. `enabled:false` pauses the
 Scout and cancels pending work. Lifecycle and roster checks are repeated before
 provider calls, report finalization and delivery.
 `DELETE /scouts/{id}` soft-deletes/disables it, cancels pending runs and returns
@@ -454,8 +457,9 @@ with `{run_id,status:"pending"}`. It is not an unlimited "run again" action.
 
 Errors follow `{success:false,error:{code,message,details?}}`:
 400 `invalid_scout`; 404 foreign/deleted/unlinked resource;
-409 `first_report_already_exists`, `run_in_progress`, `scout_paused` or
-`no_model_key`; 422 `invalid_delivery_channel`. Limits/version conflicts
+409 `first_report_already_exists`, `run_in_progress`, `scout_paused`,
+`input_redacted` or `no_model_key`; 422 `invalid_delivery_channel` or
+`sources_immutable`. Scouts that read server logs add the logs gates below. Limits/version conflicts
 are also visible, not silently ignored.
 
 ### Coverage, evidence and retained reports
@@ -506,7 +510,83 @@ treated as text by downstream UIs, not trusted navigation.
 Reports remain after Scout/scanner deletion with no automatic report TTL.
 This is not erasure: visitor-derived observation/report/evidence/input artifacts
 require manual operator review by location/session when fulfilling deletion
-requests. There is no self-serve erasure endpoint.
+requests. There is no self-serve erasure endpoint. Reports of Scouts that read
+server logs are the exception: an erasure redacts all of them for the client
+(see above).
+
+### Scouts that read server logs
+
+A Scout can also read the client's server logs ([Logs](/logs/overview)) so a
+report can put what a visitor struggled with next to what the server did in
+the same session. Logs are a second source on the same scanner-bound Scout:
+
+```json
+{
+  "name": "Checkout friction trace",
+  "template": "friction_trace",
+  "sources": ["observations", "logs"]
+}
+```
+
+`sources` is `["observations"]` (the default, and omitted from responses) or
+`["observations","logs"]`. It is chosen at creation and **cannot change**:
+a PATCH that adds or removes `logs` returns 422 `sources_immutable`.
+`friction_trace` requires logs; any other template may add them.
+
+**Gates.** Creating a logs Scout, and every PATCH of one, requires:
+
+| Requirement | Refusal |
+| --- | --- |
+| `logs:read` on an `mcp_` key (`ak_` keys hold everything) | 403 `insufficient_scope` with `required: "logs:read"` |
+| The `logs` plan feature | 402 `feature_not_in_plan`; 503 `entitlements_unavailable` (retry) |
+| A non-HIPAA client | 403 `hipaa_restricted`; 503 `privacy_unknown` (retry) |
+
+A PATCH that only pauses (`{"enabled": false}`) skips the plan and privacy
+checks so you can always pause. If the plan loses Logs or the client turns on
+HIPAA, the Scout's runs fail with `logs_policy_changed` before any model call.
+
+**What a run reads.** Each run reads a bounded digest (at most 32 KB) of log
+records **received** since the previous report: from the Scout's watermark to
+5 minutes before the run, with no event-time limit inside the 30-day log
+retention. Records that become queryable more than 5 minutes after receipt
+can be missed. The digest holds:
+
+- the top 25 patterns, 15 error patterns, and 15 patterns new against the
+  7 days received before the window;
+- the patterns of the sessions the Scout sampled (at most 5 per session, 60
+  total);
+- one first and one last sample record per pattern, which are the only log
+  records a report may cite.
+
+Counts are always **N of the M sampled sessions**, never site-wide rates.
+Location-wide patterns are reported separately from same-session
+correlations, and a finding backed only by logs says no recording was
+reviewed for it.
+
+**Reports.** Every report of a logs Scout is logs-sensitive and adds:
+
+| Field | Meaning |
+| --- | --- |
+| `sources` | `["observations","logs"]` |
+| `logs_sensitive` | `true` |
+| `redacted_at` | Set when the report was redacted for a personal-data erasure; text is then `[Redacted: personal-data erasure]` |
+| `log_evidence` (detail) | Server-built citations: `log_uuid`, `location_id`, `session_id` or null, `distinct_id` or null, `pattern_id`, `service`, `level`, `timestamp`, `excerpt` (≤500 chars), `log_url`, `archival` |
+| `coverage.logs` | `status`, `patterns_total`, `citable_samples`, `non_v7_sample_sessions`; `window` (`received_from`, `received_before`, `retained_from`, `backlog_gap`, `first_run`); `baseline` (`complete`, `covered_days` of the 7-day new-pattern baseline); `sessions` (`requested`, `queried`, `omitted`, `not_v7`, `expired` of the sampled sessions); `query_caps` (patterns beyond the 25/15/15 list limits, `session_pairs_total`, pairs cut by the 5-per-session and 60-overall limits, pairs without a citable record); `truncated` counts per list dropped for the 32 KB size budget; `bytes` |
+
+Sections may cite `log_evidence` too; `session_count` counts sessions from
+both kinds of evidence.
+
+**Who can read them.** A logs-sensitive report needs `logs:read` (for `mcp_`
+keys) and a non-HIPAA client. `GET /reports/{id}` returns 403
+`insufficient_scope` (`required: "logs:read"`), 403 `hipaa_restricted` or 503
+`privacy_unknown` (with `Retry-After`). `GET /reports` keeps such rows in the
+page as restricted rows, with `summary_md: ""` and
+`restricted: {reason, required?}`, so cursors stay stable. Delivery skips a
+report whose client is now HIPAA and waits while the client's privacy
+configuration cannot be read.
+
+Reports filed from a person or a session are not yet listed on the
+person/session APIs.
 
 ### Publication and delivery
 

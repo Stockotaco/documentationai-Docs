@@ -170,6 +170,16 @@ run reads up to 100 of the oldest new results; anything left over is read by
 the next run, and the report says when it covered only part of the backlog.
 Reports compare scanner versions separately.
 
+A Scout can also read the client's server logs, when the client sends
+[Logs](/logs/overview), its plan includes them and HIPAA mode is off. The
+**Friction trace** template does this: it puts what visitors struggled with
+next to what the server logged in the same sessions, and lists log patterns
+that are new since the last report. Counts are always "N of the M sampled
+sessions", never site-wide rates. Whether a Scout reads logs is chosen when
+you create it and cannot be changed later. Its reports cite log records, and
+only people who can read the client's logs can read them. A personal-data
+erasure blanks every log-based report for that client.
+
 "No new observations" means there was nothing to read, so no model call was
 made. "Nothing notable" means the model read the results and found nothing
 worth reporting. Each report is delivered to each channel at most once. Scout
