@@ -199,6 +199,49 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /segments/preview:
+    post:
+      summary: Preview segment size
+      operationId: previewSegment
+      description: >
+        Count the people a draft definition matches, without saving it. Readable
+        with an agency key (`ak_`, plus `?location_id=`), a viewer key (`sk_`) or
+        an `mcp_` key with `segments:read`. Attribute-only drafts are counted at
+        read time. Drafts with `events` run the membership query live, so a
+        preview costs the same as one membership refresh.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PreviewSegmentRequest"
+      responses:
+        "200":
+          description: Number of distinct people the draft matches
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SegmentPreviewResponse"
+        "400":
+          description: Invalid definition, or missing `location_id` for an agency key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authorization key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: The live membership query failed upstream
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /segments/{id}/members:
     get:
       summary: List segment members
@@ -519,6 +562,20 @@ components:
         updated_at:
           type: string
           description: When this person's profile last changed, UTC.
+    PreviewSegmentRequest:
+      type: object
+      required:
+        - definition
+      properties:
+        definition:
+          $ref: "#/components/schemas/SegmentDefinition"
+    SegmentPreviewResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Distinct people matching the draft right now.
+          example: 1284
     SaveSegmentRequest:
       type: object
       required:

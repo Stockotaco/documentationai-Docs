@@ -610,6 +610,11 @@
                 ]
               },
               {
+                "group": "Builder access",
+                "icon": "key",
+                "openapi": "openapi/builder.yaml"
+              },
+              {
                 "group": "Insights",
                 "icon": "bar-chart-2",
                 "openapi": "openapi/builder-insights.yaml"
@@ -891,6 +896,11 @@
                     "icon": "sliders-horizontal"
                   }
                 ]
+              },
+              {
+                "group": "Builder access",
+                "icon": "key",
+                "openapi": "openapi/builder.yaml"
               },
               {
                 "group": "Insights",

@@ -1,0 +1,315 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Builder access
+  description: >-
+    Entry points for the embeddable builder: the embed page itself, a key check
+    the embedded app runs on load, and the agency's client list.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev/builder
+security:
+  - BearerAuth: []
+paths:
+  /:
+    get:
+      summary: Embed page
+      operationId: getBuilderEmbedPage
+      description: >
+        Returns a small HTML page that loads the builder in a sandboxed iframe.
+        Point an `<iframe>` or a browser tab at this URL. A page load cannot set
+        headers, so this is the one builder route that takes the key in the
+        query string (`ak` or `sk`) instead of the `Authorization` header. Use a
+        viewer key (`sk_`) for client-facing embeds, because the URL is visible
+        to anyone who can see the page. The key format is checked here; the key
+        itself is checked by the embedded app through `GET /validate`.
+      security: []
+      parameters:
+        - name: ak
+          in: query
+          required: false
+          description: Agency key (`ak_` followed by 32 to 64 hex characters). Pass `ak` or `sk`.
+          schema:
+            type: string
+        - name: sk
+          in: query
+          required: false
+          description: >-
+            Viewer key (`sk_` followed by 32 to 64 hex characters). With `ak`,
+            scopes the embed to that key's client.
+          schema:
+            type: string
+        - name: location_id
+          in: query
+          required: false
+          description: Client to open when the key is an agency key.
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          description: Builder page to open. Lowercase letters only; anything else opens `insights`.
+          schema:
+            type: string
+            default: insights
+            example: dashboards
+        - name: theme
+          in: query
+          required: false
+          description: Color theme passed to the embedded app.
+          schema:
+            type: string
+            example: dark
+        - name: transparent
+          in: query
+          required: false
+          description: Render without a page background.
+          schema:
+            type: string
+        - name: hideHeader
+          in: query
+          required: false
+          description: Hide the builder header.
+          schema:
+            type: string
+        - name: branding
+          in: query
+          required: false
+          description: Branding mode passed to the embedded app.
+          schema:
+            type: string
+        - name: theme_primary
+          in: query
+          required: false
+          description: Primary color override.
+          schema:
+            type: string
+        - name: theme_secondary
+          in: query
+          required: false
+          description: Secondary color override.
+          schema:
+            type: string
+        - name: theme_heading_font
+          in: query
+          required: false
+          description: Heading font override.
+          schema:
+            type: string
+        - name: theme_body_font
+          in: query
+          required: false
+          description: Body font override.
+          schema:
+            type: string
+        - name: style
+          in: query
+          required: false
+          description: Style preset passed to the embedded app.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: HTML wrapper page. Sent with `Cache-Control` `no-store` and a strict Content-Security-Policy.
+          content:
+            text/html:
+              schema:
+                type: string
+        "400":
+          description: Missing `ak`/`sk`, or the key is not in a valid format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /validate:
+    get:
+      summary: Validate key
+      operationId: validateBuilderKey
+      description: >
+        Describes the key in the `Authorization` header. An agency key (`ak_`)
+        returns the agency and all of its clients. A viewer key (`sk_`) returns
+        its one client. Pass `?location_id=` with an agency key to include that
+        client in the response.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Key details
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/AgencyKeyInfo"
+                  - $ref: "#/components/schemas/ViewerKeyInfo"
+        "401":
+          description: Authorization key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Agency is deactivated, or `location_id` is not linked to this agency
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /locations:
+    get:
+      summary: List agency clients
+      operationId: listBuilderLocations
+      description: >
+        Lists the agency's clients by name. Requires an agency key (`ak_`) or an
+        agency-wide `mcp_` key with `agency:read`. Secret keys are masked: get
+        full keys from the admin API or by rotating the key server-side.
+        `alias_of` is set when the client is an alias of another tracking id, so
+        callers can detect events arriving under a different id.
+      responses:
+        "200":
+          description: Clients linked to the agency
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuilderLocationListResponse"
+        "401":
+          description: Authorization key missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not an agency key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Database error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Builder key as a bearer token. Use an agency key (`Bearer ak_...`) or a
+        viewer key (`Bearer sk_...`). Scoped keys (`mcp_`) are accepted where a
+        route names the scope they need. See [Using an mcp_ key over HTTP](/mcp/authentication).
+  parameters:
+    LocationId:
+      name: location_id
+      in: query
+      required: false
+      description: >-
+        Client location to scope the request to. Used with agency keys (`ak_`).
+        Ignored for viewer keys (`sk_`).
+      schema:
+        type: string
+        example: acme-retail
+  schemas:
+    BuilderLocation:
+      type: object
+      properties:
+        id:
+          type: string
+          example: acme-retail
+        name:
+          type: string
+          example: Acme Retail
+        domain:
+          type: string
+          nullable: true
+          example: acme.com
+        business_name:
+          type: string
+          nullable: true
+        status:
+          type: string
+          example: active
+        api_metadata:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: Client metadata. Returned by `/validate` only.
+    AgencyKeyInfo:
+      type: object
+      properties:
+        role:
+          type: string
+          enum:
+            - agency
+        agencyId:
+          type: string
+          format: uuid
+        agencyName:
+          type: string
+          example: Acme Agency
+        locations:
+          type: array
+          items:
+            $ref: "#/components/schemas/BuilderLocation"
+        locationId:
+          type: string
+          nullable: true
+          description: The `location_id` passed in, when it is linked to this agency.
+        locationName:
+          type: string
+          nullable: true
+    ViewerKeyInfo:
+      type: object
+      properties:
+        role:
+          type: string
+          enum:
+            - viewer
+        locationId:
+          type: string
+          example: acme-retail
+        locationName:
+          type: string
+          example: Acme Retail
+        apiMetadata:
+          type: object
+          nullable: true
+          additionalProperties: true
+    BuilderLocationListItem:
+      type: object
+      properties:
+        id:
+          type: string
+          example: acme-retail
+        name:
+          type: string
+          example: Acme Retail
+        domain:
+          type: string
+          nullable: true
+        business_name:
+          type: string
+          nullable: true
+        status:
+          type: string
+          example: active
+        secret_key:
+          type: string
+          nullable: true
+          description: Masked viewer key, first 7 and last 4 characters.
+          example: "sk_1a2b…9f0e"
+        alias_of:
+          type: string
+          nullable: true
+          description: Tracking id this client is an alias of, or null.
+    BuilderLocationListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/BuilderLocationListItem"
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Missing authorization key
