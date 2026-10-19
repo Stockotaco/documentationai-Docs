@@ -10,7 +10,8 @@ description: >-
 An **event contract** says which events a client must send and which
 properties each event must carry, such as a `purchase` event with a `value`.
 Mythic checks every contract daily at 8:00 AM UTC against the previous day's
-events, so a broken form or a removed tag shows up the next morning.
+events and keeps each day's result, so a broken form or a removed tag shows up
+the next morning, and you can see when it started.
 
 - From the agency, **Event contracts** shows every client's results.
 - Open a client and choose **Event contracts** to declare and edit its
@@ -31,12 +32,18 @@ To be told about failures, route them with an alert rule. See
 
 ## One client's contracts
 
+The card at the top shows where failures go. A failing contract always opens
+an alert on the **Alerts** page. **Notifications on** names the alert rules
+that also send it to Slack or a webhook. When none does, **Set up
+notifications** creates one for event contracts.
+
 The tiles show the number of contracts, how many are violating, yesterday's
 event count and how many had no data. Each contract row has:
 
 | Column | Meaning |
 | --- | --- |
 | **Event** | The event, with its status. |
+| **Last 30 days** | One dot per day: green passed, red violated, orange no data, grey not checked. A grey day is not a pass. |
 | **Min / day** | The minimum number of events per day, if set. |
 | **Yesterday** | How many of the event arrived yesterday. |
 
@@ -46,15 +53,24 @@ event count and how many had no data. Each contract row has:
 | **Violating** | A required property was missing, empty or the wrong type, or fewer events arrived than the minimum. |
 | **No data** | The event did not arrive yesterday. |
 
-Click an event to see what failed, the lowest coverage of a required
-property, and the latest failing event. There you can set **Minimum events
-per day**, delete the contract, or click **Ask agent to fix** to work through
-the failure in the chat panel.
+Click an event or **Details** to open the contract:
+
+- **Yesterday**: what failed, the lowest coverage of a required property and
+  the latest failing event. Set **Minimum events per day**, delete the
+  contract, or click **Ask agent to fix**.
+- **History**: the daily results for 30 days, events per day, and the problem
+  on each failing day.
+- **Properties**: each property's type, whether it is required, its coverage
+  yesterday and its lowest coverage in 30 days. Change a type, make a property
+  optional or required, remove one or add one, then **Save properties**.
 
 ## Declare contracts
 
-- **Recommended contracts**: events without a contract that matter most,
-  ranked by what Mythic sends to ad platforms. **Sent as conversion** means
+- **Recommended contracts**: events without a contract that matter most.
+  **Campaigns optimize on it** means a Meta ad set with spend in the last 30
+  days optimizes on the event this one is sent to Meta as. A warning line
+  appears when Meta ad sets optimize on an event Mythic sends nothing for.
+  **Sent as conversion** means
   Mythic delivered the event to Meta, Google Ads, GA4 or OpenAI Ads as a
   conversion in the last 30 days. **Not delivering** means it is wired to an
   ad platform and firing, but nothing was delivered. **Likely conversion**
