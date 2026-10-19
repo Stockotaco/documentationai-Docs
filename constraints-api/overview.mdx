@@ -222,6 +222,16 @@ That is why identity stitching is on by default. Measured on one client over 30 
 | Reaching any pixel session | 23% | **91%** |
 | **Creditable to a paid campaign touch** | **10%** | **81%** |
 
+A contact reaches the browsing person by email or phone when your site identifies the visitor. A GoHighLevel contact captured on a GHL form, order form, survey or calendar usually doesn't, because those are cross-origin and the site never sees the email. For those, Mythic uses the browser GHL recorded when it captured the contact. The click id (`fbclid`) is tried first, then the Meta `_fbp` cookie, then the GA client id. When the same key was seen by Mythic's SDK, the anonymous visitor merges into the contact. Merge-log reason: `browser_key <kind>: web→ghl contact`.
+
+This link is skipped when the result would be ambiguous:
+
+- the key appears on a second contact, such as a front-desk browser or staff testing;
+- the contact came from a CSV import, manual entry or another CRM-side capture;
+- the browser already belongs to another contact, or the contact is already tied to a browser;
+- the two people hold different emails;
+- the location is in HIPAA mode.
+
 Because the funnel resolves people, every row tells you *who*, not just how many:
 
 ```json

@@ -411,7 +411,7 @@ paths:
           $ref: "#/components/responses/NotConfigured"
   /query:
     post:
-      summary: Explore query (trend, funnel or paths)
+      summary: Explore query (trend, funnel, paths or attribution)
       operationId: exploreQuery
       description: >
         Self-serve analytics over the event stream in one call. A typed spec —
@@ -557,7 +557,24 @@ paths:
                       `goal`, `touchpoint`, `dimension`/`exclude`,
                       `lookback_days`, `depth`, `limit`, `goal_id_cap`, and
                       `campaign_names { ids, named, status }` when campaign
-                      touchpoints were Meta ids. Always
+                      touchpoints were Meta ids. Attribution:
+                      `totals { conversions, revenue, spend, roas, cpa,
+                      ad_conversions, ad_revenue, unmatched_ad_conversions,
+                      no_touchpoint, over_cap, mixed_currency }` over every row,
+                      `filtered { rows, conversions, revenue, spend, roas, cpa,
+                      mixed_currency }` after `platform`/`account_id`, `sampled`
+                      (rows cover a sample of converters, so row `cpa`/`roas`
+                      are null; `over_cap` counts the rest), and `rows[]
+                      { type (ad | channel), platform, channel, account_id,
+                      campaign_id, campaign_name, adset_id?, adset_name?,
+                      ad_id?, ad_name?, currency, spend, impressions, clicks,
+                      conversions, revenue, persons, cpa, roas, median_days }`
+                      (null fields omitted in the example: an ad row has
+                      `channel: null`, a channel row has null platform, ids,
+                      names, currency, cpa and roas);
+                      meta echoes `goal`/`deals`, `model`, `level`,
+                      `lookback_days`, `limit`, `platform?`, `account_id?`,
+                      `value_property?`, `goal_id_cap`. Always
                       `meta { from, to, interval?, previous?, window_seconds?,
                       sql_ms, rows_read, bytes_read, cached, sql? }`.
               examples:
@@ -597,6 +614,18 @@ paths:
                       last_touch:
                         - { touchpoint: "Paid Social", persons: 557, share: 0.835 }
                       meta: { from: "2026-08-25", to: "2026-09-24", grain: person, goal: { label: order_completed, event: order_completed }, touchpoint: session, dimension: channel_group, lookback_days: 90, depth: 5, limit: 20, goal_id_cap: 20000, sql_ms: 1070, cached: false }
+                attribution:
+                  value:
+                    success: true
+                    data:
+                      kind: attribution
+                      totals: { conversions: 299, revenue: 0, spend: 29386.09, roas: 0, cpa: 98.28, ad_conversions: 45, ad_revenue: 0, unmatched_ad_conversions: 3, no_touchpoint: 232, over_cap: 0, mixed_currency: false }
+                      filtered: { rows: 23, conversions: 299, revenue: 0, spend: 29386.09, roas: 0, cpa: 98.28, mixed_currency: false }
+                      sampled: false
+                      rows:
+                        - { type: ad, platform: meta_ads, account_id: "332171725295572", campaign_id: "120240199320680108", campaign_name: "AlphaVYVE TRT | LP", currency: USD, spend: 2885.05, impressions: 43287, clicks: 1098, conversions: 22, revenue: 0, persons: 18, cpa: 131.14, roas: 0, median_days: 0 }
+                        - { type: channel, channel: "(no touchpoint)", spend: 0, impressions: 0, clicks: 0, conversions: 232, revenue: 0, persons: 201 }
+                      meta: { from: "2026-09-19", to: "2026-10-19", grain: person, goal: { label: appointment_booked, event: appointment_booked }, model: last, level: campaign, lookback_days: 30, limit: 100, goal_id_cap: 20000, sql_ms: 1326, cached: false }
         "400":
           description: "`invalid_spec` — `error.details` lists every problem; `invalid_json`; `payload_too_large` (>64 KB)."
           content:
@@ -2182,7 +2211,7 @@ components:
       properties:
         kind:
           type: string
-          enum: [trend, funnel, paths]
+          enum: [trend, funnel, paths, attribution]
         date_range:
           oneOf:
             - type: object
@@ -2293,7 +2322,7 @@ components:
         goal:
           type: object
           required: [event]
-          description: "Paths only, required. Persons who did this in the range; each journey is what they did in the lookback before their first goal in the range."
+          description: "Paths: required. Persons who did this in the range; each journey is what they did in the lookback before their first goal in the range. Attribution: the conversion event (or use `deals`); every occurrence in the range is one conversion, credited to the touches before it."
           properties:
             event:
               type: string
@@ -2318,7 +2347,7 @@ components:
           type: integer
           minimum: 1
           maximum: 180
-          description: "Paths only. Default 90 for session touchpoints, 7 for event touchpoints."
+          description: "Paths: default 90 for session touchpoints, 7 for event touchpoints. Attribution: default 30, how far before a conversion a touch can be."
         depth:
           type: integer
           minimum: 1
@@ -2328,9 +2357,8 @@ components:
         limit:
           type: integer
           minimum: 1
-          maximum: 50
-          default: 20
-          description: "Paths only. Journeys returned, and rows per first/last-touch list."
+          maximum: 500
+          description: "Paths: default 20, max 50, journeys returned and rows per first/last-touch list. Attribution: default 100, max 500 rows; totals still cover every row."
         exclude:
           type: array
           maxItems: 50
@@ -2343,7 +2371,31 @@ components:
           description: "Paths with event touchpoints only. `false` keeps the default-excluded events."
         value_property:
           type: string
-          description: "Paths only. Numeric property of the goal event (e.g. `value`, `activity_value`). Adds `goal_value`, `goal_first_value`, and `value` / `first_value` on journey, first-touch and last-touch rows (`value` on `linear_touch`). Summed per person over their goal events in the range; `first_value` is the first goal only. Non-numeric values count as 0."
+          description: "Paths and attribution (with `goal`). Numeric property of the goal event (e.g. `value`, `activity_value`). Paths: adds `goal_value`, `goal_first_value`, and `value` / `first_value` on journey, first-touch and last-touch rows (`value` on `linear_touch`), summed per person over their goal events in the range; `first_value` is the first goal only. Attribution: the revenue of each conversion. Non-numeric values count as 0."
+        deals:
+          type: object
+          description: "Attribution only, instead of `goal`: won CRM deals (GHL opportunities whose latest status is `won`). One conversion per opportunity, at the time it was first marked won, valued at its latest monetary value."
+          properties:
+            pipeline:
+              type: string
+              description: Exact pipeline name to narrow to.
+        model:
+          type: string
+          enum: [first, last, linear]
+          default: last
+          description: "Attribution only. `last` credits the last non-Direct touch (Direct only when every touch is Direct). `first` credits the first touch in the lookback. `linear` splits each conversion evenly across its touches."
+        level:
+          type: string
+          enum: [campaign, adset, ad]
+          default: campaign
+          description: "Attribution only. Row grain. Ad set and ad ids come from the landing URL (Meta `adset_id`/`ad_id`, Google `adgroupid`/`creative`, or Meta's `utm_term`/`utm_content` id template); spend at those levels is Meta only."
+        platform:
+          type: string
+          enum: [meta_ads, google_ads]
+          description: "Attribution only. Keep only this platform's rows. Totals still cover every conversion."
+        account_id:
+          type: string
+          description: "Attribution only. Keep only rows of this ad account (digits; an `act_` prefix is removed)."
     RowsResponse:
       type: object
       description: Generic Tinybird result envelope for analytics rows.

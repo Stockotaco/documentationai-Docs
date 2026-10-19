@@ -5,13 +5,14 @@ info:
   description: >
     Bootstrap routes for the Mythic browser extension, which shows Mythic's own
     per-campaign results (sessions, conversions, revenue, the funnel
-    constraint) inside Meta Ads Manager. Three routes on
+    constraint) inside Meta Ads Manager. Four routes on
     `/client/v1/extension`: who the key belongs to plus the client roster with
     ad-platform flags (`/me`), which client syncs the ad account on screen
-    (`/resolve`), and a write-only problem report (`/issues`).
+    (`/resolve`), conversions, revenue and ROAS per campaign, ad set or ad
+    (`/performance`), and a write-only problem report (`/issues`).
 
 
-    The results themselves are **not** served here. The extension reads
+    Funnel constraint verdicts are **not** served here. The extension reads
     `GET /client/v1/constraints?account_id=<ad account>` with the resolved
     client as `X-Location-Id`, so that route's plan gate, benchmarks and
     20-per-minute limit apply unchanged.
@@ -180,6 +181,79 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/extension/performance:
+    get:
+      summary: Conversions, revenue and ROAS per Meta campaign, ad set or ad
+      operationId: extensionPerformance
+      description: >
+        The Meta rows of an explore `attribution` query (see
+        `POST /client/v1/data/query`) for one client on the caller's roster:
+        every conversion in the window is credited to the person's sessions in
+        the 30 days before it, across devices and CRM contact ids, and the
+        credit lands on the Meta campaign, ad set or ad in the session's landing
+        URL. Spend for the same dates is joined in. The body is the same one
+        `/data/query` returns for that spec, plus the `conversion` used, and the
+        two share a cache.
+
+
+        `conversion=auto` (the default) picks the first source with data in the
+        window: won CRM deals, then `purchase` (valued by `value`), then GHL
+        `order_completed` (valued by `activity_value`), then
+        `appointment_booked`, `form_submitted` or `contact_created` (no value,
+        for cost per conversion). When none has data the answer is
+        `conversion: null` with no rows. A deal counts only if its latest status is
+        still won, the same rule attribution applies.
+      parameters:
+        - { name: location_id, in: query, required: true, description: "A client on the key's roster.", schema: { type: string } }
+        - { name: account_id, in: query, description: "Meta ad account; an act_ prefix is accepted. Omit for every account.", schema: { type: string } }
+        - { name: from, in: query, description: "YYYY-MM-DD. Default 30 days before today (UTC).", schema: { type: string, format: date } }
+        - { name: to, in: query, description: "YYYY-MM-DD inclusive. Default today.", schema: { type: string, format: date } }
+        - { name: level, in: query, schema: { type: string, enum: [campaign, adset, ad], default: campaign } }
+        - { name: model, in: query, description: "last = last non-Direct touch.", schema: { type: string, enum: [last, first, linear], default: last } }
+        - { name: conversion, in: query, description: "auto, deals, or event:<event name>.", schema: { type: string, default: auto } }
+        - { name: value_property, in: query, description: "With conversion=event:<name>. The numeric property holding each conversion's value.", schema: { type: string } }
+        - { name: pipeline, in: query, description: "With conversion=deals. Exact GHL pipeline name.", schema: { type: string } }
+        - { name: timezone, in: query, description: "IANA zone the dates are read in. Default UTC.", schema: { type: string } }
+      responses:
+        "200":
+          description: Attribution rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    description: >
+                      `conversion` (the source used, or null), `totals` over
+                      every conversion of the client, `filtered` after the Meta
+                      and account filter, `sampled`, `rows[]` (one per campaign,
+                      ad set or ad with `spend`, `impressions`, `clicks`,
+                      `conversions`, `revenue`, `persons`, `cpa`, `roas`,
+                      `median_days`, names and `account_id`), and `meta`.
+              example:
+                success: true
+                data:
+                  conversion: { conversion: deals }
+                  kind: attribution
+                  totals: { conversions: 75, revenue: 210258.9, spend: 41200, roas: 5.1, cpa: 549.33, ad_conversions: 3, ad_revenue: 4494, unmatched_ad_conversions: 0, no_touchpoint: 54, mixed_currency: false }
+                  filtered: { rows: 2, conversions: 3, revenue: 4494, spend: 41200, roas: 0.11, cpa: 13733.33 }
+                  sampled: false
+                  rows:
+                    - { type: ad, platform: meta_ads, account_id: "1234567890", campaign_id: "120247921827310631", campaign_name: "HV - FF - Creative Testing", currency: USD, spend: 20600, impressions: 812000, clicks: 9100, conversions: 1, revenue: 2497, persons: 1, cpa: 20600, roas: 0.12, median_days: 3.6 }
+        "400":
+          description: "`invalid_params` — missing `location_id`, bad dates, level, model, account or conversion."
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402":
+          description: "`feature_not_in_plan` — the client's plan has no Data API."
+        "403":
+          description: "`location_not_linked` — the client is not on the key's roster; or the key is not agency-wide."
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "502":
+          description: "`upstream_error` — the query engine failed."
+        "503":
+          description: "`entitlements_unavailable` — the client's plan could not be checked; retry."
   /client/v1/extension/issues:
     post:
       summary: Report an extension problem

@@ -1,7 +1,7 @@
 ---
 title: Explore queries
 description: >-
-  Build trends, funnels and paths to a goal over any event and property in one call with a
+  Build trends, funnels, paths to a goal and ad attribution (ROAS by campaign) over any event and property in one call with a
   typed query spec — no SQL, tenant-scoped by construction, sub-second.
 ---
 
@@ -88,8 +88,8 @@ One `series[]` entry per spec series × breakdown value. `data[]` is aligned to
 
 ## The spec
 
-<ParamField body="kind" type="'trend' | 'funnel' | 'paths'" required>
-  What to compute.
+<ParamField body="kind" type="'trend' | 'funnel' | 'paths' | 'attribution'" required>
+  What to compute. `attribution` has its own section: [Ad attribution and ROAS](#ad-attribution-and-roas).
 </ParamField>
 <ParamField body="date_range" type="object" required>
   `{ "preset": "24h" | "7d" | "14d" | "30d" | "90d" | "365d" }` or
@@ -455,6 +455,82 @@ Each step is an event name, or the pathname for a `$pageview`, e.g.
 
 Paths queries cannot be saved as insights yet.
 
+## Ad attribution and ROAS
+
+An attribution query answers "which campaigns, ad sets or ads produced this
+revenue, and what did it cost?" Every conversion in the range is credited to
+the person's sessions in the `lookback_days` before it (default 30, across
+devices and CRM contact ids, as paths). A session from Meta or Google lands on
+its campaign; any other session lands on its channel group. Spend for the same
+dates is joined in, so a campaign that spent and converted nothing still has a
+row.
+
+```json
+{
+  "kind": "attribution",
+  "date_range": { "preset": "30d" },
+  "deals": {},
+  "model": "last",
+  "level": "campaign"
+}
+```
+
+Conversions are either a `goal` event, valued by `value_property`
+(`{ "goal": { "event": "order_completed" }, "value_property": "activity_value" }`
+for GHL orders), or `deals`: won GHL opportunities. A deal converts once, at
+the time it was first marked won, if its latest status is still won, and is
+valued at its latest monetary value. `deals.pipeline` narrows to one pipeline
+by exact name.
+
+| field | values | default |
+|-------|--------|---------|
+| `model` | `last` (last non-Direct touch), `first`, `linear` (equal split) | `last` |
+| `level` | `campaign`, `adset`, `ad` | `campaign` |
+| `platform` | `meta_ads`, `google_ads` (rows only; totals cover everything) | all |
+| `account_id` | an ad account id, `act_` prefix accepted | all |
+| `lookback_days` | 1 to 180 | 30 |
+| `limit` | 1 to 500 rows | 100 |
+
+How a session is matched to a campaign:
+
+- **Platform.** Meta when the session has an `fbclid` or is Paid Social from a
+  Meta source. Google when it has a `gclid`, `gbraid`, `wbraid` or
+  `gad_source`, or is Paid Search from Google.
+- **Ids from the landing URL.** Meta: `campaign_id`, `adset_id`, `ad_id`, then
+  the `utm_id` / `utm_campaign`, `utm_term` and `utm_content` id template.
+  Google: `gad_campaignid` (Google adds it), `campaignid`, `adgroupid`,
+  `creative`. Only numeric values count, so a name or an unexpanded
+  `{{campaign.id}}` never matches.
+- **By name.** A Meta or Google session with no campaign id whose
+  `utm_campaign` equals a campaign name in the synced spend (case-insensitive,
+  Mythic's ad-tagging bid suffix removed, unique names only) gets that campaign.
+- Anything else is the platform's `(unmatched)` row. A conversion with no
+  session in the lookback is the `(no touchpoint)` channel row, so credit always
+  adds up to the conversion count.
+
+The response has `totals` over every row (conversions, revenue, spend, blended
+`roas` and `cpa`, the ad-credited share, `unmatched_ad_conversions`,
+`no_touchpoint`, `over_cap`, `mixed_currency`), `filtered` with the same figures after
+`platform` and `account_id`, and `rows[]` sorted by revenue then spend.
+Revenue is assumed to be in the ad account's currency. When spend spans more
+than one currency, that level's `spend`, `roas` and `cpa` are `null` rather
+than a sum of different currencies. Above 20,000 converting ids, attribution
+runs on a deterministic sample (`sampled: true`): the remaining conversions are
+counted on the `(over attribution cap)` row so totals stay complete, and row
+`cpa` / `roas` are `null`. A row
+is `type: "ad"` (platform, account, campaign, and ad set / ad at those levels,
+with names from the ad sync) or `type: "channel"`. `cpa` is spend per
+conversion and `roas` revenue per unit of spend, `null` when the denominator is
+0. Conversions under `linear` are fractional.
+
+<Callout kind="note">
+  Spend comes from the client's Meta and Google Ads syncs, copied daily. A
+  client without a sync still gets conversions and revenue per campaign, with
+  spend 0. Ad set and ad spend is Meta only.
+</Callout>
+
+Attribution queries cannot be saved as insights yet.
+
 ## Semantics worth knowing
 
 - **Unique counts are approximate.** `dau` and `unique_sessions` use
@@ -499,4 +575,4 @@ at write time, executes on this engine, and returns this response shape. See
 ## From MCP
 
 The `query_events` and `list_property_values` tools are thin proxies over these
-two routes with the same spec as their input schema.
+two routes with the same spec as their input schema, `attribution` included.
