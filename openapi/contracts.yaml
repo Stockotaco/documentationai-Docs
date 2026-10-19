@@ -543,6 +543,11 @@ paths:
           in: query
           required: false
           schema: { type: integer, minimum: 1, maximum: 500, default: 200 }
+        - name: goals
+          in: query
+          required: false
+          description: Set to `0` to skip reading the Meta ad set optimization goals.
+          schema: { type: string, enum: ["0", "1"] }
       responses:
         "200":
           description: Ranked candidates
@@ -560,6 +565,23 @@ paths:
                         properties:
                           days: { type: integer, example: 30 }
                           date_from: { type: string, format: date, example: "2026-09-19" }
+                      meta_goals:
+                        type: object
+                        properties:
+                          available: { type: boolean }
+                          reason: { type: string, description: "Why goals are unavailable, e.g. no_meta_insights or query_failed." }
+                          source: { type: string, enum: [managed, legacy] }
+                          ad_sets_synced: { type: boolean, description: "False: the optimization goal is known but not the event; those goals read as kind unknown." }
+                          goals: { type: array, items: { $ref: "#/components/schemas/MetaGoal" } }
+                          unmatched: { type: array, items: { $ref: "#/components/schemas/MetaGoal" }, description: Goals no Mythic event is sent to Meta for. }
+                          other_goals:
+                            type: array
+                            description: Spend on ad sets optimizing on something other than an event (clicks, reach).
+                            items:
+                              type: object
+                              properties:
+                                optimization_goal: { type: string, example: LINK_CLICKS }
+                                spend: { type: number }
                       deliveries_available:
                         type: boolean
                         description: False when the delivery log could not be read. Event traffic then stands in as the evidence and `delivered` is null.
@@ -781,13 +803,24 @@ components:
               detail: { type: string }
         sampled: { type: boolean }
         checked_at: { type: string, format: date-time }
+    MetaGoal:
+      type: object
+      properties:
+        platform: { type: string, example: meta_ads }
+        meta_event: { type: string, nullable: true, example: Purchase, description: Null for a saved custom conversion or an unknown event. }
+        kind: { type: string, enum: [standard, custom, custom_conversion, unknown] }
+        spend: { type: number, example: 3210.5 }
+        currency: { type: string, nullable: true, example: USD, description: Null when the ad sets bill in more than one currency. }
+        ad_sets: { type: integer, example: 4 }
+        campaigns: { type: integer, example: 2 }
+        pixel_ids: { type: array, items: { type: string } }
     ContractCandidate:
       type: object
       properties:
         event: { type: string, example: purchase }
         tier:
           type: string
-          enum: [optimized, mapped, conversion_name, sent, not_firing, other]
+          enum: [campaign_goal, optimized, mapped, conversion_name, sent, not_firing, other]
         has_contract: { type: boolean, example: false }
         total_events: { type: integer, example: 1240 }
         unique_users: { type: integer, example: 1180 }
@@ -796,6 +829,10 @@ components:
           description: Source events delivered to ad platforms in the window, summed over destinations.
           example: 2470
         reason: { type: string, example: "Sent as a conversion to Meta as Purchase 1,240 times, Google Ads (conversion action 987654) 1,230 times." }
+        campaign_goals:
+          type: array
+          description: Live Meta ad sets that optimize on the event this one is sent to Meta as.
+          items: { $ref: "#/components/schemas/MetaGoal" }
         destinations:
           type: array
           items:

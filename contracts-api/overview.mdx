@@ -60,6 +60,7 @@ Reads accept either key. **Writes require an agency key** — same rule as Setti
 
     | Tier | Meaning |
     | --- | --- |
+    | `campaign_goal` | A Meta ad set with spend in the window optimizes on the event this one is sent to Meta as. `campaign_goals` lists the ad sets and spend. Ranked first even when the event did not fire |
     | `optimized` | Delivered to Meta, Google Ads, GA4, or OpenAI Ads as a conversion in the window, or mapped on a managed Meta / Google browser tag as a conversion and firing |
     | `mapped` | Wired to an ad platform and firing, but nothing was delivered. Delivery is broken or the destination is new |
     | `conversion_name` | Named like a conversion (`purchase`, `form_submitted`, `appointment_booked`) but not sent to any ad platform |
@@ -67,9 +68,9 @@ Reads accept either key. **Writes require an agency key** — same rule as Setti
     | `not_firing` | Wired to an ad platform as a conversion, but the event did not fire at all |
     | `other` | Everything else that fired, by volume |
 
-    `summary.optimized_without_contract` is the shortlist. Mythic does not read campaign optimization goals from Meta or Google Ads, so `optimized` means what Mythic sends as a conversion, not what each campaign bids on.
+    `summary.optimized_without_contract` is the shortlist. `meta_goals` lists what the client's live Meta ad sets optimize on, read from its synced Meta ad data, and `meta_goals.unmatched` the goals Mythic sends nothing for, such as ad sets bidding on `Purchase` when no Mythic event reaches Meta as `Purchase`. A saved Meta custom conversion is reported as `custom_conversion` without an event name, because the synced ad set data does not carry its id. Google Ads goals are not read, so for Google `optimized` means what Mythic sends as a conversion.
 
-    Query parameters: `days` (1 to 90, default 30), `include_internal=1` to keep `$`-prefixed SDK events that no ad platform receives, `limit` (1 to 500, default 200).
+    Query parameters: `days` (1 to 90, default 30), `include_internal=1` to keep `$`-prefixed SDK events that no ad platform receives, `limit` (1 to 500, default 200), `goals=0` to skip the Meta read.
   </Step>
 
   <Step title="Scaffold a contract from live traffic">
