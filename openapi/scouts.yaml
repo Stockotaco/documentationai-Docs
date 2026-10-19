@@ -1,0 +1,704 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Scouts API
+  description: >
+    Client scouts on `/client/v1/scouts`: scheduled agents that read one
+    client's data (errors, logs, events, sessions, links, destinations) with
+    the agency's own model key and file one report per finding into that
+    client's inbox. Mythic pays for no model calls.
+
+
+    **Agency key (`ak_`) only**, or an agency-wide `mcp_` key with
+    `scouts:read` / `scouts:write`. A location secret key (`sk_`) gets `403
+    agency_required`. Every `location_id` must be one of the agency's clients
+    (`403 location_not_linked`). Creating, changing or running a scout needs
+    the `scouts` plan feature for its client (`402 feature_not_in_plan`) and a
+    model key for that client or the agency. 120 requests a minute per agency
+    (`429 rate_limited`). No CORS headers: call from a server.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+paths:
+  /client/v1/scouts/skills:
+    get:
+      summary: List skills
+      operationId: listScoutSkills
+      description: "The built-in skills a scout can run, each with the surfaces (`families`) it reads, its default schedule and the full playbook it follows."
+      responses:
+        "200":
+          description: Skills
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { type: array, items: { $ref: "#/components/schemas/Skill" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+  /client/v1/scouts/models:
+    get:
+      summary: List scout models
+      operationId: listScoutModels
+      description: >
+        Models a scout can run on. `openrouter`: OpenRouter's public catalog
+        filtered to models that accept tools, without lite, nano or `:free`
+        models (at most 400). `gemini`: the current Gemini Flash models.
+      parameters:
+        - name: provider
+          in: query
+          required: false
+          schema: { type: string, enum: [openrouter, gemini], default: openrouter }
+      responses:
+        "200":
+          description: Models
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  default: { type: string, example: google/gemini-3.8-flash }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, example: google/gemini-3.8-flash }
+                        name: { type: string, description: "OpenRouter only." }
+                        context_length: { type: integer, nullable: true, description: "OpenRouter only." }
+                        prompt_price_per_token: { type: string, nullable: true, description: "OpenRouter only. As OpenRouter reports it." }
+                        completion_price_per_token: { type: string, nullable: true, description: "OpenRouter only. As OpenRouter reports it." }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "502":
+          description: "catalog_unavailable: OpenRouter's catalog did not answer."
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  /client/v1/scouts/usage:
+    get:
+      summary: Scout model spend
+      operationId: getScoutUsage
+      description: >
+        Reported BYOK spend on scout model calls, counting every provider call
+        including failed and repaired ones. Totals plus one row per scout. Calls
+        whose cost the provider did not report are counted in
+        `unknown_cost_calls`; the provider's bill is authoritative.
+      parameters:
+        - name: location_id
+          in: query
+          required: false
+          description: Only this client.
+          schema: { type: string }
+        - name: date_from
+          in: query
+          required: false
+          description: "Inclusive UTC date. Default: the first day of this month."
+          schema: { type: string, format: date }
+        - name: date_to
+          in: query
+          required: false
+          description: "Inclusive UTC date. Default: today. At most 92 days after date_from."
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Usage
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Usage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+  /client/v1/scouts/reports:
+    get:
+      summary: List reports (inbox)
+      operationId: listScoutReports
+      description: >
+        The inbox, newest first. One report per finding. List rows carry a
+        one-line `headline` instead of the full summary, evidence and history.
+        A report built from a surface the caller's key cannot read (or from
+        server logs on a HIPAA location) keeps its place in the list with an
+        empty `summary_md` and a `restricted` object instead of its text.
+      parameters:
+        - name: location_id
+          in: query
+          required: false
+          description: Only this client.
+          schema: { type: string }
+        - name: scout_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          required: false
+          description: "Comma list of open, snoozed, resolved, dismissed, suppressed, or `all`. Default `open,snoozed`."
+          schema: { type: string, default: "open,snoozed" }
+        - name: priority
+          in: query
+          required: false
+          description: "Comma list of P0, P1, P2, P3, P4."
+          schema: { type: string, example: "P0,P1" }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: cursor
+          in: query
+          required: false
+          description: "The `next_cursor` of the previous page."
+          schema: { type: string }
+      responses:
+        "200":
+          description: Reports
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { type: array, items: { $ref: "#/components/schemas/ReportListItem" } }
+                  next_cursor: { type: string, nullable: true }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+  /client/v1/scouts/reports/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      summary: Get a report
+      operationId: getScoutReport
+      description: >
+        One report with its summary, actionability explanation, suggested
+        action, status history and evidence. Needs the read scope of every
+        surface in `families` (`403 insufficient_scope` with `required`). A
+        report that read server logs is refused on HIPAA locations (`403
+        hipaa_restricted`) and while the location's privacy mode cannot be
+        read (`503 privacy_unknown`).
+      responses:
+        "200":
+          description: Report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Report" }
+        "403": { $ref: "#/components/responses/ReportForbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+    patch:
+      summary: Change a report's status
+      operationId: updateScoutReport
+      description: >
+        Triage a report. Allowed moves: open to resolved, dismissed or
+        snoozed; snoozed to open, resolved or dismissed; dismissed to open;
+        suppressed to open or dismissed. **Resolved is terminal**: a recurrence
+        is filed as a new report. Dismissing needs a `reason`, which the scout
+        reads on its next runs (for 30 days) so it stops filing the same
+        thing. Snoozing needs `snoozed_until`, a future time within 90 days;
+        the report reopens when it passes. Same read rules as GET.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              additionalProperties: false
+              properties:
+                status: { type: string, enum: [open, snoozed, resolved, dismissed] }
+                reason: { type: string, maxLength: 1000, description: "Required when dismissing. Optional note otherwise; recorded in history." }
+                snoozed_until: { type: string, format: date-time, description: "Required when snoozing; only valid when snoozing." }
+      responses:
+        "200":
+          description: Updated report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Report" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/ReportForbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/scouts:
+    get:
+      summary: List scouts
+      operationId: listScouts
+      parameters:
+        - name: location_id
+          in: query
+          required: false
+          description: Only this client's scouts. Omit for every client.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Scouts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { type: array, items: { $ref: "#/components/schemas/Scout" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+    post:
+      summary: Create a scout
+      operationId: createScout
+      description: >
+        Create a scout on one client. Unset fields take the skill's defaults:
+        name from the skill, schedule daily 08:00 in the client's timezone.
+        Needs the `scouts` plan feature for the client (`402
+        feature_not_in_plan`), a model key for the client or agency (`409
+        no_model_key`), a `model` of that key's provider (`422
+        model_provider_mismatch`), and on an `mcp_` key the read scope of
+        every surface the skill reads (`403 insufficient_scope`). At most 10
+        scouts per client (`422 scout_limit`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - type: object
+                  required: [location_id, skill]
+                  properties:
+                    location_id: { type: string, description: "One of the agency's clients." }
+                    skill: { type: string, enum: [error_tracking, attribution_drift, custom], description: "Cannot change after creation." }
+                - $ref: "#/components/schemas/ScoutInput"
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/ScoutResponse" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/scouts/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      summary: Get a scout
+      operationId: getScout
+      responses:
+        "200": { description: Scout, content: { application/json: { schema: { $ref: "#/components/schemas/ScoutResponse" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Update a scout
+      operationId: updateScout
+      description: >
+        Merge a change onto the scout. `skill` cannot change. A body of only
+        `{"enabled": false}` pauses the scout without any plan, model key or
+        scope check, so spend can always be stopped. Every other change is
+        checked like a create. The update is rejected with `409
+        version_conflict` if the scout changed concurrently.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScoutInput" }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/ScoutResponse" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+    delete:
+      summary: Delete a scout
+      operationId: deleteScout
+      description: The scout stops running. Its reports stay in the inbox.
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string, format: uuid }
+                      deleted: { type: boolean, example: true }
+                      reports_retained: { type: boolean, example: true }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /client/v1/scouts/{id}/run:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      summary: Run a scout now
+      operationId: runScout
+      description: >
+        Queue a run now. The body must be empty or `{}`. The scout must be
+        enabled (`409 scout_paused`) with no run pending or running (`409
+        run_in_progress`). Same plan, model key and scope checks as a create.
+        Runs start within a minute and usually take 1 to 5 minutes; follow
+        them with `GET /scouts/{id}/runs`.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        "202":
+          description: Queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      run_id: { type: string, format: uuid }
+                      status: { type: string, example: pending }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/scouts/{id}/runs:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      summary: List runs
+      operationId: listScoutRuns
+      description: "The scout's last 30 runs, newest first, with the close-out summary, what each filed and reported spend."
+      responses:
+        "200":
+          description: Runs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { type: array, items: { $ref: "#/components/schemas/Run" } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /client/v1/scouts/{id}/memory:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      summary: Get scout memory
+      operationId: getScoutMemory
+      description: >
+        What the scout remembers between runs, up to 200 entries by key.
+        Prefixes: `pattern:` (what normal looks like), `noise:` (what it
+        skips), `dedupe:` (already surfaced), `addressed:` (fixed),
+        `report:` (which report tracks what).
+      responses:
+        "200":
+          description: Memory
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key: { type: string, example: "noise:exceptions:abc123" }
+                        content: { type: string }
+                        created_at: { type: string, format: date-time }
+                        updated_at: { type: string, format: date-time }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /client/v1/scouts/{id}/memory/{key}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - name: key
+        in: path
+        required: true
+        description: "A memory key: one of the prefixes above, a colon, then 1 to 100 of a-z 0-9 : _ . / -"
+        schema: { type: string, example: "noise:exceptions:abc123" }
+    delete:
+      summary: Forget a memory entry
+      operationId: forgetScoutMemory
+      description: "Delete one entry, for example a `noise:` entry that now hides something that matters."
+      responses:
+        "200":
+          description: Forgotten
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      key: { type: string }
+                      forgotten: { type: boolean, example: true }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Agency key (`ak_`) only; a location secret key (`sk_`) gets `403
+        agency_required`. Agency-wide scoped keys (`mcp_`) need `scouts:read`
+        or `scouts:write`, plus the read scope of every surface a scout's skill
+        reads to create or run it, and of every surface a report's run read to
+        open it.
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Unauthorized:
+      description: Missing or invalid key
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    AgencyRequired:
+      description: "agency_required, location_not_linked, or insufficient_scope (with `required`)."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    ReportForbidden:
+      description: "insufficient_scope (with `required`, the first missing surface scope) or hipaa_restricted."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    BadRequest:
+      description: "Invalid request: invalid_json, invalid_scout, invalid_query, invalid_report_query, invalid_status_change, invalid_provider or invalid_key. `details` lists every problem."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: Not found
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    PaymentRequired:
+      description: "feature_not_in_plan: the client's plan does not include Scouts."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Conflict:
+      description: "no_model_key, version_conflict, scout_paused, run_in_progress, status_conflict, report_closed or duplicate_open_report."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unprocessable:
+      description: "model_provider_mismatch, invalid_delivery_channel or scout_limit."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unavailable:
+      description: "entitlements_unavailable or privacy_unknown; retry after Retry-After seconds."
+      headers:
+        Retry-After: { schema: { type: integer, example: 30 } }
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  schemas:
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string, example: invalid_scout }
+            required: { type: string, description: "The scope to add, on insufficient_scope." }
+            message: { type: string }
+            details: { type: array, items: { type: string } }
+    Schedule:
+      type: object
+      properties:
+        kind: { type: string, enum: [daily, weekdays, weekly] }
+        time: { type: string, example: "08:00", description: "Local HH:mm." }
+        day_of_week: { type: integer, minimum: 1, maximum: 7, description: "ISO weekday, Monday = 1. Weekly only." }
+        timezone: { type: string, example: America/New_York, description: "IANA zone. Defaults to the client's timezone, else UTC." }
+    ScoutInput:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        instructions: { type: string, nullable: true, maxLength: 8000, description: "Your notes, added after the skill's playbook. Required for the custom skill." }
+        schedule: { $ref: "#/components/schemas/Schedule" }
+        delivery:
+          type: object
+          properties:
+            channel_ids: { type: array, maxItems: 5, items: { type: string, format: uuid }, description: "Active alert channels of this agency that receive each new report once." }
+        enabled: { type: boolean, default: true }
+        model: { type: string, nullable: true, description: "A model of the key's provider. Null uses the key's default unless it is a lite or nano model, else google/gemini-3.8-flash (OpenRouter) or gemini-3.8-flash (Gemini). Lite and nano models are refused." }
+    Scout:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        location_id: { type: string }
+        name: { type: string }
+        skill: { type: string, enum: [error_tracking, attribution_drift, custom] }
+        instructions: { type: string, nullable: true }
+        schedule: { $ref: "#/components/schemas/Schedule" }
+        delivery:
+          type: object
+          properties:
+            channel_ids: { type: array, items: { type: string, format: uuid } }
+        model: { type: string, nullable: true }
+        enabled: { type: boolean }
+        version: { type: integer }
+        next_run_at: { type: string, format: date-time, nullable: true }
+        last_run_at: { type: string, format: date-time, nullable: true }
+        last_report_at: { type: string, format: date-time, nullable: true }
+        last_error: { type: string, nullable: true }
+        current_run:
+          type: object
+          nullable: true
+          description: The run pending or running, if any.
+          properties:
+            id: { type: string, format: uuid }
+            status: { type: string, enum: [pending, running] }
+            scheduled_for: { type: string, format: date-time }
+            triggered_by: { type: string, enum: [schedule, on_demand] }
+            attempts: { type: integer }
+        can_run_now: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ScoutResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: "#/components/schemas/Scout" }
+    Skill:
+      type: object
+      properties:
+        id: { type: string, enum: [error_tracking, attribution_drift, custom] }
+        name: { type: string }
+        description: { type: string }
+        families:
+          type: array
+          items: { type: string, enum: [exceptions, logs, events, sessions, links, destinations] }
+        default_schedule: { $ref: "#/components/schemas/Schedule" }
+        requires_instructions: { type: boolean }
+        version: { type: string, example: "2026-10-19.1" }
+        playbook_md: { type: string, description: The standing instructions the scout follows. }
+    Restricted:
+      type: object
+      properties:
+        reason: { type: string, enum: [insufficient_scope, hipaa_restricted, privacy_unknown] }
+        required: { type: string, description: "The scope to add, on insufficient_scope." }
+    ReportBase:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        location_id: { type: string }
+        scout_id: { type: string, format: uuid, nullable: true }
+        scout_name: { type: string, nullable: true }
+        skill: { type: string, nullable: true }
+        run_id: { type: string, format: uuid, nullable: true }
+        title: { type: string }
+        priority: { type: string, enum: [P0, P1, P2, P3, P4] }
+        actionability: { type: string, enum: [immediately_actionable, requires_human_input, not_actionable] }
+        status: { type: string, enum: [open, snoozed, resolved, dismissed, suppressed] }
+        dedupe_key: { type: string, example: "exceptions:4f2a9c" }
+        families:
+          type: array
+          description: The surfaces the run read. Reading the report needs the read scope of each.
+          items: { type: string }
+        snoozed_until: { type: string, format: date-time, nullable: true }
+        dismiss_reason: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        status_changed_at: { type: string, format: date-time, nullable: true }
+        edit_count: { type: integer }
+    ReportListItem:
+      allOf:
+        - $ref: "#/components/schemas/ReportBase"
+        - type: object
+          properties:
+            headline: { type: string, description: "First line of the summary, up to 300 characters. Absent on restricted rows." }
+            summary_md: { type: string, description: "Empty on restricted rows only." }
+            restricted: { $ref: "#/components/schemas/Restricted" }
+    Report:
+      allOf:
+        - $ref: "#/components/schemas/ReportBase"
+        - type: object
+          properties:
+            summary_md: { type: string }
+            actionability_explanation: { type: string }
+            suggested_action: { type: string }
+            evidence: { type: array, items: { $ref: "#/components/schemas/Evidence" } }
+            history:
+              type: array
+              description: "Filed, edited and status entries, oldest first."
+              items:
+                type: object
+                properties:
+                  at: { type: string, format: date-time }
+                  kind: { type: string, enum: [filed, edited, status] }
+                  run_id: { type: string, format: uuid }
+                  scout_id: { type: string, format: uuid }
+                  status: { type: string }
+                  by: { type: string }
+                  note: { type: string }
+            provider: { type: string, nullable: true }
+            model_used: { type: string, nullable: true }
+    Evidence:
+      type: object
+      description: Copied by the server from a tool result recorded in the run, not written by the model.
+      properties:
+        call_id: { type: string, example: c4 }
+        run_id: { type: string, format: uuid }
+        tool: { type: string, example: get_exception_digest }
+        family: { type: string, example: exceptions }
+        args: { type: object, additionalProperties: true }
+        status: { type: integer, example: 200 }
+        truncated: { type: boolean }
+        excerpt: { type: string, description: "What the scout read, up to 4000 characters." }
+        note: { type: string, description: "The scout's note on what this result shows." }
+        added_at: { type: string, format: date-time }
+    Run:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [pending, running, succeeded, failed, cancelled] }
+        triggered_by: { type: string, enum: [schedule, on_demand] }
+        scheduled_for: { type: string, format: date-time }
+        attempts: { type: integer }
+        provider: { type: string, nullable: true }
+        model_used: { type: string, nullable: true }
+        skills_version: { type: string }
+        steps: { type: integer, description: Model turns. }
+        tool_calls: { type: integer }
+        reports_filed: { type: integer }
+        reports_edited: { type: integer }
+        families_read: { type: array, items: { type: string } }
+        summary: { type: string, nullable: true, description: "The close-out: what it looked at, filed and ruled out." }
+        error: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time, nullable: true }
+        model_calls: { type: integer }
+        known_cost_usd: { type: number }
+        unknown_cost_calls: { type: integer }
+    Usage:
+      type: object
+      properties:
+        date_from: { type: string, format: date }
+        date_to: { type: string, format: date }
+        spend_label: { type: string, example: Reported spend on scout model calls }
+        totals:
+          type: object
+          properties:
+            runs: { type: integer }
+            calls: { type: integer }
+            known_cost_usd: { type: number }
+            unknown_cost_calls: { type: integer }
+            input_tokens: { type: integer }
+            output_tokens: { type: integer }
+        scouts:
+          type: array
+          items:
+            type: object
+            properties:
+              scout_id: { type: string, format: uuid }
+              location_id: { type: string }
+              runs: { type: integer }
+              calls: { type: integer }
+              known_cost_usd: { type: number }
+              unknown_cost_calls: { type: integer }

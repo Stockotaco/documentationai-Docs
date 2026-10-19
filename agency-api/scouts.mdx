@@ -1,0 +1,380 @@
+---
+title: Scouts
+description: >-
+  Scheduled agents that read one client's data with your own model key and
+  file one report per finding into the client's inbox, on /client/v1/scouts
+  with an agency key.
+---
+
+import TierGated from "/snippets/tier-gated.mdx"
+
+## Overview
+
+A **scout** is a scheduled agent that watches one client for you. On each run
+it reads the client's data through the same read routes your agency already
+uses (errors, server logs, events, sessions, links, destinations), compares
+what it sees with what it remembers from earlier runs, and files **one report
+per finding** into the client's inbox. When nothing clears its bar, it closes
+out quietly: an empty run is a good run.
+
+Scouts run on **your** model key (OpenRouter or Gemini). Mythic pays for no
+model calls, and the spend is reported per scout.
+
+| Route | What it does |
+| --- | --- |
+| `GET /scouts/skills` | The built-in skills and the playbook each follows |
+| `GET /scouts/models` | Models a scout can run on |
+| `GET /scouts/usage` | Reported model spend on scout runs |
+| `GET /scouts`, `POST /scouts` | List or create scouts |
+| `GET/PATCH/DELETE /scouts/{id}` | One scout: read, change or pause, delete |
+| `POST /scouts/{id}/run` | Run a scout now |
+| `GET /scouts/{id}/runs` | The last 30 runs, with what each found and spent |
+| `GET /scouts/{id}/memory`, `DELETE /scouts/{id}/memory/{key}` | What a scout remembers, and forgetting one entry |
+| `GET /scouts/reports` | The inbox |
+| `GET/PATCH /scouts/reports/{id}` | One report, and resolving, dismissing or snoozing it |
+
+The same operations are MCP tools: `list_scout_skills`, `list_scout_models`,
+`get_scout_usage`, `list_scouts`, `get_scout`, `create_scout`,
+`update_scout`, `delete_scout`, `run_scout`, `list_scout_runs`,
+`get_scout_memory`, `forget_scout_memory`, `list_scout_reports`,
+`get_scout_report` and `update_scout_report`. See the
+[tool reference](/mcp/tools#scouts).
+
+<Callout kind="note">
+  These are separate from the read-only Scouts in
+  [Replay Vision](/agency-api/replay-vision#read-only-scouts), which summarize
+  one scanner's observations in a single call. Client scouts call tools in a
+  loop across a client's surfaces and file inbox reports.
+</Callout>
+
+## Base URL
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/scouts
+```
+
+## Authentication
+
+**Agency key (`ak_`), or an agency-wide `mcp_` key with `scouts:read` or
+`scouts:write`.** A location secret key (`sk_`) gets `403 agency_required`.
+Routes do not need a bound location: `location_id` is a query parameter or
+body field where a route takes one, and it must be one of your clients (`403
+location_not_linked`). 120 requests a minute per agency (`429 rate_limited`,
+with `Retry-After`).
+
+A scout reads surfaces your key may not, so an `mcp_` key also needs the read
+scope of those surfaces. `ak_` keys hold every scope.
+
+| Action | Scopes on an `mcp_` key |
+| --- | --- |
+| List skills, models, usage, scouts, runs, memory, the inbox | `scouts:read` |
+| Create a scout, change it, or run it now | `scouts:write` + the read scope of every surface its skill reads |
+| Pause (`PATCH` with only `{"enabled": false}`), delete, forget memory | `scouts:write` |
+| Open a report | `scouts:read` + the read scope of every surface in its `families` |
+| Change a report's status | `scouts:write` + the read scope of every surface in its `families` |
+
+A missing surface scope answers `403 insufficient_scope` with `required` naming
+the first scope to add, for example `logs:read`. In the inbox, a report you
+cannot read keeps its place with an empty `summary_md` and a `restricted`
+object (`reason`, `required`) instead of its text.
+
+A report whose run read server logs follows the logs privacy rule: it is
+refused on HIPAA locations (`403 hipaa_restricted`) and while the location's
+privacy mode cannot be read (`503 privacy_unknown`, retry after
+`Retry-After`).
+
+<Callout kind="alert">
+  This surface serves **no CORS headers**. Call it from your server, never from
+  browser JavaScript.
+</Callout>
+
+## Plan feature
+
+<TierGated />
+
+On Scouts the plan check runs only where a scout reads data or spends: creating
+a scout, changing it, and running it now answer `402 feature_not_in_plan` when
+the client's plan lacks the `scouts` feature, and `503
+entitlements_unavailable` when the plan cannot be read. Listing, the inbox,
+triage, deleting and **pausing** work without it, so an agency that downgrades
+can always stop spend. `scouts` comes with plans that include error tracking.
+
+## Model key
+
+Scouts use the client's or agency's [Replay Vision model
+key](/agency-api/replay-vision#model-keys) (OpenRouter or Gemini). Without one,
+creating, changing or running a scout answers `409 no_model_key`.
+
+The model a run uses:
+
+1. The scout's own `model`, which must belong to the key's provider (`422
+   model_provider_mismatch` otherwise).
+2. With no `model` set, the key's default model, unless it is a lite or nano
+   model.
+3. Otherwise `google/gemini-3.8-flash` (OpenRouter) or `gemini-3.8-flash`
+   (Gemini).
+
+<Callout kind="warning">
+  **Lite and nano models are refused.** A scout calls tools in a loop, and lite
+  and nano models follow tool contracts poorly. Any model id containing `lite`
+  or `nano` as a segment is rejected with `400 invalid_scout`, and
+  `GET /scouts/models` does not list them.
+</Callout>
+
+`GET /scouts/models?provider=openrouter` lists OpenRouter models that accept
+tools (without lite, nano or `:free` models), with prices as OpenRouter reports
+them. `provider=gemini` lists the current Gemini Flash models.
+
+## Skills
+
+A skill is the scout's standing instructions: what counts as worth a person's
+attention on its surfaces, how to tell it from noise, and when to stay quiet.
+`GET /scouts/skills` returns each one with its full playbook (`playbook_md`)
+and the `version` recorded on every run. The skill cannot change after the
+scout is created.
+
+| Skill | Reads | What it watches |
+| --- | --- | --- |
+| `error_tracking` | `exceptions`, `logs`, `sessions`, `events` | Browser JavaScript errors and server error logs that cost visitors, leads or tracking: bursts, new issues, comebacks and same-session browser plus server failures, weighted by landing and conversion pages |
+| `attribution_drift` | `events`, `sessions`, `links` | Channels losing credit: paid traffic arriving without UTMs or click ids, tagged share falling, and channel shifts scored against the same weekday over four weeks |
+| `custom` | `exceptions`, `logs`, `events`, `sessions`, `links`, `destinations` | Your own instructions over every surface a scout can read |
+
+`instructions` (up to 8,000 characters) are your notes, added after the
+skill's playbook: what to watch, what to ignore, business context. The
+`custom` skill requires them.
+
+Each read surface maps to a scope: `exceptions:read`, `logs:read`,
+`sessions:read`, `events:read`, `links:read`, `destinations:read`. The scout
+itself reads with only the scopes of its skill's surfaces, bound to its one
+client, under the same plan, privacy and HIPAA rules as your own calls. If a
+client's plan lacks logs, an `error_tracking` scout notes it and continues
+with browser errors.
+
+## Schedule
+
+```json
+{ "kind": "weekly", "time": "09:30", "day_of_week": 1, "timezone": "Europe/Berlin" }
+```
+
+| Field | Values |
+| --- | --- |
+| `kind` | `daily`, `weekdays` or `weekly` |
+| `time` | Local `HH:mm` |
+| `day_of_week` | ISO weekday 1 (Monday) to 7, `weekly` only |
+| `timezone` | IANA zone, default the client's timezone (else UTC) |
+
+The default is daily at 08:00 client time. A schedule you send is merged onto
+the default on create, or onto the current schedule on update.
+
+## Quick start
+
+<Steps>
+  <Step title="Pick a skill">
+    ```bash
+    curl https://mythic-analytics.gulp.workers.dev/client/v1/scouts/skills \
+      -H "Authorization: Bearer ak_your_agency_key"
+    ```
+  </Step>
+  <Step title="Create the scout">
+    ```bash
+    curl -X POST https://mythic-analytics.gulp.workers.dev/client/v1/scouts \
+      -H "Authorization: Bearer ak_your_agency_key" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "location_id": "loc_abc123",
+        "skill": "error_tracking",
+        "instructions": "The booking form on /schedule is the only conversion that matters.",
+        "delivery": { "channel_ids": ["0b6f4c5e-3a0e-4a53-9d1d-6e2f7c1a9b10"] }
+      }'
+    ```
+  </Step>
+  <Step title="Run it once now">
+    ```bash
+    curl -X POST https://mythic-analytics.gulp.workers.dev/client/v1/scouts/SCOUT_ID/run \
+      -H "Authorization: Bearer ak_your_agency_key"
+    ```
+    Answers `202` with `run_id`. Runs start within a minute and usually take 1
+    to 5 minutes. Follow them with `GET /scouts/SCOUT_ID/runs`.
+  </Step>
+  <Step title="Read the inbox">
+    ```bash
+    curl "https://mythic-analytics.gulp.workers.dev/client/v1/scouts/reports?location_id=loc_abc123&priority=P0,P1" \
+      -H "Authorization: Bearer ak_your_agency_key"
+    ```
+  </Step>
+</Steps>
+
+## Changing, pausing and deleting
+
+`PATCH /scouts/{id}` merges your change onto the scout. Every change except a
+pause is checked like a create (plan, model key, scopes, channels). A body of
+only `{"enabled": false}` pauses the scout without those checks, and pausing
+cancels a pending run. A concurrent change answers `409 version_conflict`:
+fetch the scout again and retry.
+
+`POST /scouts/{id}/run` needs an enabled scout (`409 scout_paused`) with no
+run pending or running (`409 run_in_progress`). The body must be empty or
+`{}`.
+
+`DELETE /scouts/{id}` stops the scout. Its reports stay in the inbox
+(`reports_retained: true`).
+
+## The inbox
+
+Each report is one finding, with a `title`, a markdown `summary_md`, a
+`suggested_action`, a priority, an actionability with its explanation, and
+evidence.
+
+| Priority | Meaning |
+| --- | --- |
+| `P0` | Conversions or tracking broken now |
+| `P1` | Broad regression on landing pages or paid traffic |
+| `P2` | Moderate reach |
+| `P3` | Narrow |
+| `P4` | Informational |
+
+| Actionability | Meaning |
+| --- | --- |
+| `immediately_actionable` | A concrete fix someone can start now |
+| `requires_human_input` | A person must decide something first; the explanation names it |
+| `not_actionable` | Worth recording, no action. Filed as `suppressed`, hidden from the default inbox |
+
+`GET /scouts/reports` returns `open` and `snoozed` reports by default, newest
+first. Filter with `location_id`, `scout_id`, `status` (a comma list, or
+`all`) and `priority` (for example `P0,P1`); page with `limit` (1 to 200,
+default 50) and `next_cursor`. List rows carry a one-line `headline` instead of
+the summary, evidence and history; `GET /scouts/reports/{id}` returns the full
+report.
+
+A client has at most one live (`open` or `snoozed`) report per problem
+(`dedupe_key`). When a scout sees the same problem again, it **edits** that
+report with fresh evidence (`edit_count`, a history entry) instead of filing a
+duplicate.
+
+### Report statuses
+
+| Status | How it gets there | Can move to |
+| --- | --- | --- |
+| `open` | Filed, restored, or a snooze ended | `resolved`, `dismissed`, `snoozed` |
+| `snoozed` | You snoozed it until `snoozed_until` | `open`, `resolved`, `dismissed` |
+| `resolved` | You resolved it | Nothing: terminal |
+| `dismissed` | You dismissed it with a reason | `open` |
+| `suppressed` | Filed as `not_actionable` | `open`, `dismissed` |
+
+```bash
+curl -X PATCH https://mythic-analytics.gulp.workers.dev/client/v1/scouts/reports/REPORT_ID \
+  -H "Authorization: Bearer ak_your_agency_key" \
+  -H "Content-Type: application/json" \
+  -d '{ "status": "dismissed", "reason": "Third-party chat widget; does not affect the form." }'
+```
+
+- **Resolve** is terminal. If the problem comes back, the scout files a **new**
+  report; a resolved one answers `400 invalid_status_change` to any change
+  (`409 report_closed` if it was resolved while your change was in flight).
+- **Dismiss** needs a `reason` (up to 1,000 characters). The scout reads your
+  reason on its next runs, for 30 days, so it stops filing the same thing.
+- **Snooze** needs `snoozed_until`, a future time within 90 days. The report
+  reopens when it passes.
+- **Restore** a dismissed or suppressed report by setting `status: "open"`.
+  If another open report already tracks the same problem, that answers `409
+  duplicate_open_report`.
+
+A report that changed since you read it answers `409 status_conflict`. Every
+change is recorded in `history` with who made it (the key) and the note.
+
+### Evidence
+
+Evidence is **not model text**. A scout cites tool calls from its own run, and
+the server copies the recorded result into the report: the `tool`, its
+`args`, the HTTP `status`, the surface (`family`), and an `excerpt` of up to
+4,000 characters of exactly what the scout read. The scout adds only a `note`
+on what the result shows. A report needs at least one piece of evidence and
+holds at most 12 per filing. Reports keep their evidence after a run's raw
+tool results are pruned 30 days later.
+
+## Memory
+
+A scout remembers between runs. `GET /scouts/{id}/memory` lists up to 200
+entries by key prefix:
+
+| Prefix | Meaning |
+| --- | --- |
+| `pattern:` | What normal looks like (baselines) |
+| `noise:` | What it skips and why |
+| `dedupe:` | Already surfaced |
+| `addressed:` | Fixed, with the date |
+| `report:` | Which report tracks what |
+
+`DELETE /scouts/{id}/memory/{key}` forgets one entry: the quickest way to
+correct a scout, for example a `noise:` entry that now hides something that
+matters.
+
+## Runs and spend
+
+`GET /scouts/{id}/runs` returns the last 30 runs: status, trigger (`schedule`
+or `on_demand`), model, skill version, model turns (`steps`), `tool_calls`,
+`reports_filed`, `reports_edited`, the surfaces read, and the close-out
+`summary` (what it looked at, filed and ruled out). Each run also carries
+`model_calls`, `known_cost_usd` and `unknown_cost_calls`.
+
+`GET /scouts/usage` totals reported spend for a UTC date range (inclusive, at
+most 92 days, default this month), optionally for one client, with one row per
+scout. It counts every provider call, including failed and repaired ones.
+Providers do not always report cost: calls without it are counted in
+`unknown_cost_calls`, and your provider's bill is authoritative.
+
+## Delivery to alert channels
+
+`delivery.channel_ids` names up to 5 active [alert
+channels](/agency-api/alerts) of your agency (`422 invalid_delivery_channel`
+otherwise). Each new **open** report is sent to each channel at most once;
+edits are not re-sent, and `suppressed` (`not_actionable`) reports are never
+sent. Nothing is sent for a report resolved or dismissed before delivery, or
+for a client no longer on your roster.
+
+A Slack channel gets the title, priority, scout name, the summary's first line
+and a link to the report in the agency app. A webhook gets JSON with
+`X-Mythic-Event: client_scout.report`, signed like every [alert
+webhook](/agency-api/alerts#webhook-deliveries):
+
+```json
+{
+  "type": "client_scout.report",
+  "source": "client_scout",
+  "scout": { "id": "…", "name": "Error tracking", "skill": "error_tracking" },
+  "run_id": "…",
+  "filed_at": "2026-10-20T08:04:11Z",
+  "report": {
+    "id": "…",
+    "location_id": "loc_abc123",
+    "title": "Booking form throws on submit for Safari visitors",
+    "summary_md": "…",
+    "priority": "P0",
+    "actionability": "immediately_actionable",
+    "suggested_action": "…",
+    "url": "https://…/c/loc_abc123/scouts/reports/…"
+  }
+}
+```
+
+Reports built from server logs are not delivered on HIPAA locations. Scout
+reports never raise alerts in the central alert feed.
+
+## Limits
+
+| Limit | Value |
+| --- | --- |
+| Scouts per client | 10 (`422 scout_limit`) |
+| Model turns per run | 24 |
+| Tool calls per run | 60 |
+| New reports per run | 5 |
+| Evidence items per filing | 12 |
+| Delivery channels per scout | 5 |
+| Name | 120 characters |
+| Instructions | 8,000 characters |
+| Dismiss reason | 1,000 characters |
+| Snooze | 90 days |
+| Memory entries per scout | 200 |
+| Runs listed | Last 30 |
+| Usage range | 92 days |
+| Requests | 120 a minute per agency |

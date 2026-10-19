@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 296 tools across
-  30 scope families — with the scope each one needs and the
+  Every tool the Mythic MCP server exposes — 311 tools across
+  31 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 296 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 311 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -495,6 +495,30 @@ Agency-wide keys only — a key bound to one client cannot hold this scope.
 | `delete_replay_scanner`<br /><span style={{opacity: 0.7}}>Delete Replay Scanner</span> | `replay_vision:write` | Delete a scanner and its observations/scouts. | `DELETE /client/v1/replay-vision/scanners/:id` |
 | `scan_replays`<br /><span style={{opacity: 0.7}}>Scan Replays</span> | `replay_vision:write` | Queue up to 50 recordings (session ids from list_replays) for one scanner now. | `POST /client/v1/replay-vision/scanners/:id/scan` |
 | `retry_replay_observation`<br /><span style={{opacity: 0.7}}>Retry Replay Observation</span> | `replay_vision:write` | Put a failed observation back in the queue with the same scanner snapshot. | `POST /client/v1/replay-vision/observations/:id/retry` |
+
+## Scouts
+
+Scheduled agents that read one client’s data with the agency’s own model key and file findings into the client’s inbox: scouts, runs, memory, reports and report status. Reading a report also needs the read scope of every surface the scout read.
+
+Agency-wide keys only — a key bound to one client cannot hold this scope.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_scout_skills`<br /><span style={{opacity: 0.7}}>List Scout Skills</span> | `scouts:read` | The built-in client scout skills with what each reads (families) and its full playbook: error_tracking (browser exceptions + server error logs that cost visitors, leads or tracking), attribution_drift (paid… | `GET /client/v1/scouts/skills` |
+| `list_scout_models`<br /><span style={{opacity: 0.7}}>List Scout Models</span> | `scouts:read` | Tool-capable models a scout can run on, for one provider (the client's or agency's model key). | `GET /client/v1/scouts/models` |
+| `get_scout_usage`<br /><span style={{opacity: 0.7}}>Get Scout Usage</span> | `scouts:read` | Reported BYOK spend on scout model calls: runs, calls, known cost and calls whose cost the provider did not report, per scout. | `GET /client/v1/scouts/usage` |
+| `list_scout_reports`<br /><span style={{opacity: 0.7}}>List Scout Reports</span> | `scouts:read` | The inbox: scout reports newest first, one finding each, with title, headline, priority (P0-P4), actionability, status and the scout that filed it. | `GET /client/v1/scouts/reports` |
+| `get_scout_report`<br /><span style={{opacity: 0.7}}>Get Scout Report</span> | `scouts:read` | One report: summary, actionability and its explanation, suggested next step, status history, and evidence. | `GET /client/v1/scouts/reports/:id` |
+| `list_scouts`<br /><span style={{opacity: 0.7}}>List Scouts</span> | `scouts:read` | Client scouts (agency-wide, or one client with location_id): skill, schedule, model, enabled, next/last run, last error and any run in progress. | `GET /client/v1/scouts` |
+| `get_scout`<br /><span style={{opacity: 0.7}}>Get Scout</span> | `scouts:read` | One client scout's configuration and state. | `GET /client/v1/scouts/:id` |
+| `list_scout_runs`<br /><span style={{opacity: 0.7}}>List Scout Runs</span> | `scouts:read` | A scout's last 30 runs: status, its close-out summary (what it looked at, filed, ruled out), turns, tool calls, reports filed/edited, surfaces read, model, and reported spend. | `GET /client/v1/scouts/:id/runs` |
+| `get_scout_memory`<br /><span style={{opacity: 0.7}}>Get Scout Memory</span> | `scouts:read` | What a scout remembers between runs: pattern: (baselines), noise: (what it skips), dedupe:, addressed: (fixed), report: (which report tracks what). | `GET /client/v1/scouts/:id/memory` |
+| `update_scout_report`<br /><span style={{opacity: 0.7}}>Update Scout Report</span> | `scouts:write` | Triage a report: resolve (terminal; a recurrence is filed as a new report), dismiss with a reason (the scout reads it on its next runs, for 30 days, so it stops re-filing), snooze until a time (max 90 days),… | `PATCH /client/v1/scouts/reports/:id` |
+| `create_scout`<br /><span style={{opacity: 0.7}}>Create Scout</span> | `scouts:write` | Create a scheduled client scout that reads the client's data with the agency's own model key and files one report per finding into the inbox. | `POST /client/v1/scouts` |
+| `update_scout`<br /><span style={{opacity: 0.7}}>Update Scout</span> | `scouts:write` | Change a scout's name, instructions, schedule, delivery, model, or pause it (enabled:false). | `PATCH /client/v1/scouts/:id` |
+| `delete_scout`<br /><span style={{opacity: 0.7}}>Delete Scout</span> | `scouts:write` | Delete a scout. | `DELETE /client/v1/scouts/:id` |
+| `run_scout`<br /><span style={{opacity: 0.7}}>Run Scout Now</span> | `scouts:write` | Queue a run now (the scout must be enabled with no run in progress). | `POST /client/v1/scouts/:id/run` |
+| `forget_scout_memory`<br /><span style={{opacity: 0.7}}>Forget Scout Memory</span> | `scouts:write` | Delete one memory entry by key (for example a noise: entry that hides something that now matters). | `DELETE /client/v1/scouts/:id/memory/:key` |
 
 ## Alerts
 
