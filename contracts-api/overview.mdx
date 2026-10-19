@@ -19,7 +19,7 @@ The key is still very much "seen". Revenue reporting is quietly wrong.
 
 An **event contract** is the declared side of that: for one event name, the properties it is supposed to carry, their types, and which are required. `GET /violations` diffs the declaration against real traffic and tells you the share of events that break it.
 
-Contracts are **read-only enforcement**. Nothing here rejects, quarantines, or drops an event — a typo in a contract must never become data loss. It is a report, and you can [have it pushed to you daily](#getting-told-instead-of-asking) instead of asking for it.
+Contracts are **read-only enforcement**. Nothing here rejects, quarantines, or drops an event — a typo in a contract must never become data loss. It is a report, checked [every day with stored history](#daily-checks-and-history), and you can [have it pushed to you](#getting-told-instead-of-asking) instead of asking for it.
 
 | Symptom | What the report calls it | What it usually means |
 | --- | --- | --- |
@@ -234,6 +234,21 @@ If the window still holds too much to scan, the API returns `400 window_too_larg
 <Callout kind="warning">
   The report scans only the contracted events. A `truncated: true` flag on the response means their property statistics still hit the row limit. Narrow the window or pass `?event=` before trusting `absent` counts — a truncated read under-counts keys and can manufacture "missing" fields that are really a row limit.
 </Callout>
+
+## Daily checks and history
+
+Every contract is checked once a day at ~08:00 UTC against the previous whole UTC day, whether or not anything is set up to notify you. Each day's result is stored, so you can see when a contract started failing:
+
+```bash
+curl "$BASE/client/v1/contracts/history?location_id=$LOC&event=purchase&days=30" \
+  -H "Authorization: Bearer $AK"
+```
+
+`results` has one row per contract per day, newest first: `status` (`ok`, `violations`, `no_data`), `total_events`, the unsampled `reference_events`, `min_required_coverage` (the lowest coverage of any required property), per-property `coverage`, and the `violations` as reported that day. Each row is the verdict **as judged that day**, against the contract and thresholds of that day. `summary` counts days checked, failing and without data per event. `days` is 1 to 90, default 30.
+
+A day with no row was not checked: the contract did not exist yet, or the check failed. Never read a gap as a pass.
+
+A failing day also opens an alert in the agency's alert feed (source `contracts`), one per location, updated as the set of failures changes and resolved when the contracts pass again. To have it sent to Slack or a webhook, add an alert rule that includes `contracts`, or set the per-location webhook below.
 
 ## Getting told, instead of asking
 

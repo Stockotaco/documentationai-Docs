@@ -454,6 +454,61 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/contracts/history:
+    get:
+      summary: Daily contract results
+      operationId: getContractHistory
+      description: >
+        One row per contract event per UTC day, as the ~08:00 UTC daily check
+        judged the previous day, newest first. A day with no row was not
+        checked; it is not a pass.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: event
+          in: query
+          required: false
+          description: One contract event. Omit for all.
+          schema: { type: string }
+        - name: days
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 90, default: 30 }
+      responses:
+        "200":
+          description: Daily results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      since: { type: string, format: date, example: "2026-09-19" }
+                      days: { type: integer, example: 30 }
+                      summary:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            event: { type: string, example: purchase }
+                            days_checked: { type: integer, example: 30 }
+                            days_failing: { type: integer, example: 3 }
+                            days_no_data: { type: integer, example: 0 }
+                            last_status: { type: string, enum: [ok, violations, no_data] }
+                            last_day: { type: string, format: date }
+                      results:
+                        type: array
+                        items: { $ref: "#/components/schemas/ContractDayResult" }
+                      note: { type: string }
+        "400":
+          description: "`invalid_days`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /client/v1/contracts/candidates:
     get:
       summary: Rank the events to put a contract on
@@ -694,6 +749,38 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
   schemas:
+    ContractDayResult:
+      type: object
+      properties:
+        event: { type: string, example: purchase }
+        day: { type: string, format: date, example: "2026-10-18" }
+        status: { type: string, enum: [ok, violations, no_data] }
+        no_data_reason: { type: string, nullable: true, example: null }
+        total_events: { type: integer, example: 240, description: Property scan count. A sample count when sampled is true. }
+        reference_events: { type: integer, nullable: true, example: 240, description: Unsampled count of the event that day. }
+        min_daily_events: { type: integer, nullable: true, description: The contract's minimum that day. }
+        min_required_coverage: { type: number, nullable: true, example: 0.62, description: Lowest coverage of any required property. Null with no data or no required property. }
+        properties:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string, example: value }
+              expected_type: { type: string, example: number }
+              required: { type: boolean }
+              coverage: { type: number, nullable: true, example: 0.62 }
+        violations:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string, nullable: true, example: value }
+              kind: { type: string, enum: [missing_required, null_value, type_mismatch, low_volume] }
+              count: { type: integer, example: 91 }
+              rate: { type: number, nullable: true, example: 0.38 }
+              detail: { type: string }
+        sampled: { type: boolean }
+        checked_at: { type: string, format: date-time }
     ContractCandidate:
       type: object
       properties:

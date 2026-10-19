@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 295 tools across
+  Every tool the Mythic MCP server exposes — 296 tools across
   30 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 295 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 296 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -256,6 +256,7 @@ Declared per-event property schemas and their violation reports.
 | `check_event_contracts`<br /><span style={{opacity: 0.7}}>Check Event Contracts</span> | `contracts:read` | Diff every stored contract (or one, with `event`) against live traffic and report violations, worst first. | `GET /client/v1/contracts/violations` |
 | `get_contract_samples`<br /><span style={{opacity: 0.7}}>Get Contract Violation Samples</span> | `contracts:read` | The actual offending events behind ONE violation from check_event_contracts — up to 50 raw examples with session_id and $current_url, so you can see where the bad data comes from. | `GET /client/v1/contracts/samples` |
 | `suggest_event_contract`<br /><span style={{opacity: 0.7}}>Suggest Event Contract</span> | `contracts:read` | Infer a contract for one event from its live traffic — the fastest way to author one. | `GET /client/v1/contracts/suggest` |
+| `get_contract_history`<br /><span style={{opacity: 0.7}}>Get Contract History</span> | `contracts:read` | Daily results of this client's event contracts, as the ~08:00 UTC sweep judged each previous UTC day: status (ok / violations / no_data), event counts, lowest required-property coverage, per-property coverag… | `GET /client/v1/contracts/history` |
 | `list_contract_candidates`<br /><span style={{opacity: 0.7}}>List Contract Candidates</span> | `contracts:read` | Which events this client should put a contract on first, ranked. | `GET /client/v1/contracts/candidates` |
 | `list_contract_presets`<br /><span style={{opacity: 0.7}}>List Contract Presets</span> | `contracts:read` | The built-in contract packs and every contract in them. | `GET /client/v1/contracts/presets` |
 | `set_event_contract`<br /><span style={{opacity: 0.7}}>Set Event Contract</span> | `contracts:write` | Create or replace the contract for ONE event. | `PUT /client/v1/contracts` |
