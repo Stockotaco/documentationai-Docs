@@ -1,0 +1,158 @@
+---
+title: Activity Log
+description: >-
+  One row per event and destination with the outcome of its latest attempt,
+  the contact, the amount, matching signals and Meta's match quality. Filter,
+  search, page with a cursor and export to CSV.
+---
+
+## Overview
+
+`GET /client/v1/destinations/activity` answers "what did we send, to which destination, for whom, and did it land?" for one client location. It powers the agency app's Activity log page and is available to any `ak_` or `sk_` key, and to `mcp_` keys with `destinations:read` (MCP tool `list_destination_activity`).
+
+```bash
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/destinations/activity?location_id=loc_acme&hours=168&status=failed" \
+  -H "Authorization: Bearer ak_YOUR_AGENCY_KEY"
+```
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "ts": "2026-10-19T02:55:29.291Z",
+      "event_uuid": "01a15215-dbe1-7da0-bcc4-d406ccf2429a",
+      "event_name": "purchase",
+      "sent_event_name": "Purchase",
+      "action_id": "b2487ef9-852f-4bac-a08a-effacc101424",
+      "action_name": "Meta CAPI",
+      "destination_type": "meta_capi",
+      "status": "failed",
+      "attempt": 5,
+      "max_attempts": 5,
+      "response_status": 400,
+      "error": "Invalid parameter",
+      "duration_ms": 310,
+      "enrichment_applied": true,
+      "contact": { "person_id": "d4b678eb-ab69-4895-b366-15f3a184babf", "name": "Alice Doe", "email": "alice@example.com" },
+      "amount": 49.99,
+      "currency": "USD",
+      "match_quality": 7.5,
+      "test_events_only": false,
+      "signals": { "fbc": true, "gclid": false, "email": true, "phone": true, "utm": true },
+      "utm_source": "facebook",
+      "utm_medium": "paid",
+      "utm_campaign": "fall",
+      "session_id": "01a142a3-8162-7b4b-a2f4-8f5d26d09269",
+      "distinct_id": "01a142a3-8162-7b4a-8c99-a7a5c135b48b"
+    }
+  ],
+  "next_cursor": "MjAyNi0xMC0xOSAwMjo1NToyOS4yOTF8MDFhMT...",
+  "meta": {
+    "limit": 50,
+    "window": { "since": "2026-10-12T03:00:00.000Z", "until": "2026-10-19T03:00:00.000Z" },
+    "stats": {
+      "total": 5226, "successes": 5223, "failures": 1, "skipped": 2, "retrying": 0,
+      "success_rate": 0.9998, "avg_match_quality": 7.67, "emq_rows": 5191,
+      "event_names": ["Lead", "PageView", "Purchase"]
+    }
+  }
+}
+```
+
+## Row grain
+
+Each row is one **source event × destination**. A delivery that failed twice and then succeeded is one `success` row (attempt 3), not three rows. The row shows the **latest observed attempt**: the attempt with the latest timestamp wins, which is right even when a job was re-enqueued and its attempt counter restarted.
+
+For every individual attempt, use `GET /client/v1/destinations/deliveries`. For the request that was sent and the destination's response, open one row with `GET /client/v1/destinations/{action_id}/deliveries/{event_uuid}`. That detail can show an earlier success where the list shows a later retry; the list's status is the latest one observed.
+
+## Status
+
+| `status` | Meaning |
+|----------|---------|
+| `success` | The platform's API accepted the event. For Google Ads and GA4, acceptance is not ingestion: check `GET /client/v1/destinations/{id}/deliveries/{eventUuid}/status`. |
+| `failed` | The last attempt failed and no retry is pending. |
+| `skipped` | The destination logged a skip at send time, for example a rate limit or no usable identifier. `error` holds the reason when one was recorded. |
+| `retrying` | Still in flight. The row changes as attempts land. |
+| `test` | A test send. Listed only with `status=test`, never counted in `meta.stats`. |
+
+<Callout kind="info">
+Events your trigger rules filter out, events for a disabled destination and unmapped events are never logged, so they never appear here. `skipped` only covers skips the destination recorded.
+</Callout>
+
+## Where the columns come from
+
+`contact`, `amount`, `currency`, `signals` and the UTM fields are **reconstructed at read time** from the source event, its session and the person's **current** profile. They are not read from the payload that was sent:
+
+- `contact` is the person the event's visitor resolved to, as that person looks now. It is `null` for a visitor who never resolved.
+- `amount` is the first numeric `value`, `monetaryValue` or `total` property on the source event.
+- `signals.fbc` / `signals.gclid` mean a Meta or Google click id was on the event or its session; `email` / `phone` mean the contact or the event carries one; `utm` means a UTM source, medium or campaign.
+
+An event delivered more than 2 days after it occurred (a backfill or redelivery), and anything older than the 30-day window, has no contact or signals. Open the row's delivery detail to see exactly what was sent.
+
+## Match quality
+
+`match_quality` is Meta's **Event Match Quality** (0 to 10) for the destination and the **sent** event name, as captured that day by the daily quality sweep. It is a daily snapshot for the event name, not a score for this one delivery. It is `null` for non-Meta destinations and for days Meta did not score. `meta.stats.avg_match_quality` averages it over successful Meta rows that were scored (`emq_rows`).
+
+## Filters
+
+| Parameter | Notes |
+|-----------|-------|
+| `hours` | Window ending now (or at `until`). Default `168`, max `720`. Not with `since`. |
+| `since`, `until` | Explicit window, ISO 8601 or `YYYY-MM-DD HH:MM:SS` UTC, at most 720 hours apart. |
+| `status` | `all` (default), `success`, `failed`, `skipped`, `retrying` or `test`. |
+| `event_name` | Exact **sent** name, from `meta.stats.event_names`. |
+| `destination_id` | One destination. |
+| `search` | 2 to 100 characters, matched case-insensitively against the contact's email and name. Events with no resolved person are not found. |
+
+`meta.stats` counts every row matching the destination, event name and search filters, whatever `status` is. `success_rate` is `successes / (successes + failures)`, the same definition as `GET /client/v1/destinations/health`; it is `null` when there are neither.
+
+## Paging
+
+Rows are ordered newest first with a total order, and paged with an opaque cursor:
+
+1. Request page 1 with `hours` (or `since`/`until`). Keep `meta.window`.
+2. Request the next page with `cursor=<next_cursor>&since=<window.since>&until=<window.until>` and the same filters. Send `include_stats=false`: the stats do not change between pages.
+3. Stop when `next_cursor` is `null`.
+
+Freezing the window keeps page boundaries stable while new deliveries arrive. A row whose status changes between two page reads (a `retrying` row that lands) can move, so a full walk is best-effort, not a point-in-time snapshot.
+
+## CSV export
+
+There is no CSV endpoint: walk the pages and write the rows. A minimal Node example:
+
+```javascript
+const base = "https://mythic-analytics.gulp.workers.dev/client/v1/destinations/activity";
+const headers = { Authorization: `Bearer ${process.env.MYTHIC_AK}` };
+const filters = { location_id: "loc_acme", status: "failed", limit: "100", include_stats: "false" };
+
+let window = null;
+let cursor = null;
+const rows = [];
+do {
+  const qs = new URLSearchParams({ ...filters, ...(window ? { since: window.since, until: window.until } : { hours: "720" }), ...(cursor ? { cursor } : {}) });
+  const res = await fetch(`${base}?${qs}`, { headers }).then((r) => r.json());
+  if (!res.success) throw new Error(res.error.message);
+  window ??= res.meta.window;
+  rows.push(...res.data);
+  cursor = res.next_cursor;
+} while (cursor);
+
+// Quote every cell and neutralize spreadsheet formulas (=, +, -, @).
+const cell = (v) => {
+  let s = v == null ? "" : String(v);
+  if (/^[=+\-@]/.test(s)) s = `'${s}`;
+  return `"${s.replace(/"/g, '""')}"`;
+};
+const cols = ["ts", "status", "sent_event_name", "action_name", "amount", "currency", "match_quality", "error"];
+const csv = [[...cols, "contact_email"].join(","), ...rows.map((r) => [...cols.map((c) => cell(r[c])), cell(r.contact?.email)].join(","))].join("\n");
+```
+
+## Errors
+
+| Status | Code | When |
+|--------|------|------|
+| `400` | `invalid_param` | A bad `limit`, `hours`, `since`, `until`, `status`, `event_name`, `search` or `include_stats`, `hours` together with `since`, or a window over 720 hours. |
+| `400` | `invalid_cursor` | `cursor` is not one this endpoint issued. |
+| `502` | `upstream_error` | The analytics store failed or timed out. Retry. |
+| `503` | `not_configured` | Analytics is not configured in this environment. |

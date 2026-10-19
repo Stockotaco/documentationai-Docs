@@ -462,6 +462,158 @@ paths:
           $ref: "#/components/responses/UpstreamError"
         "503":
           $ref: "#/components/responses/AnalyticsNotConfigured"
+  /client/v1/destinations/activity:
+    get:
+      summary: Destination activity log
+      operationId: listDestinationActivity
+      description: >
+        The activity log for the calling location's destinations, newest
+        first: ONE row per source event and destination, showing the outcome
+        of its latest observed attempt. A retried delivery that finally
+        succeeded is one `success` row, not a failed row plus a success row.
+        For per-attempt rows use `GET /client/v1/destinations/deliveries`.
+        Both agency and viewer keys may read.
+
+
+        **Where the columns come from.** `contact`, `amount`, `currency`,
+        `signals` and the UTM fields are reconstructed at read time from the
+        source event, its session and the person's CURRENT profile. They are
+        not the payload that was sent. For exactly what was sent, open
+        `GET /client/v1/destinations/{id}/deliveries/{eventUuid}`. An event
+        delivered more than 2 days after it occurred (a backfill or
+        redelivery) has no contact or signals.
+
+
+        **Status.** `success` means the platform's API accepted the event
+        (for Google, check ingestion with the delivery status route).
+        `skipped` means the destination logged a skip at send time, for
+        example a rate limit or no usable identifier. Events your trigger
+        rules filter out are never logged and never listed. `retrying` rows
+        are still in flight and change. `test` rows only appear with
+        `status=test`.
+
+
+        **Paging.** Pass `next_cursor` back as `cursor`, together with
+        `since` and `until` set to the first page's `meta.window`, so later
+        pages read the same window. A row whose status changes between page
+        reads can move, so a full walk is best-effort, not a snapshot.
+      parameters:
+        - name: hours
+          in: query
+          description: >
+            Window length in hours, ending at `until` (default now). Default
+            `168`, min `1`, max `720`. Not allowed together with `since`.
+          required: false
+          schema:
+            type: integer
+            default: 168
+            minimum: 1
+            maximum: 720
+        - name: since
+          in: query
+          description: >
+            Window start. ISO 8601 or `YYYY-MM-DD HH:MM:SS` (UTC);
+            milliseconds are kept. The window may span at most 720 hours.
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: until
+          in: query
+          description: Window end. ISO 8601 or `YYYY-MM-DD HH:MM:SS` (UTC). Default now.
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: status
+          in: query
+          description: >
+            Status of the latest attempt. `all` (the default) lists every
+            row except test sends.
+          required: false
+          schema:
+            type: string
+            default: all
+            enum: [all, success, failed, skipped, retrying, test]
+        - name: event_name
+          in: query
+          description: >
+            Exact event name as SENT to the destination (for example
+            `Purchase`), as listed in `meta.stats.event_names`.
+          required: false
+          schema:
+            type: string
+            maxLength: 200
+        - name: destination_id
+          in: query
+          description: Only this destination (action id). `action_id` is accepted as an alias.
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: search
+          in: query
+          description: >
+            Case-insensitive substring of the contact's email or name, 2 to
+            100 characters. Person-based: an event with no resolved person is
+            not found.
+          required: false
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 100
+        - name: limit
+          in: query
+          description: Rows per page. Default `50`, min `1`, max `100`.
+          required: false
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
+        - name: cursor
+          in: query
+          description: The previous page's `next_cursor`. Opaque.
+          required: false
+          schema:
+            type: string
+        - name: include_stats
+          in: query
+          description: >
+            Include `meta.stats` (header counts and event names). Default
+            `true`; send `false` on later pages and exports.
+          required: false
+          schema:
+            type: boolean
+            default: true
+      responses:
+        "200":
+          description: One page of activity rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivityListResponse"
+        "400":
+          description: >
+            `invalid_param` (a bad limit, hours, since, until, status,
+            event_name, search or include_stats, or `hours` together with
+            `since`) or `invalid_cursor`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponse"
+        "401":
+          description: Missing or invalid key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/AnalyticsNotConfigured"
   /client/v1/destinations/health:
     get:
       summary: Destination health
@@ -3411,6 +3563,191 @@ components:
         offset:
           type: integer
           example: 0
+    ActivityContact:
+      type: object
+      nullable: true
+      description: >
+        The person behind the source event, from their CURRENT profile. Null
+        when the event's visitor never resolved to a person.
+      properties:
+        person_id:
+          type: string
+        name:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+    ActivitySignals:
+      type: object
+      description: >
+        Matching signals present on the source event, its session or the
+        contact (not read from the sent payload).
+      properties:
+        fbc:
+          type: boolean
+          description: A Meta click id (fbclid) on the event or its session.
+        gclid:
+          type: boolean
+          description: A Google click id (gclid, gbraid or wbraid).
+        email:
+          type: boolean
+          description: The contact or the event has an email.
+        phone:
+          type: boolean
+          description: The contact or the event has a phone number.
+        utm:
+          type: boolean
+          description: A UTM source, medium or campaign.
+    ActivityRow:
+      type: object
+      properties:
+        ts:
+          type: string
+          format: date-time
+          description: Time of the latest attempt (UTC, milliseconds).
+        event_uuid:
+          type: string
+          description: Source event uuid (the `uuid` of activity endpoint rows).
+        event_name:
+          type: string
+          description: Source event name.
+        sent_event_name:
+          type: string
+          description: Event name as sent to the destination.
+        action_id:
+          type: string
+          description: Destination (action) id.
+        action_name:
+          type: string
+          nullable: true
+        destination_type:
+          type: string
+          example: meta_capi
+        status:
+          type: string
+          enum: [success, failed, skipped, retrying, test]
+          description: Status of the latest observed attempt.
+        attempt:
+          type: integer
+        max_attempts:
+          type: integer
+        response_status:
+          type: integer
+          nullable: true
+          description: HTTP status of the latest attempt; null when none was recorded.
+        error:
+          type: string
+          nullable: true
+          description: Error or skip reason of the latest attempt.
+        duration_ms:
+          type: integer
+          nullable: true
+        enrichment_applied:
+          type: boolean
+        contact:
+          $ref: "#/components/schemas/ActivityContact"
+        amount:
+          type: number
+          nullable: true
+          description: >
+            Best-effort value from the source event's `value`,
+            `monetaryValue` or `total` property.
+        currency:
+          type: string
+          nullable: true
+        match_quality:
+          type: number
+          nullable: true
+          description: >
+            Meta's Event Match Quality snapshot (0 to 10) for this destination
+            and sent event name, captured that day. Not a per-delivery score.
+            Null when Meta did not score it.
+        test_events_only:
+          type: boolean
+          nullable: true
+          description: Meta reported only test events for that day's snapshot.
+        signals:
+          $ref: "#/components/schemas/ActivitySignals"
+        utm_source:
+          type: string
+          nullable: true
+        utm_medium:
+          type: string
+          nullable: true
+        utm_campaign:
+          type: string
+          nullable: true
+        session_id:
+          type: string
+          nullable: true
+        distinct_id:
+          type: string
+          nullable: true
+    ActivityStats:
+      type: object
+      description: Counts over every row matching the filters, ignoring `status` and paging.
+      properties:
+        total:
+          type: integer
+        successes:
+          type: integer
+        failures:
+          type: integer
+        skipped:
+          type: integer
+        retrying:
+          type: integer
+        success_rate:
+          type: number
+          nullable: true
+          description: "successes / (successes + failures); null when there are neither."
+        avg_match_quality:
+          type: number
+          nullable: true
+          description: Mean of the daily EMQ snapshot over successful Meta rows that were scored.
+        emq_rows:
+          type: integer
+          description: Rows behind avg_match_quality.
+        event_names:
+          type: array
+          description: >
+            Sent event names in the window, sorted, at most 200. Ignores
+            `event_name`, so a picker keeps its options.
+          items:
+            type: string
+    ActivityListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityRow"
+        next_cursor:
+          type: string
+          nullable: true
+          description: Pass as `cursor` for the next page; null on the last page.
+        meta:
+          type: object
+          properties:
+            limit:
+              type: integer
+              example: 50
+            window:
+              type: object
+              description: The resolved window. Send it back as since/until on later pages.
+              properties:
+                since:
+                  type: string
+                  format: date-time
+                until:
+                  type: string
+                  format: date-time
+            stats:
+              $ref: "#/components/schemas/ActivityStats"
     HealthResponse:
       type: object
       properties:

@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 293 tools across
+  Every tool the Mythic MCP server exposes — 294 tools across
   30 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 293 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 294 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -272,6 +272,7 @@ Activation destinations events are forwarded to, their credentials and deliverie
 | `list_destination_credentials`<br /><span style={{opacity: 0.7}}>List Destination Credentials</span> | `destinations:read` | Which destination credentials are stored for this client — METADATA ONLY (id, destination_type, credential_name, created/updated timestamps). | `GET /client/v1/destinations/credentials` |
 | `get_destination_oauth_client`<br /><span style={{opacity: 0.7}}>Get Destination OAuth Client</span> | `destinations:read` | Which Google OAuth client this agency's consent flows run as: has_client (agency registered its own), source ('agency' or the platform default), the client_id (not a secret — what you check against the Cloud… | `GET /client/v1/destinations/oauth/client` |
 | `list_destination_deliveries`<br /><span style={{opacity: 0.7}}>List Destination Deliveries</span> | `destinations:read` | Delivery log for this client's destinations, newest first — one row per delivery attempt with status (success\|failed\|retrying\|skipped\|test), response status, error, and timing. | `GET /client/v1/destinations/deliveries`<br />`GET /client/v1/destinations/:id/deliveries` |
+| `list_destination_activity`<br /><span style={{opacity: 0.7}}>List Destination Activity</span> | `destinations:read` | Activity log for this client's destinations, newest first: ONE row per (source event x destination) with the outcome of its LATEST attempt (success\|failed\|skipped\|retrying; test rows only with status=test),… | `GET /client/v1/destinations/activity` |
 | `get_destination_delivery`<br /><span style={{opacity: 0.7}}>Get Destination Delivery</span> | `destinations:read` | Full detail for ONE delivery (destination + source event uuid from list_destination_deliveries): the request actually sent (body + headers), the destination's response, attempt counts, field warnings/violati… | `GET /client/v1/destinations/:id/deliveries/:eventUuid` |
 | `get_destination_delivery_status`<br /><span style={{opacity: 0.7}}>Get Destination Delivery Status</span> | `destinations:read` | What Google did with a delivery AFTER accepting it — google_ads / google_analytics destinations only. | `GET /client/v1/destinations/:id/deliveries/:eventUuid/status` |
 | `get_destination_health`<br /><span style={{opacity: 0.7}}>Get Destination Health</span> | `destinations:read` | Per-destination delivery health rollup over a recent window: success/failure/skip counts, success rate, latency (avg + p95), queue lag, last error, and a credential_ok flag (false when the most recent failur… | `GET /client/v1/destinations/health` |

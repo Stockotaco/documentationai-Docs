@@ -366,6 +366,11 @@
                     "title": "Platform Integrations",
                     "path": "destinations-api/platform-integrations",
                     "icon": "zap"
+                  },
+                  {
+                    "title": "Activity Log",
+                    "path": "destinations-api/activity-log",
+                    "icon": "list"
                   }
                 ]
               },
@@ -1030,6 +1035,11 @@
                     "title": "Platform Integrations",
                     "path": "destinations-api/platform-integrations",
                     "icon": "zap"
+                  },
+                  {
+                    "title": "Activity Log",
+                    "path": "destinations-api/activity-log",
+                    "icon": "list"
                   }
                 ]
               },
