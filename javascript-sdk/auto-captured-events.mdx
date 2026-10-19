@@ -121,4 +121,5 @@ Every event automatically includes:
 - `$screen_width`, `$screen_height`, `$viewport_width`, `$viewport_height`, `$screen_density`
 - `$timezone`, `$timezone_offset`, `$browser_language`
 - `$is_bot`, `$is_identified`, `$pageview_id`
+- `$bot_reason` — only on events where `$is_bot` is true: `ua` (the user agent names a crawler or automation tool, e.g. `HeadlessChrome`, `Googlebot`), `webdriver` (`navigator.webdriver` is set, e.g. Playwright or Selenium), or `no_plugins` (a desktop browser reporting zero plugins, a weaker signal). A browser whose user agent names a mobile or tablet platform (including Android tablets and in-app browsers) is never flagged for having no plugins.
 - `$session_id`, `$device_id`, `distinct_id` (and `$user_id` once identified) — Identity context
