@@ -50,6 +50,28 @@ Reads accept either key. **Writes require an agency key** — same rule as Setti
 ## Quickstart
 
 <Steps>
+  <Step title="Find which events to contract">
+    ```bash
+    curl "$BASE/client/v1/contracts/candidates?location_id=$LOC" \
+      -H "Authorization: Bearer $AK"
+    ```
+
+    Every event that fired in the last 30 days, plus every event wired to an ad platform, ranked by what it would cost you if it broke. Each row names the platforms that received it, the platform-side name (`Purchase`, a Google Ads conversion action), delivery counts, and `has_contract`.
+
+    | Tier | Meaning |
+    | --- | --- |
+    | `optimized` | Delivered to Meta, Google Ads, GA4, or OpenAI Ads as a conversion in the window, or mapped on a managed Meta / Google browser tag as a conversion and firing |
+    | `mapped` | Wired to an ad platform and firing, but nothing was delivered. Delivery is broken or the destination is new |
+    | `conversion_name` | Named like a conversion (`purchase`, `form_submitted`, `appointment_booked`) but not sent to any ad platform |
+    | `sent` | Delivered to an ad platform as an upper-funnel signal (`PageView`, `ViewContent`, `AddToCart`) |
+    | `not_firing` | Wired to an ad platform as a conversion, but the event did not fire at all |
+    | `other` | Everything else that fired, by volume |
+
+    `summary.optimized_without_contract` is the shortlist. Mythic does not read campaign optimization goals from Meta or Google Ads, so `optimized` means what Mythic sends as a conversion, not what each campaign bids on.
+
+    Query parameters: `days` (1 to 90, default 30), `include_internal=1` to keep `$`-prefixed SDK events that no ad platform receives, `limit` (1 to 500, default 200).
+  </Step>
+
   <Step title="Scaffold a contract from live traffic">
     ```bash
     curl "$BASE/client/v1/contracts/suggest?location_id=$LOC&event=order_completed" \

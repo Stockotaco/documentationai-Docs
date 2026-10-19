@@ -454,6 +454,84 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /client/v1/contracts/candidates:
+    get:
+      summary: Rank the events to put a contract on
+      operationId: listContractCandidates
+      description: >
+        Every event that fired in the window, plus every event wired to an ad
+        platform, ranked by tier: `optimized` (delivered to Meta, Google Ads,
+        GA4, or OpenAI Ads as a conversion), `mapped` (wired and firing, nothing
+        delivered), `conversion_name` (named like a conversion, not sent
+        anywhere), `sent` (upper-funnel signal), `not_firing` (wired as a
+        conversion, never fired), `other`. Within a tier, by deliveries then
+        volume.
+
+
+        Mythic does not read campaign optimization goals, so `optimized` means
+        what Mythic sends as a conversion, not what each campaign bids on.
+        Internal `$`-prefixed events that no ad platform receives are hidden
+        unless `include_internal=1`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: days
+          in: query
+          required: false
+          description: Window in days.
+          schema: { type: integer, minimum: 1, maximum: 90, default: 30 }
+        - name: include_internal
+          in: query
+          required: false
+          description: Set to `1` to keep `$`-prefixed SDK events that are not sent to an ad platform.
+          schema: { type: string, enum: ["0", "1"] }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 500, default: 200 }
+      responses:
+        "200":
+          description: Ranked candidates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      window:
+                        type: object
+                        properties:
+                          days: { type: integer, example: 30 }
+                          date_from: { type: string, format: date, example: "2026-09-19" }
+                      deliveries_available:
+                        type: boolean
+                        description: False when the delivery log could not be read. Event traffic then stands in as the evidence and `delivered` is null.
+                      summary:
+                        type: object
+                        properties:
+                          candidates: { type: integer, example: 14 }
+                          by_tier:
+                            type: object
+                            additionalProperties: { type: integer }
+                            example: { optimized: 2, mapped: 0, conversion_name: 1, sent: 1, not_firing: 1, other: 9 }
+                          optimized_without_contract:
+                            type: array
+                            items: { type: string }
+                            example: [purchase]
+                      candidates:
+                        type: array
+                        items: { $ref: "#/components/schemas/ContractCandidate" }
+                      truncated: { type: boolean, example: false }
+                      note: { type: string }
+        "400":
+          description: "`invalid_days` or `invalid_limit`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /client/v1/contracts/presets:
     get:
       summary: List the built-in contract packs
@@ -616,6 +694,48 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
   schemas:
+    ContractCandidate:
+      type: object
+      properties:
+        event: { type: string, example: purchase }
+        tier:
+          type: string
+          enum: [optimized, mapped, conversion_name, sent, not_firing, other]
+        has_contract: { type: boolean, example: false }
+        total_events: { type: integer, example: 1240 }
+        unique_users: { type: integer, example: 1180 }
+        delivered:
+          type: integer
+          description: Source events delivered to ad platforms in the window, summed over destinations.
+          example: 2470
+        reason: { type: string, example: "Sent as a conversion to Meta as Purchase 1,240 times, Google Ads (conversion action 987654) 1,230 times." }
+        destinations:
+          type: array
+          items:
+            type: object
+            properties:
+              source:
+                type: string
+                enum: [server, browser_tag]
+              destination_type:
+                type: string
+                enum: [meta_capi, google_ads, google_analytics, openai_ads, meta_pixel, google_tag]
+              platform: { type: string, example: Meta }
+              action_id: { type: string, nullable: true, description: Destination id. Null for browser tags. }
+              name: { type: string, nullable: true }
+              target:
+                type: string
+                nullable: true
+                description: The platform-side name sent, e.g. `Purchase`, or the Google Ads conversion action id.
+                example: Purchase
+              conversion: { type: boolean, description: Whether the target is an outcome rather than a funnel step. }
+              enabled: { type: boolean }
+              delivered:
+                type: integer
+                nullable: true
+                description: Distinct events delivered in the window. Null for browser tags (no delivery log) and when the delivery log was unreadable.
+              failed_attempts: { type: integer }
+              last_delivered_at: { type: string, nullable: true, example: "2026-10-19 10:00:00.000" }
     PresetContract:
       type: object
       description: One contract inside a pack, in the shape `PUT /contracts` accepts.
