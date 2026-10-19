@@ -773,7 +773,35 @@ components:
           type: number
           minimum: 0
           maximum: 1
-          description: Fraction of sessions recorded, 0-1.
+          description: Fraction of sessions recorded, 0-1. Applies to sessions that match no `sampleRules` entry.
+        sampleRules:
+          type: array
+          maxItems: 20
+          description: >-
+            Per-traffic sample rates, matched against the query string of the
+            URL the session landed on, so every page of an ad session counts as
+            ad traffic. The first matching rule wins; sessions that match none
+            use `sampleRate`. A PUT replaces the whole list. Example: record every
+            Mythic link click and 10% of the rest with `sampleRate: 0.1` and
+            `sampleRules: [{"param": "iiid", "sampleRate": 1}]`.
+          items:
+            type: object
+            required: [param, sampleRate]
+            additionalProperties: false
+            properties:
+              param:
+                type: string
+                pattern: "^[A-Za-z0-9_.-]{1,64}$"
+                description: Query parameter name, e.g. `iiid`, `gclid`, `fbclid`, `utm_medium`. Matches when present with a non-empty value.
+              value:
+                type: string
+                maxLength: 256
+                description: Match only this value (case-insensitive). Omit to match any value.
+              sampleRate:
+                type: number
+                minimum: 0
+                maximum: 1
+                description: Fraction of matching sessions recorded, 0-1.
         minDurationMs:
           type: number
           minimum: 0

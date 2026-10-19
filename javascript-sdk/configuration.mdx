@@ -251,6 +251,7 @@ The full set of options you can pass to `init(key, config)`.
 
   - `enabled` (boolean) — turn recording on. Default: `false`.
   - `sampleRate` (number, 0–1) — fraction of sessions to record, decided deterministically per session ID. Default: `1`.
+  - `sampleRules` (array) — per-traffic sample rates, matched against the query string of the URL the session landed on. Each rule is `{ param, value?, sampleRate }`: `param` is a query parameter name, `value` (optional, case-insensitive) narrows the match, and `sampleRate` is the fraction of matching sessions to record. The first matching rule wins; sessions that match none use `sampleRate`. Example, every Mythic link click plus 10% of the rest: `{ sampleRate: 0.1, sampleRules: [{ param: 'iiid', sampleRate: 1 }] }`. `minDurationMs` still applies to matched sessions.
   - `minDurationMs` (number) — only keep a recording once the session has lasted this long (measured on session age, across page loads). Events buffer from the start, but nothing is transmitted (and no recording appears) until the threshold is crossed, so shorter bounce sessions send zero data. Default: `10000` (10s); set `0` to keep every recording.
   - `maskAllInputs` (boolean) — mask all form input values. Default: `true`.
   - `captureConsole` (boolean) — record `console` log/warn/error calls. Default: `true`.
