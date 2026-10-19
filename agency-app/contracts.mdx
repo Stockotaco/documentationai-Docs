@@ -53,9 +53,20 @@ the failure in the chat panel.
 
 ## Declare contracts
 
-- **Suggest from traffic**: enter an event name. Mythic reads the last 30
-  days of that event and marks a property required when it is on at least 99%
-  of events. Review the list and click **Declare contract**.
+- **Recommended contracts**: events without a contract that matter most,
+  ranked by what Mythic sends to ad platforms. **Sent as conversion** means
+  Mythic delivered the event to Meta, Google Ads, GA4 or OpenAI Ads as a
+  conversion in the last 30 days. **Not delivering** means it is wired to an
+  ad platform and firing, but nothing was delivered. **Likely conversion**
+  means it is named like one (`form_submitted`, `appointment_booked`) but no
+  ad platform receives it. Click **Review** to open the suggestion, or **Add
+  contracts for N conversions** to store a suggested contract for every event
+  sent as a conversion.
+- **Suggest from traffic**: pick an event from the list of everything the
+  client sent in the last 30 days. Conversions sent to ad platforms are listed
+  first. Mythic reads the last 30 days of that event and marks a property
+  required when it is on at least 99% of events. Review the list and click
+  **Declare contract**.
 - **Apply preset**: adds a ready-made set of contracts, such as **Commerce**.
   It replaces contracts with the same event name.
 
