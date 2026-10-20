@@ -77,12 +77,15 @@ was confused". Say what to answer when the recording does not show enough.
 
 ## Decisions
 
-After your model answers, a decision model (Cloudflare **Clef-flash** on
-Workers AI) reads that answer's reasoning and the event timeline and returns
-a probability for every allowed answer. It is stored in the observation's
-`decision`, next to `output`. Nothing your model wrote is replaced.
+After your model answers, a second model on Cloudflare Workers AI reads that
+answer's reasoning and the event timeline. For monitors, classifiers and
+summarizers it is the decision model **Clef-flash**, which returns a
+probability for every allowed answer. For scorers it is the extraction model
+**Clairic**, which estimates the score on your scanner's own scale with an
+80% interval. The result is stored in the observation's `decision`, next to
+`output`. Nothing your model wrote is replaced.
 
-The probabilities repeat on identical input. `agrees` is `false` where the
+Both models return the same answer on identical input. `agrees` is `false` where the
 two models disagree: those are the recordings worth watching first. List them
 with `?agrees=false` on either observation list. `GET /scanners/{id}` counts
 them for the month as `decision_agreed` and `decision_disagreed`. A scanner
@@ -98,7 +101,7 @@ reasoning the timeline contradicts.
 | `monitor` | `p_yes` | `p_yes` is on the same side of 0.5 as `verdict`; `null` for `inconclusive` |
 | `classifier` (one tag) | `tag`, `confidence`, `probabilities` per tag | `tag` is in `output.tags` |
 | `classifier` (`multiple`) | `tags` (probability 0.5 or more), `tag_probabilities` | `tags` equals `output.tags` |
-| `scorer` | `score`, `confidence`, `probabilities` per scale point | `score` is within 20% of the scale of `output.score` |
+| `scorer` | `score` (median estimate), `p10` and `p90` (80% interval). A wide interval means a less certain read. Scorer decisions before October 20, 2026 came from Clef-flash and have `confidence` and `probabilities` per scale point instead of `p10` and `p90` | `score` is within 20% of the scale of `output.score` |
 | `summarizer` | `p_supported`: is the summary consistent with the timeline | `p_supported` is 0.5 or more |
 
 Every decision also has `model`, `input_tokens`, `cost_usd` and `ms`. Mythic
@@ -110,10 +113,17 @@ observations scanned before October 5, 2026.
 
 ```json
 "output": { "verdict": "yes", "reasoning": "Clicked Save My Seat three times (t 14) …", "confidence": 0.9, "key_moment_t": 14 },
-"decision": { "model": "clef-flash", "p_yes": 0.97, "agrees": true, "input_tokens": 1029, "cost_usd": 0.00009, "ms": 520 }
+"decision": { "model": "clef-flash", "p_yes": 0.97, "agrees": true, "input_tokens": 1029, "cost_usd": 0.000039, "ms": 520 }
 ```
 
-The decision model gets the same session details and timeline as your model,
+A scorer on a 0 to 10 scale:
+
+```json
+"output": { "score": 4, "reasoning": "Clicked the bonus section twice (t 11) …", "confidence": 0.9, "key_moment_t": 11 },
+"decision": { "model": "clairic", "score": 4, "p10": 2, "p90": 5, "agrees": true, "input_tokens": 1007, "cost_usd": 0.0001, "ms": 385 }
+```
+
+The second model gets the same session details and timeline as your model,
 plus your model's answer. It never gets the video. It runs on Cloudflare
 Workers AI, in the same Cloudflare account that already runs Mythic's API and
 renders the recordings. Cloudflare does not use Workers AI inputs to train
