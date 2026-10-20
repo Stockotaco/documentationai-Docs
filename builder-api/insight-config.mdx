@@ -181,7 +181,7 @@ A `number` shows one total, chosen by `config.metric`: `conversions` (default), 
 | `correlation` | [`GET /client/v1/correlation`](/correlation-api/overview) | `line` (each metric per bucket), `table` (pairwise Pearson and Spearman) | `metrics` (array of 2-5 ids, required), `grain`, `lookback_days` or `from`/`to`, `rolling_window`, `max_lag`, `new_lookback_days`, `revenue_path` |
 | `scanner_summary` | [`GET /client/v1/replay-vision/scanners/{id}/summary`](/agency-api/replay-vision#scanner-summary) | `number` (headline), `pie`/`bar`/`table` (answer counts), `line` (answers per day) | `scanner_id` (required), `days` or `date_from`/`date_to` |
 
-Parameters are typed (numbers as numbers) and allowlisted: the constraint finder's `table` and `include` are not available to panels. `run_insight` returns `{ "engine": "analysis", "kind", "data" }` where `data` is the route's response body.
+Parameters are typed (numbers as numbers) and allowlisted: the constraint finder's `table` and `include` are not available to panels. `POST /insights/{id}/query` and `run_insight` return `{ "engine": "analysis", "kind", "result" }` where `result` is the route's response body (named `result` so it is not mistaken for the response envelope's `data`).
 
 ```json
 {
