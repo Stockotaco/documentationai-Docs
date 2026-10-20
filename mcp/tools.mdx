@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 311 tools across
+  Every tool the Mythic MCP server exposes — 312 tools across
   31 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 311 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 312 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -150,9 +150,9 @@ Saved analytics queries and their results.
 | --- | --- | --- | --- |
 | `list_insights`<br /><span style={{opacity: 0.7}}>List Insights</span> | `insights:read` | List insights for the active client. | `GET /builder/insights` |
 | `get_insight`<br /><span style={{opacity: 0.7}}>Get Insight</span> | `insights:read` | Get a single insight by ID, including its full config (config.query is the explore spec it runs). | `GET /builder/insights/:id` |
-| `run_insight`<br /><span style={{opacity: 0.7}}>Run Insight</span> | `insights:read` | Execute a STORED insight and return its series/buckets (trend) or steps (funnel) — the same shape query_events returns. | `POST /builder/insights/:id/query` |
+| `run_insight`<br /><span style={{opacity: 0.7}}>Run Insight</span> | `insights:read` | Execute a STORED insight and return its series/buckets (trend), steps (funnel) or rows/totals (attribution) — the same shape query_events returns — or, for an analysis panel, &#123;engine:"analysis", kind, data&#125;… | `POST /builder/insights/:id/query` |
 | `preview_insight`<br /><span style={{opacity: 0.7}}>Preview Insight</span> | `insights:read` | Execute an insight CONFIG without saving it — the same &#123; insight_type, config &#125; shape create_insight stores, run in-memory and never persisted. | `POST /builder/insights/preview` |
-| `create_insight`<br /><span style={{opacity: 0.7}}>Create Insight</span> | `insights:write` | Create a new insight for the active client: a saved explore spec (config.query) drawn as insight_type. | `POST /builder/insights` |
+| `create_insight`<br /><span style={{opacity: 0.7}}>Create Insight</span> | `insights:write` | Create a new insight (a dashboard panel) for the active client. | `POST /builder/insights` |
 | `update_insight`<br /><span style={{opacity: 0.7}}>Update Insight</span> | `insights:write` | Update an existing insight. | `PATCH /builder/insights/:id` |
 | `delete_insight`<br /><span style={{opacity: 0.7}}>Delete Insight</span> | `insights:write` | Permanently delete an insight by ID. | `DELETE /builder/insights/:id` |
 
@@ -465,9 +465,7 @@ Agency-wide keys only — a key bound to one client cannot hold this scope.
 
 ## Replay Vision
 
-AI scanners that watch session recordings with the agency’s own model key (OpenRouter or Gemini): keys, scanners, on-demand scans and their observations.
-
-Agency-wide keys only — a key bound to one client cannot hold this scope.
+AI scanners that watch session recordings with the agency’s own model key (OpenRouter or Gemini): keys, scanners, on-demand scans and their observations. A key bound to one client may read that client’s scanners, observations and summaries; everything else is agency-wide.
 
 | Tool | Scope | What it does | Proxies |
 | --- | --- | --- | --- |
@@ -484,6 +482,7 @@ Agency-wide keys only — a key bound to one client cannot hold this scope.
 | `list_scanner_observations`<br /><span style={{opacity: 0.7}}>List Scanner Observations</span> | `replay_vision:read` | One scanner's observations. | `GET /client/v1/replay-vision/scanners/:id/observations` |
 | `list_replay_observations`<br /><span style={{opacity: 0.7}}>List Replay Observations</span> | `replay_vision:read` | Agency-wide observations across the current client roster, optionally scoped to location, scanner or session. | `GET /client/v1/replay-vision/observations` |
 | `get_replay_observation`<br /><span style={{opacity: 0.7}}>Get Replay Observation</span> | `replay_vision:read` | One observation with frozen scanner config/snapshot, agency-shared rating, answer, decision, provider usage and cost. | `GET /client/v1/replay-vision/observations/:id` |
+| `get_scanner_summary`<br /><span style={{opacity: 0.7}}>Get Scanner Summary</span> | `replay_vision:read` | What one scanner found over a UTC date range, counted in one call: observation statuses, and per type, monitor yes/no counts with shares, classifier tag counts with shares (plus freeform tags), scorer averag… | `GET /client/v1/replay-vision/scanners/:id/summary` |
 | `create_replay_scout`<br /><span style={{opacity: 0.7}}>Create Replay Scout</span> | `replay_vision:write` | Create a read-only scheduled text Scout on a scanner, max 5. | `POST /client/v1/replay-vision/scanners/:id/scouts` |
 | `update_replay_scout`<br /><span style={{opacity: 0.7}}>Update Replay Scout</span> | `replay_vision:write` | Merge a Scout patch; scanner/template/sources are immutable. | `PATCH /client/v1/replay-vision/scouts/:id` |
 | `delete_replay_scout`<br /><span style={{opacity: 0.7}}>Delete Replay Scout</span> | `replay_vision:write` | Soft-delete and disable a Scout, cancel pending runs; retains immutable reports/evidence. | `DELETE /client/v1/replay-vision/scouts/:id` |

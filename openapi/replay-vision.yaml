@@ -253,6 +253,42 @@ paths:
       responses:
         "200": { description: Observations, content: { application/json: { schema: { $ref: "#/components/schemas/ObservationPage" } } } }
         "404": { $ref: "#/components/responses/NotFound" }
+  /client/v1/replay-vision/scanners/{id}/summary:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      summary: Summarize a scanner's answers
+      operationId: getScannerSummary
+      description: "Counts of one scanner's answers over a UTC range of observation created_at dates: statuses, answers with shares (monitor, classifier), score distribution (scorer) or keywords (summarizer), a zero-filled daily series, decision agreement and a headline number. Readable by a key bound to the scanner's client."
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - { name: days, in: query, required: false, description: "Last N days including today (1-366). Instead of date_from/date_to.", schema: { type: integer, minimum: 1, maximum: 366 } }
+        - { name: date_from, in: query, required: false, description: "Inclusive UTC YYYY-MM-DD. Default 29 days before date_to.", schema: { type: string, format: date } }
+        - { name: date_to, in: query, required: false, description: "Inclusive UTC YYYY-MM-DD. Default today.", schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      scanner: { type: object, properties: { id: { type: string, format: uuid }, name: { type: string }, type: { type: string, enum: [monitor, classifier, scorer, summarizer] }, config: { type: object } } }
+                      range: { type: object, properties: { from: { type: string, format: date }, to: { type: string, format: date }, dates: { type: string, example: "observation created_at, UTC" } } }
+                      observations: { type: object, properties: { total: { type: integer }, pending: { type: integer }, running: { type: integer }, succeeded: { type: integer }, failed: { type: integer }, ineligible: { type: integer } } }
+                      decision: { type: object, properties: { agreed: { type: integer }, disagreed: { type: integer }, agreement_rate: { type: number, nullable: true } } }
+                      answers: { type: array, description: "monitor and classifier. share is over succeeded observations.", items: { type: object, properties: { answer: { type: string, example: "yes" }, count: { type: integer, example: 19 }, share: { type: number, nullable: true, example: 0.0864 } } } }
+                      freeform_tags: { type: array, description: classifier, items: { type: object, properties: { tag: { type: string }, count: { type: integer } } } }
+                      score: { type: object, description: scorer, properties: { count: { type: integer }, avg: { type: number, nullable: true }, median: { type: number, nullable: true }, min: { type: number, nullable: true }, max: { type: number, nullable: true }, buckets: { type: array, items: { type: object, properties: { score: { type: number }, count: { type: integer } } } } } }
+                      keywords: { type: array, description: "summarizer, top 50", items: { type: object, properties: { keyword: { type: string }, count: { type: integer } } } }
+                      daily: { type: array, description: "One row per day in range: succeeded and counts per answer (monitor, classifier), count and avg (scorer), succeeded (summarizer).", items: { type: object } }
+                      headline: { type: object, properties: { label: { type: string, example: "Broken experience: yes" }, value: { type: number, nullable: true, example: 0.0864 }, unit: { type: string, enum: [ratio, score, count] }, count: { type: integer }, of: { type: integer } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /client/v1/replay-vision/observations:
     get:
       summary: List agency-wide observations

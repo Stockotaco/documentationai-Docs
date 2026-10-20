@@ -47,7 +47,14 @@ https://mythic-analytics.gulp.workers.dev/client/v1/replay-vision
 ## Authentication
 
 **Agency key (`ak_`), or an agency-wide `mcp_` key with `replay_vision:read`
-or `replay_vision:write`.** Setting a key (`PUT /keys`) takes an `ak_` only:
+or `replay_vision:write`.** A `mcp_` key bound to one client with
+`replay_vision:read` can read that client's scanners, observations and
+[summaries](#scanner-summary) (`GET /scanners`, `/scanners/{id}`,
+`/scanners/{id}/observations`, `/scanners/{id}/summary`, `/observations`,
+`/observations/{id}`), pinned to its client: naming another `location_id` gets
+`403 location_not_linked`, and every other route answers `403
+agency_key_required`. On any read, `?location_id=` narrows to one client, and
+another client's scanner or observation reads as `404`. Setting a key (`PUT /keys`) takes an `ak_` only:
 `mcp_` keys get `403 not_available_to_scoped_keys` there, so a provider key
 never passes through an AI tool. A location secret key (`sk_`) gets `403
 agency_required`. Every `location_id` must be one of your clients (`403
@@ -331,6 +338,41 @@ The success data contains `observation_id`, `rating` and `rated_at`. Clearing nu
 ```json
 {"success":true,"data":{"observation_id":"550e8400-e29b-41d4-a716-446655440000","rating":"up","rated_at":"2026-10-08T12:00:00Z"}}
 ```
+
+## Scanner summary
+
+`GET /scanners/{id}/summary` counts one scanner's answers over a UTC date range
+in one call, so you do not page every observation to learn how many sessions a
+scanner flagged. Pass `days` (the last N days including today) or
+`date_from`/`date_to`; the default is the last 30 days and the maximum 366.
+Dates are observation `created_at`, the same dates the observation list
+filters on.
+
+The response data includes:
+
+- `scanner` (`id`, `name`, `type`, `config`), `range`, and `observations`
+  counts by status (`total`, `pending`, `running`, `succeeded`, `failed`,
+  `ineligible`).
+- `decision`: `agreed`, `disagreed` and `agreement_rate` of the decision model.
+- monitor and classifier: `answers[]` (`answer`, `count`, `share` of succeeded
+  observations, every configured answer listed even at 0; a multi-tag
+  classifier's shares can sum above 1) and a zero-filled `daily[]` with
+  `succeeded` and `counts` per answer. Classifiers add `freeform_tags[]`.
+- scorer: `score` (`count`, `avg`, `median`, `min`, `max`, `buckets[]`) and
+  `daily[]` with `count` and `avg`.
+- summarizer: the top 50 `keywords[]` and `daily[]` with `succeeded`.
+- `headline`: `{ label, value, unit, count, of }`: the yes share (monitor), the
+  top tag's share (classifier), the average score (scorer) or sessions
+  summarized (summarizer).
+
+```bash
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/replay-vision/scanners/$SCANNER_ID/summary?days=30" \
+  -H "Authorization: Bearer $MYTHIC_AGENCY_KEY"
+```
+
+A dashboard panel can show it: an insight with
+`config.analysis: { "kind": "scanner_summary", "params": { "scanner_id": "…" } }`
+(see [Insight config](/builder-api/insight-config#analysis-panels)).
 
 ## Statistics and cost coverage
 

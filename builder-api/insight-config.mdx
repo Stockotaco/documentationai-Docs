@@ -2,13 +2,15 @@
 title: "Insight config reference"
 description: >-
   The shape of the config object on POST /builder/insights — an explore spec
-  under config.query plus a visualization type — with a working example per
-  insight_type, the type-to-spec rules, and how to read the result.
+  under config.query (trend, funnel, or attribution for ad spend, CPA and ROAS)
+  or an analysis panel under config.analysis (constraint finder, correlation,
+  scanner summary) — with a working example per insight_type, the type rules,
+  and how to read the result.
 ---
 
 ## Overview
 
-An insight is a saved [explore query](/data-api/explore) plus a visualization. Its `config` is a JSON object with one required key:
+An insight is a saved [explore query](/data-api/explore) or an [analysis panel](#analysis-panels) plus a visualization. Its `config` is a JSON object with exactly one of `query` or `analysis`:
 
 ```json
 {
@@ -28,10 +30,11 @@ An insight is a saved [explore query](/data-api/explore) plus a visualization. I
 
 - **`config.query`** is the same object you would `POST /client/v1/data/query`. The full grammar — series maths, filters, breakdowns, funnels, limits — lives on the [Explore queries](/data-api/explore) page and is not repeated here.
 - **`insight_type`** is only the visualization. It never changes what is computed.
-- Any other key in `config` is stored verbatim as display settings and never read by the runner.
+- **`config.analysis`** replaces `query` for a constraint finder, correlation or scanner summary panel. See [Analysis panels](#analysis-panels).
+- Any other key in `config` is stored verbatim as display settings and never read by the runner, except `metric` on an attribution `number` (see [Ad spend, CPA and ROAS](#ad-spend-cpa-and-roas)).
 
 <Callout kind="info">
-  `config` is **validated on write**. `POST /builder/insights` returns `400 { "error": "invalid config", "details": [...] }` for a missing or invalid `query`, or a `kind` that doesn't fit the `insight_type`. Nothing invalid reaches the table, so a saved insight cannot fail to compile later.
+  `config` is **validated on write**. `POST /builder/insights` returns `400 { "error": "invalid config", "details": [...] }` for a missing or invalid `query` or `analysis`, both at once, or a `kind` that doesn't fit the `insight_type`. Nothing invalid reaches the table, so a saved insight cannot fail to compile later.
 </Callout>
 
 ## Which spec per type
@@ -44,8 +47,9 @@ An insight is a saved [explore query](/data-api/explore) plus a visualization. I
 | `pie`     | `trend`  | no `interval`, `breakdown` | share per breakdown value |
 | `table`   | `trend`  | with or without `interval` | series × buckets, or one row per series |
 | `funnel`  | `funnel` | 2–10 `steps`, optional `window`, `grain`, `breakdown` | step bars with conversion rates |
+| `table`, `bar`, `number` | `attribution` | `goal` or `deals`, `level`, `model` | spend, clicks, conversions, CPA and ROAS per campaign, ad set or ad |
 
-The one hard rule: `funnel` ⇔ `kind: "funnel"`. Every other type must carry a `kind: "trend"` spec. A trend without `interval` returns one `value` per series; with `interval` it returns `data[]` per bucket **and** a `total`. `bar` and `pie` read the totals either way, so leaving `interval` off is cheaper for those. `number` renders either way too, but without an `interval` it has no buckets to draw and shows the scorecards alone.
+The hard rules: `funnel` ⇔ `kind: "funnel"`, and `attribution` only draws as `table`, `bar` or `number`. Every other type carries a `kind: "trend"` spec. `paths` cannot be saved. A trend without `interval` returns one `value` per series; with `interval` it returns `data[]` per bucket **and** a `total`. `bar` and `pie` read the totals either way, so leaving `interval` off is cheaper for those. `number` renders either way too, but without an `interval` it has no buckets to draw and shows the scorecards alone.
 
 ## Examples
 
@@ -142,6 +146,59 @@ server-side or CRM events — those arrive under a contact id, not the visitor's
 `distinct_id`, so the default device grain cannot link them. See
 [Explore queries](/data-api/explore) for the cost.
 
+## Ad spend, CPA and ROAS
+
+An `attribution` spec credits each conversion to the Meta or Google campaign, ad set or ad that brought the visitor, and joins the platform's daily spend. The result has `totals` (all conversions), `filtered` and one row per campaign/ad set/ad (and per non-ad channel) with `spend`, `impressions`, `clicks`, `conversions`, `revenue`, `cpa` and `roas`. `cpa` is `null` when no spend was recorded, never 0. See [Explore queries](/data-api/explore) for the grammar.
+
+```json
+{
+  "name": "Cost per lead by ad",
+  "insight_type": "table",
+  "config": {
+    "query": {
+      "kind": "attribution",
+      "date_range": { "preset": "30d" },
+      "goal": { "event": "lead_submitted" },
+      "level": "ad"
+    }
+  }
+}
+```
+
+A `number` shows one total, chosen by `config.metric`: `conversions` (default), `revenue`, `spend`, `roas` or `cpa`. A `bar` draws the same metric per row.
+
+```json
+{ "insight_type": "number", "config": { "metric": "cpa", "query": { "kind": "attribution", "date_range": { "preset": "30d" }, "goal": { "event": "lead_submitted" } } } }
+```
+
+## Analysis panels
+
+`config.analysis` is `{ "kind", "params" }`. The panel runs an existing analysis route **as the viewer**: their key is sent to the route, so the route's own scope, plan and client checks apply, and the result is cached for 5 minutes per viewer key. Analysis panels therefore do not run on public or embedded dashboards (`POST /public/query` answers `403`).
+
+| `kind` | Route it runs | `insight_type` | `params` |
+|--------|---------------|----------------|----------|
+| `constraints` | [`GET /client/v1/constraints`](/constraints-api/overview) | `table` (rows and their constraint), `number` (recoverable conversions at the primary constraint), `bar` (recoverable conversions per step) | `conversion_event`, `lead_event`, `group_by` (`campaign`, `adset`, `ad`), `days` or `from`/`to`, `timezone`, `attribution`, `min_impressions`, `campaign`, `account_id`, `attribution_window_days`, `resolve_identities`, `revenue_path`, `benchmark_ad`/`tracking`/`landing`/`sales`/`site` (0-1) |
+| `correlation` | [`GET /client/v1/correlation`](/correlation-api/overview) | `line` (each metric per bucket), `table` (pairwise Pearson and Spearman) | `metrics` (array of 2-5 ids, required), `grain`, `lookback_days` or `from`/`to`, `rolling_window`, `max_lag`, `new_lookback_days`, `revenue_path` |
+| `scanner_summary` | [`GET /client/v1/replay-vision/scanners/{id}/summary`](/agency-api/replay-vision#scanner-summary) | `number` (headline), `pie`/`bar`/`table` (answer counts), `line` (answers per day) | `scanner_id` (required), `days` or `date_from`/`date_to` |
+
+Parameters are typed (numbers as numbers) and allowlisted: the constraint finder's `table` and `include` are not available to panels. `run_insight` returns `{ "engine": "analysis", "kind", "data" }` where `data` is the route's response body.
+
+```json
+{
+  "name": "Where the paid funnel leaks, per ad",
+  "insight_type": "table",
+  "config": { "analysis": { "kind": "constraints", "params": { "conversion_event": "lead_submitted", "group_by": "ad", "days": 30, "timezone": "America/Los_Angeles" } } }
+}
+```
+
+```json
+{
+  "name": "Sessions with a broken experience",
+  "insight_type": "number",
+  "config": { "analysis": { "kind": "scanner_summary", "params": { "scanner_id": "921f8759-aafa-4595-ad62-b70d00354b68" } } }
+}
+```
+
 ## Discovering events and properties
 
 Don't hardcode names. The Data API answers, with the same key:
@@ -169,7 +226,9 @@ Don't hardcode names. The Data API answers, with the same key:
 `POST /insights/{id}/query`, `POST /public/query` and `/insights/preview` accept two optional overrides that are applied onto the stored spec for that run only:
 
 - `dateRange` — `{ "preset": "7d" }` (`24h`, `7d`, `14d`, `30d`, `90d`, `365d`) or `{ "preset": "custom", "from": "2026-08-01", "to": "2026-08-31" }`. Anything else keeps the stored range.
-- `granularity` — `hour`, `day`, `week`, `month`; replaces `query.interval`. Ignored for funnels.
+- `granularity` — `hour`, `day`, `week`, `month`; replaces `query.interval`. Trends only.
+
+On an analysis panel, a preset becomes the route's relative window (`days`, or `lookback_days` for correlation, which ignores `24h`) and a custom range its dates (`from`/`to`, or `date_from`/`date_to` for a scanner summary).
 
 Dashboards use these to apply one date range and interval to every tile.
 
