@@ -125,8 +125,28 @@ Values leave the browser hashed by `fbevents.js` / `gtag.js`, which is why the S
 
 ## Consent and existing pixels
 
+Mythic enforces each shopper's consent when the event carries it. The Mythic Shopify app attaches Shopify's Customer Privacy choice to every event as `properties.$consent`, and SDK sites can do the same with [`grantConsent(categories)`](/javascript-sdk/consent-privacy#consent-categories).
+
+| Destination | Needs | Marketing denied | Sale of data denied |
+|---|---|---|---|
+| Meta CAPI | marketing | skipped | sent with Limited Data Use |
+| Google Ads | marketing | sent with `adUserData` and `adPersonalization` DENIED | sent with `adPersonalization` DENIED |
+| GA4 | analytics | sent, ad fields DENIED | sent, `adPersonalization` DENIED |
+| OpenAI Ads | marketing | skipped | skipped |
+| Convert, Mida | analytics | sent | sent |
+| Webhook | `consent_policy.category` (default none) | per setting | per setting |
+
+- A skipped delivery appears in the delivery log as `skipped` with a reason such as `consent_denied: marketing`.
+- Google's event-level consent overrides the destination's static `consent` setting. The static value still applies to events whose consent is unknown.
+- A Shopify order webhook carries no consent of its own. Its delivery waits about a minute and then inherits the last consent seen for the same checkout (7 days) or the same email-identified shopper (90 days). Other sources without `$consent` never inherit.
+- When no consent is known at all, `consent_policy.unknown` decides: `send` (default) or `withhold`. Set `consent_policy.mode: "ignore"` only if you have your own lawful basis.
+
+```json
+{ "action_config": { "pixel_id": "1234567890", "event_mapping": { "purchase": "Purchase" }, "consent_policy": { "unknown": "withhold" } } }
+```
+
 <Callout kind="alert">
-  Both halves fire for every tracked event. If the site must honour a consent banner, gate the managed tag with trigger rules (cookie rules work well — a rule that fails blocks the tag's initial load), and gate consent-dependent server traffic the same way.
+  Events without `$consent` (a site that never reports consent, a CRM) are treated as unknown. If such a site must honour a banner, gate the managed tag with trigger rules (cookie rules work well: a rule that fails blocks the tag's initial load), or set `consent_policy.unknown: "withhold"`.
 </Callout>
 
 <Callout kind="warning">

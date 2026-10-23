@@ -50,6 +50,43 @@ function onConsentDeclined() {
   When `requireConsent` is `true`, the SDK initializes but does not track any events until `grantConsent()` is called. `revokeConsent()` stops tracking and clears all local storage.
 </Callout>
 
+### Consent categories
+
+Pass the shopper's choice per category to `grantConsent()` when your banner records more than one yes/no. The Mythic Shopify app does this for you from Shopify's Customer Privacy API.
+
+```javascript
+mythic.grantConsent({
+  analytics: true,
+  marketing: false,
+  preferences: true,
+  sale_of_data: true,
+  source: "my-cmp",   // optional, stored with the choice
+  region: "USCA",     // optional
+});
+```
+
+- Only real booleans count. Anything else is recorded as `null` (unknown), never as granted.
+- `analytics: false` stops tracking like `revokeConsent()` but keeps the recorded categories.
+- Call it again whenever the shopper changes their choice. The new categories apply from the next event.
+- `revokeConsent()` also clears the recorded categories.
+- An omitted `analytics` does not block tracking: `grantConsent({ marketing: false })` starts collection and records marketing as denied.
+- `grantConsent(categories, { capture: false })` records the categories without starting or stopping collection. Use it when your own collection does not depend on the banner but ad tags and destinations must still follow it.
+
+Once categories are recorded, every event carries them as `properties.$consent`:
+
+```json
+{ "$consent": { "analytics": true, "marketing": false, "preferences": true, "sale_of_data": true, "source": "my-cmp", "region": "USCA" } }
+```
+
+Destinations enforce `$consent` server-side: Meta and other ad platforms need marketing consent, a sale-of-data opt-out sends Meta Limited Data Use, and Google Ads receives the shopper's consent with each conversion. See [Consent policy](/destinations-api/platform-integrations#consent-and-existing-pixels).
+
+Managed ad tags follow the categories in the browser too:
+
+- **Meta pixel:** not loaded and sends nothing until `marketing` is `true`. With `sale_of_data: false` it runs with Limited Data Use (`dataProcessingOptions ['LDU'], 0, 0`).
+- **Google tag:** receives `gtag('consent', 'update', …)` with `analytics_storage` from analytics, `ad_storage` and `ad_user_data` from marketing, and `ad_personalization` from marketing and sale of data.
+
+Without an argument, `grantConsent()` behaves exactly as before and no `$consent` is attached.
+
 ### Google Consent Mode
 
 Set `autoConsentMode: true` to have the SDK automatically grant or revoke consent based on Google Consent Mode v2 signals pushed to the `dataLayer`. Enabling it forces `requireConsent: true`, so tracking stays paused until consent is granted.

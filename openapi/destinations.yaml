@@ -2454,12 +2454,54 @@ components:
             - type: mythic_event
               eventName: purchase
               operator: equals
+    ConsentPolicy:
+      type: object
+      description: >
+        How this destination treats each shopper's consent. Events from the
+        Mythic Shopify app (and SDK sites that call `grantConsent(categories)`)
+        carry `properties.$consent` with `analytics`, `marketing`,
+        `preferences` and `sale_of_data`. Mythic enforces it before sending:
+        Meta, OpenAI and TikTok need marketing consent (skipped otherwise, and
+        logged as `skipped` with reason `consent_denied: marketing`); Meta with
+        a sale-of-data opt-out is sent with Limited Data Use; Google Ads is
+        always sent and carries the shopper's consent as event-level
+        `adUserData` / `adPersonalization` (DENIED included), overriding the
+        static `consent` setting; GA4 and experiment tools need analytics
+        consent. A Shopify order webhook (no consent of its own) inherits the
+        last consent seen for its checkout or email-identified shopper; other
+        sources never inherit. Only when no consent is known does `unknown`
+        apply.
+      properties:
+        mode:
+          type: string
+          enum: [follow, ignore]
+          default: follow
+          description: "`ignore` sends regardless of shopper consent. Use only with your own lawful basis."
+        unknown:
+          type: string
+          enum: [send, withhold]
+          default: send
+          description: >
+            What to do when no consent is known for the event or its person.
+            `send` keeps the behaviour of sources that never report consent
+            (plain SDK, CRM). `withhold` skips the delivery with reason
+            `consent_unknown`.
+        category:
+          type: string
+          enum: [none, analytics, marketing]
+          default: none
+          description: >
+            Webhooks only: which consent category gates delivery. `none`
+            (default) never blocks. Rejected on other destination types, whose
+            category is fixed.
     WebhookConfig:
       type: object
       description: "`action_config` for `action_type: webhook`."
       required:
         - url
       properties:
+        consent_policy:
+          $ref: '#/components/schemas/ConsentPolicy'
         url:
           type: string
           format: uri
@@ -2510,6 +2552,8 @@ components:
         - pixel_id
         - event_mapping
       properties:
+        consent_policy:
+          $ref: '#/components/schemas/ConsentPolicy'
         pixel_id:
           type: string
           example: "1234567890"
@@ -2558,6 +2602,8 @@ components:
         - customer_id
         - event_mapping
       properties:
+        consent_policy:
+          $ref: '#/components/schemas/ConsentPolicy'
         customer_id:
           type: string
           pattern: "^\\d{10}$"
@@ -2783,6 +2829,8 @@ components:
         - property_id
         - event_mapping
       properties:
+        consent_policy:
+          $ref: '#/components/schemas/ConsentPolicy'
         property_id:
           type: string
           pattern: "^\\d{6,}$"
@@ -3083,6 +3131,8 @@ components:
         - project_id
         - goal_id
       properties:
+        consent_policy:
+          $ref: '#/components/schemas/ConsentPolicy'
         account_id:
           type: string
           description: Convert account id. Numeric.
@@ -3139,6 +3189,8 @@ components:
         - project_key
         - event_name
       properties:
+        consent_policy:
+          $ref: '#/components/schemas/ConsentPolicy'
         project_key:
           type: string
           description: The Mida project key (the `key=` on `optimize.js`).
@@ -3179,6 +3231,8 @@ components:
         - pixel_id
         - event_mapping
       properties:
+        consent_policy:
+          $ref: '#/components/schemas/ConsentPolicy'
         pixel_id:
           type: string
           description: Pixel ID from the Conversions tab in OpenAI Ads Manager.
