@@ -49,10 +49,10 @@ paths:
         A `cloudflare` key also takes `account_id`, and `api_key` is a
         Cloudflare API token with the permission Account > Workers AI > Read.
         Mythic checks it against the account's Workers AI model search before
-        storing it. On a Cloudflare key, scanners run one of three Workers AI
-        frame models (`@cf/moonshotai/kimi-k2.6`, the default,
-        `@cf/meta/llama-4-scout-17b-16e-instruct` and
-        `@cf/google/gemma-4-26b-a4b-it`), which read up to 32 still frames from
+        storing it. On a Cloudflare key, scanners run one of four Workers AI
+        frame models (`@cf/deepseek-ai/deepseek-v4.1-flash-1017`, the default,
+        `@cf/moonshotai/kimi-k2.6`, `@cf/meta/llama-4-scout-17b-16e-instruct`
+        and `@cf/google/gemma-4-26b-a4b-it`), which read up to 32 still frames from
         the video and bill as Workers AI usage, or a `google/` model, which
         watches the whole video (at most 14 MB) and needs AI Gateway credits.
         Other `@cf/` models cannot scan.
@@ -68,7 +68,7 @@ paths:
                 api_key: { type: string, description: "The provider API key. For `cloudflare`, the API token (permission Account > Workers AI > Read), without `:`." }
                 account_id: { type: string, pattern: "^[0-9a-f]{32}$", description: "Required for `cloudflare` and refused for other providers (`400 invalid_key`). The 32 lowercase hex character Cloudflare account id." }
                 location_id: { type: string, nullable: true, description: A client id for an override. Omit or null for the agency default. }
-                default_model: { type: string, description: "Model used when a scanner sets none. Must be a model id of `provider` (`400` otherwise). For `cloudflare` it must be a `google/` model or one of the three frame models (`@cf/moonshotai/kimi-k2.6`, `@cf/meta/llama-4-scout-17b-16e-instruct`, `@cf/google/gemma-4-26b-a4b-it`); other `@cf/` models get `400 invalid_key`. Default `google/gemini-3.5-flash-lite` (OpenRouter), `gemini-3.5-flash-lite` (Gemini) or `@cf/moonshotai/kimi-k2.6` (Cloudflare)." }
+                default_model: { type: string, description: "Model used when a scanner sets none. Must be a model id of `provider` (`400` otherwise). For `cloudflare` it must be a `google/` model or one of the four frame models (`@cf/deepseek-ai/deepseek-v4.1-flash-1017`, `@cf/moonshotai/kimi-k2.6`, `@cf/meta/llama-4-scout-17b-16e-instruct`, `@cf/google/gemma-4-26b-a4b-it`); other `@cf/` models get `400 invalid_key`. Default `google/gemini-3.5-flash-lite` (OpenRouter), `gemini-3.5-flash-lite` (Gemini) or `@cf/deepseek-ai/deepseek-v4.1-flash-1017` (Cloudflare)." }
                 confirm_paid_tier: { type: boolean, description: "Required `true` for `gemini`: free-tier keys let Google use request content." }
       responses:
         "200": { description: Key replaced, content: { application/json: { schema: { $ref: "#/components/schemas/KeyResponse" } } } }
@@ -92,7 +92,7 @@ paths:
     get:
       summary: List video models
       operationId: listReplayVisionModels
-      description: "`openrouter`: OpenRouter models that accept video and return structured output, cheapest input first. `gemini`: current Gemini Flash models. `cloudflare`: the models a Cloudflare key can scan with. First the Workers AI frame models (`@cf/moonshotai/kimi-k2.6`, `@cf/meta/llama-4-scout-17b-16e-instruct`, `@cf/google/gemma-4-26b-a4b-it`), which read up to 32 still frames from the video and bill as Workers AI usage. Then `google/gemini-3.5-flash-lite`, `google/gemini-3.5-flash`, `google/gemini-3.7-flash` and `google/gemini-3.8-flash`, which watch the whole video (at most 14 MB) and need Cloudflare AI Gateway credits. Default `@cf/moonshotai/kimi-k2.6`."
+      description: "`openrouter`: OpenRouter models that read video or images and return structured output, cheapest input first. Models that read images but not video (`input: frames`), for example `openai/gpt-6-luna` and `anthropic/claude-haiku-5.5`, get up to 32 still frames from the recording. `gemini`: current Gemini Flash models. `cloudflare`: the models a Cloudflare key can scan with. First the Workers AI frame models (`@cf/deepseek-ai/deepseek-v4.1-flash-1017`, `@cf/moonshotai/kimi-k2.6`, `@cf/meta/llama-4-scout-17b-16e-instruct`, `@cf/google/gemma-4-26b-a4b-it`), which read up to 32 still frames from the video and bill as Workers AI usage. Then `google/gemini-3.5-flash-lite`, `google/gemini-3.5-flash`, `google/gemini-3.7-flash` and `google/gemini-3.8-flash`, which watch the whole video (at most 14 MB) and need Cloudflare AI Gateway credits. Default `@cf/deepseek-ai/deepseek-v4.1-flash-1017`."
       parameters:
         - name: provider
           in: query
@@ -107,7 +107,7 @@ paths:
                 type: object
                 properties:
                   success: { type: boolean, example: true }
-                  default: { type: string, example: google/gemini-3.5-flash-lite, description: "`@cf/moonshotai/kimi-k2.6` for `cloudflare`." }
+                  default: { type: string, example: google/gemini-3.5-flash-lite, description: "`@cf/deepseek-ai/deepseek-v4.1-flash-1017` for `cloudflare`." }
                   note: { type: string, description: "Present for `gemini` and `cloudflare`, which are fixed lists. For `cloudflare` it says frame models read up to 32 still frames and bill as Workers AI usage, and `google/` models watch the whole video and need AI Gateway credits." }
                   data:
                     type: array
@@ -115,7 +115,7 @@ paths:
                       type: object
                       properties:
                         id: { type: string, example: google/gemini-3.5-flash-lite }
-                        input: { type: string, enum: [frames, video], description: "On `cloudflare`: `frames` for a Workers AI model that reads up to 32 still frames, `video` for a `google/` model that watches the whole video." }
+                        input: { type: string, enum: [frames, video], description: "How a scanner sends the recording to this model. `video`: the whole video. `frames`: up to 32 still frames from the recording, for a model that reads images but not video (an OpenRouter image model or a Workers AI frame model on `cloudflare`)." }
                         name: { type: string }
                         prompt_usd_per_million: { type: number, nullable: true, example: 0.3 }
                         context_length: { type: integer, nullable: true }
@@ -150,8 +150,8 @@ paths:
         OpenRouter and Cloudflare keys, other `vendor/model` ids only OpenRouter
         keys, `@cf/` ids only Cloudflare keys, bare
         ids only Gemini keys. On a Cloudflare key only `google/` models and
-        the frame models `@cf/moonshotai/kimi-k2.6`,
-        `@cf/meta/llama-4-scout-17b-16e-instruct` and
+        the frame models `@cf/deepseek-ai/deepseek-v4.1-flash-1017`,
+        `@cf/moonshotai/kimi-k2.6`, `@cf/meta/llama-4-scout-17b-16e-instruct` and
         `@cf/google/gemma-4-26b-a4b-it` can scan, so other `@cf/` models are
         refused too.
       requestBody:
@@ -197,7 +197,7 @@ paths:
     patch:
       summary: Update a scanner
       operationId: updateReplayScanner
-      description: "`type` and `location_id` cannot change. A change to `prompt`, `config` or `model` increments `version`; re-sending the same values does not. A `model` the client's key cannot run gets `422 model_provider_mismatch` (on a Cloudflare key, any model that is not `google/` or one of the three frame models). Re-enabling sweeps from now on."
+      description: "`type` and `location_id` cannot change. A change to `prompt`, `config` or `model` increments `version`; re-sending the same values does not. A `model` the client's key cannot run gets `422 model_provider_mismatch` (on a Cloudflare key, any model that is not `google/` or one of the four frame models). Re-enabling sweeps from now on."
       requestBody:
         required: true
         content:
@@ -1592,7 +1592,7 @@ components:
           type: object
           description: "Sweep filters: `device_type`, `utm_source`, `utm_medium`, `utm_campaign`, `landing_page`, `country`, `browser`, `os` (exact strings), `min_duration_s`, and `landing_hosts` (array of 1-20 host names; keeps sessions whose first page is on one of them, `www.` ignored)."
         sampling_rate: { type: number, minimum: 0, maximum: 1, default: 0.1 }
-        model: { type: string, nullable: true, description: "Model id the key can run. On a Cloudflare key, a `google/` model or a frame model (`@cf/moonshotai/kimi-k2.6`, `@cf/meta/llama-4-scout-17b-16e-instruct`, `@cf/google/gemma-4-26b-a4b-it`) that reads up to 32 still frames instead of the video. Null uses the key's default_model." }
+        model: { type: string, nullable: true, description: "Model id the key can run. On an OpenRouter key, a model that reads video, or one that reads images and gets up to 32 still frames instead. On a Cloudflare key, a `google/` model or a frame model (`@cf/deepseek-ai/deepseek-v4.1-flash-1017`, `@cf/moonshotai/kimi-k2.6`, `@cf/meta/llama-4-scout-17b-16e-instruct`, `@cf/google/gemma-4-26b-a4b-it`) that reads up to 32 still frames instead of the video. Null uses the key's default_model." }
         monthly_scan_limit: { type: integer, minimum: 1, maximum: 100000, default: 500 }
         enabled: { type: boolean, default: true }
     Scanner:
@@ -1606,7 +1606,7 @@ components:
         config: { type: object }
         filters: { type: object }
         sampling_rate: { type: number }
-        model: { type: string, nullable: true, description: "The scanner's model, or null for the key's default_model. On a Cloudflare key a frame model (`@cf/moonshotai/kimi-k2.6`, `@cf/meta/llama-4-scout-17b-16e-instruct`, `@cf/google/gemma-4-26b-a4b-it`) reads up to 32 still frames; a `google/` model watches the whole video." }
+        model: { type: string, nullable: true, description: "The scanner's model, or null for the key's default_model. On a Cloudflare key a frame model (`@cf/deepseek-ai/deepseek-v4.1-flash-1017`, `@cf/moonshotai/kimi-k2.6`, `@cf/meta/llama-4-scout-17b-16e-instruct`, `@cf/google/gemma-4-26b-a4b-it`) reads up to 32 still frames; a `google/` model watches the whole video." }
         monthly_scan_limit: { type: integer }
         enabled: { type: boolean }
         version: { type: integer }

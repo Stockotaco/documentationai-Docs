@@ -174,9 +174,9 @@ models ([data usage](https://developers.cloudflare.com/workers-ai/platform/data-
 
 | Provider | Key | Default model | How the video is sent |
 | --- | --- | --- | --- |
-| `openrouter` | An OpenRouter API key | `google/gemini-3.5-flash-lite` | Inline in each request, routed only to providers that support every parameter and do not store prompts (`data_collection: deny`) |
+| `openrouter` | An OpenRouter API key | `google/gemini-3.5-flash-lite` | Inline in each request, routed only to providers that support every parameter and do not store prompts (`data_collection: deny`). Models that read images but not video get up to 32 still frames from the video |
 | `gemini` | A Google AI Studio API key on a **paid** plan | `gemini-3.5-flash-lite` | Inline, or through the Gemini Files API for large videos (deleted after the call) |
-| `cloudflare` | A Cloudflare API token plus your `account_id` | `@cf/moonshotai/kimi-k2.6` | `@cf/` frame models get up to 32 still frames from the video. `google/` models get the whole video inline through Cloudflare's `ai/run` API, up to 14 MB |
+| `cloudflare` | A Cloudflare API token plus your `account_id` | `@cf/deepseek-ai/deepseek-v4.1-flash-1017` | `@cf/` frame models get up to 32 still frames from the video. `google/` models get the whole video inline through Cloudflare's `ai/run` API, up to 14 MB |
 
 Every key is BYOK: your own account with the provider pays for every model
 call, and Mythic pays for none of them.
@@ -189,14 +189,13 @@ run:
 | --- | --- | --- |
 | `google/model` | `google/gemini-3.5-flash-lite` | OpenRouter and Cloudflare keys |
 | Other `vendor/model` | `anthropic/claude-sonnet-5` | OpenRouter keys only |
-| `@cf/vendor/model` | `@cf/moonshotai/kimi-k2.6` | Cloudflare keys only |
+| `@cf/vendor/model` | `@cf/deepseek-ai/deepseek-v4.1-flash-1017` | Cloudflare keys only |
 | A bare id | `gemini-3.5-flash-lite` | Gemini keys only |
 
 Setting a scanner model the key cannot run gets `422
 model_provider_mismatch`. If a key is later replaced with one of another
 provider, scans use the new key's `default_model` until you update the
-scanner. `GET /models?provider=openrouter` lists OpenRouter models that accept
-video and return structured output, cheapest first.
+scanner.
 
 <Callout kind="warning">
   Direct Gemini keys require `"confirm_paid_tier": true`. Google may use
@@ -204,6 +203,25 @@ video and return structured output, cheapest first.
   clients' visitors. OpenRouter keys do not need this: Mythic routes them only
   to providers that do not store or train on prompts.
 </Callout>
+
+### OpenRouter keys
+
+A scanner on an OpenRouter key can use any OpenRouter model that reads video
+or images and returns structured output:
+
+- A model that reads video, such as `google/gemini-3.5-flash-lite`, gets the
+  whole video.
+- A model that reads images but not video, such as `openai/gpt-6-luna` or
+  `anthropic/claude-haiku-5.5`, gets up to 32 still frames from the
+  recording instead, the same way [Cloudflare frame models](#cloudflare-keys)
+  do.
+- A video model that refuses the WebM video, for example
+  `meta/muse-spark-1.3`, which takes MP4 only, is retried once with still
+  frames.
+
+`GET /models?provider=openrouter` lists these models, cheapest input price
+first. Each item has `input`: `video` for a model that gets the video, or
+`frames` for a model that gets still frames.
 
 ### Cloudflare keys
 
@@ -230,10 +248,10 @@ On a Cloudflare key, a scanner runs one of two kinds of model:
 
 | Model | Input | Billed as |
 | --- | --- | --- |
-| `@cf/moonshotai/kimi-k2.6` (the default), `@cf/meta/llama-4-scout-17b-16e-instruct`, `@cf/google/gemma-4-26b-a4b-it` | Up to 32 still frames from the video | Workers AI usage |
+| `@cf/deepseek-ai/deepseek-v4.1-flash-1017` (the default), `@cf/moonshotai/kimi-k2.6`, `@cf/meta/llama-4-scout-17b-16e-instruct`, `@cf/google/gemma-4-26b-a4b-it` | Up to 32 still frames from the video | Workers AI usage |
 | `google/gemini-3.5-flash-lite`, `google/gemini-3.5-flash`, `google/gemini-3.7-flash`, `google/gemini-3.8-flash` | The whole video, up to 14 MB | AI Gateway Unified Billing |
 
-The three `@cf/` models above are frame models: Workers AI models that read
+The four `@cf/` models above are frame models: Workers AI models that read
 images but not video. Instead of the video they get up to 32 JPEG frames
 taken from the rendered recording. Half are spread evenly over the video, and
 half are the frames right after clicks, typing and page loads. Each frame is
@@ -244,23 +262,22 @@ two of them, such as an error message shown for a second. A `google/` model
 sees every frame of the video.
 
 The key's `default_model` and every scanner `model` must be one of these
-seven. Other `@cf/` models, for example `@cf/zai-org/glm-5.3`, cannot scan:
+eight. Other `@cf/` models, for example `@cf/zai-org/glm-5.3`, cannot scan:
 they are refused with `400 invalid_key` as the key's `default_model` and `422
 model_provider_mismatch` on a scanner. [Scouts](/agency-api/scouts#model-key)
 can still use any `@cf/` model in their own models list.
 
-`GET /models?provider=cloudflare` returns the same seven models, frame models
+`GET /models?provider=cloudflare` returns the same eight models, frame models
 first, each with `input: "frames"` or `input: "video"`, and `default:
-"@cf/moonshotai/kimi-k2.6"`. A `google/` model fails a recording whose video
+"@cf/deepseek-ai/deepseek-v4.1-flash-1017"`. A `google/` model fails a recording whose video
 is over 14 MB with `error.kind: too_large`.
 
 How Cloudflare bills your account depends on the model id:
 
 - `@cf/...` models run on Workers AI and are billed as Workers AI usage: a
   free daily allowance, then the Workers Paid plan. No credits are needed. In
-  Mythic's tests on three recordings, a Kimi scan took 13 to 27 seconds and
-  read about 20,000 input tokens, roughly $0.02 per scan at Workers AI's
-  listed $0.95 per million input tokens.
+  Mythic's tests, a scan with the default DeepSeek model cost about $0.005
+  and a Kimi scan about $0.02.
 - `google/` models are billed through Cloudflare AI Gateway Unified Billing.
   The account needs AI Gateway credits, or your own Google key stored in AI
   Gateway (BYOK). Without either, Cloudflare answers HTTP 402, and the key
@@ -328,8 +345,10 @@ values), page loads, console errors, exceptions, failed or slow requests, and
 the client's own analytics events. The video shows the page as it was
 recorded, so anything the SDK masked stays masked. Query strings are removed
 from URLs, and emails and long numbers are redacted from the timeline.
-Frame models on a Cloudflare key get up to 32 still frames from this video
-instead of the video itself (see [Cloudflare keys](#cloudflare-keys)).
+Frame models on a Cloudflare key and OpenRouter models that read images but
+not video get up to 32 still frames from this video instead of the video
+itself (see [OpenRouter keys](#openrouter-keys) and
+[Cloudflare keys](#cloudflare-keys)).
 
 When the client sends [server logs linked to sessions](/logs/otlp-ingestion#link-logs-to-people-and-sessions)
 and its plan includes Logs, the timeline also carries the session's server

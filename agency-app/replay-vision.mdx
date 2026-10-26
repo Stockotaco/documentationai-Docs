@@ -72,14 +72,27 @@ If a tab shows an error, your agency's API is not on that release yet.
   </Step>
 </Steps>
 
+## OpenRouter keys
+
+On an OpenRouter key, the scanner model list shows OpenRouter models that
+read video or images and return structured answers. A model that reads video
+gets the whole recording. A model that reads images but not video, such as
+`openai/gpt-6-luna` or `anthropic/claude-haiku-5.5`, gets up to 32 still
+frames from the recording instead, the same
+way Cloudflare still-frame models do (see [Cloudflare keys](#cloudflare-keys)).
+A video model that refuses the recording's WebM video, for example
+`meta/muse-spark-1.3`, which takes MP4 only, is retried once with still
+frames.
+
 ## Cloudflare keys
 
 A Cloudflare key runs models in your own Cloudflare account, and Cloudflare
 bills that account.
 
 - **Scanners can use still-frame models or `google/` video models.** The
-  scanner model list labels three Workers AI models "still frames":
-  `@cf/moonshotai/kimi-k2.6` (the default), `@cf/meta/llama-4-scout-17b-16e-instruct`
+  scanner model list labels four Workers AI models "still frames":
+  `@cf/deepseek-ai/deepseek-v4.1-flash-1017` (the default),
+  `@cf/moonshotai/kimi-k2.6`, `@cf/meta/llama-4-scout-17b-16e-instruct`
   and `@cf/google/gemma-4-26b-a4b-it`. They read up to 32 still frames from
   the recording instead of the video: half spread evenly over it, half right
   after clicks, typing and page loads. Each frame is labeled with its video
@@ -90,7 +103,8 @@ bills that account.
   large. Other `@cf/` models cannot scan.
 - **Still-frame models are Workers AI usage.** They use the account's free
   daily Workers AI allowance, then the Workers Paid plan, and need no
-  credits. In Mythic's tests a Kimi scan cost roughly $0.02.
+  credits. In Mythic's tests a scan with the default DeepSeek model cost
+  about $0.005, and a Kimi scan about $0.02.
   [Client scouts](/agency-api/scouts#model-key) can run any `@cf/` model
   in their list, also billed as Workers AI usage.
 - **`google/` models need AI Gateway credits.** Cloudflare bills them through
