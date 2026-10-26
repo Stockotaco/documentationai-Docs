@@ -17,8 +17,8 @@ what it sees with what it remembers from earlier runs, and files **one report
 per finding** into the client's inbox. When nothing clears its bar, it closes
 out quietly: an empty run is a good run.
 
-Scouts run on **your** model key (OpenRouter or Gemini). Mythic pays for no
-model calls, and the spend is reported per scout.
+Scouts run on **your** model key (OpenRouter, Gemini or Cloudflare). Mythic
+pays for no model calls, and the spend is reported per scout.
 
 | Route | What it does |
 | --- | --- |
@@ -102,17 +102,22 @@ can always stop spend. `scouts` comes with plans that include error tracking.
 ## Model key
 
 Scouts use the client's or agency's [Replay Vision model
-key](/agency-api/replay-vision#model-keys) (OpenRouter or Gemini). Without one,
-creating, changing or running a scout answers `409 no_model_key`.
+key](/agency-api/replay-vision#model-keys) (OpenRouter, Gemini or Cloudflare).
+Without one, creating, changing or running a scout answers `409
+no_model_key`: "Add a model key (OpenRouter, Gemini or Cloudflare) for this
+client or the agency first."
 
 The model a run uses:
 
-1. The scout's own `model`, which must belong to the key's provider (`422
-   model_provider_mismatch` otherwise).
-2. With no `model` set, the key's default model, unless it is a lite or nano
-   model.
-3. Otherwise `google/gemini-3.8-flash` (OpenRouter) or `gemini-3.8-flash`
-   (Gemini).
+1. The scout's own `model`, which must be a model the key can run (`422
+   model_provider_mismatch` otherwise). `google/` ids fit OpenRouter and
+   Cloudflare keys, other `vendor/model` ids fit only OpenRouter keys,
+   `@cf/vendor/model` ids fit only Cloudflare keys, and bare
+   ids like `gemini-3.8-flash` fit only Gemini keys.
+2. With no `model` set, the key's default model, if it fits the key and is not
+   a lite or nano model.
+3. Otherwise `google/gemini-3.8-flash` (OpenRouter), `gemini-3.8-flash`
+   (Gemini) or `@cf/moonshotai/kimi-k2.6` (Cloudflare).
 
 <Callout kind="warning">
   **Lite and nano models are refused.** A scout calls tools in a loop, and lite
@@ -124,6 +129,16 @@ The model a run uses:
 `GET /scouts/models?provider=openrouter` lists OpenRouter models that accept
 tools (without lite, nano or `:free` models), with prices as OpenRouter reports
 them. `provider=gemini` lists the current Gemini Flash models.
+`provider=cloudflare` returns a fixed list of models that accept tools, with
+`default: "@cf/moonshotai/kimi-k2.6"`. It includes Workers AI `@cf/` models
+and `google/gemini-3.8-flash` and `google/gemini-3.7-flash`. Read the list
+from the API rather than hard-coding it.
+
+On a Cloudflare key, `@cf/` models are billed as Workers AI usage on your
+Cloudflare account (a free daily allowance, then Workers Paid). `google/`
+models are billed through AI Gateway and need AI Gateway credits or your own
+Google key stored in AI Gateway; without either, runs fail with HTTP 402. See
+[Cloudflare keys](/agency-api/replay-vision#cloudflare-keys).
 
 ## Skills
 

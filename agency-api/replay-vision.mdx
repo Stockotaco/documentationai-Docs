@@ -2,7 +2,7 @@
 title: Replay Vision
 description: >-
   AI scanners that watch your clients' session recordings with your own model
-  key (OpenRouter or Gemini) and turn what they see into structured,
+  key (OpenRouter, Gemini or Cloudflare) and turn what they see into structured,
   queryable answers, on /client/v1/replay-vision with an agency key.
 ---
 
@@ -176,12 +176,24 @@ models ([data usage](https://developers.cloudflare.com/workers-ai/platform/data-
 | --- | --- | --- | --- |
 | `openrouter` | An OpenRouter API key | `google/gemini-3.5-flash-lite` | Inline in each request, routed only to providers that support every parameter and do not store prompts (`data_collection: deny`) |
 | `gemini` | A Google AI Studio API key on a **paid** plan | `gemini-3.5-flash-lite` | Inline, or through the Gemini Files API for large videos (deleted after the call) |
+| `cloudflare` | A Cloudflare API token plus your `account_id` | `google/gemini-3.5-flash-lite` | Inline in each request through Cloudflare's `ai/run` API, up to 14 MB |
+
+Every key is BYOK: your own account with the provider pays for every model
+call, and Mythic pays for none of them.
 
 A scan uses the client's key if it has one, otherwise the agency's. A scanner's
-`model` overrides the key's `default_model` and must be a model of that key's
-provider: OpenRouter ids look like `google/gemini-3.5-flash-lite`, Gemini ids
-like `gemini-3.5-flash-lite`. Setting a scanner model of the other provider
-gets `422 model_provider_mismatch`. If a key is later replaced with the other
+`model` overrides the key's `default_model` and must be a model that key can
+run:
+
+| Model id form | Example | Fits |
+| --- | --- | --- |
+| `google/model` | `google/gemini-3.5-flash-lite` | OpenRouter and Cloudflare keys |
+| Other `vendor/model` | `anthropic/claude-sonnet-5` | OpenRouter keys only |
+| `@cf/vendor/model` | `@cf/moonshotai/kimi-k2.6` | Cloudflare keys only |
+| A bare id | `gemini-3.5-flash-lite` | Gemini keys only |
+
+Setting a scanner model the key cannot run gets `422
+model_provider_mismatch`. If a key is later replaced with one of another
 provider, scans use the new key's `default_model` until you update the
 scanner. `GET /models?provider=openrouter` lists OpenRouter models that accept
 video and return structured output, cheapest first.
@@ -192,6 +204,53 @@ video and return structured output, cheapest first.
   clients' visitors. OpenRouter keys do not need this: Mythic routes them only
   to providers that do not store or train on prompts.
 </Callout>
+
+### Cloudflare keys
+
+A Cloudflare key is two values: your Cloudflare account id and an API token.
+
+```bash
+curl -X PUT "https://mythic-analytics.gulp.workers.dev/client/v1/replay-vision/keys" \
+  -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
+  -d '{"provider":"cloudflare","account_id":"<32 hex characters>","api_key":"<Cloudflare API token>"}'
+```
+
+- `account_id` is required for `cloudflare` and refused for the other
+  providers (`400 invalid_key`). It is 32 lowercase hex characters, shown in
+  the Cloudflare dashboard on Account home and on the Workers AI page.
+- `api_key` is the API token. Create it with the permission **Account >
+  Workers AI > Read**. It cannot contain `:`.
+- Mythic checks the token against your account's Workers AI model search
+  before storing it. If Cloudflare refuses it, the answer is `422
+  key_rejected`.
+- `GET /keys` shows `provider: "cloudflare"` and the last four characters of
+  the token. The account id is not returned.
+
+Scanners send the recording as video, and Cloudflare's own Workers AI models
+do not take video. On a Cloudflare key, scanners run only `google/` models:
+the key's `default_model` and every scanner `model` must start with `google/`.
+An `@cf/` model is refused (`400 invalid_key` on the key, `422
+model_provider_mismatch` on a scanner). `GET /models?provider=cloudflare`
+returns the models a Cloudflare key can scan with: `google/gemini-3.5-flash-lite`
+(the default), `google/gemini-3.5-flash`, `google/gemini-3.7-flash` and
+`google/gemini-3.8-flash`. A recording's video can be at most 14 MB on
+Cloudflare; larger recordings fail with `error.kind: too_large`.
+
+How Cloudflare bills your account depends on the model id:
+
+- `@cf/...` models run on Workers AI and are billed as Workers AI usage: a
+  free daily allowance, then the Workers Paid plan. No credits are needed.
+- `google/` models, including every model a scanner uses, are
+  billed through Cloudflare AI Gateway Unified Billing. The account needs AI
+  Gateway credits, or your own Google key stored in AI Gateway (BYOK). Without
+  either, Cloudflare answers HTTP 402, and the key gets a `last_error` like any
+  other key out of credits.
+
+Every request to Cloudflare sends `cf-aig-collect-log: false`, so prompts and
+recordings are not stored in your AI Gateway logs, and `cf-aig-skip-cache:
+true`.
+
+### Stored keys
 
 Keys are encrypted at rest and never returned; `GET /keys` shows the last four
 characters. If the provider rejects a key during a scan (expired, revoked, out
@@ -291,7 +350,7 @@ minutes are rendered, and the model is told so.
 | `transient` | Timeouts, network errors or provider 5xx after every retry |
 | `bad_request` | The provider refused the request, most often an unknown model id |
 | `rejected` | The provider's safety filter refused the content |
-| `too_large` | The video was over the provider's inline limit |
+| `too_large` | The video was over the provider's inline limit (14 MB on Cloudflare) |
 | `bad_response` | The provider answered with something unreadable |
 | `validation_failed` | The model's answer did not fit the scanner, twice |
 | `render_failed` | The recording could not be rendered after every retry |
@@ -443,7 +502,10 @@ A Scout schedules text-only analysis of one scanner's existing observations
 using that scanner's resolved key/model (client override, else agency default).
 It cannot call arbitrary tools, change a scanner or start additional video
 scans. Model instructions treat visitor text and prior reports as untrusted.
-Model spend is additional BYOK dollars, not Mythic credits.
+Model spend is additional BYOK dollars, not Mythic credits. A Scout runs on
+any model that fits the resolved key, Cloudflare keys included. On a
+Cloudflare key that is the scanner's `google/` model, billed through AI
+Gateway as described in [Cloudflare keys](#cloudflare-keys).
 
 ### Templates and creation
 

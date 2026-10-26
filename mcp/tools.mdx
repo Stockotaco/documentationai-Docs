@@ -150,7 +150,7 @@ Saved analytics queries and their results.
 | --- | --- | --- | --- |
 | `list_insights`<br /><span style={{opacity: 0.7}}>List Insights</span> | `insights:read` | List insights for the active client. | `GET /builder/insights` |
 | `get_insight`<br /><span style={{opacity: 0.7}}>Get Insight</span> | `insights:read` | Get a single insight by ID, including its full config (config.query is the explore spec it runs). | `GET /builder/insights/:id` |
-| `run_insight`<br /><span style={{opacity: 0.7}}>Run Insight</span> | `insights:read` | Execute a STORED insight and return its series/buckets (trend), steps (funnel) or rows/totals (attribution) — the same shape query_events returns — or, for an analysis panel, &#123;engine:"analysis", kind, data&#125;… | `POST /builder/insights/:id/query` |
+| `run_insight`<br /><span style={{opacity: 0.7}}>Run Insight</span> | `insights:read` | Execute a STORED insight and return its series/buckets (trend), steps (funnel) or rows/totals (attribution) — the same shape query_events returns — or, for an analysis panel, &#123;engine:"analysis", kind, result… | `POST /builder/insights/:id/query` |
 | `preview_insight`<br /><span style={{opacity: 0.7}}>Preview Insight</span> | `insights:read` | Execute an insight CONFIG without saving it — the same &#123; insight_type, config &#125; shape create_insight stores, run in-memory and never persisted. | `POST /builder/insights/preview` |
 | `create_insight`<br /><span style={{opacity: 0.7}}>Create Insight</span> | `insights:write` | Create a new insight (a dashboard panel) for the active client. | `POST /builder/insights` |
 | `update_insight`<br /><span style={{opacity: 0.7}}>Update Insight</span> | `insights:write` | Update an existing insight. | `PATCH /builder/insights/:id` |
@@ -465,7 +465,7 @@ Agency-wide keys only — a key bound to one client cannot hold this scope.
 
 ## Replay Vision
 
-AI scanners that watch session recordings with the agency’s own model key (OpenRouter or Gemini): keys, scanners, on-demand scans and their observations. A key bound to one client may read that client’s scanners, observations and summaries; everything else is agency-wide.
+AI scanners that watch session recordings with the agency’s own model key (OpenRouter, Gemini or Cloudflare): keys, scanners, on-demand scans and their observations. A key bound to one client may read that client’s scanners, observations and summaries; everything else is agency-wide.
 
 | Tool | Scope | What it does | Proxies |
 | --- | --- | --- | --- |

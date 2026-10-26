@@ -46,11 +46,15 @@ paths:
         Models a scout can run on. `openrouter`: OpenRouter's public catalog
         filtered to models that accept tools, without lite, nano or `:free`
         models (at most 400). `gemini`: the current Gemini Flash models.
+        `cloudflare`: a fixed list of tool-capable models, Workers AI `@cf/`
+        models plus `google/gemini-3.8-flash` and `google/gemini-3.7-flash`,
+        with default `@cf/moonshotai/kimi-k2.6`. Read the list from this
+        endpoint rather than hard-coding it.
       parameters:
         - name: provider
           in: query
           required: false
-          schema: { type: string, enum: [openrouter, gemini], default: openrouter }
+          schema: { type: string, enum: [openrouter, gemini, cloudflare], default: openrouter }
       responses:
         "200":
           description: Models
@@ -257,9 +261,9 @@ paths:
         Create a scout on one client. Unset fields take the skill's defaults:
         name from the skill, schedule daily 08:00 in the client's timezone.
         Needs the `scouts` plan feature for the client (`402
-        feature_not_in_plan`), a model key for the client or agency (`409
-        no_model_key`), a `model` of that key's provider (`422
-        model_provider_mismatch`), and on an `mcp_` key the read scope of
+        feature_not_in_plan`), a model key (OpenRouter, Gemini or Cloudflare)
+        for the client or agency (`409 no_model_key`), a `model` that key can
+        run (`422 model_provider_mismatch`), and on an `mcp_` key the read scope of
         every surface the skill reads (`403 insufficient_scope`). At most 10
         scouts per client (`422 scout_limit`).
       requestBody:
@@ -526,7 +530,7 @@ components:
           properties:
             channel_ids: { type: array, maxItems: 5, items: { type: string, format: uuid }, description: "Active alert channels of this agency that receive each new report once." }
         enabled: { type: boolean, default: true }
-        model: { type: string, nullable: true, description: "A model of the key's provider. Null uses the key's default unless it is a lite or nano model, else google/gemini-3.8-flash (OpenRouter) or gemini-3.8-flash (Gemini). Lite and nano models are refused." }
+        model: { type: string, nullable: true, description: "A model the key can run: `google/model` on OpenRouter or Cloudflare, other `vendor/model` on OpenRouter only, `@cf/vendor/model` on Cloudflare only, a bare id on Gemini. Null uses the key's default unless it is a lite or nano model, else google/gemini-3.8-flash (OpenRouter), gemini-3.8-flash (Gemini) or @cf/moonshotai/kimi-k2.6 (Cloudflare). Lite and nano models are refused." }
     Scout:
       type: object
       properties:

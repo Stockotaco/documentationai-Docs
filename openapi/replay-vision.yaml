@@ -4,8 +4,8 @@ info:
   title: Replay Vision API
   description: >
     AI scanners over session recordings on `/client/v1/replay-vision`, run
-    with the agency's own model key (OpenRouter or Gemini). A scanner is a
-    saved question; an observation is its answer for one recording. Each
+    with the agency's own model key (OpenRouter, Gemini or Cloudflare). A
+    scanner is a saved question; an observation is its answer for one recording. Each
     succeeded observation is also ingested as a `$recording_observed` event.
 
 
@@ -44,6 +44,13 @@ paths:
         clears its `last_error`. Agency key (`ak_`) only: `mcp_` keys get
         `403 not_available_to_scoped_keys`, so a provider key never passes
         through an AI tool.
+
+
+        A `cloudflare` key also takes `account_id`, and `api_key` is a
+        Cloudflare API token with the permission Account > Workers AI > Read.
+        Mythic checks it against the account's Workers AI model search before
+        storing it. On a Cloudflare key, scanners run only `google/` models:
+        Workers AI `@cf/` models do not take video.
       requestBody:
         required: true
         content:
@@ -52,10 +59,11 @@ paths:
               type: object
               required: [provider, api_key]
               properties:
-                provider: { type: string, enum: [openrouter, gemini] }
-                api_key: { type: string, description: The provider API key. }
+                provider: { type: string, enum: [openrouter, gemini, cloudflare] }
+                api_key: { type: string, description: "The provider API key. For `cloudflare`, the API token (permission Account > Workers AI > Read), without `:`." }
+                account_id: { type: string, pattern: "^[0-9a-f]{32}$", description: "Required for `cloudflare` and refused for other providers (`400 invalid_key`). The 32 lowercase hex character Cloudflare account id." }
                 location_id: { type: string, nullable: true, description: A client id for an override. Omit or null for the agency default. }
-                default_model: { type: string, description: "Model used when a scanner sets none. Must be a model id of `provider` (`400` otherwise). Default `google/gemini-3.5-flash-lite` (OpenRouter) or `gemini-3.5-flash-lite` (Gemini)." }
+                default_model: { type: string, description: "Model used when a scanner sets none. Must be a model id of `provider` (`400` otherwise). For `cloudflare` it must be a `google/` model. Default `google/gemini-3.5-flash-lite` (OpenRouter and Cloudflare) or `gemini-3.5-flash-lite` (Gemini)." }
                 confirm_paid_tier: { type: boolean, description: "Required `true` for `gemini`: free-tier keys let Google use request content." }
       responses:
         "200": { description: Key replaced, content: { application/json: { schema: { $ref: "#/components/schemas/KeyResponse" } } } }
@@ -79,12 +87,12 @@ paths:
     get:
       summary: List video models
       operationId: listReplayVisionModels
-      description: "`openrouter`: OpenRouter models that accept video and return structured output, cheapest input first. `gemini`: current Gemini Flash models."
+      description: "`openrouter`: OpenRouter models that accept video and return structured output, cheapest input first. `gemini`: current Gemini Flash models. `cloudflare`: the `google/` models a Cloudflare key can scan video with (`google/gemini-3.5-flash-lite`, `google/gemini-3.5-flash`, `google/gemini-3.7-flash`, `google/gemini-3.8-flash`), billed through Cloudflare AI Gateway. Video on Cloudflare is at most 14 MB."
       parameters:
         - name: provider
           in: query
           required: false
-          schema: { type: string, enum: [openrouter, gemini], default: openrouter }
+          schema: { type: string, enum: [openrouter, gemini, cloudflare], default: openrouter }
       responses:
         "200":
           description: Models
@@ -95,7 +103,7 @@ paths:
                 properties:
                   success: { type: boolean, example: true }
                   default: { type: string, example: google/gemini-3.5-flash-lite }
-                  note: { type: string, description: "Present for `gemini`, which is a fixed list of current Flash models." }
+                  note: { type: string, description: "Present for `gemini` and `cloudflare`, which are fixed lists." }
                   data:
                     type: array
                     items:
@@ -131,8 +139,12 @@ paths:
       description: >
         An enabled scanner sweeps recordings that end from now on. Older
         recordings are scanned with `POST /scanners/{id}/scan`. At most 25
-        scanners per client (`422 too_many_scanners`). A `model` of the other
-        provider than the client's key gets `422 model_provider_mismatch`.
+        scanners per client (`422 too_many_scanners`). A `model` the client's key
+        cannot run gets `422 model_provider_mismatch`: `google/` ids fit
+        OpenRouter and Cloudflare keys, other `vendor/model` ids only OpenRouter
+        keys, `@cf/` ids only Cloudflare keys, bare
+        ids only Gemini keys. On a Cloudflare key only `google/` models can
+        scan video, so `@cf/` models are refused too.
       requestBody:
         required: true
         content:
@@ -176,7 +188,7 @@ paths:
     patch:
       summary: Update a scanner
       operationId: updateReplayScanner
-      description: "`type` and `location_id` cannot change. A change to `prompt`, `config` or `model` increments `version`; re-sending the same values does not. A `model` of the other provider than the client's key gets `422 model_provider_mismatch`. Re-enabling sweeps from now on."
+      description: "`type` and `location_id` cannot change. A change to `prompt`, `config` or `model` increments `version`; re-sending the same values does not. A `model` the client's key cannot run gets `422 model_provider_mismatch` (on a Cloudflare key, any model that is not `google/`). Re-enabling sweeps from now on."
       requestBody:
         required: true
         content:
@@ -1543,8 +1555,8 @@ components:
         id: { type: string, format: uuid }
         scope: { type: string, enum: [agency, location] }
         location_id: { type: string, nullable: true }
-        provider: { type: string, enum: [openrouter, gemini] }
-        key_hint: { type: string, example: "…a1b2" }
+        provider: { type: string, enum: [openrouter, gemini, cloudflare] }
+        key_hint: { type: string, example: "…a1b2", description: "Last four characters of the key (of the API token for `cloudflare`). A Cloudflare key's account id is not returned." }
         default_model: { type: string }
         verified_at: { type: string, format: date-time }
         last_error: { type: string, nullable: true, description: Why the provider last rejected this key during a scan. }
@@ -1571,7 +1583,7 @@ components:
           type: object
           description: "Sweep filters: `device_type`, `utm_source`, `utm_medium`, `utm_campaign`, `landing_page`, `country`, `browser`, `os` (exact strings), `min_duration_s`, and `landing_hosts` (array of 1-20 host names; keeps sessions whose first page is on one of them, `www.` ignored)."
         sampling_rate: { type: number, minimum: 0, maximum: 1, default: 0.1 }
-        model: { type: string, nullable: true, description: "Model id of the key's provider. Null uses the key's default_model." }
+        model: { type: string, nullable: true, description: "Model id the key can run (`google/` only on a Cloudflare key). Null uses the key's default_model." }
         monthly_scan_limit: { type: integer, minimum: 1, maximum: 100000, default: 500 }
         enabled: { type: boolean, default: true }
     Scanner:

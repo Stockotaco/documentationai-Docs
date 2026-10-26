@@ -13,8 +13,8 @@ were they. Each answer is a **result**. Results are also sent into the
 client's data as a `$recording_observed` event, so you can count and chart
 them like any other event.
 
-Scans run on your own OpenRouter or Gemini key, and the provider bills you
-directly.
+Scans run on your own OpenRouter, Gemini or Cloudflare key, and the provider
+bills you directly.
 
 Open **Replay Vision** from the agency menu to see every client's scanners, or
 from a client's menu to see only that client's. The hub has six tabs:
@@ -26,7 +26,7 @@ from a client's menu to see only that client's. The hub has six tabs:
 | **Usage** | Reported model spend this month, a straight-line estimate to month end, scans used and when the limit resets, per scanner and per Scout. |
 | **Reports** | Every Scout report, newest first, with its priority. |
 | **All results** | Every scanner's results, with status and second-check filters. |
-| **Model keys** | Your OpenRouter or Gemini keys. |
+| **Model keys** | Your OpenRouter, Gemini or Cloudflare keys. |
 
 <Callout kind="note">
 These screens arrive with the Replay Vision Scouts release of the Mythic API.
@@ -37,13 +37,19 @@ If a tab shows an error, your agency's API is not on that release yet.
 
 <Steps>
   <Step title="Add a model key">
-    Open the **Model keys** tab and add an OpenRouter or Gemini API key. A key
-    added at the agency level is used by every client. A key added on a client
-    is used for that client instead. Mythic checks the key with the provider,
+    Open the **Model keys** tab and add an OpenRouter, Gemini or Cloudflare
+    key. A key added at the agency level is used by every client. A key added
+    on a client is used for that client instead. Mythic checks the key with the provider,
     encrypts it, and never shows it again.
 
     A Gemini key must be on a paid plan. Google may use free-tier content to
     improve its products, and recordings show your clients' visitors.
+
+    A Cloudflare key has two fields. **Account ID** is the 32-character id on
+    your Cloudflare dashboard's Account home or Workers AI page. **API token**
+    is a Cloudflare API token with the permission **Account > Workers AI >
+    Read**. See [Cloudflare keys](#cloudflare-keys) for which models it runs
+    and how Cloudflare bills them.
   </Step>
   <Step title="Create a scanner">
     Click **New scanner**, choose the client and the type, and write the
@@ -65,6 +71,25 @@ If a tab shows an error, your agency's API is not on that release yet.
     the recordings that just ended.
   </Step>
 </Steps>
+
+## Cloudflare keys
+
+A Cloudflare key runs models in your own Cloudflare account, and Cloudflare
+bills that account.
+
+- **Scanners use `google/` models only.** Cloudflare's own `@cf/` models do
+  not take video. The default is `google/gemini-3.5-flash-lite`. A recording
+  whose video is over 14 MB fails as too large on Cloudflare.
+- **`google/` models need AI Gateway credits.** Cloudflare bills them through
+  AI Gateway Unified Billing: add AI Gateway credits to the account, or store
+  your own Google key in AI Gateway. Without either, Cloudflare refuses the
+  call and the key shows Cloudflare's "Insufficient balance" error.
+- **`@cf/` models are Workers AI usage.** [Client
+  scouts](/agency-api/scouts#model-key) can run them, for example
+  `@cf/moonshotai/kimi-k2.6`, the default scout model on a Cloudflare key. They use the account's free daily Workers AI allowance, then the
+  Workers Paid plan.
+- **No logs in AI Gateway.** Mythic asks Cloudflare not to store prompts or
+  recordings in your AI Gateway logs.
 
 ## Scanner types
 
