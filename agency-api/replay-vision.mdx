@@ -176,7 +176,7 @@ models ([data usage](https://developers.cloudflare.com/workers-ai/platform/data-
 | --- | --- | --- | --- |
 | `openrouter` | An OpenRouter API key | `google/gemini-3.5-flash-lite` | Inline in each request, routed only to providers that support every parameter and do not store prompts (`data_collection: deny`) |
 | `gemini` | A Google AI Studio API key on a **paid** plan | `gemini-3.5-flash-lite` | Inline, or through the Gemini Files API for large videos (deleted after the call) |
-| `cloudflare` | A Cloudflare API token plus your `account_id` | `google/gemini-3.5-flash-lite` | Inline in each request through Cloudflare's `ai/run` API, up to 14 MB |
+| `cloudflare` | A Cloudflare API token plus your `account_id` | `@cf/moonshotai/kimi-k2.6` | `@cf/` frame models get up to 32 still frames from the video. `google/` models get the whole video inline through Cloudflare's `ai/run` API, up to 14 MB |
 
 Every key is BYOK: your own account with the provider pays for every model
 call, and Mythic pays for none of them.
@@ -226,25 +226,45 @@ curl -X PUT "https://mythic-analytics.gulp.workers.dev/client/v1/replay-vision/k
 - `GET /keys` shows `provider: "cloudflare"` and the last four characters of
   the token. The account id is not returned.
 
-Scanners send the recording as video, and Cloudflare's own Workers AI models
-do not take video. On a Cloudflare key, scanners run only `google/` models:
-the key's `default_model` and every scanner `model` must start with `google/`.
-An `@cf/` model is refused (`400 invalid_key` on the key, `422
-model_provider_mismatch` on a scanner). `GET /models?provider=cloudflare`
-returns the models a Cloudflare key can scan with: `google/gemini-3.5-flash-lite`
-(the default), `google/gemini-3.5-flash`, `google/gemini-3.7-flash` and
-`google/gemini-3.8-flash`. A recording's video can be at most 14 MB on
-Cloudflare; larger recordings fail with `error.kind: too_large`.
+On a Cloudflare key, a scanner runs one of two kinds of model:
+
+| Model | Input | Billed as |
+| --- | --- | --- |
+| `@cf/moonshotai/kimi-k2.6` (the default), `@cf/meta/llama-4-scout-17b-16e-instruct`, `@cf/google/gemma-4-26b-a4b-it` | Up to 32 still frames from the video | Workers AI usage |
+| `google/gemini-3.5-flash-lite`, `google/gemini-3.5-flash`, `google/gemini-3.7-flash`, `google/gemini-3.8-flash` | The whole video, up to 14 MB | AI Gateway Unified Billing |
+
+The three `@cf/` models above are frame models: Workers AI models that read
+images but not video. Instead of the video they get up to 32 JPEG frames
+taken from the rendered recording. Half are spread evenly over the video, and
+half are the frames right after clicks, typing and page loads. Each frame is
+labeled with its video second, so `(t N)` citations and key moments use the
+same video clock as on a video model, and the event timeline still covers
+everything between frames. Frames can miss a brief state that falls between
+two of them, such as an error message shown for a second. A `google/` model
+sees every frame of the video.
+
+The key's `default_model` and every scanner `model` must be one of these
+seven. Other `@cf/` models, for example `@cf/zai-org/glm-5.3`, cannot scan:
+they are refused with `400 invalid_key` as the key's `default_model` and `422
+model_provider_mismatch` on a scanner. [Scouts](/agency-api/scouts#model-key)
+can still use any `@cf/` model in their own models list.
+
+`GET /models?provider=cloudflare` returns the same seven models, frame models
+first, each with `input: "frames"` or `input: "video"`, and `default:
+"@cf/moonshotai/kimi-k2.6"`. A `google/` model fails a recording whose video
+is over 14 MB with `error.kind: too_large`.
 
 How Cloudflare bills your account depends on the model id:
 
 - `@cf/...` models run on Workers AI and are billed as Workers AI usage: a
-  free daily allowance, then the Workers Paid plan. No credits are needed.
-- `google/` models, including every model a scanner uses, are
-  billed through Cloudflare AI Gateway Unified Billing. The account needs AI
-  Gateway credits, or your own Google key stored in AI Gateway (BYOK). Without
-  either, Cloudflare answers HTTP 402, and the key gets a `last_error` like any
-  other key out of credits.
+  free daily allowance, then the Workers Paid plan. No credits are needed. In
+  Mythic's tests on three recordings, a Kimi scan took 13 to 27 seconds and
+  read about 20,000 input tokens, roughly $0.02 per scan at Workers AI's
+  listed $0.95 per million input tokens.
+- `google/` models are billed through Cloudflare AI Gateway Unified Billing.
+  The account needs AI Gateway credits, or your own Google key stored in AI
+  Gateway (BYOK). Without either, Cloudflare answers HTTP 402, and the key
+  gets a `last_error` like any other key out of credits.
 
 Every request to Cloudflare sends `cf-aig-collect-log: false`, so prompts and
 recordings are not stored in your AI Gateway logs, and `cf-aig-skip-cache:
@@ -308,6 +328,8 @@ values), page loads, console errors, exceptions, failed or slow requests, and
 the client's own analytics events. The video shows the page as it was
 recorded, so anything the SDK masked stays masked. Query strings are removed
 from URLs, and emails and long numbers are redacted from the timeline.
+Frame models on a Cloudflare key get up to 32 still frames from this video
+instead of the video itself (see [Cloudflare keys](#cloudflare-keys)).
 
 When the client sends [server logs linked to sessions](/logs/otlp-ingestion#link-logs-to-people-and-sessions)
 and its plan includes Logs, the timeline also carries the session's server
@@ -350,7 +372,7 @@ minutes are rendered, and the model is told so.
 | `transient` | Timeouts, network errors or provider 5xx after every retry |
 | `bad_request` | The provider refused the request, most often an unknown model id |
 | `rejected` | The provider's safety filter refused the content |
-| `too_large` | The video was over the provider's inline limit (14 MB on Cloudflare) |
+| `too_large` | The video was over the provider's inline limit (14 MB for a `google/` model on Cloudflare) |
 | `bad_response` | The provider answered with something unreadable |
 | `validation_failed` | The model's answer did not fit the scanner, twice |
 | `render_failed` | The recording could not be rendered after every retry |
@@ -504,8 +526,9 @@ It cannot call arbitrary tools, change a scanner or start additional video
 scans. Model instructions treat visitor text and prior reports as untrusted.
 Model spend is additional BYOK dollars, not Mythic credits. A Scout runs on
 any model that fits the resolved key, Cloudflare keys included. On a
-Cloudflare key that is the scanner's `google/` model, billed through AI
-Gateway as described in [Cloudflare keys](#cloudflare-keys).
+Cloudflare key that is the scanner's model, a frame model billed as Workers AI
+usage or a `google/` model billed through AI Gateway, as described in
+[Cloudflare keys](#cloudflare-keys).
 
 ### Templates and creation
 

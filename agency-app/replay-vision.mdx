@@ -77,17 +77,26 @@ If a tab shows an error, your agency's API is not on that release yet.
 A Cloudflare key runs models in your own Cloudflare account, and Cloudflare
 bills that account.
 
-- **Scanners use `google/` models only.** Cloudflare's own `@cf/` models do
-  not take video. The default is `google/gemini-3.5-flash-lite`. A recording
-  whose video is over 14 MB fails as too large on Cloudflare.
+- **Scanners can use still-frame models or `google/` video models.** The
+  scanner model list labels three Workers AI models "still frames":
+  `@cf/moonshotai/kimi-k2.6` (the default), `@cf/meta/llama-4-scout-17b-16e-instruct`
+  and `@cf/google/gemma-4-26b-a4b-it`. They read up to 32 still frames from
+  the recording instead of the video: half spread evenly over it, half right
+  after clicks, typing and page loads. Each frame is labeled with its video
+  second, so citations and key moments line up with the video, and the event
+  timeline still covers what happens between frames. Frames can miss a brief
+  state between two of them. A `google/` model watches the whole video and
+  sees every frame, but a recording whose video is over 14 MB fails as too
+  large. Other `@cf/` models cannot scan.
+- **Still-frame models are Workers AI usage.** They use the account's free
+  daily Workers AI allowance, then the Workers Paid plan, and need no
+  credits. In Mythic's tests a Kimi scan cost roughly $0.02.
+  [Client scouts](/agency-api/scouts#model-key) can run any `@cf/` model
+  in their list, also billed as Workers AI usage.
 - **`google/` models need AI Gateway credits.** Cloudflare bills them through
   AI Gateway Unified Billing: add AI Gateway credits to the account, or store
   your own Google key in AI Gateway. Without either, Cloudflare refuses the
   call and the key shows Cloudflare's "Insufficient balance" error.
-- **`@cf/` models are Workers AI usage.** [Client
-  scouts](/agency-api/scouts#model-key) can run them, for example
-  `@cf/moonshotai/kimi-k2.6`, the default scout model on a Cloudflare key. They use the account's free daily Workers AI allowance, then the
-  Workers Paid plan.
 - **No logs in AI Gateway.** Mythic asks Cloudflare not to store prompts or
   recordings in your AI Gateway logs.
 
