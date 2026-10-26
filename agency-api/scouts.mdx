@@ -102,10 +102,45 @@ can always stop spend. `scouts` comes with plans that include error tracking.
 ## Model key
 
 Scouts use the client's or agency's [Replay Vision model
-key](/agency-api/replay-vision#model-keys) (OpenRouter, Gemini or Cloudflare).
-Without one, creating, changing or running a scout answers `409
+keys](/agency-api/replay-vision#model-keys) (OpenRouter, Gemini or Cloudflare).
+The agency and each client can hold one key per provider, and each has a
+default key. Without a key, creating, changing or running a scout answers `409
 no_model_key`: "Add a model key (OpenRouter, Gemini or Cloudflare) for this
 client or the agency first."
+
+### Provider
+
+A scout's optional `provider` (`openrouter`, `gemini`, `cloudflare`, or null)
+picks the key it runs on, with the same rules as a [Replay Vision
+scanner](/agency-api/replay-vision#which-key-a-scan-uses):
+
+- **Provider set:** the client's key for that provider, else the agency's.
+  With neither, `409 no_model_key` names the provider.
+- **Provider null:** the client's default key if the client has keys of its
+  own, else the agency's default key.
+
+On `POST /scouts` and `PATCH /scouts/{id}`:
+
+- **`provider` sent:** a key for it must be reachable (`409 no_model_key`),
+  and `model` must fit it (`422 model_provider_mismatch`).
+- **Only `model` sent:** Mythic picks the provider from the providers the
+  client has a key for that fit the model, and stores it: the scout's current
+  provider, else the provider of the client's default key, else the only one
+  that fits, else OpenRouter, then Cloudflare, then Gemini. When none fits,
+  `422 model_provider_mismatch` lists the providers the client has keys for.
+- **`provider: null`:** the scout runs on the default key.
+- **Neither sent:** the provider stays as it was (null on create).
+
+A model-only change on a scout whose provider's key was deleted gets `409
+no_model_key` naming that provider. Deleting a key does not change scouts set
+to its provider: their runs fail with `no_model_key` until a key for it is
+added again. `POST /scouts/{id}/run` checks the stored provider. Scout responses include
+`provider`, and a run keeps the provider the scout had when it was queued.
+
+Scouts created before keys were per provider were set to the provider of the
+key they ran on, when their model fits it; the others have `provider: null`.
+
+### Model
 
 The model a run uses:
 

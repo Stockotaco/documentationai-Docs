@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 312 tools across
+  Every tool the Mythic MCP server exposes — 313 tools across
   31 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 312 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 313 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -475,7 +475,7 @@ AI scanners that watch session recordings with the agency’s own model key (Ope
 | `get_replay_scout`<br /><span style={{opacity: 0.7}}>Get Replay Scout</span> | `replay_vision:read` | One read-only Scout configuration and lifecycle. | `GET /client/v1/replay-vision/scouts/:id` |
 | `list_replay_scout_reports`<br /><span style={{opacity: 0.7}}>List Replay Scout Reports</span> | `replay_vision:read` | Frozen report summaries newest first, scoped to the current client roster. | `GET /client/v1/replay-vision/reports` |
 | `get_replay_scout_report`<br /><span style={{opacity: 0.7}}>Get Replay Scout Report</span> | `replay_vision:read` | Immutable report text/sections, bounded input coverage, frozen server-built evidence, RUN-attempt cost/coverage and publish/delivery states. | `GET /client/v1/replay-vision/reports/:id` |
-| `list_replay_vision_keys`<br /><span style={{opacity: 0.7}}>List Replay Vision Keys</span> | `replay_vision:read` | The agency's model keys for Replay Vision: the agency default (scope agency) and per-client overrides (scope location). | `GET /client/v1/replay-vision/keys` |
+| `list_replay_vision_keys`<br /><span style={{opacity: 0.7}}>List Replay Vision Keys</span> | `replay_vision:read` | The agency's model keys for Replay Vision and client scouts: agency keys (scope agency) and per-client overrides (scope location), at most one per provider (openrouter, gemini, cloudflare) in each scope. | `GET /client/v1/replay-vision/keys` |
 | `list_replay_vision_models`<br /><span style={{opacity: 0.7}}>List Replay Vision Models</span> | `replay_vision:read` | Models that can scan a recording (video or still frames) and return structured answers. | `GET /client/v1/replay-vision/models` |
 | `list_replay_scanners`<br /><span style={{opacity: 0.7}}>List Replay Scanners</span> | `replay_vision:read` | Replay Vision scanners: saved questions an AI model answers by watching session recordings. | `GET /client/v1/replay-vision/scanners` |
 | `get_replay_scanner`<br /><span style={{opacity: 0.7}}>Get Replay Scanner</span> | `replay_vision:read` | One scanner with this month's usage: queued, succeeded, failed, ineligible, how many count against monthly_scan_limit, and the model spend the provider reported (OpenRouter reports it; direct Gemini does not… | `GET /client/v1/replay-vision/scanners/:id` |
@@ -488,7 +488,8 @@ AI scanners that watch session recordings with the agency’s own model key (Ope
 | `delete_replay_scout`<br /><span style={{opacity: 0.7}}>Delete Replay Scout</span> | `replay_vision:write` | Soft-delete and disable a Scout, cancel pending runs; retains immutable reports/evidence. | `DELETE /client/v1/replay-vision/scouts/:id` |
 | `run_replay_scout`<br /><span style={{opacity: 0.7}}>Run Replay Scout</span> | `replay_vision:write` | Queue an enabled Scout before its FIRST report only; returns 202 run_id/status pending. | `POST /client/v1/replay-vision/scouts/:id/run` |
 | `rate_replay_observation`<br /><span style={{opacity: 0.7}}>Rate Replay Observation</span> | `replay_vision:write` | Set or clear an agency-shared rating on a succeeded observation only (409 otherwise). | `PUT /client/v1/replay-vision/observations/:id/rating` |
-| `delete_replay_vision_key`<br /><span style={{opacity: 0.7}}>Delete Replay Vision Key</span> | `replay_vision:write` | Remove the agency default key (no location_id) or one client's override (location_id). | `DELETE /client/v1/replay-vision/keys` |
+| `delete_replay_vision_key`<br /><span style={{opacity: 0.7}}>Delete Replay Vision Key</span> | `replay_vision:write` | Remove one model key: an agency key (no location_id) or one client's override (location_id), chosen by provider. | `DELETE /client/v1/replay-vision/keys` |
+| `make_default_replay_vision_key`<br /><span style={{opacity: 0.7}}>Set Default Replay Vision Key</span> | `replay_vision:write` | Make one key its scope's default: the key scanners and client scouts without a provider run on. | `POST /client/v1/replay-vision/keys/default` |
 | `create_replay_scanner`<br /><span style={{opacity: 0.7}}>Create Replay Scanner</span> | `replay_vision:write` | Create a scanner on one client. | `POST /client/v1/replay-vision/scanners` |
 | `update_replay_scanner`<br /><span style={{opacity: 0.7}}>Update Replay Scanner</span> | `replay_vision:write` | Change a scanner. | `PATCH /client/v1/replay-vision/scanners/:id` |
 | `delete_replay_scanner`<br /><span style={{opacity: 0.7}}>Delete Replay Scanner</span> | `replay_vision:write` | Delete a scanner and its observations/scouts. | `DELETE /client/v1/replay-vision/scanners/:id` |

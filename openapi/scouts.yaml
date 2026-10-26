@@ -266,6 +266,17 @@ paths:
         run (`422 model_provider_mismatch`), and on an `mcp_` key the read scope of
         every surface the skill reads (`403 insufficient_scope`). At most 10
         scouts per client (`422 scout_limit`).
+
+
+        `provider` picks the key. Sent: the client must reach a key for it
+        (its own or the agency's), else `409 no_model_key` naming it, and
+        `model` must fit it (`422 model_provider_mismatch`). Only `model`
+        sent: Mythic picks a provider the client has a key for that fits the
+        model and stores it (the provider of the client's default key first,
+        else the only one that fits, else OpenRouter, Cloudflare, Gemini); none
+        fits gives `422 model_provider_mismatch` listing the providers the
+        client has keys for. `null`, or neither sent: the default key, which
+        `model` must fit.
       requestBody:
         required: true
         content:
@@ -302,7 +313,10 @@ paths:
         Merge a change onto the scout. `skill` cannot change. A body of only
         `{"enabled": false}` pauses the scout without any plan, model key or
         scope check, so spend can always be stopped. Every other change is
-        checked like a create. The update is rejected with `409
+        checked like a create. Omitting both `provider` and `model` keeps the
+        provider; a model-only change keeps the current provider when the
+        model fits it, and on a scout whose provider's key was deleted gets
+        `409 no_model_key` naming that provider. The update is rejected with `409
         version_conflict` if the scout changed concurrently.
       requestBody:
         required: true
@@ -348,7 +362,8 @@ paths:
       description: >
         Queue a run now. The body must be empty or `{}`. The scout must be
         enabled (`409 scout_paused`) with no run pending or running (`409
-        run_in_progress`). Same plan, model key and scope checks as a create.
+        run_in_progress`). Same plan, model key and scope checks as a create,
+        on the scout's stored `provider`.
         Runs start within a minute and usually take 1 to 5 minutes; follow
         them with `GET /scouts/{id}/runs`.
       requestBody:
@@ -530,6 +545,7 @@ components:
           properties:
             channel_ids: { type: array, maxItems: 5, items: { type: string, format: uuid }, description: "Active alert channels of this agency that receive each new report once." }
         enabled: { type: boolean, default: true }
+        provider: { type: string, nullable: true, enum: [openrouter, gemini, cloudflare, null], description: "Which key runs the scout: the client's key for this provider, else the agency's. Null runs on the client's default key if it has keys of its own, else the agency's default. Omitted with a `model`: inferred and stored. Omitted without one: unchanged (null on create)." }
         model: { type: string, nullable: true, description: "A model the key can run: `google/model` on OpenRouter or Cloudflare, other `vendor/model` on OpenRouter only, `@cf/vendor/model` on Cloudflare only, a bare id on Gemini. Null uses the key's default unless it is a lite or nano model, else google/gemini-3.8-flash (OpenRouter), gemini-3.8-flash (Gemini) or @cf/moonshotai/kimi-k2.6 (Cloudflare). Lite and nano models are refused." }
     Scout:
       type: object
@@ -545,6 +561,7 @@ components:
           properties:
             channel_ids: { type: array, items: { type: string, format: uuid } }
         model: { type: string, nullable: true }
+        provider: { type: string, nullable: true, enum: [openrouter, gemini, cloudflare, null], description: "The provider whose key runs the scout, or null for the default key." }
         enabled: { type: boolean }
         version: { type: integer }
         next_run_at: { type: string, format: date-time, nullable: true }

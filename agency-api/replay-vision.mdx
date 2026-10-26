@@ -19,7 +19,7 @@ You pay your model provider directly in BYOK dollars, not credits. Mythic expose
 
 | Route | What it does |
 | --- | --- |
-| `GET /keys`, `PUT /keys`, `DELETE /keys` | The agency's model key and per-client overrides |
+| `GET /keys`, `PUT /keys`, `DELETE /keys`, `POST /keys/default` | The agency's model keys and per-client overrides, one per provider in each, and which key is the default |
 | `GET /models` | Models that can watch video and return structured answers |
 | `/scanners` | Create, list, change and delete scanners |
 | `POST /scanners/{id}/scan` | Scan up to 50 recordings now |
@@ -36,7 +36,8 @@ You pay your model provider directly in BYOK dollars, not credits. Mythic expose
 The same operations are MCP tools (`list_replay_scanners`,
 `create_replay_scanner`, `scan_replays`, `list_scanner_observations`, …),
 except setting a key: a provider key must not pass through an AI conversation,
-so `PUT /keys` is HTTP only.
+so `PUT /keys` is HTTP only. Choosing the default key is the MCP tool
+`make_default_replay_vision_key`.
 
 ## Base URL
 
@@ -146,8 +147,8 @@ models ([data usage](https://developers.cloudflare.com/workers-ai/platform/data-
       -d '{"provider":"openrouter","api_key":"sk-or-v1-…"}'
     ```
     Mythic checks the key with the provider before storing it. Omit
-    `location_id` for the agency default; pass a client's id to override it for
-    that client.
+    `location_id` for an agency key; pass a client's id to add a key for that
+    client only. The agency and each client can hold one key per provider.
   </Step>
   <Step title="Create a scanner">
     ```bash
@@ -181,9 +182,93 @@ models ([data usage](https://developers.cloudflare.com/workers-ai/platform/data-
 Every key is BYOK: your own account with the provider pays for every model
 call, and Mythic pays for none of them.
 
-A scan uses the client's key if it has one, otherwise the agency's. A scanner's
-`model` overrides the key's `default_model` and must be a model that key can
-run:
+### Several keys and the default key
+
+The agency, and each client, is a **scope** that holds at most one key per
+provider: an OpenRouter key, a Gemini key and a Cloudflare key can sit side by
+side. A client's key for a provider is used instead of the agency's key for
+that provider.
+
+Each scope with keys has one **default key**. Scanners and scouts with no `provider` run
+on it.
+
+- The first key added to a scope becomes its default.
+- `PUT /keys` with `"make_default": true` makes the key you set the default.
+  Replacing a key (same scope, same provider) keeps whether it is the default.
+  `PUT /keys` answers `201` when it adds a key and `200` when it replaces one.
+- `POST /keys/default` makes an existing key the default:
+
+  ```bash
+  curl -X POST "https://mythic-analytics.gulp.workers.dev/client/v1/replay-vision/keys/default" \
+    -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
+    -d '{"location_id":null,"provider":"cloudflare"}'
+  ```
+
+  The body takes only `location_id` (a client id, or null for the agency) and
+  `provider`. It returns the key, in the same shape as `GET /keys`, with
+  `is_default: true`. A scope without a key for that provider gets `404
+  not_found`, and a bad provider, location or extra field gets `400
+  invalid_key`.
+- `GET /keys` returns every key with `is_default`.
+
+`DELETE /keys?location_id=&provider=` removes one key. Omit `location_id` for
+an agency key. `provider` may be left out only when the scope has exactly one
+key; with several, the answer is `400 provider_required`. An unknown provider
+gets `400 invalid_provider`, and a missing key `404 not_found`. The response
+is `{ id, deleted: true, location_id, provider, default_id }`, where
+`default_id` is the scope's default key after the delete, or null when the
+scope has no keys left. Deleting the default key makes the scope's oldest
+remaining key the default.
+
+Deleting a key changes no scanner or scout. Those set to that provider keep
+it until a key for it is added again: their scans fail with `error.kind:
+no_key`, and `POST /scanners/{id}/scan` and scout runs answer `409
+no_model_key`.
+
+### Which key a scan uses
+
+A scanner's `provider` (`openrouter`, `gemini`, `cloudflare`, or null) picks
+the key:
+
+- **Provider set:** the client's key for that provider, else the agency's key
+  for it. With neither, the scan fails with `error.kind: no_key`.
+- **Provider null:** the client's default key if the client has any keys of
+  its own, else the agency's default key.
+
+A client with its own key can still use the agency's keys for other
+providers: a client with only a Gemini key, under an agency with an OpenRouter
+key, can run a scanner with `provider: openrouter`.
+
+### A scanner's provider
+
+`POST /scanners` and `PATCH /scanners/{id}` take `provider`:
+
+- **`provider` sent:** the client must reach a key for it (its own or the
+  agency's), else `409 no_model_key` naming the provider. A `model` must fit
+  that provider, else `422 model_provider_mismatch`.
+- **Only `model` sent:** Mythic picks the provider and stores it. It considers
+  the providers the client has a key for that fit the model, and picks, in
+  order: the scanner's current provider, the provider of the client's default
+  key, the only one that fits, else OpenRouter, then Cloudflare, then Gemini.
+  When none fits, the answer is `422 model_provider_mismatch` listing the
+  providers the client has keys for. When the client has no key yet, nothing
+  is picked and `provider` stays null.
+- **`provider: null`:** the scanner runs on the default key, and `model` must
+  fit that key.
+- **Neither sent:** the provider stays as it was (null on create).
+
+A model-only change on a scanner whose provider's key was deleted gets `409
+no_model_key` naming that provider, rather than a silent move to another key.
+Send `provider` to move it. `POST /scanners/{id}/scan` checks the scanner's
+provider too and answers `409 no_model_key` naming it when no key is there.
+
+Changing `provider` makes a new scanner `version`. The scanner, and the frozen
+scanner on each observation, include `provider`. Scanners created before keys
+were per provider were set to the provider of the key they ran on, when their
+model fits it; the others have `provider: null`.
+
+A scanner's `model` overrides the key's `default_model` and must be a model
+that key can run:
 
 | Model id form | Example | Fits |
 | --- | --- | --- |
@@ -193,9 +278,9 @@ run:
 | A bare id | `gemini-3.5-flash-lite` | Gemini keys only |
 
 Setting a scanner model the key cannot run gets `422
-model_provider_mismatch`. If a key is later replaced with one of another
-provider, scans use the new key's `default_model` until you update the
-scanner.
+model_provider_mismatch`. If the default key later changes to another provider, a
+scanner with no `provider` whose `model` the new key cannot run uses the new
+key's `default_model` until you update the scanner.
 
 <Callout kind="warning">
   Direct Gemini keys require `"confirm_paid_tier": true`. Google may use
@@ -315,8 +400,8 @@ of credits), `last_error` on the key says so and those scans fail with
   and succeeded scans per calendar month (UTC), sweep and on-demand together.
   `GET /scanners/{id}` shows `this_month`, including `cost_usd` when the
   provider reports it (OpenRouter does, direct Gemini does not).
-- **Versions.** A change to `prompt`, `config` or `model` increments
-  `version`; re-sending the same values does not. Each observation keeps the
+- **Versions.** A change to `prompt`, `config`, `model` or `provider`
+  increments `version`; re-sending the same values does not. Each observation keeps the
   scanner as it was when it was queued.
 
 ## Alerts
@@ -386,7 +471,7 @@ minutes are rendered, and the model is told so.
 | `error.kind` | Meaning |
 | --- | --- |
 | `auth` | The provider rejected the key (invalid, revoked, out of credits). Replace it with `PUT /keys` |
-| `no_key` | No key for the client or the agency when the scan ran |
+| `no_key` | No key for the scanner's provider (or no default key) for the client or the agency when the scan ran |
 | `rate_limited` | The provider kept refusing with 429 |
 | `transient` | Timeouts, network errors or provider 5xx after every retry |
 | `bad_request` | The provider refused the request, most often an unknown model id |
@@ -540,7 +625,8 @@ Other Replay Vision tools keep their existing array or detail result shapes.
 ## Read-only Scouts
 
 A Scout schedules text-only analysis of one scanner's existing observations
-using that scanner's resolved key/model (client override, else agency default).
+using that scanner's key and model: the key for the scanner's `provider`, or
+the default key when it has none (see [Which key a scan uses](#which-key-a-scan-uses)).
 It cannot call arbitrary tools, change a scanner or start additional video
 scans. Model instructions treat visitor text and prior reports as untrusted.
 Model spend is additional BYOK dollars, not Mythic credits. A Scout runs on

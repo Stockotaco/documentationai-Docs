@@ -21,7 +21,7 @@ paths:
     get:
       summary: List model keys
       operationId: listReplayVisionKeys
-      description: The agency default (`scope` agency) and per-client overrides (`scope` location). Only a hint of each key is returned.
+      description: "Agency keys (`scope` agency) and per-client overrides (`scope` location), at most one per provider in each scope. `is_default` marks each scope's default key, the one scanners and scouts with no `provider` run on. Only a hint of each key is returned."
       responses:
         "200":
           description: Keys
@@ -38,8 +38,11 @@ paths:
       summary: Set a model key
       operationId: setReplayVisionKey
       description: >
-        Set the agency default (omit `location_id`) or one client's override.
-        The key is checked with the provider first (`422 key_rejected` if it
+        Set an agency key (omit `location_id`) or one client's override. Each
+        scope holds one key per provider: this adds the key for `provider`
+        (`201`) or replaces it (`200`). The first key in a scope becomes its
+        default; `make_default: true` makes this key the default, and a
+        replaced key keeps whether it is the default. The key is checked with the provider first (`422 key_rejected` if it
         is refused), encrypted, and never returned again. Replacing a key
         clears its `last_error`. Agency key (`ak_`) only: `mcp_` keys get
         `403 not_available_to_scoped_keys`, so a provider key never passes
@@ -67,7 +70,8 @@ paths:
                 provider: { type: string, enum: [openrouter, gemini, cloudflare] }
                 api_key: { type: string, description: "The provider API key. For `cloudflare`, the API token (permission Account > Workers AI > Read), without `:`." }
                 account_id: { type: string, pattern: "^[0-9a-f]{32}$", description: "Required for `cloudflare` and refused for other providers (`400 invalid_key`). The 32 lowercase hex character Cloudflare account id." }
-                location_id: { type: string, nullable: true, description: A client id for an override. Omit or null for the agency default. }
+                location_id: { type: string, nullable: true, description: A client id for an override. Omit or null for an agency key. }
+                make_default: { type: boolean, description: "`true` makes this key its scope's default. Not a boolean: `400 invalid_key`." }
                 default_model: { type: string, description: "Model used when a scanner sets none. Must be a model id of `provider` (`400` otherwise). For `cloudflare` it must be a `google/` model or one of the four frame models (`@cf/deepseek-ai/deepseek-v4.1-flash-1017`, `@cf/moonshotai/kimi-k2.6`, `@cf/meta/llama-4-scout-17b-16e-instruct`, `@cf/google/gemma-4-26b-a4b-it`); other `@cf/` models get `400 invalid_key`. Default `google/gemini-3.5-flash-lite` (OpenRouter), `gemini-3.5-flash-lite` (Gemini) or `@cf/deepseek-ai/deepseek-v4.1-flash-1017` (Cloudflare)." }
                 confirm_paid_tier: { type: boolean, description: "Required `true` for `gemini`: free-tier keys let Google use request content." }
       responses:
@@ -79,14 +83,71 @@ paths:
     delete:
       summary: Delete a model key
       operationId: deleteReplayVisionKey
+      description: >
+        Remove one key from a scope. Deleting the default key makes the
+        scope's oldest remaining key the default. Nothing cascades: scanners
+        and scouts set to the deleted provider keep it and fail with
+        `no_model_key` until a key for it is added again. `400
+        provider_required` when the scope has several keys and no `provider`
+        was given, `400 invalid_provider` for an unknown provider, `404
+        not_found` when there is no matching key.
       parameters:
         - name: location_id
           in: query
           required: false
-          description: Remove this client's override. Omit to remove the agency default.
+          description: Remove one of this client's keys. Omit for an agency key.
           schema: { type: string }
+        - name: provider
+          in: query
+          required: false
+          description: The key to remove. May be left out only when the scope has exactly one key.
+          schema: { type: string, enum: [openrouter, gemini, cloudflare] }
       responses:
-        "200": { description: Deleted, content: { application/json: { schema: { $ref: "#/components/schemas/Deleted" } } } }
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string, format: uuid }
+                      deleted: { type: boolean, example: true }
+                      location_id: { type: string, nullable: true }
+                      provider: { type: string, enum: [openrouter, gemini, cloudflare] }
+                      default_id: { type: string, format: uuid, nullable: true, description: "The scope's default key after the delete, or null when the scope has no keys left." }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /client/v1/replay-vision/keys/default:
+    post:
+      summary: Make a key the default
+      operationId: setDefaultReplayVisionKey
+      description: >
+        Make the scope's key for `provider` its default key: the key scanners
+        and scouts with no `provider` run on. The scope's previous default
+        stops being the default. Also the MCP tool
+        `make_default_replay_vision_key`. `400 invalid_key` for a bad
+        provider, location or extra field, `403 location_not_linked` when the
+        client is not one of the agency's, `404 not_found` when the scope has
+        no key for that provider.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider]
+              additionalProperties: false
+              properties:
+                location_id: { type: string, nullable: true, description: A client id. Omit or null for the agency's keys. }
+                provider: { type: string, enum: [openrouter, gemini, cloudflare] }
+      responses:
+        "200": { description: "The key, now with `is_default: true`", content: { application/json: { schema: { $ref: "#/components/schemas/KeyResponse" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
         "404": { $ref: "#/components/responses/NotFound" }
   /client/v1/replay-vision/models:
     get:
@@ -154,6 +215,17 @@ paths:
         `@cf/moonshotai/kimi-k2.6`, `@cf/meta/llama-4-scout-17b-16e-instruct` and
         `@cf/google/gemma-4-26b-a4b-it` can scan, so other `@cf/` models are
         refused too.
+
+
+        `provider` picks the key. Sent: the client must reach a key for it
+        (its own or the agency's), else `409 no_model_key` naming it, and
+        `model` must fit it (`422 model_provider_mismatch`). Only `model`
+        sent: Mythic picks a provider the client has a key for that fits the
+        model and stores it (the provider of the client's default key first,
+        else the only one that fits, else OpenRouter, Cloudflare, Gemini); none
+        fits gives `422 model_provider_mismatch` listing the providers the
+        client has keys for. With no key yet, `provider` stays null. `null`:
+        the default key, which `model` must fit.
       requestBody:
         required: true
         content:
@@ -170,6 +242,7 @@ paths:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/ScannerResponse" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "403": { $ref: "#/components/responses/AgencyRequired" }
+        "409": { $ref: "#/components/responses/BadRequest" }
         "422": { $ref: "#/components/responses/BadRequest" }
   /client/v1/replay-vision/scanners/{id}:
     parameters:
@@ -197,7 +270,7 @@ paths:
     patch:
       summary: Update a scanner
       operationId: updateReplayScanner
-      description: "`type` and `location_id` cannot change. A change to `prompt`, `config` or `model` increments `version`; re-sending the same values does not. A `model` the client's key cannot run gets `422 model_provider_mismatch` (on a Cloudflare key, any model that is not `google/` or one of the four frame models). Re-enabling sweeps from now on."
+      description: "`type` and `location_id` cannot change. A change to `prompt`, `config`, `model` or `provider` increments `version`; re-sending the same values does not. A `model` the key cannot run gets `422 model_provider_mismatch` (on a Cloudflare key, any model that is not `google/` or one of the four frame models). `provider` follows the create rules; a model-only change keeps the current provider when the model fits it, and on a scanner whose provider's key was deleted gets `409 no_model_key` naming that provider. Omitting both keeps the provider. Re-enabling sweeps from now on."
       requestBody:
         required: true
         content:
@@ -207,6 +280,7 @@ paths:
         "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/ScannerResponse" } } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/BadRequest" }
         "422": { $ref: "#/components/responses/BadRequest" }
     delete:
       summary: Delete a scanner
@@ -224,7 +298,10 @@ paths:
       description: >
         Queue up to 50 recordings. Ignores `sampling_rate` and works on a
         disabled scanner, but counts against `monthly_scan_limit`. Sessions the
-        scanner already observed are listed in `already_observed`.
+        scanner already observed are listed in `already_observed`. The key is
+        the one for the scanner's `provider`, or the default key when it has
+        none; with no such key the answer is `409 no_model_key` naming the
+        provider.
       requestBody:
         required: true
         content:
@@ -604,7 +681,7 @@ paths:
     post:
       summary: "Run Scout before first report"
       operationId: "runReplayScout"
-      description: "First-report-only, enabled, no outstanding run, resolved model key required. Empty body or {} only. 409 first_report_already_exists/run_in_progress/scout_paused/no_model_key. 422 model_provider_mismatch. Deterministic empty-input reports do not invoke provider: No new observations or No observations in window; Nothing notable requires provider analysis."
+      description: "First-report-only, enabled, no outstanding run, resolved model key required (the key for the scanner's provider, or the default key when the scanner has none). Empty body or {} only. 409 first_report_already_exists/run_in_progress/scout_paused/no_model_key. 422 model_provider_mismatch. Deterministic empty-input reports do not invoke provider: No new observations or No observations in window; Nothing notable requires provider analysis."
       requestBody:
         required: false
         content:
@@ -1567,6 +1644,7 @@ components:
         provider: { type: string, enum: [openrouter, gemini, cloudflare] }
         key_hint: { type: string, example: "…a1b2", description: "Last four characters of the key (of the API token for `cloudflare`). A Cloudflare key's account id is not returned." }
         default_model: { type: string }
+        is_default: { type: boolean, description: "Whether this is its scope's default key: the one scanners and scouts with no `provider` run on." }
         verified_at: { type: string, format: date-time }
         last_error: { type: string, nullable: true, description: Why the provider last rejected this key during a scan. }
         last_error_at: { type: string, format: date-time, nullable: true }
@@ -1592,6 +1670,7 @@ components:
           type: object
           description: "Sweep filters: `device_type`, `utm_source`, `utm_medium`, `utm_campaign`, `landing_page`, `country`, `browser`, `os` (exact strings), `min_duration_s`, and `landing_hosts` (array of 1-20 host names; keeps sessions whose first page is on one of them, `www.` ignored)."
         sampling_rate: { type: number, minimum: 0, maximum: 1, default: 0.1 }
+        provider: { type: string, nullable: true, enum: [openrouter, gemini, cloudflare, null], description: "Which key runs the scanner: the client's key for this provider, else the agency's. Null runs on the client's default key if it has keys of its own, else the agency's default. Omitted with a `model`: inferred and stored. Omitted without one: unchanged (null on create)." }
         model: { type: string, nullable: true, description: "Model id the key can run. On an OpenRouter key, a model that reads video, or one that reads images and gets up to 32 still frames instead. On a Cloudflare key, a `google/` model or a frame model (`@cf/deepseek-ai/deepseek-v4.1-flash-1017`, `@cf/moonshotai/kimi-k2.6`, `@cf/meta/llama-4-scout-17b-16e-instruct`, `@cf/google/gemma-4-26b-a4b-it`) that reads up to 32 still frames instead of the video. Null uses the key's default_model." }
         monthly_scan_limit: { type: integer, minimum: 1, maximum: 100000, default: 500 }
         enabled: { type: boolean, default: true }
@@ -1606,6 +1685,7 @@ components:
         config: { type: object }
         filters: { type: object }
         sampling_rate: { type: number }
+        provider: { type: string, nullable: true, enum: [openrouter, gemini, cloudflare, null], description: "The provider whose key runs the scanner, or null for the default key. Also in the frozen scanner snapshot of each observation." }
         model: { type: string, nullable: true, description: "The scanner's model, or null for the key's default_model. On a Cloudflare key a frame model (`@cf/deepseek-ai/deepseek-v4.1-flash-1017`, `@cf/moonshotai/kimi-k2.6`, `@cf/meta/llama-4-scout-17b-16e-instruct`, `@cf/google/gemma-4-26b-a4b-it`) reads up to 32 still frames; a `google/` model watches the whole video." }
         monthly_scan_limit: { type: integer }
         enabled: { type: boolean }

@@ -26,7 +26,7 @@ from a client's menu to see only that client's. The hub has six tabs:
 | **Usage** | Reported model spend this month, a straight-line estimate to month end, scans used and when the limit resets, per scanner and per Scout. |
 | **Reports** | Every Scout report, newest first, with its priority. |
 | **All results** | Every scanner's results, with status and second-check filters. |
-| **Model keys** | Your OpenRouter, Gemini or Cloudflare keys. |
+| **Model keys** | Your OpenRouter, Gemini and Cloudflare keys, for the agency and for each client. |
 
 <Callout kind="note">
 These screens arrive with the Replay Vision Scouts release of the Mythic API.
@@ -40,7 +40,8 @@ If a tab shows an error, your agency's API is not on that release yet.
     Open the **Model keys** tab and add an OpenRouter, Gemini or Cloudflare
     key. A key added at the agency level is used by every client. A key added
     on a client is used for that client instead. Mythic checks the key with the provider,
-    encrypts it, and never shows it again.
+    encrypts it, and never shows it again. You can add one key per provider
+    for the agency and for each client. See [Model keys](#model-keys).
 
     A Gemini key must be on a paid plan. Google may use free-tier content to
     improve its products, and recordings show your clients' visitors.
@@ -53,7 +54,9 @@ If a tab shows an error, your agency's API is not on that release yet.
   </Step>
   <Step title="Create a scanner">
     Click **New scanner**, choose the client and the type, and write the
-    question. Describe what can be seen, not feelings. "Answer yes if the
+    question. Under **Provider and model**, keep **Default key** or pick a
+    provider (see [Choose a provider](#choose-a-provider)).
+    Describe what can be seen, not feelings. "Answer yes if the
     visitor clicked Submit and an error appeared" works. "Answer yes if the
     visitor was confused" does not. Say what to answer when the recording
     doesn't show enough.
@@ -71,6 +74,52 @@ If a tab shows an error, your agency's API is not on that release yet.
     the recordings that just ended.
   </Step>
 </Steps>
+
+## Model keys
+
+The agency and each client can hold one key per provider: an OpenRouter key,
+a Gemini key and a Cloudflare key. A client's own key for a provider is used
+instead of the agency's key for that provider. One key in each group is the
+**default key**, the key scanners and scouts run on when they don't name a
+provider. The first key you add becomes the default.
+
+The **Model keys** tab lists the agency's keys under **Agency keys (all
+clients)**, then each client's keys under the client's name. Each key shows
+the end of the key, its default model, and the last error from the provider,
+if any. On each key:
+
+- **Default** marks the default key. On the others, **Make default** makes
+  that key the default instead.
+- **Replace** enters a new key for the same provider. A replaced default key
+  stays the default.
+- **Remove** deletes the key. If it was the default, the oldest remaining key
+  becomes the default, and the confirmation says which. Scanners and scouts
+  set to that provider are not changed: they stop running until you add a key
+  for it again, unless the agency has one they can use.
+
+Opened from a client, the tab also says which key is the client's default
+and which providers its scanners and scouts can pick.
+
+### Choose a provider
+
+The scanner dialog and the client **New scout** dialog have a **Provider**
+choice:
+
+- **Default key** runs on the client's default key and follows it if the
+  default changes. Picking a specific model here saves the default key's
+  provider with it, so the model stays on that provider if the default
+  changes later.
+- A provider (**OpenRouter**, **Google Gemini** or **Cloudflare**) runs on
+  the client's key for that provider, else the agency's. Each option says
+  whether it is a client or agency key and how the key ends. Only providers
+  with a key for the client or the agency are listed. If a scanner or scout
+  is set to a provider whose key was removed, the dialog says so: add the key
+  under **Model keys** or pick another provider.
+
+The model list follows the provider: it shows that provider's models, and
+**Key's default model** uses the default model of the key it runs on. Changing
+the provider starts a new scanner version. A Replay Vision Scout runs on its
+scanner's provider and has no provider choice of its own.
 
 ## OpenRouter keys
 
@@ -187,7 +236,8 @@ choose the clients to receive notifications for. See [Alerts](/agency-app/alerts
   your model and don't count against the limit.
 - Recordings are kept 30 days. HIPAA clients have no recordings.
 - A client can have up to 25 scanners.
-- Editing a scanner's question, settings or model starts a new version.
+- Editing a scanner's question, settings, provider or model starts a new
+  version.
   Earlier results keep the version they were scanned with.
 - Deleting a scanner deletes its results and Scouts, but frozen Scout reports/evidence are retained. Events already sent stay in the client's data.
 
