@@ -517,6 +517,13 @@ paths:
         `exclude_event_type` is applied before the limit, so high-volume
         telemetry such as `$replay_summary` cannot crowd real events off the
         page.
+
+
+        Each row carries `person_id`, `person_email` and `person_name`: the
+        person its `user_id` (else `distinct_id`) resolves to. Anonymous events
+        from before an identify resolve to the identified person once the
+        identities are merged. They are null until the identity processor has
+        seen the identity.
       parameters:
         - $ref: "#/components/parameters/LocationId"
         - $ref: "#/components/parameters/HoursBack"

@@ -446,6 +446,9 @@ paths:
                         session_event_count: { type: integer, nullable: true }
                         session_start: { type: string, nullable: true }
                         session_duration_seconds: { type: integer, nullable: true }
+                        person_id: { type: string, nullable: true, description: "The person the row's user_id (else distinct_id) resolves to, including anonymous events merged into a person later. Null until the identity processor has seen the identity." }
+                        person_email: { type: string, nullable: true, description: "That person's profile email." }
+                        person_name: { type: string, nullable: true, description: "That person's profile display name." }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NoLocations" }
