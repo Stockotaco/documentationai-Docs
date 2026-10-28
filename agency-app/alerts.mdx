@@ -8,7 +8,8 @@ description: >-
 ## Overview
 
 Mythic watches your clients for you: event contracts, short link uptime, data
-syncs, incrementality experiments and usage. When one of these checks finds a
+syncs, incrementality experiments, usage, browser errors and destination
+delivery. When one of these checks finds a
 problem, it opens an **alert**. The **Alerts** screen has three tabs:
 
 - **Feed**: the alerts.
@@ -28,6 +29,9 @@ menu to see only that client.
 | Data syncs | A sync Mythic manages fails | Warning | On each sync |
 | Experiments | An incrementality experiment has new outlier days | Info | Daily |
 | Usage | Your agency passes 80% of a monthly event quota | Info | Daily |
+| Browser errors | A new error reaches 3 or more sessions in 24 hours, or an error spikes to 10 or more sessions and 3 times its 7-day average | Warning, critical at 100+ sessions | Daily, about 08:40 UTC |
+| Destination delivery | 5 deliveries fail in a row, or under 50% succeed over 10 or more attempts in 24 hours | Warning | Hourly |
+| Destination delivery | The platform rejects the credential (HTTP 401 or 403) | Critical | Hourly |
 | Usage | Your agency reaches 100% of a monthly event quota | Warning | Daily |
 | Replay Vision | An opted-in monitor answers yes, unless the second check disagrees | Warning | After a scan |
 
@@ -113,3 +117,5 @@ Email isn't available as a channel yet.
 
 The feed, rules and channels are on the [Alerts API](/agency-api/alerts),
 including the webhook payload and how to verify its signature.
+
+An alert about one client is also a **signal** on that client's Scouts screen, where a Signal triage scout can group related signals into one report. See [Scouts and signals](/agency-app/scouts).

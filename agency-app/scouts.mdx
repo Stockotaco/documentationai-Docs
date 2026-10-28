@@ -1,0 +1,163 @@
+---
+title: Scouts and signals
+description: >-
+  Scouts are scheduled agents that read a client's data on your model key and
+  file reports into an inbox. Signals are the problems Mythic's checks found,
+  which a Signal triage scout groups into reports.
+---
+
+## Overview
+
+Open a client and choose **Scouts** from its menu. The screen has three tabs:
+
+- **Inbox**: the reports your scouts filed for this client.
+- **Signals**: every problem Mythic's checks found for this client, and
+  whether a report covers it yet.
+- **Scouts**: the scouts that run for this client. Click **New scout** to add
+  one.
+
+Scouts are for your agency. Client portal users don't see them.
+
+## Scouts
+
+A scout is an agent that runs on a schedule, reads one client's data (errors,
+server logs, events, sessions, short links, destinations) and files one
+report per problem it finds. Each scout follows a skill:
+
+| Skill | What it looks for |
+| --- | --- |
+| Error tracking | Browser errors and server error logs that cost visitors, leads or tracking |
+| Attribution drift | Channels losing credit, such as paid traffic arriving without UTMs or click ids |
+| Conversion delivery | Conversions that never reach the ad platforms, and lost credentials |
+| Signal triage | Groups the client's open signals into one report per problem. See [How triage groups signals](#how-triage-groups-signals) |
+| Custom | Your own instructions over every surface a scout can read |
+
+Scouts run every day, on weekdays or weekly at a time you pick in the
+client's time zone. Signal triage runs hourly. A client can have up to 10
+scouts.
+
+Scouts run on your own OpenRouter, Gemini or Cloudflare model key, so the
+provider bills you directly. Add a key under **Replay Vision**, **Model keys**,
+for the client or the agency. Without a key, Mythic won't create or run a
+scout. Each scout's page shows its runs, what each cost and what it read.
+
+## The Inbox
+
+Each report is one problem: a title, a summary, a suggested action, a
+priority from P0 (conversions or tracking broken now) to P4 (informational)
+and the evidence behind it. Evidence is the exact tool results the scout read,
+plus any signals it grouped.
+
+When a scout sees the same problem again, it updates the open report with
+fresh evidence instead of filing another one.
+
+The Inbox shows **Open** and **Snoozed** reports by default. Filter by
+status, priority or scout.
+
+| Status | Meaning | What you can do |
+| --- | --- | --- |
+| Open | Needs attention | Resolve, snooze or dismiss |
+| Snoozed | Hidden until a date, then it reopens on its own | Unsnooze, resolve or dismiss |
+| Resolved | Fixed. If it comes back, the scout files a new report | Nothing |
+| Dismissed | Not worth acting on | Reopen |
+| Suppressed | The scout filed it for the record, with no action needed | Restore or dismiss |
+
+- **Dismiss** needs a reason. The scout reads it on its next runs for 30
+  days, so it stops filing the same thing.
+- **Snooze** lasts up to 90 days.
+
+To get new reports in Slack or a webhook, pick channels in the scout's
+**Delivery** step. Each new open report is sent once. Updates and suppressed
+reports are not sent.
+
+## Signals
+
+A signal is one problem a Mythic check found on its own: a new browser error,
+a destination rejecting conversions, a short link that's down. Every problem
+that meets a check's threshold becomes a signal. Nothing is judged or
+filtered, and no model is involved.
+
+Signals, alerts and reports are related:
+
+- An **alert** is what a check raises. The [Alerts](/agency-app/alerts) screen
+  shows all of them, including agency-level ones such as usage, and rules
+  decide which go to Slack or a webhook.
+- A **signal** is an alert about one client, shown on that client's
+  **Signals** tab. It is the input for Signal triage.
+- A **report** is what a scout writes after looking into a problem. One
+  report can group several related signals.
+
+A signal resolves on its own when its check sees the problem recover.
+Replay Vision signals are the exception: they stay open until someone
+resolves them on the Alerts screen.
+
+### What raises a signal
+
+| Source | Raised when | Severity | How often |
+| --- | --- | --- | --- |
+| Browser errors | A new error reaches 3 or more sessions in 24 hours | Warning, critical at 100+ sessions | Daily, about 08:40 UTC |
+| Browser errors | An error spikes to 10 or more sessions in 24 hours and 3 times its 7-day average | Warning, critical at 100+ sessions | Daily, about 08:40 UTC |
+| Destination delivery | 5 deliveries fail in a row, or under 50% succeed over 10 or more attempts in 24 hours | Warning | Hourly |
+| Destination delivery | The platform rejects the credential (HTTP 401 or 403) | Critical | Hourly |
+| Event contracts | Events break their contract | Warning | Daily, about 08:00 UTC |
+| Event contracts | The client sent no events all day | Critical | Daily, about 08:00 UTC |
+| Link uptime | A short link fails 2 checks in a row | Critical | Every 5 minutes |
+| Data syncs | A sync Mythic manages fails | Warning | On each sync |
+| Session health | The site keeps starting new sessions for the same visitor | Warning | Daily |
+| Experiments | An incrementality experiment has new outlier days | Info | Daily |
+| Replay Vision | An opted-in monitor answers yes, unless the second check disagrees | Warning | After a scan |
+
+Browser error signals need history to compare against. A client needs 97
+days of error history before new-error signals start, and 8 days before spike
+signals start.
+
+## How triage groups signals
+
+Add a scout with the **Signal triage** skill to group a client's signals.
+On the **Signals** tab, **Add Signal triage scout** opens the form with the
+skill already picked.
+
+Every hour, Mythic checks whether the client has a signal no report covers
+yet, or one that changed severity. If not, nothing runs and nothing is spent.
+If so, the scout reads the new signals, checks the client's data where it
+matters, and either adds each signal to the open report that covers its
+problem or files a new report. Several related signals become one report, so
+you handle one problem instead of many alerts.
+
+Triage runs on your model key, like every scout, and you pay only for the
+hours it actually runs. A new signal can take up to an hour to appear in a
+report.
+
+Without a triage scout, or without a model key, signals stay ungrouped on the
+**Signals** tab. They still appear on the Alerts screen.
+
+## Use signals day to day
+
+Work from the **Inbox**. With Signal triage on, the signals behind each
+report are listed on the report under **Signals behind this report**.
+
+Check the **Signals** tab for what isn't in a report yet:
+
+- The strip at the top shows whether triage is on, and how many signals are
+  not grouped, in a report, or resolved in the last 7 days.
+- Switch between **Not grouped**, **In a report** and **Resolved**, and filter
+  by source.
+- Click a signal to open its details: what the check saw, the report it is
+  in, what the problem usually means and what usually fixes it, and a button
+  to the related screen, such as Errors or Destinations. Turn on **Raw** to
+  see the check's data as JSON.
+
+You don't need to close signals. Fix the problem and the signal resolves
+when its check next runs.
+
+## Privacy
+
+Browser error, destination, session health and Replay Vision signals can
+contain visitor data. On HIPAA clients these signals show a lock and
+**Restricted (HIPAA)** instead of their text and details. If Mythic can't
+confirm a client's privacy setting, they show **Restricted for now**. Try
+again in a minute.
+
+## For developers
+
+Scouts, reports and signals are on the [Scouts API](/agency-api/scouts).
