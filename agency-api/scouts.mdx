@@ -29,7 +29,13 @@ pays for no model calls, and the spend is reported per scout.
 | `GET/PATCH/DELETE /scouts/{id}` | One scout: read, change or pause, delete |
 | `POST /scouts/{id}/run` | Run a scout now |
 | `GET /scouts/{id}/runs` | The last 30 runs, with what each found and spent |
-| `GET /scouts/{id}/memory`, `DELETE /scouts/{id}/memory/{key}` | What a scout remembers, and forgetting one entry |
+| `GET /scouts/{id}/memory`, Memory entries carry the source families and privacy requirements of the run
+that wrote them. Memory reads omit entries the caller cannot read, including
+their keys. A run's close-out summary carries its run's provenance; restricted
+run-history rows expose only identifiers, state, trigger, and timestamps, not
+the summary or error text.
+
+`DELETE /scouts/{id}/memory/{key}` | What a scout remembers, and forgetting one entry |
 | `GET /scouts/reports` | The inbox |
 | `GET/PATCH /scouts/reports/{id}` | One report, and resolving, dismissing or snoozing it |
 
@@ -75,11 +81,12 @@ scope of those surfaces. `ak_` keys hold every scope.
 
 A missing surface scope answers `403 insufficient_scope` with `required` naming
 the first scope to add, for example `logs:read`. In the inbox, a report you
-cannot read keeps its place with an empty `summary_md` and a `restricted`
-object (`reason`, `required`) instead of its text.
+cannot read keeps its place as an explicit metadata-only row with an empty
+`summary_md` and a `restricted` object (`reason`, `required`). It omits title,
+scout name, dedupe key, dismissal reason, headline, evidence, and history.
 
-A report whose run read server logs or visitor-derived signals (`exceptions`,
-`sessions`, `replay_vision`, `destinations`) follows the logs privacy rule: it is
+A report whose inputs include server logs or visitor-derived data from
+`exceptions`, `sessions`, `replay_vision`, or `destinations` follows the logs privacy rule: it is
 refused on HIPAA locations (`403 hipaa_restricted`) and while the location's
 privacy mode cannot be read (`503 privacy_unknown`, retry after
 `Retry-After`).
@@ -379,16 +386,20 @@ Read report detail separately under its full scope and privacy checks.
 checks, without a model call, whether the client has an open signal that is
 unattached or materially changed since its last successful triage (revision
 or severity). Successful runs consume a frozen batch of up to 50 oldest pending
-signals. Failed runs consume nothing and retry after a backoff that doubles
+signals. Only signals exposed in a dispatched model input can be consumed. Unknown
+privacy is a bounded retryable failure, never a successful empty triage.
+Failed runs consume nothing and retry after a backoff that doubles
 from one hour to at most 16 hours. Only then does it run, with a model key: it reads
 the signals, confirms with data tools where it matters, and attaches each one
 to the open report that covers its problem or files a new report citing it.
 A signal is on at most one open or snoozed report; a signal on a resolved or
 dismissed report moves to the new one. A resolved report never reopens: a
 signal that fires again after a resolve gets a new report. Report detail
-includes `signals`. Every signal shown in the briefing or through a signal
-tool adds its source family and privacy requirement to all reports the run
-subsequently files or edits, even when the report does not cite that signal.
+includes `signals`. Every signal or report read adds its family and privacy requirements to the
+run, including briefing reports and report-list/detail tools. Those requirements
+flow into subsequently filed or edited reports and written memory, even without
+citations. Memory reads and prior-run summaries retain the same restrictions,
+so reading derived text cannot remove the source requirements.
 
 **Without a model key**, signals still appear in `GET /scouts/signals` (and
 the alert feed), ungrouped. Grouping starts when you add a key and create the

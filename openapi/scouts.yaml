@@ -480,7 +480,9 @@ paths:
         What the scout remembers between runs, up to 200 entries by key.
         Prefixes: `pattern:` (what normal looks like), `noise:` (what it
         skips), `dedupe:` (already surfaced), `addressed:` (fixed),
-        `report:` (which report tracks what).
+        `report:` (which report tracks what). Entries inherit their writing
+        run's families and privacy requirements. Unreadable entries, including
+        their keys, are omitted.
       responses:
         "200":
           description: Memory
@@ -691,6 +693,7 @@ components:
         status_changed_at: { type: string, format: date-time, nullable: true }
         edit_count: { type: integer }
     ReportListItem:
+      description: "Restricted rows contain only identifiers, skill, priority, actionability, status, families, timestamps, empty summary_md and restricted. Title, scout_name, dedupe_key, dismiss_reason, evidence and history are absent."
       allOf:
         - $ref: "#/components/schemas/ReportBase"
         - type: object
@@ -779,7 +782,8 @@ components:
         reports_filed: { type: integer }
         reports_edited: { type: integer }
         families_read: { type: array, items: { type: string } }
-        summary: { type: string, nullable: true, description: "The close-out: what it looked at, filed and ruled out." }
+        summary: { type: string, nullable: true, description: "The close-out. Absent when its family scopes or privacy mode restrict the caller." }
+        restricted: { $ref: "#/components/schemas/Restricted" }
         error: { type: string, nullable: true }
         created_at: { type: string, format: date-time }
         completed_at: { type: string, format: date-time, nullable: true }
