@@ -78,7 +78,8 @@ the first scope to add, for example `logs:read`. In the inbox, a report you
 cannot read keeps its place with an empty `summary_md` and a `restricted`
 object (`reason`, `required`) instead of its text.
 
-A report whose run read server logs follows the logs privacy rule: it is
+A report whose run read server logs or visitor-derived signals (`exceptions`,
+`sessions`, `replay_vision`, `destinations`) follows the logs privacy rule: it is
 refused on HIPAA locations (`403 hipaa_restricted`) and while the location's
 privacy mode cannot be read (`503 privacy_unknown`, retry after
 `Retry-After`).
@@ -366,19 +367,28 @@ the condition is real (its own threshold), so signals are facts, not guesses.
 open, resolved or all, `source`, `attached`, `limit`, `cursor`), each with the
 report it is attached to. `GET /scouts/signals/{id}` returns one with the
 detector's full `payload`. Both need `scouts:read` plus the read scope of the
-source's family; a key without one does not see those sources.
+source's family; a key without one does not see those sources. On HIPAA
+locations, and while the privacy configuration cannot be read, visitor-derived
+sources (`exceptions`, `sessions`, `replay_vision`, `destinations`) keep their
+list position with an empty title, no detail or payload, `report: null`, and
+`restricted.reason` (`hipaa_restricted` or `privacy_unknown`). Detail is refused
+with 403 or 503 respectively. Linked report titles are always null on signals.
+Read report detail separately under its full scope and privacy checks.
 
 **Grouping.** A `signal_triage` scout groups a client's signals. Each hour it
 checks, without a model call, whether the client has an open signal that is
-on no open or snoozed report and that no earlier triage run has seen. Only
-then does it run (at most once an hour, and only with a model key): it reads
+unattached or materially changed since its last successful triage (revision
+or severity). Successful runs consume a frozen batch of up to 50 oldest pending
+signals. Failed runs consume nothing and retry after a backoff that doubles
+from one hour to at most 16 hours. Only then does it run, with a model key: it reads
 the signals, confirms with data tools where it matters, and attaches each one
 to the open report that covers its problem or files a new report citing it.
 A signal is on at most one open or snoozed report; a signal on a resolved or
 dismissed report moves to the new one. A resolved report never reopens: a
 signal that fires again after a resolve gets a new report. Report detail
-includes `signals`, and reading the report needs the scope of each signal's
-family.
+includes `signals`. Every signal shown in the briefing or through a signal
+tool adds its source family and privacy requirement to all reports the run
+subsequently files or edits, even when the report does not cite that signal.
 
 **Without a model key**, signals still appear in `GET /scouts/signals` (and
 the alert feed), ungrouped. Grouping starts when you add a key and create the

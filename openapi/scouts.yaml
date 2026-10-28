@@ -124,7 +124,7 @@ paths:
         The inbox, newest first. One report per finding. List rows carry a
         one-line `headline` instead of the full summary, evidence and history.
         A report built from a surface the caller's key cannot read (or from
-        server logs on a HIPAA location) keeps its place in the list with an
+        server logs or visitor-derived signals on a HIPAA location) keeps its place in the list with an
         empty `summary_md` and a `restricted` object instead of its text.
       parameters:
         - name: location_id
@@ -244,7 +244,9 @@ paths:
         which for a client without a model key is all of them. Newest first.
         Needs `scouts:read` plus the read scope of each source's family; on a
         key without one, those sources are left out, and naming one in
-        `source` is `403 insufficient_scope`.
+        `source` is `403 insufficient_scope`. Visitor-derived sources on HIPAA
+        locations, or with unreadable privacy configuration, are redacted with
+        a restricted reason and no title, detail, payload or report.
       parameters:
         - { name: location_id, in: query, schema: { type: string }, description: "One client. Omit for every client." }
         - { name: status, in: query, schema: { type: string, enum: [open, resolved, all], default: open } }
@@ -274,7 +276,9 @@ paths:
       description: >
         One signal with its full payload and the report it is attached to.
         Needs the read scope of its source's family (`403
-        insufficient_scope` with `required`).
+        insufficient_scope` with `required`). Visitor-derived sources are
+        refused on HIPAA locations (403 hipaa_restricted), or when privacy
+        configuration is unavailable (503 privacy_unknown, Retry-After).
       responses:
         "200":
           description: Signal
@@ -287,6 +291,7 @@ paths:
                   data: { $ref: "#/components/schemas/Signal" }
         "403": { $ref: "#/components/responses/AgencyRequired" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/Unavailable" }
   /client/v1/scouts:
     get:
       summary: List scouts
@@ -720,7 +725,7 @@ components:
             model_used: { type: string, nullable: true }
     Signal:
       type: object
-      description: An alert a Mythic detector raised about one client (an alert_events row with a location_id).
+      description: "An alert about one client. Visitor-derived sources are redacted in lists on HIPAA locations or when privacy configuration is unavailable. Detail returns 403 hipaa_restricted or 503 privacy_unknown."
       properties:
         id: { type: string, format: uuid }
         location_id: { type: string }
@@ -735,14 +740,15 @@ components:
         opened_at: { type: string, format: date-time }
         last_seen_at: { type: string, format: date-time }
         resolved_at: { type: string, format: date-time, nullable: true }
+        restricted: { $ref: "#/components/schemas/Restricted" }
         report:
           type: object
           nullable: true
-          description: "The report it is attached to: the open or snoozed one, else the latest."
+          description: "The report it is attached to. Null on a privacy-restricted signal. Titles are withheld here because report access may require additional scopes."
           properties:
             id: { type: string, format: uuid }
             status: { type: string, enum: [open, snoozed, resolved, dismissed, suppressed] }
-            title: { type: string }
+            title: { type: string, nullable: true, description: Always null. Read report detail for its title. }
     Evidence:
       type: object
       description: Copied by the server from a tool result recorded in the run, not written by the model.
