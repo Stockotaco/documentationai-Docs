@@ -340,6 +340,7 @@ curl -X PATCH https://mythic-analytics.gulp.workers.dev/client/v1/scouts/reports
   (`409 report_closed` if it was resolved while your change was in flight).
   Resolving schedules a [re-check](#re-check-after-resolve); send
   `recheck_after_days` (1 to 7) to choose when, or `recheck: false` to skip it.
+  The re-check is the only thing you can change on a resolved report.
 - **Dismiss** needs a `reason` (up to 1,000 characters). The scout reads your
   reason on its next runs, for 30 days, so it stops filing the same thing.
 - **Snooze** needs `snoozed_until`, a future time within 90 days. The report
@@ -378,7 +379,20 @@ curl -X PATCH https://mythic-analytics.gulp.workers.dev/client/v1/scouts/reports
 **When.** At resolve time plus `recheck_after_days`: your value (1 to 7), else
 the number of days the scout suggested when it filed or edited the report
 (`recheck.suggested_after_days`), else 3. `recheck: false` turns it off
-(`recheck.status: skipped`). One re-check per resolve. A report filed because
+(`recheck.status: skipped`). One re-check per resolve.
+
+**Change your mind.** While `recheck.status` is `scheduled`, PATCH the
+resolved report without a `status`: `{ "recheck": false }` cancels the
+re-check (`skipped`, no event), `{ "recheck_after_days": 5 }` moves it to 5
+days after the resolve (a date already passed runs at the next sweep). Once
+the check started or finished, both answer `409 recheck_not_scheduled`.
+
+```bash
+curl -X PATCH https://mythic-analytics.gulp.workers.dev/client/v1/scouts/reports/REPORT_ID \
+  -H "Authorization: Bearer ak_your_agency_key" \
+  -H "Content-Type: application/json" \
+  -d '{ "recheck_after_days": 5 }'
+``` A report filed because
 the problem came back gets its own re-check when you resolve it.
 
 **How.** When it is due:
@@ -402,7 +416,7 @@ the problem came back gets its own re-check when you resolve it.
 | `running` | A scout is checking now (`recheck.run_id`) |
 | `recovered` | The problem went away. `recheck.result_md` says what was checked; detail adds `recheck.evidence` |
 | `not_recovered` | It came back. `recheck.report_id` is the new report (or the open report that already tracks it) |
-| `skipped` | Turned off at resolve, the scout was deleted or paused, the client left your roster, or it has no model key. `result_md` says which |
+| `skipped` | Turned off at resolve or cancelled later, the scout was deleted or paused, the client left your roster, its plan no longer includes Scouts, or it has no model key. `result_md` says which |
 | `failed` | The re-check run failed after its retries |
 
 When it came back, the new report has `recheck_of` set to the resolved one, a

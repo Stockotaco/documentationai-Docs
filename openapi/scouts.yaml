@@ -214,21 +214,24 @@ paths:
         `recheck_after_days` (1-7; default the scout's suggestion, else 3)
         Mythic checks whether the problem went away. If it did, the report
         records `recheck.status: recovered`; if not, a new report linked by
-        `recheck_of` is filed. `recheck: false` skips it.
+        `recheck_of` is filed. `recheck: false` skips it. On a resolved
+        report with a scheduled re-check, send no `status` and either
+        `recheck: false` (cancel it) or `recheck_after_days` (move it, counted
+        from the resolve); `409 recheck_not_scheduled` when there is none.
+        Nothing else on a resolved report changes.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [status]
               additionalProperties: false
               properties:
-                status: { type: string, enum: [open, snoozed, resolved, dismissed] }
+                status: { type: string, enum: [open, snoozed, resolved, dismissed], description: "Required, except on a resolved report when changing only its re-check." }
                 reason: { type: string, maxLength: 1000, description: "Required when dismissing. Optional note otherwise; recorded in history." }
                 snoozed_until: { type: string, format: date-time, description: "Required when snoozing; only valid when snoozing." }
-                recheck_after_days: { type: integer, minimum: 1, maximum: 7, description: "Resolve only. Days until the re-check. Default the scout's suggestion, else 3." }
-                recheck: { type: boolean, description: "Resolve only. false skips the re-check (not combinable with recheck_after_days)." }
+                recheck_after_days: { type: integer, minimum: 1, maximum: 7, description: "When resolving, or alone on a resolved report with a scheduled re-check. Days from the resolve until the re-check. Default the scout's suggestion, else 3." }
+                recheck: { type: boolean, description: "false skips the re-check when resolving, or alone cancels a scheduled one on a resolved report. Not combinable with recheck_after_days." }
       responses:
         "200":
           description: Updated report
