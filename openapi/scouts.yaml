@@ -786,7 +786,7 @@ components:
       nullable: true
       description: "Skip a scheduled run, with no model call, when nothing new happened since the scout's last successful run. The slot is recorded as a skipped run and the next one is scheduled. A scout that never succeeded always runs. Run now and dry runs ignore it. Not allowed for signal_triage, which already runs only on new signals. Null: always run."
       properties:
-        kind: { type: string, enum: [signals, events], description: "signals: an open signal from one of `sources`, opened since the last successful run and on no open report. events: at least `min_count` of `event`, counted from the start of the UTC day of the last successful run; when the count cannot be read the scout runs." }
+        kind: { type: string, enum: [signals, events], description: "signals: an open signal from one of `sources`, opened since the last successful run and on no open report. events: at least `min_count` of `event` strictly after the start of the last successful run; when the count cannot be read the scout runs." }
         sources: { type: array, items: { type: string }, description: "signals only: signal sources whose family the skill reads." }
         event: { type: string, maxLength: 200, description: "events only: the event name, e.g. purchase. The skill must read events." }
         min_count: { type: integer, minimum: 1, default: 1, description: "events only." }
