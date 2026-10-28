@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 315 tools across
+  Every tool the Mythic MCP server exposes — 319 tools across
   31 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 315 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 319 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -511,16 +511,20 @@ Agency-wide keys only — a key bound to one client cannot hold this scope.
 | `get_scout_report`<br /><span style={{opacity: 0.7}}>Get Scout Report</span> | `scouts:read` | One report: summary, actionability and its explanation, suggested next step, status history, the signals it covers, the re-check after resolve (recheck, with its result and evidence; recheck_of when this rep… | `GET /client/v1/scouts/reports/:id` |
 | `list_scout_signals`<br /><span style={{opacity: 0.7}}>List Scout Signals</span> | `scouts:read` | Signals: the alerts Mythic detectors raised about each client (exceptions = new or spiking browser errors, destinations = failing deliveries or a rejected credential, uptime, contracts, airbyte, sessions, dr… | `GET /client/v1/scouts/signals` |
 | `get_scout_signal`<br /><span style={{opacity: 0.7}}>Get Scout Signal</span> | `scouts:read` | One signal: source, severity, title, detail, the detector's full payload (ids, counts, status codes, a link to the detail route), status, occurrences, when it opened, was last seen and resolved, and the repo… | `GET /client/v1/scouts/signals/:id` |
-| `list_scouts`<br /><span style={{opacity: 0.7}}>List Scouts</span> | `scouts:read` | Client scouts (agency-wide, or one client with location_id): skill, schedule, model, enabled, next/last run, last error and any run in progress. | `GET /client/v1/scouts` |
+| `list_scouts`<br /><span style={{opacity: 0.7}}>List Scouts</span> | `scouts:read` | Client scouts (agency-wide, or one client with location_id): skill, schedule, model, enabled, paused_reason (auto_ignored or auto_failing when Mythic paused it), auto_pause, run_only_when, next/last run, las… | `GET /client/v1/scouts` |
 | `get_scout`<br /><span style={{opacity: 0.7}}>Get Scout</span> | `scouts:read` | One client scout's configuration and state. | `GET /client/v1/scouts/:id` |
-| `list_scout_runs`<br /><span style={{opacity: 0.7}}>List Scout Runs</span> | `scouts:read` | A scout's last 30 runs: status, its close-out summary (what it looked at, filed, ruled out), turns, tool calls, reports filed/edited, surfaces read, model, and reported spend. | `GET /client/v1/scouts/:id/runs` |
+| `list_scout_runs`<br /><span style={{opacity: 0.7}}>List Scout Runs</span> | `scouts:read` | A scout's last 30 runs: status (skipped = a scheduled slot skipped by run_only_when, with skip_reason), dry_run with draft_count, its close-out summary (what it looked at, filed, ruled out), turns, tool call… | `GET /client/v1/scouts/:id/runs` |
 | `get_scout_memory`<br /><span style={{opacity: 0.7}}>Get Scout Memory</span> | `scouts:read` | What a scout remembers between runs: pattern: (baselines), noise: (what it skips), dedupe:, addressed: (fixed), report: (which report tracks what). | `GET /client/v1/scouts/:id/memory` |
-| `update_scout_report`<br /><span style={{opacity: 0.7}}>Update Scout Report</span> | `scouts:write` | Triage a report: resolve (terminal; a recurrence is filed as a new report), dismiss with a reason (the scout reads it on its next runs, for 30 days, so it stops re-filing), snooze until a time (max 90 days),… | `PATCH /client/v1/scouts/reports/:id` |
+| `get_scout_run`<br /><span style={{opacity: 0.7}}>Get Scout Run</span> | `scouts:read` | One scout run. | `GET /client/v1/scouts/:id/runs/:runId` |
+| `list_scout_notes`<br /><span style={{opacity: 0.7}}>List Scout Notes</span> | `scouts:read` | A scout's steering notes: short guidance people added ("ignore /docs pages", "Black Friday sale runs Nov 25-30"). | `GET /client/v1/scouts/:id/notes` |
+| `update_scout_report`<br /><span style={{opacity: 0.7}}>Update Scout Report</span> | `scouts:write` | Triage a report: resolve (terminal; a recurrence is filed as a new report), dismiss with a reason (the scout reads it on its next runs, for 30 days, so it stops re-filing; add_note: true also keeps the reaso… | `PATCH /client/v1/scouts/reports/:id` |
 | `create_scout`<br /><span style={{opacity: 0.7}}>Create Scout</span> | `scouts:write` | Create a scheduled client scout that reads the client's data with the agency's own model key and files one report per finding into the inbox. | `POST /client/v1/scouts` |
-| `update_scout`<br /><span style={{opacity: 0.7}}>Update Scout</span> | `scouts:write` | Change a scout's name, instructions, schedule, delivery, model, or pause it (enabled:false). | `PATCH /client/v1/scouts/:id` |
+| `update_scout`<br /><span style={{opacity: 0.7}}>Update Scout</span> | `scouts:write` | Change a scout's name, instructions, schedule, delivery, model, auto_pause or run_only_when, pause it (enabled:false) or resume it (enabled:true, which also clears a paused_reason set by Mythic). | `PATCH /client/v1/scouts/:id` |
 | `delete_scout`<br /><span style={{opacity: 0.7}}>Delete Scout</span> | `scouts:write` | Delete a scout. | `DELETE /client/v1/scouts/:id` |
-| `run_scout`<br /><span style={{opacity: 0.7}}>Run Scout Now</span> | `scouts:write` | Queue a run now (the scout must be enabled with no run in progress). | `POST /client/v1/scouts/:id/run` |
+| `run_scout`<br /><span style={{opacity: 0.7}}>Run Scout Now</span> | `scouts:write` | Queue a run now (no run may be in progress). | `POST /client/v1/scouts/:id/run` |
 | `forget_scout_memory`<br /><span style={{opacity: 0.7}}>Forget Scout Memory</span> | `scouts:write` | Delete one memory entry by key (for example a noise: entry that hides something that now matters). | `DELETE /client/v1/scouts/:id/memory/:key` |
+| `add_scout_note`<br /><span style={{opacity: 0.7}}>Add Scout Note</span> | `scouts:write` | Steer a scout with a short note (max 500 characters, at most 20 active per scout), for example "ignore /docs pages" or "Black Friday sale runs Nov 25-30". | `POST /client/v1/scouts/:id/notes` |
+| `delete_scout_note`<br /><span style={{opacity: 0.7}}>Delete Scout Note</span> | `scouts:write` | Delete one steering note from a scout. | `DELETE /client/v1/scouts/:id/notes/:noteId` |
 
 ## Alerts
 

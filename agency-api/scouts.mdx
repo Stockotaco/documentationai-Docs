@@ -29,6 +29,8 @@ pays for no model calls, and the spend is reported per scout.
 | `GET/PATCH/DELETE /scouts/{id}` | One scout: read, change or pause, delete |
 | `POST /scouts/{id}/run` | Run a scout now |
 | `GET /scouts/{id}/runs` | The last 30 runs, with what each found and spent |
+| `GET /scouts/{id}/runs/{runId}` | One run, with a dry run's drafts |
+| `GET/POST /scouts/{id}/notes`, `DELETE /scouts/{id}/notes/{noteId}` | Steering notes |
 | `GET /scouts/{id}/memory`, Memory entries carry the source families and privacy requirements of the run
 that wrote them. Memory reads omit entries the caller cannot read, including
 their keys. A run's close-out summary carries its run's provenance; restricted
@@ -42,8 +44,9 @@ the summary or error text.
 The same operations are MCP tools: `list_scout_skills`, `list_scout_models`,
 `get_scout_usage`, `list_scouts`, `get_scout`, `create_scout`,
 `update_scout`, `delete_scout`, `run_scout`, `list_scout_runs`,
-`get_scout_memory`, `forget_scout_memory`, `list_scout_reports`,
-`get_scout_report` and `update_scout_report`. See the
+`get_scout_run`, `get_scout_memory`, `forget_scout_memory`,
+`list_scout_notes`, `add_scout_note`, `delete_scout_note`,
+`list_scout_reports`, `get_scout_report` and `update_scout_report`. See the
 [tool reference](/mcp/tools#scouts).
 
 <Callout kind="note">
@@ -279,8 +282,11 @@ cancels a pending run. A concurrent change answers `409 version_conflict`:
 fetch the scout again and retry.
 
 `POST /scouts/{id}/run` needs an enabled scout (`409 scout_paused`) with no
-run pending or running (`409 run_in_progress`). The body must be empty or
-`{}`.
+run pending or running (`409 run_in_progress`). The body is empty, `{}` or
+`{"dry_run": true}` (see [Test a scout with a dry run](#test-a-scout-with-a-dry-run)).
+
+`PATCH {"enabled": true}` resumes a paused scout, including one
+[Mythic paused](#auto-pause).
 
 `DELETE /scouts/{id}` stops the scout. Its reports stay in the inbox
 (`reports_retained: true`).
@@ -343,6 +349,11 @@ curl -X PATCH https://mythic-analytics.gulp.workers.dev/client/v1/scouts/reports
   The re-check is the only thing you can change on a resolved report.
 - **Dismiss** needs a `reason` (up to 1,000 characters). The scout reads your
   reason on its next runs, for 30 days, so it stops filing the same thing.
+  Add `add_note: true` to also keep the reason (up to 500 characters) as a
+  [steering note](#steering-notes) on the scout that filed the report, which
+  it reads on every run. The response's `data.note` is the note. `409
+  note_scout_gone` when that scout was deleted, `422 note_limit` when it has
+  20 active notes.
 - **Snooze** needs `snoozed_until`, a future time within 90 days. The report
   reopens when it passes.
 - **Restore** a dismissed or suppressed report by setting `status: "open"`.
@@ -505,17 +516,88 @@ entries by key prefix:
 correct a scout, for example a `noise:` entry that now hides something that
 matters.
 
+## Steering notes
+
+Notes steer one scout without rewriting its instructions: "ignore /docs
+pages", "Black Friday sale runs Nov 25-30". Every run reads the scout's active
+notes as guidance from your agency, after the skill playbook and the
+instructions.
+
+```bash
+curl -X POST "https://mythic-analytics.gulp.workers.dev/client/v1/scouts/$SCOUT_ID/notes" \
+  -H "Authorization: Bearer $AGENCY_KEY" -H "Content-Type: application/json" \
+  -d '{ "body": "Black Friday sale runs Nov 25-30; expect traffic spikes.", "expires_at": "2026-11-30T23:59:00Z" }'
+```
+
+A note has a `body` of up to 500 characters and an optional `expires_at`
+(within 366 days). A scout holds at most 20 active notes (`422 note_limit`).
+`GET /scouts/{id}/notes` lists them, expired ones with `active: false` (they
+are deleted 30 days after they expire), and `DELETE
+/scouts/{id}/notes/{noteId}` removes one. A note made from a dismiss reason
+(`add_note`) links its report (`source_report_id`) and carries the report's
+`families`: keys and runs that may not read that report do not see it.
+
+## Test a scout with a dry run
+
+`POST /scouts/{id}/run` with `{"dry_run": true}` runs the scout normally on
+your key, also when it is paused, but keeps the reports it would file or edit
+as **drafts** on the run. Nothing reaches the inbox, alert channels or events;
+the run writes no memory, consumes no signals and schedules no re-check. Use
+it to test a new scout or changed instructions. Its model calls count toward
+spend.
+
+`GET /scouts/{id}/runs/{runId}` returns the run with `drafts`: `kind: "new"`
+(title, priority, summary, suggested action, evidence, `signal_ids`) or
+`kind: "edit"` (the `report_id` it would have edited and what it would have
+changed).
+
+## Run only when
+
+`run_only_when` skips a scheduled run, without a model call, when nothing new
+happened since the scout's last successful run:
+
+| Value | Runs when |
+| --- | --- |
+| `{"kind": "signals", "sources": ["exceptions"]}` | A signal from one of these sources opened since the last successful run and no open report covers it. Sources must be ones the skill reads. |
+| `{"kind": "events", "event": "purchase", "min_count": 3}` | At least `min_count` (default 1) of the event arrived, counted from the start of the UTC day of the last successful run. The skill must read events. When the count cannot be read, the scout runs. |
+
+A skipped slot shows in the run history as a `skipped` run with its
+`skip_reason`, and the next slot is scheduled. A scout that never succeeded
+always runs; run now and dry runs ignore the condition. `null` clears it.
+`signal_triage` already runs only when new signals exist, so it does not take
+`run_only_when`.
+
+## Auto-pause
+
+Mythic pauses a scout (`enabled: false`, with `paused_reason` and `paused_at`)
+when:
+
+- `auto_ignored`: it has 5 or more open reports, the oldest at least 14 days
+  old, and in the last 30 days nobody changed the status of any of its reports,
+  added a note to it or resumed it.
+- `auto_failing`: its last 5 runs since it was last resumed all failed, for
+  example on a deleted or out-of-credit model key.
+
+The check runs at most once a day per scout. A pause cancels the pending
+scheduled run, is sent once to the scout's delivery channels (Slack text, or a
+webhook with `X-Mythic-Event: client_scout.paused`) and is published as the
+event `$scout_paused`. `PATCH {"enabled": true}` resumes the scout and clears
+the reason. `auto_pause: false` opts a scout out.
+
 ## Runs and spend
 
 `GET /scouts/{id}/runs` returns the last 30 runs: status, trigger (`schedule`,
 `on_demand`, or `recheck` for a [re-check after resolve](#re-check-after-resolve)), model, skill version, model turns (`steps`), `tool_calls`,
 `reports_filed`, `reports_edited`, the surfaces read, and the close-out
-`summary` (what it looked at, filed and ruled out). Each run also carries
+`summary` (what it looked at, filed and ruled out). Dry runs carry `dry_run:
+true` and `draft_count`; skipped slots have status `skipped` and a
+`skip_reason`. Each run also carries
 `model_calls`, `known_cost_usd` and `unknown_cost_calls`.
 
 `GET /scouts/usage` totals reported spend for a UTC date range (inclusive, at
 most 92 days, default this month), optionally for one client, with one row per
 scout. It counts every provider call, including failed and repaired ones.
+Dry runs count toward spend and are also counted as `dry_runs`.
 Providers do not always report cost: calls without it are counted in
 `unknown_cost_calls`, and your provider's bill is authoritative.
 

@@ -219,6 +219,11 @@ paths:
         `recheck: false` (cancel it) or `recheck_after_days` (move it, counted
         from the resolve); `409 recheck_not_scheduled` when there is none.
         Nothing else on a resolved report changes.
+        Dismissing with `add_note: true` also keeps the reason (at most 500
+        characters) as a steering note on the scout that filed the report, in
+        the same transaction; the response's `data.note` is that note. `409
+        note_scout_gone` when that scout was deleted, `422 note_limit` when it
+        already has 20 active notes.
       requestBody:
         required: true
         content:
@@ -230,6 +235,7 @@ paths:
                 status: { type: string, enum: [open, snoozed, resolved, dismissed], description: "Required, except on a resolved report when changing only its re-check." }
                 reason: { type: string, maxLength: 1000, description: "Required when dismissing. Optional note otherwise; recorded in history." }
                 snoozed_until: { type: string, format: date-time, description: "Required when snoozing; only valid when snoozing." }
+                add_note: { type: boolean, description: "Dismiss only: also add the reason (max 500 characters) as a steering note on the scout that filed the report." }
                 recheck_after_days: { type: integer, minimum: 1, maximum: 7, description: "When resolving, or alone on a resolved report with a scheduled re-check. Days from the resolve until the re-check. Default the scout's suggestion, else 3." }
                 recheck: { type: boolean, description: "false skips the re-check when resolving, or alone cancels a scheduled one on a resolved report. Not combinable with recheck_after_days." }
       responses:
@@ -387,7 +393,8 @@ paths:
       description: >
         Merge a change onto the scout. `skill` cannot change. A body of only
         `{"enabled": false}` pauses the scout without any plan, model key or
-        scope check, so spend can always be stopped. Every other change is
+        scope check, so spend can always be stopped. `{"enabled": true}`
+        resumes it and clears a `paused_reason` Mythic set. Every other change is
         checked like a create. Omitting both `provider` and `model` keeps the
         provider; a model-only change keeps the current provider when the
         model fits it, and on a scout whose provider's key was deleted gets
@@ -435,17 +442,28 @@ paths:
       summary: Run a scout now
       operationId: runScout
       description: >
-        Queue a run now. The body must be empty or `{}`. The scout must be
-        enabled (`409 scout_paused`) with no run pending or running (`409
-        run_in_progress`). Same plan, model key and scope checks as a create,
-        on the scout's stored `provider`.
+        Queue a run now. The body is empty, `{}` or `{"dry_run": true}`. The
+        scout must be enabled (`409 scout_paused`), except for a dry run, with
+        no run pending or running (`409 run_in_progress`). Same plan, model
+        key and scope checks as a create, on the scout's stored `provider`.
         Runs start within a minute and usually take 1 to 5 minutes; follow
-        them with `GET /scouts/{id}/runs`.
+        them with `GET /scouts/{id}/runs`. `run_only_when` does not apply.
+
+        A **dry run** tests the scout, for example after changing its
+        instructions: it runs normally on your key, but the reports it would
+        file or edit are kept as `drafts` on the run (`GET
+        /scouts/{id}/runs/{runId}`). Nothing reaches the inbox, delivery
+        channels or events; it writes no memory, consumes no signals and
+        schedules no re-check. Its model calls count toward spend and usage.
       requestBody:
         required: false
         content:
           application/json:
-            schema: { type: object, additionalProperties: false }
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                dry_run: { type: boolean, default: false, description: "Test run: reports become drafts on the run. Allowed on a paused scout." }
       responses:
         "202":
           description: Queued
@@ -460,6 +478,7 @@ paths:
                     properties:
                       run_id: { type: string, format: uuid }
                       status: { type: string, example: pending }
+                      dry_run: { type: boolean }
         "400": { $ref: "#/components/responses/BadRequest" }
         "402": { $ref: "#/components/responses/PaymentRequired" }
         "403": { $ref: "#/components/responses/AgencyRequired" }
@@ -473,7 +492,7 @@ paths:
     get:
       summary: List runs
       operationId: listScoutRuns
-      description: "The scout's last 30 runs, newest first, with the close-out summary, what each filed and reported spend."
+      description: "The scout's last 30 runs, newest first, with the close-out summary, what each filed and reported spend. Dry runs carry `dry_run` and `draft_count`; a scheduled slot skipped by `run_only_when` is a `skipped` run with `skip_reason` and no model calls."
       responses:
         "200":
           description: Runs
@@ -484,6 +503,104 @@ paths:
                 properties:
                   success: { type: boolean, example: true }
                   data: { type: array, items: { $ref: "#/components/schemas/Run" } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /client/v1/scouts/{id}/runs/{runId}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - name: runId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: Get a run
+      operationId: getScoutRun
+      description: "One run, as in the list. A dry run also returns `drafts`: the reports it would have filed (`kind: new`) and the edits it would have made (`kind: edit`). A run that read surfaces the caller cannot read comes back restricted, without drafts."
+      responses:
+        "200":
+          description: Run
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/Run"
+                      - type: object
+                        properties:
+                          drafts: { type: array, items: { $ref: "#/components/schemas/Draft" } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /client/v1/scouts/{id}/notes:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      summary: List steering notes
+      operationId: listScoutNotes
+      description: "The scout's steering notes, oldest first, expired ones included (`active: false`; deleted 30 days after they expire). Every run reads the active ones as agency guidance, after the skill playbook and instructions. A note made from a dismiss reason carries that report's families and is listed only to keys that may read them."
+      responses:
+        "200":
+          description: Notes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { type: array, items: { $ref: "#/components/schemas/Note" } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      summary: Add a steering note
+      operationId: addScoutNote
+      description: "Steer the scout with a short note, such as `ignore /docs pages` or `Black Friday sale runs Nov 25-30`. At most 500 characters and 20 active notes per scout (`422 note_limit`)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [body]
+              properties:
+                body: { type: string, minLength: 1, maxLength: 500 }
+                expires_at: { type: string, format: date-time, nullable: true, description: "When the note stops applying: a future time within 366 days. Null or omitted: no end." }
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Note" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+  /client/v1/scouts/{id}/notes/{noteId}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+      - name: noteId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      summary: Delete a steering note
+      operationId: deleteScoutNote
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string, format: uuid }
+                      deleted: { type: boolean, example: true }
         "404": { $ref: "#/components/responses/NotFound" }
   /client/v1/scouts/{id}/memory:
     parameters:
@@ -623,6 +740,8 @@ components:
             channel_ids: { type: array, maxItems: 5, items: { type: string, format: uuid }, description: "Active alert channels of this agency that receive each new report once." }
         enabled: { type: boolean, default: true }
         provider: { type: string, nullable: true, enum: [openrouter, gemini, cloudflare, null], description: "Which key runs the scout: the client's key for this provider, else the agency's. Null runs on the client's default key if it has keys of its own, else the agency's default. Omitted with a `model`: inferred and stored. Omitted without one: unchanged (null on create)." }
+        auto_pause: { type: boolean, default: true, description: "Let Mythic pause the scout when it is ignored (5+ open reports, the oldest 14+ days old, and no status change on its reports, note or resume in 30 days) or failing (its last 5 runs since the last resume failed). Checked at most daily. false opts out." }
+        run_only_when: { $ref: "#/components/schemas/RunOnlyWhen" }
         model: { type: string, nullable: true, description: "A model the key can run: `google/model` on OpenRouter or Cloudflare, other `vendor/model` on OpenRouter only, `@cf/vendor/model` on Cloudflare only, a bare id on Gemini. Null uses the key's default unless it is a lite or nano model, else google/gemini-3.8-flash (OpenRouter), gemini-3.8-flash (Gemini) or @cf/moonshotai/kimi-k2.6 (Cloudflare). Lite and nano models are refused." }
     Scout:
       type: object
@@ -656,8 +775,54 @@ components:
             triggered_by: { type: string, enum: [schedule, on_demand, recheck], description: "recheck: a re-check after resolve of one report." }
             attempts: { type: integer }
         can_run_now: { type: boolean }
+        auto_pause: { type: boolean }
+        paused_reason: { type: string, nullable: true, enum: [auto_ignored, auto_failing, null], description: "Set only when Mythic paused the scout. The pause is sent once to the scout's delivery channels and as the event $scout_paused. Resuming clears it." }
+        paused_at: { type: string, format: date-time, nullable: true }
+        run_only_when: { $ref: "#/components/schemas/RunOnlyWhen" }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+    RunOnlyWhen:
+      type: object
+      nullable: true
+      description: "Skip a scheduled run, with no model call, when nothing new happened since the scout's last successful run. The slot is recorded as a skipped run and the next one is scheduled. A scout that never succeeded always runs. Run now and dry runs ignore it. Not allowed for signal_triage, which already runs only on new signals. Null: always run."
+      properties:
+        kind: { type: string, enum: [signals, events], description: "signals: an open signal from one of `sources`, opened since the last successful run and on no open report. events: at least `min_count` of `event`, counted from the start of the UTC day of the last successful run; when the count cannot be read the scout runs." }
+        sources: { type: array, items: { type: string }, description: "signals only: signal sources whose family the skill reads." }
+        event: { type: string, maxLength: 200, description: "events only: the event name, e.g. purchase. The skill must read events." }
+        min_count: { type: integer, minimum: 1, default: 1, description: "events only." }
+    Note:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        scout_id: { type: string, format: uuid }
+        body: { type: string }
+        expires_at: { type: string, format: date-time, nullable: true }
+        active: { type: boolean, description: "Not expired. Only active notes reach runs." }
+        source_report_id: { type: string, format: uuid, nullable: true, description: "Set when the note came from a dismiss reason (add_note)." }
+        families: { type: array, items: { type: string }, description: "The surfaces of that report. Empty for notes added directly." }
+        created_by: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+    Draft:
+      type: object
+      description: "A dry run's report emit (kind new) or edit (kind edit). Same checks as a real one; nothing outside the run was written."
+      properties:
+        draft: { type: integer }
+        kind: { type: string, enum: [new, edit] }
+        at: { type: string, format: date-time }
+        title: { type: string }
+        summary_md: { type: string }
+        priority: { type: string, enum: [P0, P1, P2, P3, P4] }
+        actionability: { type: string, enum: [immediately_actionable, requires_human_input, not_actionable] }
+        actionability_explanation: { type: string }
+        suggested_action: { type: string }
+        dedupe_key: { type: string }
+        status: { type: string, enum: [open, suppressed], description: "new only: the status the report would have." }
+        report_id: { type: string, format: uuid, description: "edit only: the report it would have edited." }
+        report_title: { type: string }
+        note: { type: string, description: "edit only: the scout's note on the edit." }
+        recheck_after_days: { type: integer }
+        evidence: { type: array, items: { $ref: "#/components/schemas/Evidence" } }
+        signal_ids: { type: array, items: { type: string, format: uuid } }
     ScoutResponse:
       type: object
       properties:
@@ -801,8 +966,11 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
-        status: { type: string, enum: [pending, running, succeeded, failed, cancelled] }
+        status: { type: string, enum: [pending, running, succeeded, failed, cancelled, skipped], description: "skipped: a scheduled slot run_only_when skipped, with no model call." }
         triggered_by: { type: string, enum: [schedule, on_demand, recheck], description: "recheck: a re-check after resolve of one report." }
+        dry_run: { type: boolean, description: "A test run: its reports are drafts on the run." }
+        draft_count: { type: integer }
+        skip_reason: { type: string, nullable: true }
         scheduled_for: { type: string, format: date-time }
         attempts: { type: integer }
         provider: { type: string, nullable: true }
@@ -831,6 +999,7 @@ components:
           type: object
           properties:
             runs: { type: integer }
+            dry_runs: { type: integer, description: "Of runs, the dry runs. They count toward spend." }
             calls: { type: integer }
             known_cost_usd: { type: number }
             unknown_cost_calls: { type: integer }
@@ -844,6 +1013,7 @@ components:
               scout_id: { type: string, format: uuid }
               location_id: { type: string }
               runs: { type: integer }
+              dry_runs: { type: integer }
               calls: { type: integer }
               known_cost_usd: { type: number }
               unknown_cost_calls: { type: integer }

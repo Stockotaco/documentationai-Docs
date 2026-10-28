@@ -41,6 +41,32 @@ provider bills you directly. Add a key under **Replay Vision**, **Model keys**,
 for the client or the agency. Without a key, Mythic won't create or run a
 scout. Each scout's page shows its runs, what each cost and what it read.
 
+### Steer a scout
+
+On a scout's page:
+
+- **Notes**: add short notes the scout reads on every run, such as "ignore
+  /docs pages" or "Black Friday sale runs Nov 25-30". Pick an end date for a
+  note that only applies for a while. A scout holds up to 20 active notes;
+  **Remove** one to add another.
+- **Test run**: runs the scout now on your key, also when it is paused, but
+  keeps what it would file as drafts. Nothing reaches the Inbox, Slack,
+  webhooks or the scout's memory. In **Runs**, the run shows as **Test run**;
+  **View drafts** shows each report it would have filed or edited, with its
+  evidence. Use it after changing instructions. A test run costs the same as
+  any run.
+- **Edit**, **Schedule**: **Run only when** skips a scheduled run without a
+  model call when nothing new happened since the last successful run: **New
+  signals arrived** (from the sources you pick) or **Enough of an event
+  arrived** (at least a number of one event, counted per day). Skipped runs
+  show as **Skipped** in **Runs**. Signal triage already runs only on new
+  signals.
+- **Auto-pause** (on by default, under **Edit**, **Schedule**): Mythic
+  pauses the scout when it has 5 or more open reports for 14 days and nobody
+  acted on its reports in 30 days, or when its last 5 runs failed. You get a
+  message on the scout's delivery destinations, and its page shows why with a
+  **Resume** button.
+
 ## The Inbox
 
 Each report is one problem: a title, a summary, a suggested action, a
@@ -63,7 +89,9 @@ status, priority or scout.
 | Suppressed | The scout filed it for the record, with no action needed | Restore or dismiss |
 
 - **Dismiss** needs a reason. The scout reads it on its next runs for 30
-  days, so it stops filing the same thing.
+  days, so it stops filing the same thing. Tick **Tell the scout** to also
+  keep the reason as a note on the scout that filed it, which it reads on
+  every run (up to 500 characters).
 - **Snooze** lasts up to 90 days.
 - **Resolve** asks when to **Check again in**: 1 to 7 days, starting on the
   scout's suggestion or 3 days, or **Don't check again**. Add an optional
@@ -216,7 +244,9 @@ client's Signals tab, with the client's name.
 
 One row per client that has scouts, open reports or ungrouped signals:
 
-- **Scouts on**: the skills with a scout. Paused scouts are gray.
+- **Scouts on**: the skills with a scout. Paused scouts are gray; scouts
+  Mythic paused are orange and say why (**runs failing** or **reports
+  ignored**).
 - **Key and last run**: whether the model key the scouts run on works
   (**Working**, **Rejected** or **No key**), when a scout last ran and its
   last error.
