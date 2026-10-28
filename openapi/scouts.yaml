@@ -287,7 +287,7 @@ paths:
                   required: [location_id, skill]
                   properties:
                     location_id: { type: string, description: "One of the agency's clients." }
-                    skill: { type: string, enum: [error_tracking, attribution_drift, custom], description: "Cannot change after creation." }
+                    skill: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, custom], description: "Cannot change after creation." }
                 - $ref: "#/components/schemas/ScoutInput"
       responses:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/ScoutResponse" } } } }
@@ -553,7 +553,7 @@ components:
         id: { type: string, format: uuid }
         location_id: { type: string }
         name: { type: string }
-        skill: { type: string, enum: [error_tracking, attribution_drift, custom] }
+        skill: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, custom] }
         instructions: { type: string, nullable: true }
         schedule: { $ref: "#/components/schemas/Schedule" }
         delivery:
@@ -589,7 +589,7 @@ components:
     Skill:
       type: object
       properties:
-        id: { type: string, enum: [error_tracking, attribution_drift, custom] }
+        id: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, custom] }
         name: { type: string }
         description: { type: string }
         families:
