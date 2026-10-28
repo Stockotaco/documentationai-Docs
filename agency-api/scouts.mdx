@@ -226,6 +226,12 @@ with browser errors.
 The default is daily at 08:00 client time (`signal_triage`: hourly at :05). A schedule you send is merged onto
 the default on create, or onto the current schedule on update.
 
+A `signal_triage` scout runs at its hourly slot only when there is a signal to triage: one that no open
+report covers and an earlier run has not already looked at (or whose severity or revision changed since).
+When there is nothing to triage, the slot passes without a run or a model call, and `next_run_at` moves to the
+following hour. A signal that arrives between slots is picked up at the next slot, so grouping can lag a new
+signal by up to an hour.
+
 ## Quick start
 
 <Steps>

@@ -626,7 +626,7 @@ components:
         provider: { type: string, nullable: true, enum: [openrouter, gemini, cloudflare, null], description: "The provider whose key runs the scout, or null for the default key." }
         enabled: { type: boolean }
         version: { type: integer }
-        next_run_at: { type: string, format: date-time, nullable: true }
+        next_run_at: { type: string, format: date-time, nullable: true, description: "The next scheduled slot. For signal_triage, the next hourly check; it runs only if there is a signal to triage." }
         last_run_at: { type: string, format: date-time, nullable: true }
         last_report_at: { type: string, format: date-time, nullable: true }
         last_error: { type: string, nullable: true }
