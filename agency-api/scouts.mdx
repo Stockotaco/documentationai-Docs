@@ -420,7 +420,7 @@ the problem came back gets its own re-check when you resolve it.
 | `failed` | The re-check run failed after its retries |
 
 When it came back, the new report has `recheck_of` set to the resolved one, a
-`dedupe_key` of the resolved one's plus `:recheck`, the signals that are open
+`dedupe_key` built from the resolved one's (a prefix, a hash of the full key, and `:recheck`), the signals that are open
 again, and is delivered to the scout's alert channels like any new report.
 Recovered results are not sent to channels. Every outcome adds a `recheck`
 entry to the resolved report's `history` and publishes a
