@@ -188,6 +188,7 @@ scout is created.
 | `error_tracking` | `exceptions`, `logs`, `sessions`, `events` | Browser JavaScript errors and server error logs that cost visitors, leads or tracking: bursts, new issues, comebacks and same-session browser plus server failures, weighted by landing and conversion pages |
 | `attribution_drift` | `events`, `sessions`, `links` | Channels losing credit: paid traffic arriving without UTMs or click ids, tagged share falling, and channel shifts scored against the same weekday over four weeks |
 | `conversion_delivery` | `destinations`, `events`, `sessions` | Conversions that never reach the ad platforms: destination failures and lost credentials, conversion events fired but not delivered, mapped events gone silent, late deliveries, and Meta match quality falling on conversion events |
+| `signal_triage` | `exceptions`, `destinations`, `sessions`, `events`, `links`, plus every signal family | Groups the client's open [signals](#signals) into one report per underlying problem: attaches each signal to an open report or files a new one. Runs only when new unattached signals exist. One per client |
 | `custom` | `exceptions`, `logs`, `events`, `sessions`, `links`, `destinations` | Your own instructions over every surface a scout can read |
 
 `instructions` (up to 8,000 characters) are your notes, added after the
@@ -209,12 +210,12 @@ with browser errors.
 
 | Field | Values |
 | --- | --- |
-| `kind` | `daily`, `weekdays` or `weekly` |
-| `time` | Local `HH:mm` |
+| `kind` | `daily`, `weekdays` or `weekly`; `hourly` for `signal_triage` only |
+| `time` | Local `HH:mm`; for `hourly` only the minute counts |
 | `day_of_week` | ISO weekday 1 (Monday) to 7, `weekly` only |
 | `timezone` | IANA zone, default the client's timezone (else UTC) |
 
-The default is daily at 08:00 client time. A schedule you send is merged onto
+The default is daily at 08:00 client time (`signal_triage`: hourly at :05). A schedule you send is merged onto
 the default on create, or onto the current schedule on update.
 
 ## Quick start
@@ -339,9 +340,54 @@ Evidence is **not model text**. A scout cites tool calls from its own run, and
 the server copies the recorded result into the report: the `tool`, its
 `args`, the HTTP `status`, the surface (`family`), and an `excerpt` of up to
 4,000 characters of exactly what the scout read. The scout adds only a `note`
-on what the result shows. A report needs at least one piece of evidence and
-holds at most 12 per filing. Reports keep their evidence after a run's raw
+on what the result shows. Signals attached to a report also count as
+evidence: a report needs at least one tool result or one signal, and holds at
+most 12 tool results per filing. Reports keep their evidence after a run's raw
 tool results are pruned 30 days later.
+
+## Signals
+
+A signal is an alert a Mythic detector raised about one client: a row of the
+[alert feed](/agency-api/alerts) with a client. Each detector already decided
+the condition is real (its own threshold), so signals are facts, not guesses.
+
+| Source | Family (scope to read it) | Raised when |
+| --- | --- | --- |
+| `exceptions` | `exceptions` | A browser error issue is new or spiking |
+| `destinations` | `destinations` | A destination fails repeatedly or its credential is rejected |
+| `uptime` | `links` | A short link destination is down |
+| `contracts` | `contracts` | Event contracts fail, or no events arrived all day |
+| `airbyte` | `airbyte` | A data sync failed |
+| `sessions` | `sessions` | The site keeps starting new sessions |
+| `drift` | `incrementality` | An experiment drifted |
+| `replay_vision` | `replay_vision` | A Replay Vision monitor flagged a session |
+
+`GET /scouts/signals` lists them, newest first (`location_id`, `status`
+open, resolved or all, `source`, `attached`, `limit`, `cursor`), each with the
+report it is attached to. `GET /scouts/signals/{id}` returns one with the
+detector's full `payload`. Both need `scouts:read` plus the read scope of the
+source's family; a key without one does not see those sources.
+
+**Grouping.** A `signal_triage` scout groups a client's signals. Each hour it
+checks, without a model call, whether the client has an open signal that is
+on no open or snoozed report and that no earlier triage run has seen. Only
+then does it run (at most once an hour, and only with a model key): it reads
+the signals, confirms with data tools where it matters, and attaches each one
+to the open report that covers its problem or files a new report citing it.
+A signal is on at most one open or snoozed report; a signal on a resolved or
+dismissed report moves to the new one. A resolved report never reopens: a
+signal that fires again after a resolve gets a new report. Report detail
+includes `signals`, and reading the report needs the scope of each signal's
+family.
+
+**Without a model key**, signals still appear in `GET /scouts/signals` (and
+the alert feed), ungrouped. Grouping starts when you add a key and create the
+client's `signal_triage` scout.
+
+```bash
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/scouts/signals?location_id=loc_123&attached=false" \
+  -H "Authorization: Bearer $MYTHIC_AGENCY_KEY"
+```
 
 ## Memory
 

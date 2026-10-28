@@ -176,7 +176,7 @@ paths:
       operationId: getScoutReport
       description: >
         One report with its summary, actionability explanation, suggested
-        action, status history and evidence. Needs the read scope of every
+        action, status history, evidence and the signals it covers. Needs the read scope of every
         surface in `families` (`403 insufficient_scope` with `required`). A
         report that read server logs is refused on HIPAA locations (`403
         hipaa_restricted`) and while the location's privacy mode cannot be
@@ -232,6 +232,61 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/scouts/signals:
+    get:
+      summary: List signals
+      operationId: listScoutSignals
+      description: >
+        Signals are the alerts Mythic detectors raised about each client:
+        exceptions, destinations, uptime, contracts, airbyte, sessions, drift
+        and replay_vision. The signal_triage scout groups them into reports;
+        `attached=false` lists the ones no open or snoozed report covers,
+        which for a client without a model key is all of them. Newest first.
+        Needs `scouts:read` plus the read scope of each source's family; on a
+        key without one, those sources are left out, and naming one in
+        `source` is `403 insufficient_scope`.
+      parameters:
+        - { name: location_id, in: query, schema: { type: string }, description: "One client. Omit for every client." }
+        - { name: status, in: query, schema: { type: string, enum: [open, resolved, all], default: open } }
+        - { name: source, in: query, schema: { type: string }, description: "Comma list of sources." }
+        - { name: attached, in: query, schema: { type: boolean }, description: "true: on a report. false: on no open or snoozed report." }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: cursor, in: query, schema: { type: string }, description: "next_cursor from the previous page." }
+      responses:
+        "200":
+          description: Signals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { type: array, items: { $ref: "#/components/schemas/Signal" } }
+                  next_cursor: { type: string, nullable: true }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+  /client/v1/scouts/signals/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      summary: Get a signal
+      operationId: getScoutSignal
+      description: >
+        One signal with its full payload and the report it is attached to.
+        Needs the read scope of its source's family (`403
+        insufficient_scope` with `required`).
+      responses:
+        "200":
+          description: Signal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Signal" }
+        "403": { $ref: "#/components/responses/AgencyRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /client/v1/scouts:
     get:
       summary: List scouts
@@ -287,7 +342,7 @@ paths:
                   required: [location_id, skill]
                   properties:
                     location_id: { type: string, description: "One of the agency's clients." }
-                    skill: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, custom], description: "Cannot change after creation." }
+                    skill: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, signal_triage, custom], description: "Cannot change after creation." }
                 - $ref: "#/components/schemas/ScoutInput"
       responses:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/ScoutResponse" } } } }
@@ -530,8 +585,8 @@ components:
     Schedule:
       type: object
       properties:
-        kind: { type: string, enum: [daily, weekdays, weekly] }
-        time: { type: string, example: "08:00", description: "Local HH:mm." }
+        kind: { type: string, enum: [hourly, daily, weekdays, weekly], description: "hourly is only for signal_triage." }
+        time: { type: string, example: "08:00", description: "Local HH:mm. For hourly, only the minute counts." }
         day_of_week: { type: integer, minimum: 1, maximum: 7, description: "ISO weekday, Monday = 1. Weekly only." }
         timezone: { type: string, example: America/New_York, description: "IANA zone. Defaults to the client's timezone, else UTC." }
     ScoutInput:
@@ -553,7 +608,7 @@ components:
         id: { type: string, format: uuid }
         location_id: { type: string }
         name: { type: string }
-        skill: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, custom] }
+        skill: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, signal_triage, custom] }
         instructions: { type: string, nullable: true }
         schedule: { $ref: "#/components/schemas/Schedule" }
         delivery:
@@ -589,12 +644,14 @@ components:
     Skill:
       type: object
       properties:
-        id: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, custom] }
+        id: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, signal_triage, custom] }
         name: { type: string }
         description: { type: string }
         families:
           type: array
-          items: { type: string, enum: [exceptions, logs, events, sessions, links, destinations] }
+          description: "Data surfaces plus, for signal_triage, the families of the signals it groups."
+          items: { type: string, enum: [exceptions, logs, events, sessions, links, destinations, contracts, airbyte, incrementality, alerts, replay_vision] }
+        trigger: { type: string, enum: [schedule, signals], description: "signals: a scheduled run starts only when new unattached signals exist." }
         default_schedule: { $ref: "#/components/schemas/Schedule" }
         requires_instructions: { type: boolean }
         version: { type: string, example: "2026-10-19.1" }
@@ -645,6 +702,7 @@ components:
             actionability_explanation: { type: string }
             suggested_action: { type: string }
             evidence: { type: array, items: { $ref: "#/components/schemas/Evidence" } }
+            signals: { type: array, description: "The signals attached to this report. Each counts as evidence.", items: { $ref: "#/components/schemas/Signal" } }
             history:
               type: array
               description: "Filed, edited and status entries, oldest first."
@@ -660,6 +718,31 @@ components:
                   note: { type: string }
             provider: { type: string, nullable: true }
             model_used: { type: string, nullable: true }
+    Signal:
+      type: object
+      description: An alert a Mythic detector raised about one client (an alert_events row with a location_id).
+      properties:
+        id: { type: string, format: uuid }
+        location_id: { type: string }
+        source: { type: string, enum: [contracts, uptime, airbyte, drift, quota, sessions, replay_vision, exceptions, destinations] }
+        family: { type: string, description: "The scope family reading it needs, e.g. links for uptime." }
+        severity: { type: string, enum: [info, warning, critical] }
+        title: { type: string }
+        detail: { type: string, nullable: true }
+        payload: { type: object, additionalProperties: true, description: "The detector's own fields: ids, counts, status codes and a link to the detail route." }
+        status: { type: string, enum: [open, resolved] }
+        occurrences: { type: integer }
+        opened_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+        resolved_at: { type: string, format: date-time, nullable: true }
+        report:
+          type: object
+          nullable: true
+          description: "The report it is attached to: the open or snoozed one, else the latest."
+          properties:
+            id: { type: string, format: uuid }
+            status: { type: string, enum: [open, snoozed, resolved, dismissed, suppressed] }
+            title: { type: string }
     Evidence:
       type: object
       description: Copied by the server from a tool result recorded in the run, not written by the model.
