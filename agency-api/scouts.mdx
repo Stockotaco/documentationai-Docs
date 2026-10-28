@@ -307,7 +307,8 @@ evidence.
 
 `GET /scouts/reports` returns `open` and `snoozed` reports by default, newest
 first. Filter with `location_id`, `scout_id`, `status` (a comma list, or
-`all`) and `priority` (for example `P0,P1`); page with `limit` (1 to 200,
+`all`), `priority` (for example `P0,P1`) and `recheck_status` (see
+[Re-check after resolve](#re-check-after-resolve)); page with `limit` (1 to 200,
 default 50) and `next_cursor`. List rows carry a one-line `headline` instead of
 the summary, evidence and history; `GET /scouts/reports/{id}` returns the full
 report.
@@ -337,6 +338,8 @@ curl -X PATCH https://mythic-analytics.gulp.workers.dev/client/v1/scouts/reports
 - **Resolve** is terminal. If the problem comes back, the scout files a **new**
   report; a resolved one answers `400 invalid_status_change` to any change
   (`409 report_closed` if it was resolved while your change was in flight).
+  Resolving schedules a [re-check](#re-check-after-resolve); send
+  `recheck_after_days` (1 to 7) to choose when, or `recheck: false` to skip it.
 - **Dismiss** needs a `reason` (up to 1,000 characters). The scout reads your
   reason on its next runs, for 30 days, so it stops filing the same thing.
 - **Snooze** needs `snoozed_until`, a future time within 90 days. The report
@@ -358,6 +361,61 @@ on what the result shows. Signals attached to a report also count as
 evidence: a report needs at least one tool result or one signal, and holds at
 most 12 tool results per filing. Reports keep their evidence after a run's raw
 tool results are pruned 30 days later.
+
+### Re-check after resolve
+
+Resolving a report says the problem is fixed. Mythic checks that once, later,
+and records the answer on the resolved report. The report itself stays
+resolved.
+
+```bash
+curl -X PATCH https://mythic-analytics.gulp.workers.dev/client/v1/scouts/reports/REPORT_ID \
+  -H "Authorization: Bearer ak_your_agency_key" \
+  -H "Content-Type: application/json" \
+  -d '{ "status": "resolved", "reason": "Deployed the form fix", "recheck_after_days": 2 }'
+```
+
+**When.** At resolve time plus `recheck_after_days`: your value (1 to 7), else
+the number of days the scout suggested when it filed or edited the report
+(`recheck.suggested_after_days`), else 3. `recheck: false` turns it off
+(`recheck.status: skipped`). One re-check per resolve. A report filed because
+the problem came back gets its own re-check when you resolve it.
+
+**How.** When it is due:
+
+1. **From signals, without a model.** If any of the report's signals (same
+   source and subject) is open again, the problem is back. If all of them
+   stayed resolved and the report has no tool-call evidence, it recovered.
+2. **Otherwise a scout checks.** The scout that filed the report runs once
+   with `triggered_by: "recheck"`, on your model key, with the resolved report
+   (summary, evidence notes, suggested action, who resolved it and the note)
+   and its signals. It measures the same thing again and records whether it
+   recovered, with evidence from that run. At most 10 re-check runs per client
+   per day; more wait an hour. A re-check run does not use up the client's
+   signals for triage.
+
+**Outcome** (`recheck.status` on the resolved report):
+
+| Status | Meaning |
+| --- | --- |
+| `scheduled` | Waiting for `recheck.due_at` |
+| `running` | A scout is checking now (`recheck.run_id`) |
+| `recovered` | The problem went away. `recheck.result_md` says what was checked; detail adds `recheck.evidence` |
+| `not_recovered` | It came back. `recheck.report_id` is the new report (or the open report that already tracks it) |
+| `skipped` | Turned off at resolve, the scout was deleted or paused, the client left your roster, or it has no model key. `result_md` says which |
+| `failed` | The re-check run failed after its retries |
+
+When it came back, the new report has `recheck_of` set to the resolved one, a
+`dedupe_key` of the resolved one's plus `:recheck`, the signals that are open
+again, and is delivered to the scout's alert channels like any new report.
+Recovered results are not sent to channels. Every outcome adds a `recheck`
+entry to the resolved report's `history` and publishes a
+`$scout_report_rechecked` event (`report_id`, `outcome`, `new_report_id`) to
+your event stream.
+
+Find re-checks with `GET /scouts/reports?status=resolved&recheck_status=not_recovered`
+(any comma list of the statuses above). On restricted rows `recheck` carries
+the state only, without `result_md`.
 
 ## Signals
 
@@ -435,8 +493,8 @@ matters.
 
 ## Runs and spend
 
-`GET /scouts/{id}/runs` returns the last 30 runs: status, trigger (`schedule`
-or `on_demand`), model, skill version, model turns (`steps`), `tool_calls`,
+`GET /scouts/{id}/runs` returns the last 30 runs: status, trigger (`schedule`,
+`on_demand`, or `recheck` for a [re-check after resolve](#re-check-after-resolve)), model, skill version, model turns (`steps`), `tool_calls`,
 `reports_filed`, `reports_edited`, the surfaces read, and the close-out
 `summary` (what it looked at, filed and ruled out). Each run also carries
 `model_calls`, `known_cost_usd` and `unknown_cost_calls`.
@@ -498,6 +556,7 @@ reports never raise alerts in the central alert feed.
 | Instructions | 8,000 characters |
 | Dismiss reason | 1,000 characters |
 | Snooze | 90 days |
+| Re-check after resolve | 1 to 7 days (default 3); 10 re-check runs per client per day |
 | Memory entries per scout | 200 |
 | Runs listed | Last 30 |
 | Usage range | 92 days |

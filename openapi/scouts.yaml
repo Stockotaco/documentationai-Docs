@@ -146,6 +146,11 @@ paths:
           required: false
           description: "Comma list of P0, P1, P2, P3, P4."
           schema: { type: string, example: "P0,P1" }
+        - name: recheck_status
+          in: query
+          required: false
+          description: "Comma list of scheduled, running, recovered, not_recovered, skipped, failed: the state of the re-check after resolve. Combine with `status=resolved`."
+          schema: { type: string, example: "not_recovered" }
         - name: limit
           in: query
           required: false
@@ -205,6 +210,11 @@ paths:
         reads on its next runs (for 30 days) so it stops filing the same
         thing. Snoozing needs `snoozed_until`, a future time within 90 days;
         the report reopens when it passes. Same read rules as GET.
+        Resolving schedules one **re-check after resolve**: after
+        `recheck_after_days` (1-7; default the scout's suggestion, else 3)
+        Mythic checks whether the problem went away. If it did, the report
+        records `recheck.status: recovered`; if not, a new report linked by
+        `recheck_of` is filed. `recheck: false` skips it.
       requestBody:
         required: true
         content:
@@ -217,6 +227,8 @@ paths:
                 status: { type: string, enum: [open, snoozed, resolved, dismissed] }
                 reason: { type: string, maxLength: 1000, description: "Required when dismissing. Optional note otherwise; recorded in history." }
                 snoozed_until: { type: string, format: date-time, description: "Required when snoozing; only valid when snoozing." }
+                recheck_after_days: { type: integer, minimum: 1, maximum: 7, description: "Resolve only. Days until the re-check. Default the scout's suggestion, else 3." }
+                recheck: { type: boolean, description: "Resolve only. false skips the re-check (not combinable with recheck_after_days)." }
       responses:
         "200":
           description: Updated report
@@ -638,7 +650,7 @@ components:
             id: { type: string, format: uuid }
             status: { type: string, enum: [pending, running] }
             scheduled_for: { type: string, format: date-time }
-            triggered_by: { type: string, enum: [schedule, on_demand] }
+            triggered_by: { type: string, enum: [schedule, on_demand, recheck], description: "recheck: a re-check after resolve of one report." }
             attempts: { type: integer }
         can_run_now: { type: boolean }
         created_at: { type: string, format: date-time }
@@ -692,6 +704,22 @@ components:
         updated_at: { type: string, format: date-time }
         status_changed_at: { type: string, format: date-time, nullable: true }
         edit_count: { type: integer }
+        recheck: { $ref: "#/components/schemas/Recheck" }
+        recheck_of: { type: string, format: uuid, nullable: true, description: "On a report filed because a resolved report's problem came back: that resolved report." }
+    Recheck:
+      type: object
+      nullable: true
+      description: "Re-check after resolve. Null when no re-check was ever scheduled or suggested. Restricted rows carry the state fields only (no result_md, no evidence). List rows omit evidence."
+      properties:
+        status: { type: string, nullable: true, enum: [scheduled, running, recovered, not_recovered, skipped, failed], description: "scheduled at resolve; running while a scout checks; recovered; not_recovered (came back, see report_id); skipped (turned off, scout deleted or paused, no model key); failed (the check run failed)." }
+        after_days: { type: integer, nullable: true, minimum: 1, maximum: 7 }
+        suggested_after_days: { type: integer, nullable: true, minimum: 1, maximum: 7, description: "What the scout that filed it suggested." }
+        due_at: { type: string, format: date-time, nullable: true }
+        completed_at: { type: string, format: date-time, nullable: true }
+        run_id: { type: string, format: uuid, nullable: true, description: "The scout run that did the re-check, when a model was needed." }
+        report_id: { type: string, format: uuid, nullable: true, description: "On not_recovered: the report filed (or the open report linked) because it came back." }
+        result_md: { type: string, nullable: true, description: "One or two sentences: what was checked and what it showed, or why it was skipped." }
+        evidence: { type: array, description: "Detail only. Evidence from the re-check run.", items: { $ref: "#/components/schemas/Evidence" } }
     ReportListItem:
       description: "Restricted rows contain only identifiers, skill, priority, actionability, status, families, timestamps, empty summary_md and restricted. Title, scout_name, dedupe_key, dismiss_reason, evidence and history are absent."
       allOf:
@@ -718,7 +746,7 @@ components:
                 type: object
                 properties:
                   at: { type: string, format: date-time }
-                  kind: { type: string, enum: [filed, edited, status] }
+                  kind: { type: string, enum: [filed, edited, status, recheck] }
                   run_id: { type: string, format: uuid }
                   scout_id: { type: string, format: uuid }
                   status: { type: string }
@@ -771,7 +799,7 @@ components:
       properties:
         id: { type: string, format: uuid }
         status: { type: string, enum: [pending, running, succeeded, failed, cancelled] }
-        triggered_by: { type: string, enum: [schedule, on_demand] }
+        triggered_by: { type: string, enum: [schedule, on_demand, recheck], description: "recheck: a re-check after resolve of one report." }
         scheduled_for: { type: string, format: date-time }
         attempts: { type: integer }
         provider: { type: string, nullable: true }

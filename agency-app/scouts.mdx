@@ -58,13 +58,37 @@ status, priority or scout.
 | --- | --- | --- |
 | Open | Needs attention | Resolve, snooze or dismiss |
 | Snoozed | Hidden until a date, then it reopens on its own | Unsnooze, resolve or dismiss |
-| Resolved | Fixed. If it comes back, the scout files a new report | Nothing |
+| Resolved | Fixed. Mythic checks again later; if it came back, a new report is filed | Nothing |
 | Dismissed | Not worth acting on | Reopen |
 | Suppressed | The scout filed it for the record, with no action needed | Restore or dismiss |
 
 - **Dismiss** needs a reason. The scout reads it on its next runs for 30
   days, so it stops filing the same thing.
 - **Snooze** lasts up to 90 days.
+- **Resolve** asks when to **Check again in**: 1 to 7 days, starting on the
+  scout's suggestion or 3 days, or **Don't check again**. Add an optional
+  note on what was fixed.
+
+### Check again after resolve
+
+A resolved report stays resolved. On the day you picked, Mythic checks
+whether the problem actually went away:
+
+- If the report's signals are still resolved and none fired again, it is
+  marked **Stayed fixed** without a model call.
+- If one of its signals fired again, a new report is filed right away.
+- Otherwise the scout that filed it runs once on your model key, measures the
+  same thing again, and records what it found. A client gets at most 10 of
+  these runs a day.
+
+The report page shows the state under the triage buttons: the date of the
+check, **Stayed fixed** with what the scout measured, or **Came back** with a
+link to the new report. The new report says **Came back after being
+resolved** and links to the old one. It is delivered to the scout's channels
+like any new report. Inbox rows show a small badge: **Check** and the date,
+**Checking**, **Stayed fixed**, **Came back**, or **Check failed**. Nothing is
+checked when you picked **Don't check again**, the scout was deleted or paused,
+or the client has no model key; the report page says which.
 
 To get new reports in Slack or a webhook, pick channels in the scout's
 **Delivery** step. Each new open report is sent once. Updates and suppressed
