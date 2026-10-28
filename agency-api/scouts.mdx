@@ -199,6 +199,9 @@ scout is created.
 | `error_tracking` | `exceptions`, `logs`, `sessions`, `events` | Browser JavaScript errors and server error logs that cost visitors, leads or tracking: bursts, new issues, comebacks and same-session browser plus server failures, weighted by landing and conversion pages |
 | `attribution_drift` | `events`, `sessions`, `links` | Channels losing credit: paid traffic arriving without UTMs or click ids, tagged share falling, and channel shifts scored against the same weekday over four weeks |
 | `conversion_delivery` | `destinations`, `events`, `sessions` | Conversions that never reach the ad platforms: destination failures and lost credentials, conversion events fired but not delivered, mapped events gone silent, late deliveries, and Meta match quality falling on conversion events |
+| `spend_efficiency` | `events`, `sessions`, `links`, `constraints`, `contracts` | Paid spend against results per Meta and Google Ads campaign: cost per lead or acquisition rising and ROAS falling against the campaign's own four weeks, spend with zero tracked conversions, and campaigns spending against a broken landing page or a conversion that is not tracked |
+| `landing_pages` | `sessions`, `events`, `links`, `exceptions` | Pages receiving paid traffic that are down, slow (Core Web Vitals), throwing errors, losing conversion rate against their own baseline, or restarting sessions, weighted by paid sessions |
+| `data_pipeline` | `events`, `contracts`, plus `airbyte` signals | Data that stops or arrives broken: event volume stopping or dropping per event against the same weekday, tracking gaps on conversion pages, event contract violations, conversions wired to ad platforms that never fire, and failing ad platform or CRM syncs |
 | `signal_triage` | `exceptions`, `destinations`, `sessions`, `events`, `links`, plus every signal family | Groups the client's open [signals](#signals) into one report per underlying problem: attaches each signal to an open report or files a new one. Runs only when new unattached signals exist. One per client |
 | `custom` | `exceptions`, `logs`, `events`, `sessions`, `links`, `destinations` | Your own instructions over every surface a scout can read |
 
@@ -207,11 +210,15 @@ skill's playbook: what to watch, what to ignore, business context. The
 `custom` skill requires them.
 
 Each read surface maps to a scope: `exceptions:read`, `logs:read`,
-`sessions:read`, `events:read`, `links:read`, `destinations:read`. The scout
+`sessions:read`, `events:read`, `links:read`, `destinations:read`,
+`contracts:read`, `constraints:read`, and `airbyte:read` for the sync signals
+a `data_pipeline` scout reads. The scout
 itself reads with only the scopes of its skill's surfaces, bound to its one
 client, under the same plan, privacy and HIPAA rules as your own calls. If a
 client's plan lacks logs, an `error_tracking` scout notes it and continues
-with browser errors.
+with browser errors. Spend comes from the Meta and Google Ads syncs: a
+`spend_efficiency` scout reads it through attribution queries, plus the
+Meta-only constraint finder when the client's plan includes constraints.
 
 ## Schedule
 

@@ -21,7 +21,8 @@ Scouts are for your agency. Client portal users don't see them.
 ## Scouts
 
 A scout is an agent that runs on a schedule, reads one client's data (errors,
-server logs, events, sessions, short links, destinations) and files one
+server logs, events, sessions, short links, destinations, ad spend, event
+contracts) and files one
 report per problem it finds. Each scout follows a skill:
 
 | Skill | What it looks for |
@@ -29,6 +30,9 @@ report per problem it finds. Each scout follows a skill:
 | Error tracking | Browser errors and server error logs that cost visitors, leads or tracking |
 | Attribution drift | Channels losing credit, such as paid traffic arriving without UTMs or click ids |
 | Conversion delivery | Conversions that never reach the ad platforms, and lost credentials |
+| Spend and results | Paid campaigns whose cost per lead rises or ROAS falls against their own four weeks, and spend with no tracked conversions |
+| Landing pages | Pages receiving paid traffic that are down, slow, erroring or converting worse than before |
+| Data pipeline | Events that stop or drop, tracking gaps, event contract violations and failing data syncs |
 | Signal triage | Groups the client's open signals into one report per problem. See [How triage groups signals](#how-triage-groups-signals) |
 | Custom | Your own instructions over every surface a scout can read |
 

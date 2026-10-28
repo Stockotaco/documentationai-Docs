@@ -368,7 +368,7 @@ paths:
                   required: [location_id, skill]
                   properties:
                     location_id: { type: string, description: "One of the agency's clients." }
-                    skill: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, signal_triage, custom], description: "Cannot change after creation." }
+                    skill: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, spend_efficiency, landing_pages, data_pipeline, signal_triage, custom], description: "Cannot change after creation." }
                 - $ref: "#/components/schemas/ScoutInput"
       responses:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/ScoutResponse" } } } }
@@ -749,7 +749,7 @@ components:
         id: { type: string, format: uuid }
         location_id: { type: string }
         name: { type: string }
-        skill: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, signal_triage, custom] }
+        skill: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, spend_efficiency, landing_pages, data_pipeline, signal_triage, custom] }
         instructions: { type: string, nullable: true }
         schedule: { $ref: "#/components/schemas/Schedule" }
         delivery:
@@ -831,13 +831,13 @@ components:
     Skill:
       type: object
       properties:
-        id: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, signal_triage, custom] }
+        id: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, spend_efficiency, landing_pages, data_pipeline, signal_triage, custom] }
         name: { type: string }
         description: { type: string }
         families:
           type: array
-          description: "Data surfaces plus, for signal_triage, the families of the signals it groups."
-          items: { type: string, enum: [exceptions, logs, events, sessions, links, destinations, contracts, airbyte, incrementality, alerts, replay_vision] }
+          description: "Data surfaces plus the families of the signals it groups (signal_triage: every signal family; data_pipeline: airbyte)."
+          items: { type: string, enum: [exceptions, logs, events, sessions, links, destinations, contracts, constraints, airbyte, incrementality, alerts, replay_vision] }
         trigger: { type: string, enum: [schedule, signals], description: "signals: a scheduled run starts only when new unattached signals exist." }
         default_schedule: { $ref: "#/components/schemas/Schedule" }
         requires_instructions: { type: boolean }
