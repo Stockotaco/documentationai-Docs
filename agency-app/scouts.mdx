@@ -161,3 +161,60 @@ again in a minute.
 ## For developers
 
 Scouts, reports and signals are on the [Scouts API](/agency-api/scouts).
+
+## All clients
+
+To see every client's scouts at once, open **Monitor** with no client picked
+and choose **Scouts** under **Alerts**. The screen has three tabs.
+
+### Inbox
+
+Open and snoozed reports from every client, most urgent first: P0 at the top,
+then newest. Each row shows the priority, the client, the report title and
+first line, the scout that filed it, the status, how many open signals the
+report covers and how long ago it was filed. Click a title to open the report
+on the client's own Scouts screen, where you resolve, snooze or dismiss it.
+
+Filter by client, priority, status or scout skill. The list ranks up to the
+200 newest matching reports. If more match, a note says so. Pick a client or
+a priority to see the rest.
+
+### Signals
+
+Every client's signals, grouped by client. The client with the most severe
+signal comes first, and inside each client the most severe and most recent
+signals come first.
+
+The strip at the top counts the clients with signals not in a report, the
+signals not in a report, and the open critical signals. When a client has
+signals but no Signal triage scout, a note says how many and links to
+**Coverage**.
+
+Switch between **Not grouped**, **In a report** and **Resolved**, and filter
+by client or source. Click a signal to open the same details panel as on a
+client's Signals tab, with the client's name.
+
+### Coverage
+
+One row per client that has scouts, open reports or ungrouped signals:
+
+- **Scouts on**: the skills with a scout. Paused scouts are gray.
+- **Key and last run**: whether the model key the scouts run on works
+  (**Working**, **Rejected** or **No key**), when a scout last ran and its
+  last error.
+- **Reports** and **Not grouped**: open reports and signals not in a report.
+
+Use it to find what to turn on:
+
+1. Start on **Needs attention**. It lists clients tagged **No working key**
+   (they have scouts that can't run) or **Signals, no triage** (their signals
+   stay ungrouped). It opens on **With scouts or signals** when nothing needs
+   attention.
+2. For **No working key**, click **Model keys** in the row and add a key for
+   the client, or fix the agency key. When the agency key is rejected, a
+   banner at the top shows its last error. Every client without its own key
+   runs on it.
+3. For **Signals, no triage**, click the client name. It opens the client's
+   Signals tab, where **Add Signal triage scout** sets one up.
+4. To add scouts to a client with none, switch to **All clients** and click
+   **Add one** in its row.
