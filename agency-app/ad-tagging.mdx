@@ -188,7 +188,7 @@ and **Skipped** shows each ad's reason. **Done** closes the check.
 | **Already correct** | Every parameter already has the template's value. |
 | **Nothing to add** | **Keep** has nothing to add. Some values differ from your settings. **Replace** would overwrite them. |
 | **UTMs in link** | The ad's link already has one of your parameters, so Mythic leaves it alone rather than duplicate it. |
-| **Unsupported creative** | Catalog, template URL and dynamic creatives aren't supported yet. |
+| **Unsupported creative** | Catalog, template URL and dynamic creatives aren't supported yet. Ads with text options (several primary texts, headlines or descriptions) are supported. |
 | **No link** | The ad has no destination link. |
 | **Key parameter** | Short links are on and the URL parameters include `key`. Short links use `key` to pick the client, so Mythic leaves the ad alone. |
 
@@ -277,8 +277,12 @@ Errors can report missing or invalid tokens, permissions, Meta timeouts or
 throttling, short-link setup problems or storage failures. Check the error
 detail and fix the cause.
 
+Ads the last check skipped for a reason you need to fix, such as an
+unsupported creative, are listed under **Needs attention** with the reason.
+Fix them in Ads Manager; the list updates on the next check.
+
 For API clients, the read-only config fields are `last_auto_at`,
-`last_auto_status` and `last_auto_error`. Auto runs use a `run_slot` timestamp
+`last_auto_status`, `last_auto_error` and `last_auto_skips`. Auto runs use a `run_slot` timestamp
 instead of `run_date`. `last_auto_date` is removed. These are not editable settings.
 
 ## History

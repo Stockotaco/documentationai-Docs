@@ -895,6 +895,26 @@ components:
           description: "Last automatic check outcome when available. No particular initial or cleared value is guaranteed."
           allOf: [{ $ref: "#/components/schemas/LastAutoStatus" }]
         last_auto_error: { type: string, nullable: true, readOnly: true, description: "Error detail as a string, or null when there is no error. No failed-scan run is created." }
+        last_auto_skips:
+          type: object
+          nullable: true
+          readOnly: true
+          description: "Ads the last finished automatic scan skipped for a reason a person must fix. A scan that fails or is skipped keeps the previous value. Null before the first such scan."
+          properties:
+            checked_at: { type: string, format: date-time }
+            count: { type: integer, description: "Total skipped ads needing attention." }
+            ads:
+              type: array
+              maxItems: 25
+              items:
+                type: object
+                properties:
+                  ad_id: { type: string }
+                  ad_name: { type: string, nullable: true }
+                  campaign_id: { type: string }
+                  campaign_name: { type: string, nullable: true }
+                  reason: { type: string, enum: [unsupported_creative, link_unverified, no_link, inline_utms_in_link, short_link_conflict, names_outdated_delivering] }
+                  detail: { type: string, nullable: true }
         generation: { type: string, format: uuid, description: "Immutable config identity. Recreating the config changes it and prevents reuse of old previews." }
         revision: { type: integer }
         fingerprint: { type: string, description: "Hash of account, template, overwrite, ad statuses, rules, short_links and resolve_names. Excludes enabled, credential_name and interval. Apply and auto approval bind to generation, revision and fingerprint." }
@@ -1020,7 +1040,8 @@ components:
       type: string
       enum: [unsupported_creative, no_link, inline_utms_in_link, already_correct, has_values_fill_missing, link_unverified, short_link_conflict, names_outdated_delivering]
       description: >
-        unsupported_creative means the creative cannot be safely copied.
+        unsupported_creative means the creative cannot be safely copied. Text options (alternative
+        primary texts, headlines and descriptions only) are copied; other dynamic creatives are not.
         no_link means a readable creative has no destination.
         inline_utms_in_link means a destination already carries a managed key.
         already_correct means tags match and no destination needs shortening.

@@ -265,7 +265,7 @@ A `key=pk_...` parameter selects the client before the hostname does. Without it
 
 | `reason` | Meaning |
 | --- | --- |
-| `unsupported_creative` | No copyable creative. This includes catalog, template URL, dynamic, placement-customized, portrait, interactive, branded content, regulated disclaimer and Instagram post creatives. Unsupported enhancement settings also fail closed. |
+| `unsupported_creative` | No copyable creative. This includes catalog, template URL, dynamic, placement-customized, portrait, interactive, branded content, regulated disclaimer and Instagram post creatives. Unsupported enhancement settings also fail closed. Ads with text options (several primary texts, headlines or descriptions from Ads Manager's "Add text options") are supported: the copy keeps every text. A dynamic creative that also varies media, links, calls to action or formats is not. An ad that needs a change is also skipped when its Advantage+ standard enhancements are on without the individual enhancement settings, because Meta no longer accepts that setting on a new creative. |
 | `no_link` | The readable creative has no destination link. |
 | `inline_utms_in_link` | A destination URL already carries a managed parameter. Fix the link in Ads Manager. |
 | `already_correct` | Tags match and no destination needs shortening. |
@@ -352,6 +352,7 @@ The config exposes these read-only fields. They describe the last check, not the
 | `last_auto_at` | Timestamp of the latest automatic scan, or null when no scan is recorded. |
 | `last_auto_status` | Outcome below, or an error code, when available. |
 | `last_auto_error` | Error detail as a string, or null when there is no error. |
+| `last_auto_skips` | Ads the last finished scan skipped for a reason you must fix, or null before the first such scan. `{ checked_at, count, ads }`: `count` is the total, `ads` lists up to 25 as `{ ad_id, ad_name, campaign_id, campaign_name, reason, detail }`. Reasons: `unsupported_creative`, `link_unverified`, `no_link`, `inline_utms_in_link`, `short_link_conflict`, `names_outdated_delivering`. A scan that fails or is skipped keeps the previous value. |
 
 | `last_auto_status` | Meaning |
 | --- | --- |
