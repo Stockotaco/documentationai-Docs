@@ -1321,7 +1321,33 @@ paths:
                             browser_coverage_from_dedupe_key_percentage:
                               type: number
                               nullable: true
+                              description: >-
+                                Share of browser events Meta actually deduplicated
+                                against a server copy using `dedupe_key`. This is
+                                the direct answer to "is anything double counted".
                             upload_frequency: { type: string, nullable: true }
+                            diagnostics:
+                              type: array
+                              description: >-
+                                Meta's own named matching problems for this event,
+                                each with a suggested fix. Empty when Meta reports
+                                none. Fields Meta leaves out are null.
+                              items: &metaDiagnostic
+                                type: object
+                                properties:
+                                  name: { type: string, nullable: true }
+                                  description: { type: string, nullable: true }
+                                  solution: { type: string, nullable: true }
+                                  percentage: { type: number, nullable: true }
+                                  affected_event_count: { type: number, nullable: true }
+                                  total_event_count: { type: number, nullable: true }
+                            value_diagnostics:
+                              type: array
+                              description: >-
+                                Meta's named value and currency problems for this
+                                event, same shape as `diagnostics`. Empty when
+                                Meta reports none.
+                              items: *metaDiagnostic
                             flags:
                               type: array
                               description: >-

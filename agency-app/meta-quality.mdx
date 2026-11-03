@@ -56,6 +56,11 @@ to list them, then expand one to see why.
 - **Dedupe key coverage** shows whether the browser pixel and the Conversions
   API send the same event ID, so Meta counts one conversion instead of two.
   Under 90% on either side means Meta counts some conversions twice.
+- **Deduped** is the share of browser pixel events Meta actually matched to a
+  server copy and counted once.
+- **Meta diagnostics** lists the problems Meta itself names for an event, such
+  as missing parameters or bad value and currency data, with Meta's suggested
+  fix. The section only appears when Meta reports at least one.
 - **Match keys** are the customer details Meta used to match, such as email,
   phone, IP address and click ID, with the share of events that carried each.
 - **Test fires** are scored by Meta even when a test event code is set. An
