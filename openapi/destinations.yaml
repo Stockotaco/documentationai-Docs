@@ -1362,6 +1362,9 @@ paths:
                                 on (another sender on the same dataset lacks IP).
                                 With enrichment off it also fires when no event
                                 carried an IP. It never fires for a HIPAA location.
+                                `meta_diagnostic` and `meta_value_diagnostic` are
+                                warnings that repeat an entry from `diagnostics` or
+                                `value_diagnostics`, so the daily snapshot keeps it.
                               items:
                                 type: object
                                 properties:
@@ -1370,6 +1373,7 @@ paths:
                                     enum: [emq_low, emq_critical, missing_email, missing_phone,
                                            ip_coverage_low, event_coverage_below_goal,
                                            server_dedupe_key_missing, browser_dedupe_key_missing,
+                                           meta_diagnostic, meta_value_diagnostic,
                                            test_events_only, test_only_unknown]
                                   severity: { type: string, enum: [info, warn, critical] }
                                   message: { type: string }
