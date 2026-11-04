@@ -183,7 +183,7 @@ paths:
         - { name: has_video, in: query, schema: { type: boolean } }
         - { name: has_transcript, in: query, schema: { type: boolean, enum: [true] }, description: Only ads whose transcript is ready. }
         - { name: tag, in: query, schema: { type: string, example: offer.guarantee }, description: "An analysis tag as family.tag." }
-        - { name: epic, in: query, schema: { type: string, enum: [in_order] }, description: "Only ads whose copy or transcript has all four E.P.I.C. stages in order." }
+        - { name: epic, in: query, schema: { type: string, enum: [in_order] }, description: "Only ads whose current analysis (analysis_status done) has all four E.P.I.C. stages in order." }
         - { name: since, in: query, schema: { type: string, format: date }, description: Ad Library start date on or after. }
         - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
         - { name: cursor, in: query, schema: { type: string }, description: next_cursor from the previous page. }
@@ -484,8 +484,11 @@ components:
               text: { type: string, description: First 120 characters of the paragraph. }
         sequence: { type: string, example: EPIC }
         stages_present: { type: string, example: EPIC }
-        in_order: { type: boolean }
-        all_stages_in_order: { type: boolean }
+        in_order: { type: boolean, nullable: true, description: "null when truncated and no reversal was seen." }
+        all_stages_in_order: { type: boolean, nullable: true, description: "null when truncated and no reversal was seen." }
+        paragraphs_total: { type: integer }
+        paragraphs_assessed: { type: integer, description: First 30 paragraphs at most. }
+        truncated: { type: boolean }
         input_tokens: { type: integer, nullable: true }
         cost_usd: { type: number, nullable: true }
         skipped: { type: string, example: under 40 words }
@@ -503,12 +506,13 @@ components:
         you_only_bottom_half: { type: boolean }
         checks: { type: object, nullable: true, additionalProperties: { type: number }, description: "Probability per rule, e.g. engage.direct_question." }
         checks_error: { type: string }
+        checks_input_tokens: { type: integer, description: "Tokens billed for a checks call whose answer was unreadable." }
         stages:
           type: object
           properties:
             copy: { $ref: "#/components/schemas/EpicSequence" }
             transcript: { $ref: "#/components/schemas/EpicSequence" }
-        all_stages_in_order: { type: boolean }
+        all_stages_in_order: { type: boolean, nullable: true, description: "null when no sequence was labeled (failed, skipped or truncated)." }
         rules_followed:
           type: object
           properties:
@@ -579,7 +583,8 @@ components:
                   ads: { type: integer, description: Ads following the rule. }
                   evaluated: { type: integer, description: Ads where the rule was evaluated. }
                   share: { type: number, nullable: true }
-            all_stages_in_order_share: { type: number, nullable: true }
+            stage_order_evaluated_ads: { type: integer, description: Ads with a non-null stage verdict. }
+            all_stages_in_order_share: { type: number, nullable: true, description: "Over stage_order_evaluated_ads." }
             median_copy_words: { type: number, nullable: true }
             you_only_bottom_half_share: { type: number, nullable: true }
     TopText:

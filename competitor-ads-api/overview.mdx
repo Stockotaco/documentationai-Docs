@@ -86,7 +86,7 @@ A changed ad copy or headline is analysed again. New media is copied again.
 | `has_video` | `true` | Ads with or without a video. |
 | `has_transcript` | `true` | Ads whose transcript is ready. |
 | `tag` | `offer.guarantee` | Ads carrying an analysis tag. |
-| `epic` | `in_order` | Ads whose copy or transcript has all four E.P.I.C. stages in order. |
+| `epic` | `in_order` | Ads whose current analysis (`analysis_status: done`) has all four E.P.I.C. stages in order in the copy or transcript. |
 | `since` | `2026-10-01` | Ad Library start date on or after. |
 
 Page with `limit` (up to 200) and `next_cursor`.
@@ -138,7 +138,8 @@ Page with `limit` (up to 200) and `next_cursor`.
   "stages": {
     "copy": {
       "labels": [{ "i": 1, "stage": "E", "p": 0.5884 }, { "i": 2, "stage": "E", "p": 0.3328 }, { "i": 3, "stage": "I", "p": 0.3887 }],
-      "sequence": "EIPIC", "stages_present": "EPIC", "in_order": false, "all_stages_in_order": false
+      "sequence": "EIPIC", "stages_present": "EPIC", "in_order": false, "all_stages_in_order": false,
+      "paragraphs_total": 7, "paragraphs_assessed": 7, "truncated": false
     }
   },
   "all_stages_in_order": false,
@@ -151,8 +152,10 @@ Page with `limit` (up to 200) and `next_cursor`.
 - `copy`, `transcript`: word count and the number of "you", "your", "you're", "yours" and "yourself" in the top and bottom half. His rule is no "you" until the bottom half.
 - `checks`: probability that each of 14 rules applies. Engage: `direct_question`, `indirect_open`, `negative_callout`, `pain_and_benefit_in_opener`, `mechanism_in_opener`. Present: `struggle`, `empathy`. Illustrate: `journey`, `teaches_value`, `differentiation`, `substantiated`, `lead_is_other_persons_story`. Convert: `cta`, `risk_reversal`. `direct_question`, `negative_callout` and `lead_is_other_persons_story` break a rule when they apply.
 - `stages`: `copy`, and `transcript` for video ads. Each paragraph takes its most likely stage when that probability is 0.3 or more, else `-`. The ad copy and the video transcript are separate sequences. `sequence` collapses repeats, `in_order` means it never goes back to an earlier stage. Copy or transcript under 40 words is not labeled (`skipped`).
-- `rules_followed`: the "you" rule, each check (met at 0.5 or more, or under 0.5 for the three that break a rule) and `all_stages_in_order`.
-- A part that fails stores `error` (`checks_error` for the checks). The rest of the analysis is kept.
+- Only the first 30 paragraphs of a sequence are labeled. `paragraphs_total`, `paragraphs_assessed` and `truncated` say so. A truncated sequence has `in_order` and `all_stages_in_order` `null` (unknown), unless a reversal was already seen (`false`).
+- `all_stages_in_order` (top level): `true` when any labeled sequence has all four stages in order, `false` when the labeled ones do not, `null` when none was labeled (failed, skipped or truncated). `null` is never counted as a negative.
+- `rules_followed`: the "you" rule, each check (met at 0.5 or more, or under 0.5 for the three that break a rule) and `all_stages_in_order` when it is not `null`.
+- A part that fails stores `error` (`checks_error` for the checks, with `checks_input_tokens` when the call was billed). Its tokens still count in `input_tokens` and `cost_usd`. The rest of the analysis is kept.
 
 `GET /ads` rows carry `epic: { all_stages_in_order, rules_met, rules_total }`.
 
@@ -168,7 +171,7 @@ Page with `limit` (up to 200) and `next_cursor`.
 | `hook_types`, `angles`, `offer_elements` | Ads and share per tag. |
 | `longest_running` | Top 10 active ads by days since their start date. |
 | `top_hooks`, `top_offers` | Most used hook and offer texts, with the longest-running example. |
-| `epic` | E.P.I.C. test over ads with a result: share following each rule, share with all four stages in order, median copy word count, share with "you" only in the bottom half. |
+| `epic` | E.P.I.C. test over ads with a result: share following each rule, share with all four stages in order (over `stage_order_evaluated_ads`, the ads with a non-null verdict), median copy word count, share with "you" only in the bottom half. |
 
 ## Errors
 
