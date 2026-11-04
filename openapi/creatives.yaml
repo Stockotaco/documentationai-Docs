@@ -54,6 +54,10 @@ paths:
                   data: { type: array, items: { $ref: "#/components/schemas/Creative" } }
                   next_cursor: { type: string, nullable: true }
                   spend_error: { type: string, description: "Set when 30-day spend could not be read; spend_30d is then null." }
+                  meta:
+                    type: object
+                    properties:
+                      spend_error: { type: string }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "402": { $ref: "#/components/responses/Error" }
@@ -121,7 +125,7 @@ paths:
     get:
       summary: Sync status
       operationId: getCreativesSync
-      description: Where the client's Meta ads are read from, the last sync and this month's paid analyses against the cap.
+      description: Where the client's Meta ads are read from, the last sync and a read still in progress.
       parameters:
         - $ref: "#/components/parameters/LocationId"
       responses:
@@ -140,10 +144,12 @@ paths:
       summary: Sync now
       operationId: syncCreatives
       description: >-
-        Read the client's Meta ads from its Airbyte data now. Media copies,
-        transcripts and analysis follow in the background. At most once every
-        10 minutes and 10 times per 24 hours per client; syncs also run after
-        every Airbyte sync (daily for legacy datasets).
+        Run one pass reading the client's Meta ads from its Airbyte data now
+        (about 3,000 ads; complete is false when more passes follow on the
+        5-minute schedule). Media copies, transcripts and analysis follow in
+        the background. At most once every 10 minutes and 10 times per 24 hours
+        per client; syncs also run after every Airbyte sync (daily for legacy
+        datasets).
       parameters:
         - $ref: "#/components/parameters/LocationId"
       responses:
@@ -158,8 +164,9 @@ paths:
                   data:
                     type: object
                     properties:
-                      status: { type: string, enum: [ok, partial, skipped] }
-                      counts: { type: object, nullable: true, description: "read, received, inserted, updated, changed, gone, rejected, bytes, queries, capped, ms." }
+                      status: { type: string, enum: [ok, partial, in_progress, skipped] }
+                      complete: { type: boolean, nullable: true, description: "False when the read continues on the next pass." }
+                      counts: { type: object, nullable: true, description: "read, received, inserted, updated, changed, gone, rejected, bytes, queries, pages, ms." }
                       reason: { type: string, nullable: true }
                       sync: { $ref: "#/components/schemas/SyncStatus" }
         "403": { $ref: "#/components/responses/Error" }
@@ -206,20 +213,20 @@ components:
         source_project: { type: string, nullable: true }
         source_dataset: { type: string, nullable: true }
         source_synced_at: { type: string, format: date-time, nullable: true, description: The Airbyte sync the last own-ads sync consumed (managed datasets). }
-        status: { type: string, nullable: true, enum: [ok, partial, failed, skipped] }
+        status: { type: string, nullable: true, enum: [ok, partial, in_progress, failed, skipped] }
         error: { type: string, nullable: true }
         last_synced_at: { type: string, format: date-time, nullable: true }
         last_attempt_at: { type: string, format: date-time, nullable: true }
-        last_counts: { type: object, nullable: true }
+        last_counts: { type: object, nullable: true, description: "The last pass: read, inserted, updated, changed, gone, rejected, bytes, queries, pages, complete, ms." }
         consecutive_failures: { type: integer }
         syncing: { type: boolean }
-        analysis_usage:
+        traversal:
           type: object
+          nullable: true
+          description: "A read still in progress (large datasets are read in passes about 5 minutes apart)."
           properties:
-            month: { type: string, format: date }
-            analyses: { type: integer }
-            cap: { type: integer, example: 500 }
-            cap_reached: { type: boolean, description: "New analyses wait for next month." }
+            started_at: { type: string, format: date-time }
+            rows: { type: integer, description: Ads stored so far. }
         pipeline_enabled: { type: boolean }
     Creative:
       type: object
@@ -281,8 +288,13 @@ components:
               items:
                 type: object
                 properties:
+                  slot: { type: string, example: "image:0" }
                   kind: { type: string, enum: [image, video, video_preview] }
-                  index: { type: integer }
+                  quality: { type: string, enum: [hd, image, video_picture, thumbnail, video], description: "Source of the stored copy, best first; thumbnail is a last resort." }
+                  width: { type: integer, nullable: true }
+                  height: { type: integer, nullable: true }
+                  copied_at: { type: string, format: date-time }
+                  last_error: { type: string, description: "A later upgrade attempt failed; this copy was kept." }
                   key: { type: string }
                   bytes: { type: integer, nullable: true }
                   content_type: { type: string, nullable: true }
