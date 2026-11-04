@@ -53,7 +53,13 @@ curl -X POST "https://mythic-analytics.gulp.workers.dev/client/v1/competitor-ads
 | `label` | none | Your name for the competitor. |
 | `active` | `true` | `false` pauses the daily refresh and keeps the stored ads. |
 
-The first scrape runs within 5 minutes. `POST /pages/{id}/refresh` runs it now and waits for it (up to about a minute for 50 ads). It answers `429 refreshed_recently` within 10 minutes of the last refresh and `409 refresh_in_progress` while one runs.
+The first scrape runs within 5 minutes. `POST /pages/{id}/refresh` runs it now and waits for it (up to about a minute for 50 ads). It answers:
+
+- `429 refreshed_recently` within 10 minutes of the last scrape of that page for this client.
+- `429 refresh_budget_exhausted` after 20 manual refreshes by this client in 24 hours. Pages still refresh daily.
+- `409 refresh_in_progress` while a refresh runs.
+
+Deleting and re-adding a page does not reset these limits. A re-added page is first refreshed 24 hours after its last scrape.
 
 <Callout kind="info">
 Ads missing from a scrape are marked gone only when the scrape reached the end of the page. A scrape capped by `max_ads` never marks an ad as stopped. `last_refresh_status` is `ok` for a complete scrape and `partial` for a capped one.
@@ -140,8 +146,8 @@ Page with `limit` (up to 200) and `next_cursor`.
 | 402 | `feature_not_in_plan` | The client's plan does not include competitor ads. |
 | 403 | `agency_required`, `location_disabled` | Write with a read-only key, or the client is disabled. |
 | 409 | `already_tracked`, `page_limit`, `refresh_in_progress` | Duplicate page, 10 pages already, or a refresh is running. |
-| 429 | `refreshed_recently`, `rate_limited` | See `Retry-After`. |
-| 502, 504 | `scraper_failed`, `scraper_timeout` | The Ad Library scrape failed. Retry later. |
+| 429 | `refreshed_recently`, `refresh_budget_exhausted`, `rate_limited` | See `Retry-After`. |
+| 502, 504 | `scraper_failed`, `scraper_untrusted_redirect`, `scraper_timeout` | The Ad Library scrape failed. Retry later. |
 | 503 | `pipeline_disabled`, `scraper_not_configured` | Refreshes are switched off. |
 
 ## MCP tools

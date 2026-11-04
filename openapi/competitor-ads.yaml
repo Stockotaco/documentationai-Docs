@@ -45,7 +45,7 @@ paths:
     post:
       summary: Track a page
       operationId: addCompetitorPage
-      description: Track a competitor page. Its first scrape runs within 5 minutes, then daily.
+      description: Track a competitor page. Its first scrape runs within 5 minutes (24 hours after its last scrape when the page was tracked before), then daily.
       parameters:
         - $ref: "#/components/parameters/LocationId"
       requestBody:
@@ -132,7 +132,9 @@ paths:
       description: >
         Scrape the page now and store its ads. Synchronous: up to about a minute
         for 50 ads. Media copies, transcripts and analysis follow in the
-        background. At most once per page every 10 minutes.
+        background. At most once per page every 10 minutes and 20 manual
+        refreshes per client per 24 hours. Deleting and re-adding a page does
+        not reset either limit.
       parameters:
         - $ref: "#/components/parameters/LocationId"
         - $ref: "#/components/parameters/PageUuid"
@@ -161,7 +163,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "429":
-          description: "`refreshed_recently` or `rate_limited`. See `Retry-After`."
+          description: "`refreshed_recently`, `refresh_budget_exhausted` or `rate_limited`. See `Retry-After`."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
