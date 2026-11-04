@@ -49,7 +49,7 @@ curl -X POST "https://mythic-analytics.gulp.workers.dev/client/v1/competitor-ads
 | --- | --- | --- |
 | `page_id` | required | Numeric Facebook page id, as a string. |
 | `country` | `US` | Ad Library country filter: ISO code or `ALL`. |
-| `max_ads` | `50` | Ads scraped per refresh, 1 to 200. |
+| `max_ads` | `50` | Ads scraped per refresh, 1 to 600. A refresh of 600 ads takes up to about a minute. |
 | `label` | none | Your name for the competitor. |
 | `active` | `true` | `false` pauses the daily refresh and keeps the stored ads. |
 
