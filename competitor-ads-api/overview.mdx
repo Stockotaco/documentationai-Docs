@@ -218,7 +218,7 @@ Before it is returned, every answer is checked:
 
 - It matches the prompt schema for the requested `formats`.
 - Every cited id is in the grounding (`grounding.competitor_ad_ids`, `own_creative_ids`, `rewrite_ad_id`). Only working ads may be cited as sources.
-- Each rewrite section's `original` is the selected ad's text, quoted verbatim (pieces may be joined with `...`).
+- Each rewrite section's `original` is the selected ad's text, quoted verbatim (pieces may be joined with `...`; every piece is checked, and an empty original is refused).
 - The headline, hook, primary text, video script and rewrite follow the E.P.I.C. rules: no direct self-identification question ("Are you...?"), no "you" in the top half, no negative call-out of the reader, and the stages E, P, I, C all present and in order.
 
 An answer that fails gets one repair turn with the errors; a second failure returns `502 generation_invalid` with the errors in `details`. The response reports the provider, the model and token usage. `usage.cost_usd` is the total when every call reported a cost (OpenRouter does; Gemini and Cloudflare do not). When any call did not, including a call that timed out or hit a network error after it was sent, `cost_usd` is `null`, `usage_complete` is `false`, and `cost_usd_known` is the cost of the calls that did report one.
