@@ -1,0 +1,376 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Creatives
+  description: >
+    A client's own Meta ads and creatives. After each Airbyte sync Mythic reads
+    the client's ads, creatives, videos and images from its Airbyte data (no
+    live Meta API calls), copies the media, transcribes videos and reads each
+    creative with the same analysis competitor ads get (hook, offer, tags,
+    E.P.I.C.), so the two compare 1:1. Sold on the Pro plan.
+
+
+    Reads accept an agency key (`ak_`, bind a location with `location_id` or the
+    `X-Location-Id` header), a location secret key (`sk_`) or an `mcp_` key with
+    `creative_analysis:read`. A manual sync needs an agency key or
+    `creative_analysis:write`.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+paths:
+  /client/v1/creatives:
+    get:
+      summary: List creatives
+      operationId: listCreatives
+      description: >-
+        The client's Meta ads that are active or had spend in the last 90 days,
+        highest 90-day spend first, with their creative, analysis headline and a
+        signed thumbnail URL (about an hour). Ads no longer covered are left out
+        unless include_gone=true or status=gone.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - { name: account_id, in: query, schema: { type: string, pattern: "^[0-9]+$" } }
+        - { name: campaign_id, in: query, schema: { type: string, pattern: "^[0-9]+$" } }
+        - { name: adset_id, in: query, schema: { type: string, pattern: "^[0-9]+$" } }
+        - { name: status, in: query, description: "Meta effective_status such as ACTIVE or PAUSED, or gone.", schema: { type: string } }
+        - { name: format, in: query, schema: { type: string, enum: [image, video, carousel, dynamic, unknown] } }
+        - { name: has_video, in: query, schema: { type: boolean } }
+        - { name: tag, in: query, description: "An analysis tag as family.tag, e.g. offer.guarantee.", schema: { type: string } }
+        - { name: epic, in: query, description: "in_order: only creatives whose copy or transcript reads all four E.P.I.C. stages in order.", schema: { type: string, enum: [in_order] } }
+        - { name: since, in: query, description: "Ads created on or after this ISO date.", schema: { type: string } }
+        - { name: include_gone, in: query, schema: { type: boolean } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: cursor, in: query, description: "next_cursor from the previous page.", schema: { type: string } }
+      responses:
+        "200":
+          description: Creatives
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { type: array, items: { $ref: "#/components/schemas/Creative" } }
+                  next_cursor: { type: string, nullable: true }
+                  spend_error: { type: string, description: "Set when 30-day spend could not be read; spend_30d is then null." }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "402": { $ref: "#/components/responses/Error" }
+  /client/v1/creatives/{ad_id}:
+    get:
+      summary: Get a creative
+      operationId: getCreative
+      description: One ad with its full creative, analysis, transcript and signed media URLs.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - { name: ad_id, in: path, required: true, description: The Meta ad id., schema: { type: string, pattern: "^[0-9]+$" } }
+        - { name: include, in: query, description: "raw: also return the stored source row (bounded).", schema: { type: string, enum: [raw] } }
+      responses:
+        "200":
+          description: Creative
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/CreativeDetail" }
+        "401": { $ref: "#/components/responses/Error" }
+        "402": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /client/v1/creatives/summary:
+    get:
+      summary: Summary
+      operationId: getCreativesSummary
+      description: >-
+        What the client runs, overall and per ad account, in the same shape as
+        the competitor ads summary (overall has the same fields), counted per
+        ad. Days running counts from the ad's creation.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - { name: account_id, in: query, schema: { type: string, pattern: "^[0-9]+$" } }
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      as_of: { type: string, format: date-time }
+                      overall: { $ref: "#/components/schemas/SummaryStats" }
+                      accounts:
+                        type: array
+                        items:
+                          allOf:
+                            - type: object
+                              properties:
+                                account_id: { type: string }
+                            - $ref: "#/components/schemas/SummaryStats"
+                      truncated: { type: boolean, description: More than 5000 ads; the summary covers the newest 5000. }
+                      tag_families: { type: object, additionalProperties: { type: array, items: { type: string } } }
+                      text_fields: { type: array, items: { type: string } }
+        "401": { $ref: "#/components/responses/Error" }
+        "402": { $ref: "#/components/responses/Error" }
+  /client/v1/creatives/sync:
+    get:
+      summary: Sync status
+      operationId: getCreativesSync
+      description: Where the client's Meta ads are read from, the last sync and this month's paid analyses against the cap.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Sync status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/SyncStatus" }
+        "401": { $ref: "#/components/responses/Error" }
+        "402": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Sync now
+      operationId: syncCreatives
+      description: >-
+        Read the client's Meta ads from its Airbyte data now. Media copies,
+        transcripts and analysis follow in the background. At most once every
+        10 minutes and 10 times per 24 hours per client; syncs also run after
+        every Airbyte sync (daily for legacy datasets).
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Synced
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      status: { type: string, enum: [ok, partial, skipped] }
+                      counts: { type: object, nullable: true, description: "read, received, inserted, updated, changed, gone, rejected, bytes, queries, capped, ms." }
+                      reason: { type: string, nullable: true }
+                      sync: { $ref: "#/components/schemas/SyncStatus" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        "502": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Agency key (`ak_`), location secret key (`sk_`, reads only) or a scoped `mcp_` key with
+        `creative_analysis:read` or `creative_analysis:write`. See [Using an mcp_ key over HTTP](/mcp/authentication).
+  parameters:
+    LocationId:
+      name: location_id
+      in: query
+      required: false
+      description: Location to scope to. Required for `ak_` keys or send `X-Location-Id`. Ignored for `sk_`.
+      schema: { type: string }
+  responses:
+    Error:
+      description: "Error. The code names the cause, e.g. `feature_not_in_plan`, `agency_required`, `not_found`, `sync_throttled`, `sync_in_progress`, `no_meta_source`, `pipeline_disabled`."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: {}
+    SyncStatus:
+      type: object
+      properties:
+        source_kind: { type: string, nullable: true, enum: [managed, legacy] }
+        source_project: { type: string, nullable: true }
+        source_dataset: { type: string, nullable: true }
+        source_synced_at: { type: string, format: date-time, nullable: true, description: The Airbyte sync the last own-ads sync consumed (managed datasets). }
+        status: { type: string, nullable: true, enum: [ok, partial, failed, skipped] }
+        error: { type: string, nullable: true }
+        last_synced_at: { type: string, format: date-time, nullable: true }
+        last_attempt_at: { type: string, format: date-time, nullable: true }
+        last_counts: { type: object, nullable: true }
+        consecutive_failures: { type: integer }
+        syncing: { type: boolean }
+        analysis_usage:
+          type: object
+          properties:
+            month: { type: string, format: date }
+            analyses: { type: integer }
+            cap: { type: integer, example: 500 }
+            cap_reached: { type: boolean, description: "New analyses wait for next month." }
+        pipeline_enabled: { type: boolean }
+    Creative:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        ad_id: { type: string }
+        account_id: { type: string, nullable: true }
+        campaign_id: { type: string, nullable: true }
+        adset_id: { type: string, nullable: true }
+        ad_name: { type: string, nullable: true }
+        adset_name: { type: string, nullable: true }
+        campaign_name: { type: string, nullable: true }
+        effective_status: { type: string, nullable: true, example: ACTIVE }
+        gone: { type: boolean, description: "No longer active and no spend in 90 days at the latest complete sync." }
+        gone_at: { type: string, format: date-time, nullable: true }
+        ad_created_at: { type: string, format: date-time, nullable: true }
+        creative_id: { type: string, nullable: true }
+        creative_found: { type: boolean, description: "False when the creative is in neither Airbyte creative stream." }
+        display_format: { type: string, enum: [image, video, carousel, dynamic, unknown] }
+        title: { type: string, nullable: true }
+        body: { type: string, nullable: true }
+        link_description: { type: string, nullable: true }
+        cta_type: { type: string, nullable: true, example: LEARN_MORE }
+        cta_text: { type: string, nullable: true, example: Learn More }
+        link_url: { type: string, nullable: true }
+        has_video: { type: boolean }
+        video_id: { type: string, nullable: true }
+        video_duration_s: { type: number, nullable: true }
+        spend_90d: { type: number, nullable: true, description: From the latest sync. }
+        impressions_90d: { type: integer, nullable: true }
+        last_spend_date: { type: string, format: date, nullable: true }
+        spend_30d: { type: number, nullable: true, description: "From Mythic's ad spend copy; null when it could not be read (see spend_error)." }
+        impressions_30d: { type: integer, nullable: true }
+        media_status: { type: string, enum: [pending, done, partial, failed, none] }
+        analysis_status: { type: string, enum: [pending, done, failed] }
+        hook: { type: string, nullable: true }
+        hook_start_s: { type: number, nullable: true }
+        hook_end_s: { type: number, nullable: true }
+        tags: { type: object, nullable: true, additionalProperties: { type: array, items: { type: string } } }
+        epic:
+          type: object
+          nullable: true
+          properties:
+            all_stages_in_order: { type: boolean, nullable: true }
+            rules_met: { type: integer, nullable: true }
+            rules_total: { type: integer, nullable: true }
+        thumbnail_url: { type: string, nullable: true, description: "Signed, valid for about an hour." }
+        first_seen_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+    CreativeDetail:
+      allOf:
+        - $ref: "#/components/schemas/Creative"
+        - type: object
+          properties:
+            carousel_cards: { type: array, nullable: true, items: { type: object } }
+            asset_feed: { type: object, nullable: true, description: "Dynamic creative variants: titles, bodies, descriptions, link_urls, call_to_action_types, video_ids, image_hashes." }
+            media:
+              type: array
+              items:
+                type: object
+                properties:
+                  kind: { type: string, enum: [image, video, video_preview] }
+                  index: { type: integer }
+                  key: { type: string }
+                  bytes: { type: integer, nullable: true }
+                  content_type: { type: string, nullable: true }
+                  url: { type: string, nullable: true, description: "Signed, valid for about an hour." }
+                  skipped: { type: string }
+                  error: { type: string }
+            analysis: { type: object, nullable: true, description: "Same shape as a competitor ad's analysis: fields, hook_start_s, hook_end_s, tags, probabilities, epic, taxonomy_version." }
+            analysis_model: { type: string, nullable: true }
+            analysis_input_tokens: { type: integer, nullable: true }
+            analysis_cost_usd: { type: number, nullable: true }
+            analyzed_at: { type: string, format: date-time, nullable: true }
+            transcript:
+              type: object
+              nullable: true
+              properties:
+                status: { type: string }
+                text: { type: string, nullable: true }
+                sentences: { type: array, nullable: true, items: { type: object, properties: { start: { type: number }, end: { type: number }, text: { type: string } } } }
+                duration_s: { type: number, nullable: true }
+                language: { type: string, nullable: true }
+                error: { type: string, nullable: true }
+                completed_at: { type: string, format: date-time, nullable: true }
+            spend_error: { type: string }
+            raw: { type: object, description: Only with include=raw. }
+    TagShare:
+      type: object
+      properties:
+        tag: { type: string }
+        ads: { type: integer }
+        share: { type: number, nullable: true }
+    SummaryStats:
+      type: object
+      properties:
+        ads: { type: integer }
+        active_ads: { type: integer }
+        analyzed_ads: { type: integer }
+        new_ads_7d: { type: integer }
+        new_ads_30d: { type: integer }
+        formats:
+          type: array
+          items:
+            type: object
+            properties:
+              format: { type: string }
+              ads: { type: integer }
+              share: { type: number }
+        hook_types: { type: array, items: { $ref: "#/components/schemas/TagShare" } }
+        angles: { type: array, items: { $ref: "#/components/schemas/TagShare" } }
+        offer_elements: { type: array, items: { $ref: "#/components/schemas/TagShare" } }
+        longest_running:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              ad_archive_id: { type: string }
+              page_id: { type: string }
+              page_name: { type: string, nullable: true }
+              display_format: { type: string, nullable: true }
+              days_running: { type: integer }
+              start_date: { type: string, format: date-time }
+              title: { type: string, nullable: true }
+              hook: { type: string, nullable: true }
+        top_hooks: { type: array, items: { $ref: "#/components/schemas/TopText" } }
+        top_offers: { type: array, items: { $ref: "#/components/schemas/TopText" } }
+        epic:
+          type: object
+          description: "E.P.I.C. aggregates over ads with a result. Not yet checked against spend results."
+          properties:
+            analyzed_ads: { type: integer }
+            rules:
+              type: array
+              items:
+                type: object
+                properties:
+                  rule: { type: string }
+                  ads: { type: integer, description: Ads following the rule. }
+                  evaluated: { type: integer, description: Ads where the rule was evaluated. }
+                  share: { type: number, nullable: true }
+            stage_order_evaluated_ads: { type: integer, description: Ads with a non-null stage verdict. }
+            all_stages_in_order_share: { type: number, nullable: true, description: "Over stage_order_evaluated_ads." }
+            median_copy_words: { type: number, nullable: true }
+            you_only_bottom_half_share: { type: number, nullable: true }
+    TopText:
+      type: object
+      properties:
+        text: { type: string }
+        ads: { type: integer }
+        max_days_running: { type: integer, nullable: true }
+        example_ad_id: { type: string, format: uuid }
+        example_ad_archive_id: { type: string }

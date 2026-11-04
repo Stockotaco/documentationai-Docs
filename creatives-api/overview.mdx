@@ -1,0 +1,80 @@
+---
+title: Creatives
+description: >-
+  A client's own Meta ads and creatives, read from its Airbyte data, with media,
+  video transcripts and the same analysis competitor ads get.
+---
+
+import ClientV1Auth from "/snippets/client-v1-auth.mdx"
+import TierGated from "/snippets/tier-gated.mdx"
+
+## Overview
+
+Mythic reads each client's own Meta ads from the Airbyte data it already syncs: ads, creatives, videos, images and ad insights. It makes no live calls to the Meta API.
+
+Every ad that is active, or had any spend in the last 90 days, is covered. There is no spend minimum, so new and zero-spend ads are included. For every covered ad Mythic:
+
+1. Stores the copy, headline, call to action, landing link, format (image, video, carousel or dynamic), carousel cards and dynamic creative variants, campaign, ad set and ad names, and 90-day spend and impressions.
+2. Copies the image and video to Mythic storage. Meta's media links expire within days; Mythic's copies do not. Media is stored per client and never shared between clients.
+3. Transcribes the video with sentence timestamps.
+4. Reads the creative and its transcript with the same models and tags as [Competitor Ads](/competitor-ads-api/overview): hook, offer and call to action text, hook type, persuasion angle and offer tags, and the E.P.I.C. test.
+
+The summary has the same shape as the competitor ads summary, so what a client runs compares directly with what its competitors run.
+
+## When data updates
+
+- **Mythic-managed Airbyte connection:** within 5 minutes of each successful Meta sync.
+- **Legacy dataset:** once a day after 09:00 UTC.
+- **By hand:** `POST /creatives/sync`, at most once every 10 minutes and 10 times per 24 hours per client.
+
+An ad that is no longer active and had no spend in 90 days is marked `gone` by the next complete sync. A sync that stops early never marks ads as gone.
+
+## Base URL
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/creatives
+```
+
+<ClientV1Auth />
+
+A location secret key (`sk_`) can read creatives, the summary and the sync status. A manual sync needs an agency key or an `mcp_` key with `creative_analysis:write`. Reads with an `mcp_` key need `creative_analysis:read`.
+
+<TierGated />
+
+Creatives is part of the Pro plan.
+
+## Analysis limit
+
+Each client gets up to 500 paid analyses per calendar month (UTC). New creatives, creatives whose copy changed and re-analyses after a model update count; an unchanged creative is never analysed again. When the limit is reached, `GET /creatives/sync` returns `analysis_usage.cap_reached: true` and new analyses wait for the next month. Syncs and media copies continue.
+
+## Read creatives
+
+```bash
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/creatives?location_id=LOC&status=ACTIVE&format=video" \
+  -H "Authorization: Bearer ak_..."
+```
+
+Each creative carries `spend_90d` (from the sync) and `spend_30d` (from Mythic's ad spend copy; `null` with a `spend_error` when it could not be read). Filters: `account_id`, `campaign_id`, `adset_id`, `status` (a Meta `effective_status`, or `gone`), `format`, `has_video`, `tag`, `epic=in_order`, `since`, `include_gone`. Page with `cursor`.
+
+`GET /creatives/{ad_id}` returns one ad by its Meta ad id, with the full analysis, the transcript and media URLs.
+
+<Callout kind="info">
+Media URLs are signed and valid for about an hour. Read the creative again for fresh links.
+</Callout>
+
+## Compare with competitors
+
+```bash
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/creatives/summary?location_id=LOC" -H "Authorization: Bearer ak_..."
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/competitor-ads/summary?location_id=LOC" -H "Authorization: Bearer ak_..."
+```
+
+Both return `overall` with the same fields: ad and active counts, formats, new ads in the last 7 and 30 days, hook type, angle and offer shares among analysed ads, the longest-running active ads, the most used hooks and offers, and E.P.I.C. aggregates. The creatives summary groups by ad account (`accounts`) where the competitor summary groups by page.
+
+<Callout kind="note">
+The E.P.I.C. test is Mythic's interpretation of Chris Rocheleau's publicly described formula. It is not yet checked against spend results.
+</Callout>
+
+## MCP tools
+
+`get_creatives_sync`, `get_creatives_summary`, `list_creatives`, `get_creative` and `sync_creatives`. See [MCP tools](/mcp/tools).

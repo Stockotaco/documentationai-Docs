@@ -578,6 +578,28 @@
             ]
           },
           {
+            "tab": "Creatives",
+            "icon": "image",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "creatives-api/overview",
+                    "icon": "file-text"
+                  }
+                ]
+              },
+              {
+                "group": "Creatives",
+                "icon": "image",
+                "openapi": "openapi/creatives.yaml"
+              }
+            ]
+          },
+          {
             "tab": "Heatmaps",
             "icon": "flame",
             "groups": [
