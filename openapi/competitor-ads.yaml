@@ -512,7 +512,7 @@ components:
           properties:
             copy: { $ref: "#/components/schemas/EpicSequence" }
             transcript: { $ref: "#/components/schemas/EpicSequence" }
-        all_stages_in_order: { type: boolean, nullable: true, description: "null when no sequence was labeled (failed, skipped or truncated)." }
+        all_stages_in_order: { type: boolean, nullable: true, description: "true when the copy or transcript is known in order; null when either is unknown (failed, skipped or truncated); false only when every present sequence is known not in order." }
         rules_followed:
           type: object
           properties:
