@@ -17,7 +17,7 @@ Every ad that is active, or had any spend in the last 90 days, is covered. There
 1. Stores the copy, headline, call to action, landing link, format (image, video, carousel or dynamic), carousel cards and dynamic creative variants, campaign, ad set and ad names, and 90-day spend and impressions.
 2. Copies the best available image and the video to Mythic storage, per client (never shared between clients). Meta's media links expire within days, so every sync looks for a better live version: the full image first, then the creative image, then the video still, and the small thumbnail only as a last resort (marked `quality: "thumbnail"`). A stored copy is never replaced by a worse or expired one.
 3. Transcribes the video with sentence timestamps.
-4. Reads the creative and its transcript with the same models and tags as [Competitor Ads](/competitor-ads-api/overview): hook, offer and call to action text, hook type, persuasion angle and offer tags, and the E.P.I.C. test. For a carousel the models also read every card; for a dynamic creative, its other headlines and bodies. The E.P.I.C. test reads the primary copy.
+4. Reads the creative and its transcript with the same models and tags as [Competitor Ads](/competitor-ads-api/overview): hook, offer and call to action text, hook type, persuasion angle and offer tags, and the E.P.I.C. test. For a carousel the models also read the cards; for a dynamic creative, its other headlines, bodies and descriptions. These extra versions are capped at 6 entries, 600 characters each and 3,000 characters in total, so cards or variants past the cap are not read. The E.P.I.C. test reads the primary copy.
 
 An unchanged creative is never analysed again.
 
