@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 319 tools across
-  31 scope families — with the scope each one needs and the
+  Every tool the Mythic MCP server exposes — 327 tools across
+  32 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 319 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 327 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -315,6 +315,21 @@ Meta ad UTM tagging for one client: config and campaign rules, the ad accounts i
 | `apply_meta_ad_tagging`<br /><span style={{opacity: 0.7}}>Apply Meta Ad UTM Tagging</span> | `ad_tagging:write` | Queue the selected "set" ads from a preview of the SAVED config (made in the last 24h, tagging config unchanged since; interval-only edits are allowed). | `POST /client/v1/ad-tagging/meta/apply` |
 | `set_meta_ad_tagging_auto`<br /><span style={{opacity: 0.7}}>Set Meta Ad UTM Tagging Auto Mode</span> | `ad_tagging:write` | Turns automatic scans on or off. | `POST /client/v1/ad-tagging/meta/auto` |
 | `cancel_meta_ad_tagging_run`<br /><span style={{opacity: 0.7}}>Cancel Meta Ad Tagging Run</span> | `ad_tagging:write` | Stop a queued or running apply/auto run. | `POST /client/v1/ad-tagging/meta/runs/:id/cancel` |
+
+## Competitor Ads
+
+Competitor Facebook pages one client tracks in the Meta Ad Library, their scraped ads with media, video transcripts and hook/angle/offer analysis, refreshes and a summary across competitors.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_competitor_pages`<br /><span style={{opacity: 0.7}}>List Competitor Pages</span> | `competitor_ads:read` | Competitor Facebook pages this client tracks in the Meta Ad Library (at most 10), with each page's last refresh (status, counts, error) and next scheduled refresh. | `GET /client/v1/competitor-ads/pages` |
+| `list_competitor_ads`<br /><span style={{opacity: 0.7}}>List Competitor Ads</span> | `competitor_ads:read` | Scraped competitor ads, newest Ad Library start date first: copy, headline, CTA, format, days running, hook text with its video seconds, hook/angle/offer tags and a short-lived thumbnail URL. | `GET /client/v1/competitor-ads/ads` |
+| `get_competitor_ad`<br /><span style={{opacity: 0.7}}>Get Competitor Ad</span> | `competitor_ads:read` | One competitor ad with its full analysis (hook, intro, problem, mechanism, offer and CTA text with confidence and video seconds; every tag probability; model cost), the video transcript with sentence timesta… | `GET /client/v1/competitor-ads/ads/:id` |
+| `get_competitor_ads_summary`<br /><span style={{opacity: 0.7}}>Get Competitor Ads Summary</span> | `competitor_ads:read` | What this client's competitors run, overall and per page, counted per ad (a carousel is one ad): ad and active counts, formats, new ads in the last 7/30 days, shares of hook types, angles and offer elements… | `GET /client/v1/competitor-ads/summary` |
+| `add_competitor_page`<br /><span style={{opacity: 0.7}}>Add Competitor Page</span> | `competitor_ads:write` | Track a competitor Facebook page for this client (max 10). | `POST /client/v1/competitor-ads/pages` |
+| `update_competitor_page`<br /><span style={{opacity: 0.7}}>Update Competitor Page</span> | `competitor_ads:write` | Change a tracked page: label, country, max_ads, or active (false pauses its daily refresh and works on every plan). | `PATCH /client/v1/competitor-ads/pages/:id` |
+| `delete_competitor_page`<br /><span style={{opacity: 0.7}}>Delete Competitor Page</span> | `competitor_ads:write` | Stop tracking a page and delete its stored ads for this client. | `DELETE /client/v1/competitor-ads/pages/:id` |
+| `refresh_competitor_page`<br /><span style={{opacity: 0.7}}>Refresh Competitor Page</span> | `competitor_ads:write` | Scrape the page now and store its ads (can take a minute for 50 ads). | `POST /client/v1/competitor-ads/pages/:id/refresh` |
 
 ## Tracking Settings
 

@@ -556,6 +556,28 @@
             ]
           },
           {
+            "tab": "Competitor Ads",
+            "icon": "binoculars",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "competitor-ads-api/overview",
+                    "icon": "file-text"
+                  }
+                ]
+              },
+              {
+                "group": "Competitor Ads",
+                "icon": "binoculars",
+                "openapi": "openapi/competitor-ads.yaml"
+              }
+            ]
+          },
+          {
             "tab": "Heatmaps",
             "icon": "flame",
             "groups": [

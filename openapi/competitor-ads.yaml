@@ -1,0 +1,501 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Competitor Ads
+  description: >
+    Track a client's competitor Facebook pages in the Meta Ad Library. Mythic
+    scrapes each page daily (or on request), stores every ad, copies its media,
+    transcribes videos and tags each ad's hook type, persuasion angle and offer
+    elements. Sold on the Pro plan.
+
+
+    Reads accept an agency key (`ak_`, bind a location with `location_id` or the
+    `X-Location-Id` header), a location secret key (`sk_`) or an `mcp_` key with
+    `competitor_ads:read`. Writes need an agency key or `competitor_ads:write`.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+paths:
+  /client/v1/competitor-ads/pages:
+    get:
+      summary: List tracked pages
+      operationId: listCompetitorPages
+      description: Competitor pages this client tracks (at most 10), with the last refresh and the next scheduled one.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Tracked pages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { type: array, items: { $ref: "#/components/schemas/Page" } }
+                  limits:
+                    type: object
+                    properties:
+                      max_pages: { type: integer, example: 10 }
+                      max_ads: { type: integer, example: 200 }
+                  pipeline_enabled: { type: boolean }
+        "401": { $ref: "#/components/responses/Error" }
+        "402": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Track a page
+      operationId: addCompetitorPage
+      description: Track a competitor page. Its first scrape runs within 5 minutes, then daily.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PageInput" }
+            example: { page_id: "64841063928", label: Juvenon, country: US, max_ads: 50 }
+      responses:
+        "201":
+          description: Page tracked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Page" }
+        "400": { $ref: "#/components/responses/Error" }
+        "402": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409":
+          description: "`already_tracked` or `page_limit` (10 pages per client)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /client/v1/competitor-ads/pages/{id}:
+    patch:
+      summary: Update a tracked page
+      operationId: updateCompetitorPage
+      description: "Change label, country, max_ads or active. A body of only `{\"active\": false}` works on every plan and for disabled clients."
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/PageUuid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                country: { type: string, example: US }
+                label: { type: string, nullable: true }
+                max_ads: { type: integer, minimum: 1, maximum: 200 }
+                active: { type: boolean }
+      responses:
+        "200":
+          description: Updated page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Page" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Stop tracking a page
+      operationId: deleteCompetitorPage
+      description: Deletes the page and its stored ads for this client. Works on every plan.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/PageUuid"
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      deleted: { type: boolean, example: true }
+                      id: { type: string, format: uuid }
+        "404": { $ref: "#/components/responses/Error" }
+  /client/v1/competitor-ads/pages/{id}/refresh:
+    post:
+      summary: Refresh a page now
+      operationId: refreshCompetitorPage
+      description: >
+        Scrape the page now and store its ads. Synchronous: up to about a minute
+        for 50 ads. Media copies, transcripts and analysis follow in the
+        background. At most once per page every 10 minutes.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/PageUuid"
+      responses:
+        "200":
+          description: Scrape stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      page: { $ref: "#/components/schemas/Page" }
+                      status:
+                        type: string
+                        enum: [ok, partial]
+                        description: "`partial`: the scrape did not reach the end of the page (capped by max_ads), so no ad was marked gone."
+                      counts: { $ref: "#/components/schemas/RefreshCounts" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409":
+          description: "`refresh_in_progress`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429":
+          description: "`refreshed_recently` or `rate_limited`. See `Retry-After`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "502": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+        "504": { $ref: "#/components/responses/Error" }
+  /client/v1/competitor-ads/ads:
+    get:
+      summary: List ads
+      operationId: listCompetitorAds
+      description: One row per ad, or per card for carousel and DCO ads, newest Ad Library start date first.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - { name: page_id, in: query, schema: { type: string }, description: Numeric Facebook page id. }
+        - { name: active, in: query, schema: { type: boolean }, description: "true: active and in the latest complete scrape. false: inactive or gone." }
+        - { name: format, in: query, schema: { type: string, example: VIDEO }, description: Ad Library display format. }
+        - { name: has_video, in: query, schema: { type: boolean } }
+        - { name: has_transcript, in: query, schema: { type: boolean, enum: [true] }, description: Only ads whose transcript is ready. }
+        - { name: tag, in: query, schema: { type: string, example: offer.guarantee }, description: "An analysis tag as family.tag." }
+        - { name: since, in: query, schema: { type: string, format: date }, description: Ad Library start date on or after. }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+        - { name: cursor, in: query, schema: { type: string }, description: next_cursor from the previous page. }
+      responses:
+        "200":
+          description: Ads
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { type: array, items: { $ref: "#/components/schemas/Ad" } }
+                  next_cursor: { type: string, nullable: true }
+        "400": { $ref: "#/components/responses/Error" }
+  /client/v1/competitor-ads/ads/{id}:
+    get:
+      summary: Get one ad
+      operationId: getCompetitorAd
+      description: The ad with its full analysis, transcript and signed media links (valid about an hour).
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: include, in: query, schema: { type: string, enum: [raw] }, description: "`raw` adds the scraped Ad Library row." }
+      responses:
+        "200":
+          description: Ad detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/AdDetail" }
+        "404": { $ref: "#/components/responses/Error" }
+  /client/v1/competitor-ads/summary:
+    get:
+      summary: Summary across competitors
+      operationId: getCompetitorAdsSummary
+      description: >
+        Counts per ad (a carousel is one ad) overall and per tracked page:
+        formats, new ads, hook/angle/offer shares among analysed ads, the
+        longest-running active ads and the most used hooks and offers.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - { name: page_id, in: query, schema: { type: string }, description: Only this competitor. }
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      as_of: { type: string, format: date-time }
+                      overall: { $ref: "#/components/schemas/SummaryStats" }
+                      pages:
+                        type: array
+                        items:
+                          allOf:
+                            - type: object
+                              properties:
+                                page_id: { type: string }
+                                page_name: { type: string, nullable: true }
+                                label: { type: string, nullable: true }
+                            - $ref: "#/components/schemas/SummaryStats"
+                      truncated: { type: boolean, description: "True when more than 5,000 ad rows exist; the summary covers the newest 5,000." }
+                      tag_families: { type: object, additionalProperties: { type: array, items: { type: string } } }
+                      text_fields: { type: array, items: { type: string } }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Agency key (`ak_`), location secret key (`sk_`, reads only) or a scoped `mcp_` key with
+        `competitor_ads:read` or `competitor_ads:write`. See [Using an mcp_ key over HTTP](/mcp/authentication).
+  parameters:
+    LocationId:
+      name: location_id
+      in: query
+      required: false
+      description: Location to scope to. Required for `ak_` keys or send `X-Location-Id`. Ignored for `sk_`.
+      schema: { type: string }
+    PageUuid:
+      name: id
+      in: path
+      required: true
+      description: The tracked page id from the list, not the Facebook page id.
+      schema: { type: string, format: uuid }
+  responses:
+    Error:
+      description: "Error. The code names the cause, e.g. `invalid_page`, `feature_not_in_plan`, `agency_required`, `not_found`, `scraper_failed`."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: {}
+    PageInput:
+      type: object
+      required: [page_id]
+      properties:
+        page_id: { type: string, example: "64841063928", description: Numeric Facebook page id. }
+        country: { type: string, default: US, description: "ISO alpha-2 code or ALL." }
+        label: { type: string, nullable: true, maxLength: 200 }
+        max_ads: { type: integer, default: 50, minimum: 1, maximum: 200 }
+        active: { type: boolean, default: true }
+    RefreshCounts:
+      type: object
+      properties:
+        received: { type: integer }
+        inserted: { type: integer }
+        updated: { type: integer }
+        changed: { type: integer, description: "Existing rows whose copy, media or status changed." }
+        gone: { type: integer, description: Rows marked gone by a complete scrape. }
+        rejected: { type: integer }
+        total_results: { type: integer, nullable: true }
+        returned_ads: { type: integer, nullable: true }
+        pagination_complete: { type: boolean }
+        ms: { type: integer }
+    Page:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        page_id: { type: string }
+        country: { type: string }
+        label: { type: string, nullable: true }
+        max_ads: { type: integer }
+        active: { type: boolean }
+        page_name: { type: string, nullable: true }
+        last_refresh_at: { type: string, format: date-time, nullable: true }
+        last_refresh_status: { type: string, enum: [ok, partial, failed, skipped], nullable: true }
+        last_refresh_error: { type: string, nullable: true }
+        last_refresh_counts:
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/RefreshCounts" }]
+        next_refresh_at: { type: string, format: date-time }
+        refreshing: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Ad:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        row_id: { type: string, example: "1747063449962897:ad", description: "<ad_archive_id>:ad or <ad_archive_id>:card:N" }
+        ad_archive_id: { type: string }
+        creative_type: { type: string, nullable: true }
+        card_index: { type: integer, nullable: true }
+        card_count: { type: integer, nullable: true }
+        page_id: { type: string }
+        page_name: { type: string, nullable: true }
+        is_active: { type: boolean, nullable: true }
+        gone: { type: boolean }
+        gone_at: { type: string, format: date-time, nullable: true }
+        start_date: { type: string, format: date-time, nullable: true }
+        end_date: { type: string, format: date-time, nullable: true }
+        days_running: { type: integer, nullable: true, description: Days since start_date for active ads. }
+        display_format: { type: string, nullable: true }
+        publisher_platforms: { type: array, items: { type: string } }
+        title: { type: string, nullable: true }
+        body: { type: string, nullable: true }
+        caption: { type: string, nullable: true }
+        cta_text: { type: string, nullable: true }
+        cta_type: { type: string, nullable: true }
+        link_url: { type: string, nullable: true }
+        ad_url: { type: string, nullable: true }
+        has_video: { type: boolean }
+        video_duration_s: { type: number, nullable: true }
+        media_status: { type: string, enum: [pending, done, partial, failed, none] }
+        analysis_status: { type: string, enum: [pending, done, failed] }
+        hook: { type: string, nullable: true }
+        hook_start_s: { type: number, nullable: true }
+        hook_end_s: { type: number, nullable: true }
+        tags:
+          type: object
+          nullable: true
+          properties:
+            hook_type: { type: array, items: { type: string } }
+            angle: { type: array, items: { type: string } }
+            offer: { type: array, items: { type: string } }
+        thumbnail_url: { type: string, nullable: true, description: Signed link valid about an hour. }
+        first_seen_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+        last_seen_active_at: { type: string, format: date-time, nullable: true }
+    AdDetail:
+      allOf:
+        - $ref: "#/components/schemas/Ad"
+        - type: object
+          properties:
+            link_description: { type: string, nullable: true }
+            media:
+              type: array
+              items:
+                type: object
+                properties:
+                  kind: { type: string, enum: [video, video_preview, image] }
+                  index: { type: integer }
+                  url: { type: string, nullable: true, description: Signed link valid about an hour. Range requests work. }
+                  bytes: { type: integer, nullable: true }
+                  content_type: { type: string, nullable: true }
+                  skipped: { type: string, description: "too_large: over 100 MB, not copied." }
+                  error: { type: string }
+            analysis: { $ref: "#/components/schemas/Analysis" }
+            analysis_cost_usd: { type: number, nullable: true }
+            analysis_input_tokens: { type: integer, nullable: true }
+            analyzed_at: { type: string, format: date-time, nullable: true }
+            transcript:
+              type: object
+              nullable: true
+              properties:
+                status: { type: string, enum: [pending, submitted, succeeded, failed] }
+                text: { type: string, nullable: true }
+                sentences:
+                  type: array
+                  nullable: true
+                  items:
+                    type: object
+                    properties:
+                      start: { type: number }
+                      end: { type: number }
+                      text: { type: string }
+                duration_s: { type: number, nullable: true }
+                error: { type: string, nullable: true }
+            raw: { type: object, description: "Only with include=raw." }
+    TextField:
+      type: object
+      properties:
+        text: { type: string, nullable: true }
+        confidence: { type: number, nullable: true }
+        source: { type: string, enum: [transcript, copy] }
+        start_s: { type: number }
+        end_s: { type: number }
+    Analysis:
+      type: object
+      nullable: true
+      properties:
+        taxonomy_version: { type: integer, example: 1 }
+        has_transcript: { type: boolean }
+        fields:
+          type: object
+          properties:
+            hook: { $ref: "#/components/schemas/TextField" }
+            intro: { $ref: "#/components/schemas/TextField" }
+            problem: { $ref: "#/components/schemas/TextField" }
+            mechanism: { $ref: "#/components/schemas/TextField" }
+            offer: { $ref: "#/components/schemas/TextField" }
+            cta: { $ref: "#/components/schemas/TextField" }
+        hook_start_s: { type: number, nullable: true }
+        hook_end_s: { type: number, nullable: true }
+        tags:
+          type: object
+          properties:
+            hook_type: { type: array, items: { type: string } }
+            angle: { type: array, items: { type: string } }
+            offer: { type: array, items: { type: string } }
+        probabilities: { type: object, additionalProperties: { type: object, additionalProperties: { type: number } } }
+    TagShare:
+      type: object
+      properties:
+        tag: { type: string }
+        ads: { type: integer }
+        share: { type: number, nullable: true }
+    SummaryStats:
+      type: object
+      properties:
+        ads: { type: integer }
+        active_ads: { type: integer }
+        analyzed_ads: { type: integer }
+        new_ads_7d: { type: integer }
+        new_ads_30d: { type: integer }
+        formats:
+          type: array
+          items:
+            type: object
+            properties:
+              format: { type: string }
+              ads: { type: integer }
+              share: { type: number }
+        hook_types: { type: array, items: { $ref: "#/components/schemas/TagShare" } }
+        angles: { type: array, items: { $ref: "#/components/schemas/TagShare" } }
+        offer_elements: { type: array, items: { $ref: "#/components/schemas/TagShare" } }
+        longest_running:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              ad_archive_id: { type: string }
+              page_id: { type: string }
+              page_name: { type: string, nullable: true }
+              display_format: { type: string, nullable: true }
+              days_running: { type: integer }
+              start_date: { type: string, format: date-time }
+              title: { type: string, nullable: true }
+              hook: { type: string, nullable: true }
+        top_hooks: { type: array, items: { $ref: "#/components/schemas/TopText" } }
+        top_offers: { type: array, items: { $ref: "#/components/schemas/TopText" } }
+    TopText:
+      type: object
+      properties:
+        text: { type: string }
+        ads: { type: integer }
+        max_days_running: { type: integer, nullable: true }
+        example_ad_id: { type: string, format: uuid }
+        example_ad_archive_id: { type: string }

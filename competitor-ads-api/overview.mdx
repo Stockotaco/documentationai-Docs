@@ -1,0 +1,149 @@
+---
+title: Competitor Ads
+description: >-
+  Track a client's competitors in the Meta Ad Library. Mythic stores their ads,
+  transcribes videos and tags each ad's hook, angle and offer.
+---
+
+import ClientV1Auth from "/snippets/client-v1-auth.mdx"
+import TierGated from "/snippets/tier-gated.mdx"
+
+## Overview
+
+Add up to 10 competitor Facebook pages per client. Mythic scrapes each page's Meta Ad Library ads once a day, or now when you ask, and keeps every ad it has seen.
+
+For every ad Mythic:
+
+1. Stores the copy, headline, call to action, landing link, format, platforms and Ad Library start date, plus the full scraped row.
+2. Copies the images and video to Mythic storage. Ad Library media links expire after about five days; Mythic's copies do not.
+3. Transcribes the video with sentence timestamps. A video shared by several ads or clients is transcribed once.
+4. Reads the ad and its transcript with two Cloudflare models. One quotes the hook, intro, problem, mechanism, offer and call to action, and gives the video seconds where each one is spoken. The other tags the hook type, persuasion angle and offer elements.
+
+The summary then answers what each competitor runs: formats, new ads in the last 7 and 30 days, which hooks, angles and offers they use most, and which active ads have run longest. Days running is the only public signal of a winning ad: advertisers keep paying for ads that work.
+
+## Base URL
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/competitor-ads
+```
+
+<ClientV1Auth />
+
+A location secret key (`sk_`) can read pages, ads and the summary. Adding, changing, refreshing and deleting pages needs an agency key or an `mcp_` key with `competitor_ads:write`. Reads with an `mcp_` key need `competitor_ads:read`.
+
+<TierGated />
+
+Competitor ads is part of the Pro plan. Pausing a page (`PATCH /pages/{id}` with only `active: false`) and deleting one work on every plan.
+
+## Track a page
+
+Find the page id in the Ad Library URL (`view_all_page_id=64841063928`).
+
+```bash
+curl -X POST "https://mythic-analytics.gulp.workers.dev/client/v1/competitor-ads/pages?location_id=LOC" \
+  -H "Authorization: Bearer ak_..." -H "Content-Type: application/json" \
+  -d '{"page_id": "64841063928", "label": "Juvenon", "country": "US", "max_ads": 50}'
+```
+
+| Field | Default | Notes |
+| --- | --- | --- |
+| `page_id` | required | Numeric Facebook page id, as a string. |
+| `country` | `US` | Ad Library country filter: ISO code or `ALL`. |
+| `max_ads` | `50` | Ads scraped per refresh, 1 to 200. |
+| `label` | none | Your name for the competitor. |
+| `active` | `true` | `false` pauses the daily refresh and keeps the stored ads. |
+
+The first scrape runs within 5 minutes. `POST /pages/{id}/refresh` runs it now and waits for it (up to about a minute for 50 ads). It answers `429 refreshed_recently` within 10 minutes of the last refresh and `409 refresh_in_progress` while one runs.
+
+<Callout kind="info">
+Ads missing from a scrape are marked gone only when the scrape reached the end of the page. A scrape capped by `max_ads` never marks an ad as stopped. `last_refresh_status` is `ok` for a complete scrape and `partial` for a capped one.
+</Callout>
+
+## Processing
+
+A refresh stores the ads at once. Media copies, transcripts and analysis follow in the background, usually within a few minutes. Each ad shows its progress:
+
+- `media_status`: `pending`, `done`, `partial` (some files failed), `failed`, `none` (no media).
+- `analysis_status`: `pending`, `done`, `failed`. Video ads are analysed after their transcript is ready.
+
+A changed ad copy or headline is analysed again. New media is copied again.
+
+## Read ads
+
+`GET /ads` lists one row per ad, or per card for carousel and dynamic (DCO) ads, newest start date first.
+
+| Filter | Example | Meaning |
+| --- | --- | --- |
+| `page_id` | `64841063928` | One competitor. |
+| `active` | `true` | Active and seen in the latest complete scrape. `false`: inactive or gone. |
+| `format` | `VIDEO` | Ad Library format: `VIDEO`, `IMAGE`, `DCO`, `CAROUSEL`, … |
+| `has_video` | `true` | Ads with or without a video. |
+| `has_transcript` | `true` | Ads whose transcript is ready. |
+| `tag` | `offer.guarantee` | Ads carrying an analysis tag. |
+| `since` | `2026-10-01` | Ad Library start date on or after. |
+
+Page with `limit` (up to 200) and `next_cursor`.
+
+`GET /ads/{id}` adds the transcript, the full analysis and media links. `?include=raw` adds the scraped Ad Library row.
+
+### Media links
+
+`thumbnail_url` and each `media[].url` are signed links valid for about an hour. They work in `<img>` and `<video>` tags without a key and support range requests. Read the ad again for fresh links. Videos larger than 100 MB are not copied and show `skipped: "too_large"`.
+
+## Analysis
+
+```json
+{
+  "taxonomy_version": 1,
+  "has_transcript": true,
+  "fields": {
+    "hook": { "text": "This is what happens to a man's body when he takes nitric oxide boosters every single day for 30 days straight.", "confidence": 0.76, "source": "transcript", "start_s": 0, "end_s": 5.98 },
+    "offer": { "text": "60-day money-back guarantee", "confidence": 0.81, "source": "transcript", "start_s": 80.1, "end_s": 84.2 },
+    "cta": { "text": "Grab them before they're gone.", "confidence": 0.5, "source": "transcript" }
+  },
+  "hook_start_s": 0,
+  "hook_end_s": 5.98,
+  "tags": { "hook_type": ["story"], "angle": ["authority_science"], "offer": ["guarantee"] },
+  "probabilities": { "offer": { "guarantee": 0.947, "discount": 0.08 } }
+}
+```
+
+- `fields`: `hook`, `intro`, `problem`, `mechanism`, `offer`, `cta`. Each is quoted from the ad copy or transcript, or `null` when the ad has none. `source` says where it was found. Text from the video carries `start_s` and `end_s`.
+- `tags`: every tag with probability 0.5 or more. `probabilities` keeps all of them.
+
+| Family | Tags |
+| --- | --- |
+| `hook_type` | `question`, `bold_claim`, `story`, `problem_callout`, `curiosity`, `social_proof`, `offer_first`, `demonstration`, `statistic` |
+| `angle` | `pain_point`, `aspiration`, `urgency_scarcity`, `authority_science`, `social_proof`, `price_value`, `comparison`, `testimonial` |
+| `offer` | `discount`, `guarantee`, `free_shipping`, `bundle`, `free_trial`, `limited_time` |
+
+`taxonomy_version` changes when the tag set changes.
+
+## Summary
+
+`GET /summary` (optional `page_id`) returns `overall` and one entry per tracked page. Counts are per ad: a three-card carousel is one ad, carrying a tag when any of its cards does. Tag shares are over analysed ads only.
+
+| Field | Meaning |
+| --- | --- |
+| `ads`, `active_ads`, `analyzed_ads` | Ad counts. |
+| `new_ads_7d`, `new_ads_30d` | Ads whose Ad Library start date is that recent. |
+| `formats` | Ads and share per format. |
+| `hook_types`, `angles`, `offer_elements` | Ads and share per tag. |
+| `longest_running` | Top 10 active ads by days since their start date. |
+| `top_hooks`, `top_offers` | Most used hook and offer texts, with the longest-running example. |
+
+## Errors
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `invalid_page`, `invalid_tag`, `invalid_since`, … | Bad input. The message names the field. |
+| 402 | `feature_not_in_plan` | The client's plan does not include competitor ads. |
+| 403 | `agency_required`, `location_disabled` | Write with a read-only key, or the client is disabled. |
+| 409 | `already_tracked`, `page_limit`, `refresh_in_progress` | Duplicate page, 10 pages already, or a refresh is running. |
+| 429 | `refreshed_recently`, `rate_limited` | See `Retry-After`. |
+| 502, 504 | `scraper_failed`, `scraper_timeout` | The Ad Library scrape failed. Retry later. |
+| 503 | `pipeline_disabled`, `scraper_not_configured` | Refreshes are switched off. |
+
+## MCP tools
+
+`list_competitor_pages`, `add_competitor_page`, `update_competitor_page`, `delete_competitor_page`, `refresh_competitor_page`, `list_competitor_ads`, `get_competitor_ad`, `get_competitor_ads_summary`. See [MCP tools](/mcp/tools).
