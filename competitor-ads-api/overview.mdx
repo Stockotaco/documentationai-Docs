@@ -190,7 +190,7 @@ Every ad carries `landing_page: { url, domain, path }`, the `link_url` Meta show
 
 ## Ad prompts
 
-`POST /ad-prompts` writes 1-5 ad briefs for the client from its brand and its competitors' **working ads**: ads that have run 30 days or more, weighted by days running, with active ads counted over stopped ones. Ads under 30 days are shown to the model as new tests and are never evidence. When the client's own creatives are available, its top ads by spend join the grounding.
+`POST /ad-prompts` writes 1-5 ad briefs for the client from its brand and its competitors' **working ads**: ads that have run 30 days or more, weighted by days running, with active ads counted over stopped ones. Ads under 30 days are shown to the model as new tests and are never evidence. When the client's plan includes [creative analysis](/creatives-api/overview), its top 5 active own ads by 90-day spend join the grounding with their hooks, tags and E.P.I.C. result, and prompts may cite them by `ad_id` in `own_creative_ids`. Own ads are ranked by spend only: no cost per result is stored for them.
 
 It runs on the agency's own model key, the same key as [scouts](/agency-api/scouts#model-key): Mythic pays for no model call, and a client with no key gets `409 no_model_key`. Write scope (`competitor_ads:write` or an agency key), 20 per client per rolling 24 hours, failed calls included. A call can take a few minutes.
 
