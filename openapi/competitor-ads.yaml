@@ -184,6 +184,8 @@ paths:
         - { name: has_transcript, in: query, schema: { type: boolean, enum: [true] }, description: Only ads whose transcript is ready. }
         - { name: tag, in: query, schema: { type: string, example: offer.guarantee }, description: "An analysis tag as family.tag." }
         - { name: epic, in: query, schema: { type: string, enum: [in_order] }, description: "Only ads whose current analysis (analysis_status done) has all four E.P.I.C. stages in order." }
+        - { name: landing_url, in: query, schema: { type: string }, description: "Only ads whose normalized landing page is this URL (tracking parameters ignored)." }
+        - { name: domain, in: query, schema: { type: string, example: juvenon.com }, description: "Only ads whose landing page is on this domain (www. ignored)." }
         - { name: since, in: query, schema: { type: string, format: date }, description: Ad Library start date on or after. }
         - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
         - { name: cursor, in: query, schema: { type: string }, description: next_cursor from the previous page. }
@@ -362,6 +364,14 @@ components:
         cta_text: { type: string, nullable: true }
         cta_type: { type: string, nullable: true }
         link_url: { type: string, nullable: true }
+        landing_page:
+          type: object
+          nullable: true
+          description: "link_url normalized: tracking parameters removed, lowercase host, no trailing slash. Redirect links are not followed."
+          properties:
+            url: { type: string, example: "https://juvenon.com/pages/bf7" }
+            domain: { type: string, example: juvenon.com }
+            path: { type: string, example: /pages/bf7 }
         ad_url: { type: string, nullable: true }
         has_video: { type: boolean }
         video_duration_s: { type: number, nullable: true }
@@ -569,6 +579,7 @@ components:
               hook: { type: string, nullable: true }
         top_hooks: { type: array, items: { $ref: "#/components/schemas/TopText" } }
         top_offers: { type: array, items: { $ref: "#/components/schemas/TopText" } }
+        landing_pages: { $ref: "#/components/schemas/LandingPages" }
         epic:
           type: object
           description: "E.P.I.C. aggregates over ads with a result. Not yet checked against spend results."
@@ -587,6 +598,31 @@ components:
             all_stages_in_order_share: { type: number, nullable: true, description: "Over stage_order_evaluated_ads." }
             median_copy_words: { type: number, nullable: true }
             you_only_bottom_half_share: { type: number, nullable: true }
+    LandingPages:
+      type: object
+      properties:
+        total: { type: integer, description: All landing pages in scope. }
+        truncated: { type: boolean, description: "true when more than 50 exist." }
+        items:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            properties:
+              url: { type: string }
+              domain: { type: string, nullable: true }
+              ads: { type: integer }
+              active_ads: { type: integer }
+              formats:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    format: { type: string }
+                    ads: { type: integer }
+              first_seen: { type: string, format: date-time, nullable: true, description: Earliest Ad Library start date. }
+              last_seen: { type: string, format: date-time, nullable: true, description: Latest Ad Library start date. }
+              longest_running_days: { type: integer, nullable: true }
     TopText:
       type: object
       properties:

@@ -87,9 +87,23 @@ A changed ad copy or headline is analysed again. New media is copied again.
 | `has_transcript` | `true` | Ads whose transcript is ready. |
 | `tag` | `offer.guarantee` | Ads carrying an analysis tag. |
 | `epic` | `in_order` | Ads whose current analysis (`analysis_status: done`) has all four E.P.I.C. stages in order in the copy or transcript. |
+| `landing_url` | `https://juvenon.com/pages/bf7` | Ads whose landing page is this URL. Tracking parameters are ignored. |
+| `domain` | `juvenon.com` | Ads whose landing page is on this domain (`www.` ignored). |
 | `since` | `2026-10-01` | Ad Library start date on or after. |
 
 Page with `limit` (up to 200) and `next_cursor`.
+
+### Landing pages
+
+Every ad carries `landing_page: { url, domain, path }`, the `link_url` Meta shows, normalized so ads that send people to the same page group together:
+
+- Tracking parameters are removed: `utm_*`, `hsa_*`, `fb_*`, `fbclid`, `gclid`, `gbraid`, `wbraid`, `dclid`, `msclkid`, `ttclid`, `twclid`, `yclid`, `igshid`, `li_fat_id`, `mc_cid`, `mc_eid`, `_ga`, `_gl`, `_hsenc`, `_hsmi`, `mkt_tok`, `irclickid`, `epik`, `sscid`. Other parameters, such as `variant` or `id`, are kept and sorted by name.
+- The scheme and host are lowercase. The fragment, credentials, default port and trailing slash are dropped.
+- `domain` is the host without `www.`.
+- Redirect links, such as `link.juvenon.com/xxxl-men-fb`, are shown as Meta shows them. They are not followed.
+- Cards of a carousel or dynamic ad often share one landing page.
+
+`landing_page` is `null` when the ad has no http(s) link.
 
 `GET /ads/{id}` adds the transcript, the full analysis and media links. `?include=raw` adds the scraped Ad Library row.
 
@@ -171,13 +185,14 @@ Page with `limit` (up to 200) and `next_cursor`.
 | `hook_types`, `angles`, `offer_elements` | Ads and share per tag. |
 | `longest_running` | Top 10 active ads by days since their start date. |
 | `top_hooks`, `top_offers` | Most used hook and offer texts, with the longest-running example. |
+| `landing_pages` | Top 50 landing pages by ads: `url`, `domain`, `ads`, `active_ads`, `formats`, `first_seen` and `last_seen` (earliest and latest Ad Library start date), `longest_running_days`. `total` counts all of them; `truncated` is `true` when more than 50 exist. An ad whose cards link to two pages counts under both. |
 | `epic` | E.P.I.C. test over ads with a result: share following each rule, share with all four stages in order (over `stage_order_evaluated_ads`, the ads with a non-null verdict), median copy word count, share with "you" only in the bottom half. |
 
 ## Errors
 
 | Status | Code | When |
 | --- | --- | --- |
-| 400 | `invalid_page`, `invalid_tag`, `invalid_since`, … | Bad input. The message names the field. |
+| 400 | `invalid_page`, `invalid_tag`, `invalid_since`, `invalid_landing_url`, `invalid_domain`, … | Bad input. The message names the field. |
 | 402 | `feature_not_in_plan` | The client's plan does not include competitor ads. |
 | 403 | `agency_required`, `location_disabled` | Write with a read-only key, or the client is disabled. |
 | 409 | `already_tracked`, `page_limit`, `refresh_in_progress` | Duplicate page, 10 pages already, or a refresh is running. |
