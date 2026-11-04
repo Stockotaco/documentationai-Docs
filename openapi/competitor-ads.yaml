@@ -183,6 +183,7 @@ paths:
         - { name: has_video, in: query, schema: { type: boolean } }
         - { name: has_transcript, in: query, schema: { type: boolean, enum: [true] }, description: Only ads whose transcript is ready. }
         - { name: tag, in: query, schema: { type: string, example: offer.guarantee }, description: "An analysis tag as family.tag." }
+        - { name: epic, in: query, schema: { type: string, enum: [in_order] }, description: "Only ads whose copy or transcript has all four E.P.I.C. stages in order." }
         - { name: since, in: query, schema: { type: string, format: date }, description: Ad Library start date on or after. }
         - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
         - { name: cursor, in: query, schema: { type: string }, description: next_cursor from the previous page. }
@@ -376,6 +377,14 @@ components:
             hook_type: { type: array, items: { type: string } }
             angle: { type: array, items: { type: string } }
             offer: { type: array, items: { type: string } }
+        epic:
+          type: object
+          nullable: true
+          description: "E.P.I.C. headline; the full result is analysis.epic on GET /ads/{id}."
+          properties:
+            all_stages_in_order: { type: boolean, nullable: true }
+            rules_met: { type: integer, nullable: true }
+            rules_total: { type: integer, nullable: true }
         thumbnail_url: { type: string, nullable: true, description: Signed link valid about an hour. }
         first_seen_at: { type: string, format: date-time }
         last_seen_at: { type: string, format: date-time }
@@ -432,7 +441,7 @@ components:
       type: object
       nullable: true
       properties:
-        taxonomy_version: { type: integer, example: 1 }
+        taxonomy_version: { type: integer, example: 2 }
         has_transcript: { type: boolean }
         fields:
           type: object
@@ -452,6 +461,69 @@ components:
             angle: { type: array, items: { type: string } }
             offer: { type: array, items: { type: string } }
         probabilities: { type: object, additionalProperties: { type: object, additionalProperties: { type: number } } }
+        epic: { $ref: "#/components/schemas/Epic" }
+    WordStats:
+      type: object
+      properties:
+        words: { type: integer }
+        you_top_half: { type: integer }
+        you_bottom_half: { type: integer }
+    EpicSequence:
+      type: object
+      description: "Stage labels for one sequence (ad copy or video transcript), or skipped, or error."
+      properties:
+        labels:
+          type: array
+          items:
+            type: object
+            properties:
+              i: { type: integer }
+              stage: { type: string, enum: [E, P, I, C, "-"] }
+              p: { type: number }
+              probabilities: { type: object, additionalProperties: { type: number } }
+              text: { type: string, description: First 120 characters of the paragraph. }
+        sequence: { type: string, example: EPIC }
+        stages_present: { type: string, example: EPIC }
+        in_order: { type: boolean }
+        all_stages_in_order: { type: boolean }
+        input_tokens: { type: integer, nullable: true }
+        cost_usd: { type: number, nullable: true }
+        skipped: { type: string, example: under 40 words }
+        error: { type: string }
+    Epic:
+      type: object
+      nullable: true
+      description: >-
+        E.P.I.C. test: Mythic's interpretation of Chris Rocheleau's publicly
+        described formula (Engage, Present, Illustrate, Convert). Not yet
+        checked against spend results; rules_followed is a count, not a score.
+      properties:
+        copy: { $ref: "#/components/schemas/WordStats" }
+        transcript: { $ref: "#/components/schemas/WordStats" }
+        you_only_bottom_half: { type: boolean }
+        checks: { type: object, nullable: true, additionalProperties: { type: number }, description: "Probability per rule, e.g. engage.direct_question." }
+        checks_error: { type: string }
+        stages:
+          type: object
+          properties:
+            copy: { $ref: "#/components/schemas/EpicSequence" }
+            transcript: { $ref: "#/components/schemas/EpicSequence" }
+        all_stages_in_order: { type: boolean }
+        rules_followed:
+          type: object
+          properties:
+            met: { type: integer }
+            total: { type: integer }
+            rules:
+              type: array
+              items:
+                type: object
+                properties:
+                  rule: { type: string, example: "not:engage.direct_question" }
+                  met: { type: boolean }
+        input_tokens: { type: integer, nullable: true }
+        cost_usd: { type: number, nullable: true }
+        error: { type: string }
     TagShare:
       type: object
       properties:
@@ -493,6 +565,23 @@ components:
               hook: { type: string, nullable: true }
         top_hooks: { type: array, items: { $ref: "#/components/schemas/TopText" } }
         top_offers: { type: array, items: { $ref: "#/components/schemas/TopText" } }
+        epic:
+          type: object
+          description: "E.P.I.C. aggregates over ads with a result. Not yet checked against spend results."
+          properties:
+            analyzed_ads: { type: integer }
+            rules:
+              type: array
+              items:
+                type: object
+                properties:
+                  rule: { type: string }
+                  ads: { type: integer, description: Ads following the rule. }
+                  evaluated: { type: integer, description: Ads where the rule was evaluated. }
+                  share: { type: number, nullable: true }
+            all_stages_in_order_share: { type: number, nullable: true }
+            median_copy_words: { type: number, nullable: true }
+            you_only_bottom_half_share: { type: number, nullable: true }
     TopText:
       type: object
       properties:

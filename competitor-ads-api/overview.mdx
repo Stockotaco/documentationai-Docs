@@ -86,6 +86,7 @@ A changed ad copy or headline is analysed again. New media is copied again.
 | `has_video` | `true` | Ads with or without a video. |
 | `has_transcript` | `true` | Ads whose transcript is ready. |
 | `tag` | `offer.guarantee` | Ads carrying an analysis tag. |
+| `epic` | `in_order` | Ads whose copy or transcript has all four E.P.I.C. stages in order. |
 | `since` | `2026-10-01` | Ad Library start date on or after. |
 
 Page with `limit` (up to 200) and `next_cursor`.
@@ -100,7 +101,7 @@ Page with `limit` (up to 200) and `next_cursor`.
 
 ```json
 {
-  "taxonomy_version": 1,
+  "taxonomy_version": 2,
   "has_transcript": true,
   "fields": {
     "hook": { "text": "This is what happens to a man's body when he takes nitric oxide boosters every single day for 30 days straight.", "confidence": 0.76, "source": "transcript", "start_s": 0, "end_s": 5.98 },
@@ -123,7 +124,37 @@ Page with `limit` (up to 200) and `next_cursor`.
 | `angle` | `pain_point`, `aspiration`, `urgency_scarcity`, `authority_science`, `social_proof`, `price_value`, `comparison`, `testimonial` |
 | `offer` | `discount`, `guarantee`, `free_shipping`, `bundle`, `free_trial`, `limited_time` |
 
-`taxonomy_version` changes when the tag set changes.
+`taxonomy_version` changes when the tag set or the E.P.I.C. test changes. Stored analyses with an older version are analysed again in the background.
+
+### E.P.I.C. test
+
+`analysis.epic` applies Chris Rocheleau's publicly described E.P.I.C. long-copy formula: Engage, Present, Illustrate, Convert. The rule wording and scoring are Mythic's own interpretation of his public descriptions. They are not yet checked against spend results, so there is no overall score. `rules_followed` counts the rules an ad meets and lists them.
+
+```json
+{
+  "copy": { "words": 126, "you_top_half": 3, "you_bottom_half": 0 },
+  "you_only_bottom_half": false,
+  "checks": { "engage.direct_question": 0.0365, "engage.mechanism_in_opener": 0.7146, "convert.cta": 0.8764 },
+  "stages": {
+    "copy": {
+      "labels": [{ "i": 1, "stage": "E", "p": 0.5884 }, { "i": 2, "stage": "E", "p": 0.3328 }, { "i": 3, "stage": "I", "p": 0.3887 }],
+      "sequence": "EIPIC", "stages_present": "EPIC", "in_order": false, "all_stages_in_order": false
+    }
+  },
+  "all_stages_in_order": false,
+  "rules_followed": { "met": 7, "total": 16, "rules": [{ "rule": "not:engage.direct_question", "met": true }] },
+  "input_tokens": 5072,
+  "cost_usd": 0.00019274
+}
+```
+
+- `copy`, `transcript`: word count and the number of "you", "your", "you're", "yours" and "yourself" in the top and bottom half. His rule is no "you" until the bottom half.
+- `checks`: probability that each of 14 rules applies. Engage: `direct_question`, `indirect_open`, `negative_callout`, `pain_and_benefit_in_opener`, `mechanism_in_opener`. Present: `struggle`, `empathy`. Illustrate: `journey`, `teaches_value`, `differentiation`, `substantiated`, `lead_is_other_persons_story`. Convert: `cta`, `risk_reversal`. `direct_question`, `negative_callout` and `lead_is_other_persons_story` break a rule when they apply.
+- `stages`: `copy`, and `transcript` for video ads. Each paragraph takes its most likely stage when that probability is 0.3 or more, else `-`. The ad copy and the video transcript are separate sequences. `sequence` collapses repeats, `in_order` means it never goes back to an earlier stage. Copy or transcript under 40 words is not labeled (`skipped`).
+- `rules_followed`: the "you" rule, each check (met at 0.5 or more, or under 0.5 for the three that break a rule) and `all_stages_in_order`.
+- A part that fails stores `error` (`checks_error` for the checks). The rest of the analysis is kept.
+
+`GET /ads` rows carry `epic: { all_stages_in_order, rules_met, rules_total }`.
 
 ## Summary
 
@@ -137,6 +168,7 @@ Page with `limit` (up to 200) and `next_cursor`.
 | `hook_types`, `angles`, `offer_elements` | Ads and share per tag. |
 | `longest_running` | Top 10 active ads by days since their start date. |
 | `top_hooks`, `top_offers` | Most used hook and offer texts, with the longest-running example. |
+| `epic` | E.P.I.C. test over ads with a result: share following each rule, share with all four stages in order, median copy word count, share with "you" only in the bottom half. |
 
 ## Errors
 
