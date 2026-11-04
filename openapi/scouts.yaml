@@ -911,7 +911,7 @@ components:
             artifacts:
               type: object
               nullable: true
-              description: "Structured data next to the markdown. competitor_creative reports carry { ad_prompts: [...] }: 3-5 prompts in the shape of POST /client/v1/competitor-ads/ad-prompts (see the competitor ads API), each citing only ads the run read."
+              description: "Structured data next to the markdown. competitor_creative reports carry { ad_prompts: [...] }: 3-5 prompts in the shape of POST /client/v1/competitor-ads/ad-prompts (see the competitor ads API), each citing only ads the run read: competitor ads that had run 30+ days, a rewrite of one it read in full, and the client's own ad_ids. At most 90,000 bytes (UTF-8)."
             history:
               type: array
               description: "Filed, edited and status entries, oldest first."

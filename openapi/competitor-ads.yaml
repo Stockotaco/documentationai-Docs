@@ -369,7 +369,7 @@ components:
       schema: { type: string, format: uuid }
   responses:
     Error:
-      description: "Error. The code names the cause, e.g. `invalid_page`, `feature_not_in_plan`, `agency_required`, `not_found`, `scraper_failed`, `no_model_key`, `no_working_ads`, `generation_invalid`."
+      description: "Error. The code names the cause, e.g. `invalid_page`, `feature_not_in_plan`, `agency_required`, `not_found`, `scraper_failed`, `no_model_key`, `no_working_ads`, `grounding_too_large`, `generation_invalid`."
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -409,6 +409,7 @@ components:
           type: array
           items: { type: string, enum: [copy, image, video, ugc, rewrite] }
           description: "Parts to write. `copy` is always included. Default: all but `rewrite`, or all when `rewrite_ad_id` is set."
+        include_own_creatives: { type: boolean, default: true, description: "Ground on the client's own top ads by spend. Needs the creative analysis plan feature, and `creative_analysis:read` on an `mcp_` key." }
     AdPrompt:
       type: object
       required: [title, concept]
@@ -505,7 +506,7 @@ components:
               type: object
               properties:
                 available: { type: boolean }
-                reason: { type: string, enum: [creative_analysis_not_in_plan, own_creatives_unavailable] }
+                reason: { type: string, enum: [creative_analysis_not_in_plan, own_creatives_unavailable, insufficient_scope, not_requested] }
             working_ads: { type: integer, description: Competitor ads running 30+ days. }
             new_tests: { type: integer, description: Active ads under 30 days. }
             dropped_for_size: { type: integer }
@@ -519,7 +520,15 @@ components:
             model_calls: { type: integer }
             input_tokens: { type: integer }
             output_tokens: { type: integer }
-            cost_usd: { type: number, nullable: true, description: "Null when the provider does not report cost (Gemini, Cloudflare)." }
+            cost_usd: { type: number, nullable: true, description: "The total. Null when any call reported no cost: Gemini, Cloudflare, or a call that timed out or failed on the network after it was sent." }
+            cost_usd_known: { type: number, description: "Cost of the calls that reported one." }
+            usage_complete: { type: boolean, description: "False when any call reported no cost." }
+        record:
+          type: object
+          description: Whether the generation record was stored. The prompts are returned either way.
+          properties:
+            saved: { type: boolean, description: Status and usage stored. }
+            prompts_saved: { type: boolean, description: Prompts stored. }
     PageInput:
       type: object
       required: [page_id]
