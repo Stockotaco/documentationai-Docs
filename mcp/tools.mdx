@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 332 tools across
+  Every tool the Mythic MCP server exposes — 335 tools across
   33 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 332 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 335 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -325,11 +325,14 @@ Competitor Facebook pages one client tracks in the Meta Ad Library, their scrape
 | `list_competitor_pages`<br /><span style={{opacity: 0.7}}>List Competitor Pages</span> | `competitor_ads:read` | Competitor Facebook pages this client tracks in the Meta Ad Library (at most 10), with each page's last refresh (status, counts, error) and next scheduled refresh. | `GET /client/v1/competitor-ads/pages` |
 | `list_competitor_ads`<br /><span style={{opacity: 0.7}}>List Competitor Ads</span> | `competitor_ads:read` | Scraped competitor ads, newest Ad Library start date first: copy, headline, CTA, format, days running, hook text with its video seconds, hook/angle/offer tags, an E.P.I.C. | `GET /client/v1/competitor-ads/ads` |
 | `get_competitor_ad`<br /><span style={{opacity: 0.7}}>Get Competitor Ad</span> | `competitor_ads:read` | One competitor ad with its full analysis (hook, intro, problem, mechanism, offer and CTA text with confidence and video seconds; every tag probability; the E.P.I.C. | `GET /client/v1/competitor-ads/ads/:id` |
+| `get_competitor_ad_brand`<br /><span style={{opacity: 0.7}}>Get Ad Brand</span> | `competitor_ads:read` | This client's saved brand profile for ad prompts (product, audience, benefits, angles, proof, offers, must_avoid, compliance), or null. | `GET /client/v1/competitor-ads/brand` |
 | `get_competitor_ads_summary`<br /><span style={{opacity: 0.7}}>Get Competitor Ads Summary</span> | `competitor_ads:read` | What this client's competitors run, overall and per page, counted per ad (a carousel is one ad): ad and active counts, formats, new ads in the last 7/30 days, shares of hook types, angles and offer elements… | `GET /client/v1/competitor-ads/summary` |
 | `add_competitor_page`<br /><span style={{opacity: 0.7}}>Add Competitor Page</span> | `competitor_ads:write` | Track a competitor Facebook page for this client (max 10). | `POST /client/v1/competitor-ads/pages` |
 | `update_competitor_page`<br /><span style={{opacity: 0.7}}>Update Competitor Page</span> | `competitor_ads:write` | Change a tracked page: label, country, max_ads, or active (false pauses its daily refresh and works on every plan). | `PATCH /client/v1/competitor-ads/pages/:id` |
 | `delete_competitor_page`<br /><span style={{opacity: 0.7}}>Delete Competitor Page</span> | `competitor_ads:write` | Stop tracking a page and delete its stored ads for this client. | `DELETE /client/v1/competitor-ads/pages/:id` |
 | `refresh_competitor_page`<br /><span style={{opacity: 0.7}}>Refresh Competitor Page</span> | `competitor_ads:write` | Scrape the page now and store its ads (can take a minute for 50 ads). | `POST /client/v1/competitor-ads/pages/:id/refresh` |
+| `set_competitor_ad_brand`<br /><span style={{opacity: 0.7}}>Set Ad Brand</span> | `competitor_ads:write` | Save this client's brand profile (product, audience, benefits, angles, proof, offers, must_avoid, compliance). | `PUT /client/v1/competitor-ads/brand` |
+| `generate_ad_prompts`<br /><span style={{opacity: 0.7}}>Generate Ad Prompts</span> | `competitor_ads:write` | Write 1-5 ad briefs for this client from its brand and its competitors' working ads (running 30+ days, weighted by days running; ads under 30 days are never evidence). | `POST /client/v1/competitor-ads/ad-prompts` |
 
 ## Creative Analysis
 

@@ -259,6 +259,93 @@ paths:
                       truncated: { type: boolean, description: "True when more than 5,000 ad rows exist; the summary covers the newest 5,000." }
                       tag_families: { type: object, additionalProperties: { type: array, items: { type: string } } }
                       text_fields: { type: array, items: { type: string } }
+  /client/v1/competitor-ads/brand:
+    get:
+      summary: Get the brand profile
+      operationId: getCompetitorAdBrand
+      description: The client's saved brand profile for ad prompts, or null. Needs `competitor_ads:read`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Brand
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      brand: { allOf: [{ $ref: "#/components/schemas/Brand" }], nullable: true }
+                      updated_at: { type: string, format: date-time, nullable: true }
+        "402": { $ref: "#/components/responses/Error" }
+    put:
+      summary: Save the brand profile
+      operationId: putCompetitorAdBrand
+      description: Replaces the client's brand profile. Ad prompt generation uses it when no `brand` is sent. Agency keys or `competitor_ads:write`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Brand" }
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      brand: { $ref: "#/components/schemas/Brand" }
+                      updated_at: { type: string, format: date-time }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /client/v1/competitor-ads/ad-prompts:
+    post:
+      summary: Generate ad prompts
+      operationId: generateAdPrompts
+      description: >
+        Writes 1-5 ad briefs from the client's brand and its competitors'
+        working ads (running 30+ days, weighted by days running; ads under 30
+        days are never evidence), plus the client's own top creatives when
+        that feature is available. Runs on the agency's own model key (BYOK,
+        the same key as scouts); Mythic pays for no model call. The answer is
+        checked against the prompt schema, the E.P.I.C. rules and the grounding
+        ids, repaired once, then refused. 20 per client per rolling 24 hours.
+        Agency keys or `competitor_ads:write`. Can take a few minutes.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdPromptsRequest" }
+      responses:
+        "200":
+          description: Prompts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/AdPromptsResult" }
+        "400": { $ref: "#/components/responses/Error" }
+        "402": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        "502": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     BearerAuth:
@@ -282,7 +369,7 @@ components:
       schema: { type: string, format: uuid }
   responses:
     Error:
-      description: "Error. The code names the cause, e.g. `invalid_page`, `feature_not_in_plan`, `agency_required`, `not_found`, `scraper_failed`."
+      description: "Error. The code names the cause, e.g. `invalid_page`, `feature_not_in_plan`, `agency_required`, `not_found`, `scraper_failed`, `no_model_key`, `no_working_ads`, `generation_invalid`."
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -297,6 +384,142 @@ components:
             code: { type: string }
             message: { type: string }
             details: {}
+    Brand:
+      type: object
+      required: [product]
+      additionalProperties: false
+      properties:
+        product: { type: string, maxLength: 300, description: What the client sells. }
+        audience: { type: string, maxLength: 600 }
+        benefits: { type: array, maxItems: 10, items: { type: string, maxLength: 200 } }
+        angles: { type: array, maxItems: 10, items: { type: string, maxLength: 200 } }
+        proof: { type: array, maxItems: 10, items: { type: string, maxLength: 300 }, description: "Proof prompts may cite. They never claim more than this." }
+        offers: { type: array, maxItems: 10, items: { type: string, maxLength: 200 } }
+        must_avoid: { type: array, maxItems: 20, items: { type: string, maxLength: 200 } }
+        compliance: { type: string, maxLength: 1500 }
+    AdPromptsRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        brand: { $ref: "#/components/schemas/Brand" }
+        angles: { type: array, maxItems: 5, items: { type: string, maxLength: 200 }, description: Angles to focus on. }
+        count: { type: integer, minimum: 1, maximum: 5, default: 3 }
+        rewrite_ad_id: { type: string, format: uuid, description: "Competitor ad `id` to rewrite in place on the first prompt. Default when `rewrite` is in formats: the top working ad." }
+        formats:
+          type: array
+          items: { type: string, enum: [copy, image, video, ugc, rewrite] }
+          description: "Parts to write. `copy` is always included. Default: all but `rewrite`, or all when `rewrite_ad_id` is set."
+    AdPrompt:
+      type: object
+      required: [title, concept]
+      properties:
+        title: { type: string }
+        concept:
+          type: object
+          properties:
+            angle: { type: string }
+            hook: { type: string }
+            primary_text: { type: string }
+            headline: { type: string }
+            cta: { type: string }
+            landing_page: { type: string }
+            sources:
+              type: object
+              description: The ads this concept learned from. Every id is in the response's grounding.
+              properties:
+                competitor_ad_ids: { type: array, items: { type: string, format: uuid } }
+                own_creative_ids: { type: array, items: { type: string } }
+        image_prompt:
+          type: object
+          properties:
+            layout: { type: string }
+            subject: { type: string }
+            text_overlay: { type: string }
+            aspect_ratio: { type: string, enum: ["1:1", "4:5", "9:16", "16:9"] }
+            prompt: { type: string, description: Ready to paste into an image model. }
+        video:
+          type: object
+          properties:
+            duration_s: { type: integer, minimum: 15, maximum: 60 }
+            beats:
+              type: array
+              items:
+                type: object
+                properties:
+                  t_start: { type: number }
+                  t_end: { type: number }
+                  stage: { type: string, enum: [E, P, I, C], description: "E.P.I.C. stage: Engage, Present, Illustrate, Convert." }
+                  visual: { type: string }
+                  voiceover: { type: string }
+                  on_screen_text: { type: string }
+            shot_list:
+              type: array
+              items:
+                type: object
+                properties:
+                  shot: { type: integer }
+                  framing: { type: string }
+                  description: { type: string }
+        ugc_brief:
+          type: object
+          properties:
+            creator: { type: string }
+            setting: { type: string }
+            talking_points: { type: array, items: { type: string } }
+            dos: { type: array, items: { type: string } }
+            donts: { type: array, items: { type: string } }
+        rewrite:
+          type: object
+          nullable: true
+          description: First prompt only. One competitor ad rewritten into the client's version.
+          properties:
+            source_ad_id: { type: string, format: uuid }
+            original_structure:
+              type: object
+              properties:
+                format: { type: string }
+                length: { type: string }
+                stage_order: { type: string, example: EPIC }
+            sections:
+              type: array
+              items:
+                type: object
+                properties:
+                  part: { type: string, enum: [headline, hook, primary_text, script_beat, cta] }
+                  stage: { type: string, enum: [E, P, I, C], nullable: true }
+                  original: { type: string }
+                  rewrite: { type: string }
+                  change_note: { type: string }
+    AdPromptsResult:
+      type: object
+      properties:
+        generation_id: { type: string, format: uuid }
+        prompts: { type: array, items: { $ref: "#/components/schemas/AdPrompt" } }
+        grounding:
+          type: object
+          properties:
+            competitor_ad_ids: { type: array, items: { type: string, format: uuid }, description: Working ads the model was given (the only citable competitor ids). }
+            own_creative_ids: { type: array, items: { type: string } }
+            rewrite_ad_id: { type: string, format: uuid, nullable: true }
+            own_creatives:
+              type: object
+              properties:
+                available: { type: boolean }
+                reason: { type: string, enum: [creative_analysis_not_in_plan, own_creatives_unavailable] }
+            working_ads: { type: integer, description: Competitor ads running 30+ days. }
+            new_tests: { type: integer, description: Active ads under 30 days. }
+            dropped_for_size: { type: integer }
+        provider: { type: string, enum: [openrouter, gemini, cloudflare] }
+        model: { type: string }
+        key_scope: { type: string, enum: [location, agency] }
+        repaired: { type: boolean, description: True when the first answer failed the checks and the repair passed. }
+        usage:
+          type: object
+          properties:
+            model_calls: { type: integer }
+            input_tokens: { type: integer }
+            output_tokens: { type: integer }
+            cost_usd: { type: number, nullable: true, description: "Null when the provider does not report cost (Gemini, Cloudflare)." }
     PageInput:
       type: object
       required: [page_id]

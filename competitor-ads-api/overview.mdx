@@ -188,6 +188,38 @@ Every ad carries `landing_page: { url, domain, path }`, the `link_url` Meta show
 | `landing_pages` | Top 50 landing pages by ads: `url`, `domain`, `ads`, `active_ads`, `formats`, `first_seen` and `last_seen` (earliest and latest Ad Library start date), `longest_running_days`. `total` counts all of them; `truncated` is `true` when more than 50 exist. An ad whose cards link to two pages counts under both. `active_ads` and `longest_running_days` count an ad only while a live card (active, not gone) links to the page; a dropped card's page keeps its other counts. |
 | `epic` | E.P.I.C. test over ads with a result: share following each rule, share with all four stages in order (over `stage_order_evaluated_ads`, the ads with a non-null verdict), median copy word count, share with "you" only in the bottom half. |
 
+## Ad prompts
+
+`POST /ad-prompts` writes 1-5 ad briefs for the client from its brand and its competitors' **working ads**: ads that have run 30 days or more, weighted by days running, with active ads counted over stopped ones. Ads under 30 days are shown to the model as new tests and are never evidence. When the client's own creatives are available, its top ads by spend join the grounding.
+
+It runs on the agency's own model key, the same key as [scouts](/agency-api/scouts#model-key): Mythic pays for no model call, and a client with no key gets `409 no_model_key`. Write scope (`competitor_ads:write` or an agency key), 20 per client per rolling 24 hours, failed calls included. A call can take a few minutes.
+
+Save the brand once with `PUT /brand` (`product` is required; `audience`, `benefits`, `angles`, `proof`, `offers`, `must_avoid`, `compliance` are optional), or send `brand` in the request to use it for that call only.
+
+```bash
+curl -X POST "https://api.mythicanalytics.com/client/v1/competitor-ads/ad-prompts?location_id=$LOC" \
+  -H "Authorization: Bearer $AK" -H "Content-Type: application/json" \
+  -d '{"count": 2, "formats": ["copy", "image", "video", "ugc", "rewrite"]}'
+```
+
+Each prompt has:
+
+| Part | Contents |
+| --- | --- |
+| `concept` | Angle, hook, primary text, headline, CTA, landing page, and `sources`: the competitor ad ids and own creative ids it learned from. |
+| `image_prompt` | Layout, subject, text overlay, aspect ratio and a full prompt ready for an image model. |
+| `video` | A 15-60 second script: beats with an E.P.I.C. stage, visual, voiceover and on-screen text, plus a shot list. |
+| `ugc_brief` | Who should film it, the setting, talking points, dos and don'ts. |
+| `rewrite` | First prompt only, with `rewrite` in `formats`: one competitor ad (`rewrite_ad_id`, default the top working ad) rewritten into the client's version. It keeps the ad's format, length and stage order, and lists each section's original text next to the rewrite with a note on what changed. |
+
+Before it is returned, every answer is checked:
+
+- It matches the prompt schema for the requested `formats`.
+- Every cited id is in the grounding (`grounding.competitor_ad_ids`, `own_creative_ids`, `rewrite_ad_id`). Only working ads may be cited as sources.
+- The headline, video script and rewrite follow the E.P.I.C. rules: no direct self-identification question ("Are you...?"), no "you" in the top half, no negative call-out of the reader, and the stages E, P, I, C all present and in order.
+
+An answer that fails gets one repair turn with the errors; a second failure returns `502 generation_invalid` with the errors in `details`. The response reports the provider, the model, token usage and the cost when the provider reports it (OpenRouter does; Gemini and Cloudflare do not).
+
 ## Errors
 
 | Status | Code | When |
@@ -199,7 +231,13 @@ Every ad carries `landing_page: { url, domain, path }`, the `link_url` Meta show
 | 429 | `refreshed_recently`, `refresh_budget_exhausted`, `rate_limited` | See `Retry-After`. |
 | 502, 504 | `scraper_failed`, `scraper_untrusted_redirect`, `scraper_timeout` | The Ad Library scrape failed. Retry later. |
 | 503 | `pipeline_disabled`, `scraper_not_configured` | Refreshes are switched off. |
+| 400 | `brand_required`, `invalid_brand`, `invalid_request` | Ad prompts: no saved brand and none sent, or a bad body. |
+| 404 | `rewrite_ad_not_found` | `rewrite_ad_id` is not one of this client's competitor ads. |
+| 409 | `no_model_key`, `model_key_rejected`, `model_key_unreadable` | Add or fix the agency's model key. |
+| 422 | `no_working_ads`, `model_unsupported` | No competitor ad has run 30 days yet, or the key's model cannot run here. |
+| 429 | `generation_budget_exhausted`, `model_rate_limited` | 20 generations per client per 24 hours, or the provider rate-limited the key. See `Retry-After`. |
+| 502 | `generation_invalid`, `model_failed` | The model's answer failed the checks after one repair, or the model call failed. |
 
 ## MCP tools
 
-`list_competitor_pages`, `add_competitor_page`, `update_competitor_page`, `delete_competitor_page`, `refresh_competitor_page`, `list_competitor_ads`, `get_competitor_ad`, `get_competitor_ads_summary`. See [MCP tools](/mcp/tools).
+`list_competitor_pages`, `add_competitor_page`, `update_competitor_page`, `delete_competitor_page`, `refresh_competitor_page`, `list_competitor_ads`, `get_competitor_ad`, `get_competitor_ads_summary`, `get_competitor_ad_brand`, `set_competitor_ad_brand`, `generate_ad_prompts`. See [MCP tools](/mcp/tools).
