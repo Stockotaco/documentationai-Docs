@@ -612,7 +612,7 @@ components:
               url: { type: string }
               domain: { type: string, nullable: true }
               ads: { type: integer }
-              active_ads: { type: integer }
+              active_ads: { type: integer, description: "Ads with a live (active, not gone) card linking to this page." }
               formats:
                 type: array
                 items:
@@ -622,7 +622,7 @@ components:
                     ads: { type: integer }
               first_seen: { type: string, format: date-time, nullable: true, description: Earliest Ad Library start date. }
               last_seen: { type: string, format: date-time, nullable: true, description: Latest Ad Library start date. }
-              longest_running_days: { type: integer, nullable: true }
+              longest_running_days: { type: integer, nullable: true, description: Longest days running among ads with a live card linking to this page. }
     TopText:
       type: object
       properties:

@@ -185,7 +185,7 @@ Every ad carries `landing_page: { url, domain, path }`, the `link_url` Meta show
 | `hook_types`, `angles`, `offer_elements` | Ads and share per tag. |
 | `longest_running` | Top 10 active ads by days since their start date. |
 | `top_hooks`, `top_offers` | Most used hook and offer texts, with the longest-running example. |
-| `landing_pages` | Top 50 landing pages by ads: `url`, `domain`, `ads`, `active_ads`, `formats`, `first_seen` and `last_seen` (earliest and latest Ad Library start date), `longest_running_days`. `total` counts all of them; `truncated` is `true` when more than 50 exist. An ad whose cards link to two pages counts under both. |
+| `landing_pages` | Top 50 landing pages by ads: `url`, `domain`, `ads`, `active_ads`, `formats`, `first_seen` and `last_seen` (earliest and latest Ad Library start date), `longest_running_days`. `total` counts all of them; `truncated` is `true` when more than 50 exist. An ad whose cards link to two pages counts under both. `active_ads` and `longest_running_days` count an ad only while a live card (active, not gone) links to the page; a dropped card's page keeps its other counts. |
 | `epic` | E.P.I.C. test over ads with a result: share following each rule, share with all four stages in order (over `stage_order_evaluated_ads`, the ads with a non-null verdict), median copy word count, share with "you" only in the bottom half. |
 
 ## Errors
