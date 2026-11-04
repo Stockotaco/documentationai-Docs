@@ -59,7 +59,7 @@ The first scrape runs within 5 minutes. `POST /pages/{id}/refresh` runs it now a
 - `429 refresh_budget_exhausted` after 20 manual refreshes by this client in 24 hours. Pages still refresh daily.
 - `409 refresh_in_progress` while a refresh runs.
 
-Deleting and re-adding a page does not reset these limits. A re-added page is first refreshed 24 hours after its last scrape.
+Deleting and re-adding a page, or pausing and resuming it, does not reset these limits. A re-added or resumed page is first refreshed 24 hours after its last scrape.
 
 <Callout kind="info">
 Ads missing from a scrape are marked gone only when the scrape reached the end of the page. A scrape capped by `max_ads` never marks an ad as stopped. `last_refresh_status` is `ok` for a complete scrape and `partial` for a capped one.
@@ -95,7 +95,7 @@ Page with `limit` (up to 200) and `next_cursor`.
 
 ### Media links
 
-`thumbnail_url` and each `media[].url` are signed links valid for about an hour. They work in `<img>` and `<video>` tags without a key and support range requests. Read the ad again for fresh links. Videos larger than 100 MB are not copied and show `skipped: "too_large"`.
+`thumbnail_url` and each `media[].url` are signed links valid for about an hour. They work in `<img>` and `<video>` tags without a key and support range requests. Read the ad again for fresh links. Videos larger than 100 MB, or larger than 32 MB when the CDN sends no file size, are not copied and show `skipped: "too_large"`.
 
 ## Analysis
 

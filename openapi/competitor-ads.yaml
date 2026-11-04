@@ -76,7 +76,7 @@ paths:
     patch:
       summary: Update a tracked page
       operationId: updateCompetitorPage
-      description: "Change label, country, max_ads or active. A body of only `{\"active\": false}` works on every plan and for disabled clients."
+      description: "Change label, country, max_ads or active. A body of only `{\"active\": false}` works on every plan and for disabled clients. A resumed page is first refreshed 24 hours after its last scrape."
       parameters:
         - $ref: "#/components/parameters/LocationId"
         - $ref: "#/components/parameters/PageUuid"
@@ -405,7 +405,7 @@ components:
                   url: { type: string, nullable: true, description: Signed link valid about an hour. Range requests work. }
                   bytes: { type: integer, nullable: true }
                   content_type: { type: string, nullable: true }
-                  skipped: { type: string, description: "too_large: over 100 MB, not copied." }
+                  skipped: { type: string, description: "too_large: over 100 MB (32 MB when the CDN sends no size), not copied." }
                   error: { type: string }
             analysis: { $ref: "#/components/schemas/Analysis" }
             analysis_cost_usd: { type: number, nullable: true }
