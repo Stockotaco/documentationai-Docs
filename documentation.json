@@ -90,6 +90,11 @@
                     "icon": "radio"
                   },
                   {
+                    "title": "Connect GoHighLevel",
+                    "path": "agency-app/gohighlevel",
+                    "icon": "link"
+                  },
+                  {
                     "title": "Sessions",
                     "path": "agency-app/sessions",
                     "icon": "play-circle"

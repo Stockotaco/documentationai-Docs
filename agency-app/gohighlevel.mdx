@@ -1,0 +1,87 @@
+---
+title: Connect GoHighLevel
+description: >-
+  Link a client to its GoHighLevel sub-account so Mythic receives the client's
+  CRM activity and ties it to the same people as the website events.
+---
+
+## Overview
+
+Connecting GoHighLevel installs the Mythic app on the client's GoHighLevel
+sub-account. Mythic then receives the sub-account's CRM activity, such as new
+contacts, form submissions, booked appointments, opportunity changes and
+orders, and joins it to the visitors Mythic tracked on the client's website.
+That join is what lets journeys, attribution and ROAS reach the lead or sale
+recorded in GoHighLevel.
+
+You need a GoHighLevel login with access to the client's sub-account.
+
+## Connect a client
+
+<Steps>
+  <Step title="Open Integrations">
+    Open the client and choose **Setup**, then **Integrations**. The
+    **Connect GoHighLevel** step is at the top.
+  </Step>
+  <Step title="Start the install">
+    Click **Connect GoHighLevel**. The app opens GoHighLevel in the same tab.
+  </Step>
+  <Step title="Pick one sub-account">
+    Log in to GoHighLevel and choose the client's **sub-account**. Do not pick
+    the agency: an agency-level install is not linked to any client.
+  </Step>
+  <Step title="Come back to Mythic">
+    GoHighLevel returns you to **Integrations**. A **GoHighLevel connected**
+    banner confirms it, and the step shows the sub-account id and when it was
+    connected.
+  </Step>
+</Steps>
+
+The first CRM events arrive as activity happens in the sub-account. See them on
+the client's [Activity](/agency-app/activity) screen.
+
+## Status
+
+| Status | Meaning |
+| --- | --- |
+| **Connected** | The sub-account is linked and Mythic receives its activity |
+| **Not connected** | No sub-account is linked yet |
+| **Disconnected** | GoHighLevel no longer accepts the install's access, for example after the app was uninstalled. Click **Reconnect** |
+| **Incomplete** | GoHighLevel reports the install, but Mythic is missing the sub-account or its access key. Click **Reconnect** |
+
+**Reconnect** runs the same install again. Pick the same sub-account.
+
+## If it does not connect
+
+The **GoHighLevel didn't connect** banner says why:
+
+- **That sub-account is already linked to another client.** One GoHighLevel
+  sub-account maps to exactly one Mythic client. Pick this client's own
+  sub-account. To move a sub-account between clients, contact support.
+- **No install was found.** The agency was picked instead of a sub-account, or
+  the install was cancelled. Try again and pick a single sub-account.
+- **Mythic reported a code.** Try again. If it repeats, send the code to
+  support.
+
+The button is unavailable on read-only sample clients.
+
+## Where you come back to
+
+Mythic returns you to this app's address after the install. That address must
+be listed under **Callback origins** in [Settings](/agency-app/settings).
+Connecting from the app adds it for you. If you open the app from a new
+address, such as your own portal domain, check that it is listed.
+
+## What the CRM data powers
+
+- [Activity](/agency-app/activity): GoHighLevel events appear with the website
+  events. GoHighLevel tag changes are hidden unless **Internal events** is on.
+- [People & segments](/agency-app/people): journeys can use GoHighLevel
+  appointment and opportunity outcomes as the goal, and GoHighLevel order or
+  payment amounts as revenue.
+
+## For developers
+
+To connect GoHighLevel through the API, see
+[Connecting GoHighLevel](/locations-api/overview#connecting-gohighlevel) in the
+Locations API.
