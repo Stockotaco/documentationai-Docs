@@ -212,7 +212,7 @@ Platforms whose catalog entry has `supportsOauth: true` can be connected without
 
 <Steps>
   <Step title="Register where consent may land" titleType="h3">
-    Once per agency: `PATCH /config` with `oauth_return_origins`, the list of origins (`https://portal.example.com`, no path) your portal returns to. The list starts empty and a `return_url` outside it is rejected at initiation — that check is what keeps the unauthenticated callback from being usable as an open redirector. This works before provisioning; the config row is created if it does not exist.
+    Once per agency: `PATCH /config` with `oauth_return_origins`, the list of origins (`https://portal.example.com`, no path) your portal returns to. The list starts empty (the Mythic agency app, `https://app.mythicdata.io`, is always allowed) and a `return_url` outside it is rejected at initiation — that check is what keeps the unauthenticated callback from being usable as an open redirector. This works before provisioning; the config row is created if it does not exist.
   </Step>
   <Step title="Start the handoff" titleType="h3">
     `POST /oauth/initiate` with `client_id`, `platform`, a `return_url`, and the non-secret connector fields in `source_config` (account identifiers, and Bing's app-issued `developer_token` — everything not flagged `oauth: true`). `meta_ads` and `google_ads` require an account identifier here; it is validated before consent so a missing one cannot surface later as an opaque catalog-discovery failure. You get back a `consent_url` and a single-use `state`, valid for 15 minutes.

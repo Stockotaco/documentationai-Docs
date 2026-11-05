@@ -230,6 +230,8 @@ origins a browser may return to after a GoHighLevel install
 (`POST /client/v1/locations/ghl/install`) or a Google destination consent
 (`POST /client/v1/destinations/oauth/initiate`). A `return_url` on another
 origin is refused with `return_url_not_allowed`. The list starts empty.
+The Mythic agency app (`https://app.mythicdata.io`) is always allowed and
+needs no entry.
 
 ```bash
 curl -X PUT "https://mythic-analytics.gulp.workers.dev/client/v1/agency/oauth-return-origins" \
