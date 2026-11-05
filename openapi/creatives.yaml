@@ -95,6 +95,9 @@ paths:
         for hook type, angle, offer and format. Up to 10 cohorts by ad count are
         listed, reduced further to keep the coherent response within 10000 JSON
         characters. cohorts_total and cohorts_truncated disclose omissions.
+        Dimension rows may also be omitted, keeping at least one per family and
+        every unclassified row. dimensions_total and dimensions_truncated disclose
+        this, while shares retain the complete cohort denominator.
         Spend is a rolling 90-day source snapshot in raw account units, never
         cross-account money or proof of success. Outcome performance is explicitly
         unavailable without verified objective, currency and attribution joins.
@@ -272,7 +275,7 @@ components:
           maxItems: 10
           items:
             type: object
-            description: "One account/campaign, currency and objective null. Contains ads/active_ads, known-spend counts, raw source spend, analysis ad/spend coverage and dimensions. Each dimension has family, label, ads, spend_known_ads, spend_90d_raw, example_ad_ids, ad_share and spend_share. Multi-label shares overlap. No cross-cohort comparison of success."
+            description: "One account/campaign, currency and objective null. Contains ads/active_ads, known-spend counts, raw source spend, analysis ad/spend coverage and dimensions. dimensions_total and dimensions_truncated disclose omitted dimension rows, ordered by ad count. Each dimension has family, label, ads, spend_known_ads, spend_90d_raw, example_ad_ids, ad_share and spend_share. Ratios are rounded to six decimals and always retain whole-cohort denominators. Multi-label shares overlap. No cross-cohort comparison of success."
             additionalProperties: true
         limitations: { type: array, items: { type: string } }
     Error:

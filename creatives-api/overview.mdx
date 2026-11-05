@@ -91,14 +91,21 @@ sample page: active/spending ads, unknown spend, missing creatives, analysis
 coverage, and media/transcript/analysis states with ratios. Transcript counts are
 eligible ads, not unique shared videos. Source Airbyte errors/freshness and
 Mythic traversal freshness are separate. No raw error text or credentials appear.
-An absent source or timestamp is unknown, not healthy. Normal short queues are
-not alarms. Analysis/transcript work older than 48 hours merits investigation;
+An absent source or timestamp is unknown, not healthy. A source is confirmed
+healthy only when every connection is active and has synced. Partial traversals
+are open findings; in-progress, skipped or unknown syncs cannot confirm recovery.
+Normal short queues are not alarms, and retrying or incomplete stages do not
+confirm recovery. Analysis/transcript work older than 48 hours merits investigation;
 media enqueue age is not available, so pending media is not labeled stuck.
 
 `cohorts` lists up to 10 account/campaign groups by ad count, reduced further to
 keep the complete JSON response under 10,000 characters. `cohorts_total` and
 `cohorts_truncated` disclose omissions. Each group has hook-type, angle, offer
 and format counts, known raw spend, within-cohort shares and example `ad_id`s.
+A rich campaign may retain only its highest-ad-count dimension rows, preserving
+at least one row per family and every unclassified gap. `dimensions_total` and
+`dimensions_truncated` disclose omissions; shares still use the whole campaign,
+not the retained rows. Ratios are rounded to six decimal places.
 Multi-label tag shares overlap; unclassified values are coverage gaps. A partial
 sync can mean incomplete upstream coverage even when stored-row counts are exact.
 
