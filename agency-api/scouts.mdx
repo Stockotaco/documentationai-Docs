@@ -402,7 +402,8 @@ curl -X PATCH https://mythic-analytics.gulp.workers.dev/client/v1/scouts/reports
 **When.** At resolve time plus `recheck_after_days`: your value (1 to 7), else
 the number of days the scout suggested when it filed or edited the report
 (`recheck.suggested_after_days`), else 3. `recheck: false` turns it off
-(`recheck.status: skipped`). One re-check per resolve.
+(`recheck.status: skipped`). One re-check per resolve. A report filed because
+the problem came back gets its own re-check when you resolve it.
 
 **Change your mind.** While `recheck.status` is `scheduled`, PATCH the
 resolved report without a `status`: `{ "recheck": false }` cancels the
@@ -415,8 +416,7 @@ curl -X PATCH https://mythic-analytics.gulp.workers.dev/client/v1/scouts/reports
   -H "Authorization: Bearer ak_your_agency_key" \
   -H "Content-Type: application/json" \
   -d '{ "recheck_after_days": 5 }'
-``` A report filed because
-the problem came back gets its own re-check when you resolve it.
+```
 
 **How.** When it is due:
 
