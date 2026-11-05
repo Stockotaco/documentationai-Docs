@@ -56,7 +56,7 @@ The population is every ad with spend in the window. Ads are compared only withi
 Meta counts, reach and CPMr come from a daily copy of the client's Airbyte data that is separate from the spend copy. An ad's numbers from that copy are used only when both copies hold the same days for the ad, days with zero spend included. Otherwise they are unknown and `actions_coverage` says why:
 
 - `actions_incomplete`: some of the ad's days are not in the actions copy yet (for example during the first backfill).
-- `spend_copy_incomplete`: the actions copy has days the spend copy does not have yet.
+- `spend_copy_incomplete`: the actions copy has days the spend copy does not have yet. Daily copies re-read only recent weeks, so a day that reached the ad data late can stay in this state until Mythic support runs a full re-copy for the client.
 - `not_in_actions_copy`: no actions data for the ad.
 
 A Meta count is compared with the spend of the same daily rows it came from. If Meta restated an ad's spend between the two copies, `spend` is that spend and `spend_copy` is the spend copy's. With `mythic:` conversions, `spend` is the spend copy's. A copied day with no conversions counts as zero. `population.actions_coverage` counts ads by state.
