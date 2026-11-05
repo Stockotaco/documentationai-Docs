@@ -375,14 +375,15 @@ components:
             first_date: { type: string, format: date }
             last_date: { type: string, format: date }
             days_with_spend: { type: integer }
-            spend: { type: number }
+            spend: { type: number, description: "The spend the decision used. Meta conversions: the spend of the same daily rows as the count. Mythic conversions: the spend copy's." }
+            spend_copy: { type: number, description: "The ad's spend in the spend copy. Differs from spend only when Meta restated spend between the two copies." }
             impressions: { type: integer }
             reach_summed_daily: { type: integer, nullable: true, description: "Meta's daily reach summed over the window. Not unique reach." }
             reach_missing_days: { type: integer, nullable: true }
             cpmr: { type: number, nullable: true, description: "Spend per 1,000 reach_summed_daily." }
             conversions: { type: number, nullable: true, description: Null when unknown (never a guessed zero). Fractional with linear attribution. }
-            outcome_missing: { type: string, nullable: true, enum: [not_in_actions_copy, actions_incomplete, actions_stale, actions_spend_mismatch, actions_coverage_unknown, not_in_attribution, attribution_row_cap, attribution_sampled, attribution_unavailable, null] }
-            actions_coverage: { type: string, enum: [aligned, not_in_actions_copy, actions_incomplete, actions_stale, actions_spend_mismatch, actions_coverage_unknown], description: "Whether the actions copy covers every spend day at the same or a newer copy. Meta counts, reach and CPMr are null unless aligned." }
+            outcome_missing: { type: string, nullable: true, enum: [not_in_actions_copy, actions_incomplete, spend_copy_incomplete, not_in_attribution, attribution_row_cap, attribution_sampled, attribution_unavailable, null] }
+            actions_coverage: { type: string, enum: [aligned, not_in_actions_copy, actions_incomplete, spend_copy_incomplete], description: "Whether the spend and actions copies hold the same days for this ad, zero-spend days included. Meta counts, reach and CPMr are null unless aligned." }
             quadrant: { type: object, nullable: true, properties: { cpmr: { type: string, enum: [low, high] }, cpa: { type: string, enum: [low, high] } } }
             format: { type: string, nullable: true }
             tags: { type: object, nullable: true, additionalProperties: { type: array, items: { type: string } } }
