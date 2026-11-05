@@ -35,6 +35,23 @@ Ad-level Mythic attribution needs the ad id in the landing URL or a click id Myt
 
 `new_customers=true` (only a person's first-ever conversion) is not supported yet and answers 422. No substitute count is used.
 
+### Reported Meta actions
+
+`GET /client/v1/creatives/decisions/actions?from&to&account_id` lists the action types in the client's imported Meta Ads reports for the window, so you can pick a `meta:` conversion before asking for decisions. It takes only `from`, `to` (at most 366 days, default the last 30) and `account_id`, and does not decide or attribute anything.
+
+Each entry has `key` (the `conversion` value to use), `count` (Meta's count under each ad set's own attribution setting, the `value` window), `counts_by_window` (every window the reports carry), `ads` and `ad_days`. `selectable` is false for a type whose name is not a valid `meta:` key. At most 200 types are returned, ordered by `count`; `truncated` is true when there were more.
+
+<Callout kind="info">
+This is what Meta reported in the imported ad reports, not every event your Pixel or Conversions API received, and not event delivery status. An event Meta did not attribute to an ad in these dates is not listed.
+</Callout>
+
+`data_state` explains an empty list:
+
+- `no_actions_copy`: no action data has been imported for this client yet. `imported.spend_ad_days` above 0 means spend is imported and the action import has not caught up.
+- `no_ad_days_in_window`: action data is imported, but no ad ran in these dates.
+- `no_actions_in_reports`: ads ran, and Meta's reports for them carry no actions.
+- `actions_reported`: the list is not empty.
+
 ## Targets
 
 The target for an ad is, in order:
@@ -82,4 +99,4 @@ The math is one pure module in the Mythic repository (`packages/shared/src/creat
 
 ## MCP
 
-`get_creative_decisions`, `get_creative_cpa_targets` and `set_creative_cpa_targets` call these routes.
+`list_creative_reported_actions`, `get_creative_decisions`, `get_creative_cpa_targets` and `set_creative_cpa_targets` call these routes.

@@ -261,6 +261,37 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
+  /client/v1/creatives/decisions/actions:
+    get:
+      summary: List reported Meta actions
+      operationId: listCreativeReportedActions
+      description: >-
+        The Meta action types in this client's imported Meta Ads reports for the
+        window, with the counts Meta reported per attribution window, to pick a
+        `meta:` conversion. Not every event the Pixel or Conversions API
+        received, and not event delivery status. No decisions or attribution
+        are computed. Only `from`, `to` and `account_id` are accepted; any other
+        parameter answers 400.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - { name: from, in: query, schema: { type: string, format: date }, description: "First day. Default: 29 days before `to`." }
+        - { name: to, in: query, schema: { type: string, format: date }, description: "Last day. Default: today (UTC). At most 366 days in the window." }
+        - { name: account_id, in: query, schema: { type: string, example: "act_315277422339436" }, description: "Only this Meta ad account (act_ accepted)." }
+      responses:
+        "200":
+          description: Reported action types
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/ReportedActions" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "402": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
   /client/v1/creatives/decisions/targets:
     get:
       summary: Get target CPAs
@@ -338,6 +369,42 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
   schemas:
+    ReportedActions:
+      type: object
+      properties:
+        source: { type: string, enum: [meta_ads_reports] }
+        meaning: { type: string, description: What the list is and is not. }
+        window: { type: object, properties: { from: { type: string, format: date }, to: { type: string, format: date }, days: { type: integer } } }
+        account_id: { type: string, nullable: true }
+        data_state:
+          type: string
+          enum: [no_actions_copy, no_ad_days_in_window, no_actions_in_reports, actions_reported]
+          description: "no_actions_copy: nothing imported for this client yet. no_ad_days_in_window: imported, no ad-days in these dates. no_actions_in_reports: ad-days imported, none carries an action. actions_reported: the list is not empty."
+        imported:
+          type: object
+          properties:
+            ad_days: { type: integer, description: Ad-days in the imported action reports in the window. }
+            ads: { type: integer }
+            ad_days_with_actions: { type: integer }
+            spend_ad_days: { type: integer, description: "Ad-days in the imported spend reports in the window. Above ad_days means the action import is behind." }
+            first_date: { type: string, format: date, nullable: true }
+            last_date: { type: string, format: date, nullable: true }
+            attribution_settings: { type: array, items: { type: string } }
+        action_types:
+          type: array
+          maxItems: 200
+          items:
+            type: object
+            properties:
+              action_type: { type: string, example: offsite_conversion.fb_pixel_purchase }
+              key: { type: string, example: "meta:offsite_conversion.fb_pixel_purchase", description: "The conversion value for GET /client/v1/creatives/decisions." }
+              selectable: { type: boolean, description: "False when the type is not a valid meta: key." }
+              count: { type: number, nullable: true, description: "Count in the value window (each ad set's own attribution setting); null when the reports carry no value window for it." }
+              counts_by_window: { type: object, additionalProperties: { type: number }, example: { "7d_click": 12, "1d_view": 3, value: 15 } }
+              ads: { type: integer }
+              ad_days: { type: integer }
+        limit: { type: integer, example: 200 }
+        truncated: { type: boolean }
     CpaTargets:
       type: object
       properties:

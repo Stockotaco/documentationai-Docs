@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 339 tools across
+  Every tool the Mythic MCP server exposes — 340 tools across
   33 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 339 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 340 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -346,6 +346,7 @@ One client's own Meta ads and creatives copied from its Airbyte data, with media
 | `get_creative`<br /><span style={{opacity: 0.7}}>Get Creative</span> | `creative_analysis:read` | One of the client's own Meta ads with its full creative (carousel cards, dynamic asset feed), the full analysis (hook, offer and CTA text with confidence and video seconds; every tag probability; the E.P.I.C. | `GET /client/v1/creatives/:ad_id` |
 | `get_creatives_sync`<br /><span style={{opacity: 0.7}}>Get Creatives Sync</span> | `creative_analysis:read` | Where this client's own Meta creatives are read from (managed or legacy Airbyte dataset), the last sync's status, time, counts and error, and a traversal still in progress (large datasets are read over sever… | `GET /client/v1/creatives/sync` |
 | `get_creative_decisions`<br /><span style={{opacity: 0.7}}>Get Creative Decisions (Scale / Test / Kill)</span> | `creative_analysis:read` | Scale / Test / Kill for every Meta ad of this client with spend in the window, and CPMr x CPA quadrants. | `GET /client/v1/creatives/decisions` |
+| `list_creative_reported_actions`<br /><span style={{opacity: 0.7}}>List Reported Meta Actions (for picking a conversion)</span> | `creative_analysis:read` | The Meta action types in this client's IMPORTED Meta Ads reports for the window, with the counts Meta reported per attribution window (value = each ad set's own setting), ads and ad-days. | `GET /client/v1/creatives/decisions/actions` |
 | `get_creative_cpa_targets`<br /><span style={{opacity: 0.7}}>Get Creative CPA Targets</span> | `creative_analysis:read` | The saved target CPAs for one conversion: the client default, per-campaign overrides and their currency. | `GET /client/v1/creatives/decisions/targets` |
 | `sync_creatives`<br /><span style={{opacity: 0.7}}>Sync Creatives</span> | `creative_analysis:write` | Run one pass reading this client's Meta ads and creatives from its Airbyte dataset now (syncs also run after every Airbyte sync, or daily for legacy datasets). | `POST /client/v1/creatives/sync` |
 | `set_creative_cpa_targets`<br /><span style={{opacity: 0.7}}>Set Creative CPA Targets</span> | `creative_analysis:write` | Save the target CPAs for one conversion, replacing every saved target of that conversion: the client default (null removes it) and per-campaign overrides. | `PUT /client/v1/creatives/decisions/targets` |
