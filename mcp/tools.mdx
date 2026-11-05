@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 336 tools across
+  Every tool the Mythic MCP server exposes — 338 tools across
   33 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 336 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 338 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -336,16 +336,18 @@ Competitor Facebook pages one client tracks in the Meta Ad Library, their scrape
 
 ## Creative Analysis
 
-One client's own Meta ads and creatives copied from its Airbyte data, with media, video transcripts, hook/angle/offer and E.P.I.C. analysis, a summary comparable with competitor ads, and manual syncs.
+One client's own Meta ads and creatives copied from its Airbyte data, with media, video transcripts, hook/angle/offer and E.P.I.C. analysis, a summary comparable with competitor ads, manual syncs, Scale/Test/Kill decisions with CPMr x CPA quadrants, and saved target CPAs.
 
 | Tool | Scope | What it does | Proxies |
 | --- | --- | --- | --- |
 | `list_creatives`<br /><span style={{opacity: 0.7}}>List Creatives</span> | `creative_analysis:read` | The client's own Meta ads with their creative, highest 90-day spend first: copy, headline, CTA, landing URL, format (image, video, carousel, dynamic), campaign/ad set/ad names, 90-day spend and impressions f… | `GET /client/v1/creatives` |
-| `get_creative_intelligence`<br /><span style={{opacity: 0.7}}>Get Creative Intelligence</span> | `creative_analysis:read` | Complete stored-population own-ad readiness counts and ratios (media, transcripts, analysis, active/spending gaps, source freshness), with bounded account/campaign hook, angle, offer and format distributions. | `GET /client/v1/creatives/intelligence` |
 | `get_creatives_summary`<br /><span style={{opacity: 0.7}}>Get Creatives Summary</span> | `creative_analysis:read` | What this client itself runs on Meta, overall and per ad account, in the same shape as get_competitor_ads_summary so the two compare 1:1: ad and active counts, formats, new ads in the last 7/30 days, shares… | `GET /client/v1/creatives/summary` |
 | `get_creative`<br /><span style={{opacity: 0.7}}>Get Creative</span> | `creative_analysis:read` | One of the client's own Meta ads with its full creative (carousel cards, dynamic asset feed), the full analysis (hook, offer and CTA text with confidence and video seconds; every tag probability; the E.P.I.C. | `GET /client/v1/creatives/:ad_id` |
 | `get_creatives_sync`<br /><span style={{opacity: 0.7}}>Get Creatives Sync</span> | `creative_analysis:read` | Where this client's own Meta creatives are read from (managed or legacy Airbyte dataset), the last sync's status, time, counts and error, and a traversal still in progress (large datasets are read over sever… | `GET /client/v1/creatives/sync` |
+| `get_creative_decisions`<br /><span style={{opacity: 0.7}}>Get Creative Decisions (Scale / Test / Kill)</span> | `creative_analysis:read` | Scale / Test / Kill for every Meta ad of this client with spend in the window, and CPMr x CPA quadrants. | `GET /client/v1/creatives/decisions` |
+| `get_creative_cpa_targets`<br /><span style={{opacity: 0.7}}>Get Creative CPA Targets</span> | `creative_analysis:read` | The saved target CPAs for one conversion: the client default, per-campaign overrides and their currency. | `GET /client/v1/creatives/decisions/targets` |
 | `sync_creatives`<br /><span style={{opacity: 0.7}}>Sync Creatives</span> | `creative_analysis:write` | Run one pass reading this client's Meta ads and creatives from its Airbyte dataset now (syncs also run after every Airbyte sync, or daily for legacy datasets). | `POST /client/v1/creatives/sync` |
+| `set_creative_cpa_targets`<br /><span style={{opacity: 0.7}}>Set Creative CPA Targets</span> | `creative_analysis:write` | Save the target CPAs for one conversion, replacing every saved target of that conversion: the client default (null removes it) and per-campaign overrides. | `PUT /client/v1/creatives/decisions/targets` |
 
 ## Tracking Settings
 

@@ -210,6 +210,109 @@ paths:
         "429": { $ref: "#/components/responses/Error" }
         "502": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
+  /client/v1/creatives/decisions:
+    get:
+      summary: Scale / Test / Kill decisions
+      operationId: getCreativeDecisions
+      description: >-
+        Scale / Test / Kill for every Meta ad with spend in the window, with
+        CPMr x CPA quadrants and optional pooled attribute groups. Zones come
+        from a Gamma-Poisson model (Jeffreys prior) of conversions per unit of
+        spend: scale when P(CPA < target) >= confidence, kill when
+        P(CPA > target) >= confidence, else test. They describe observed cost
+        per conversion, not causality. Ads whose conversions are unknown are
+        `unclassifiable` with a reason; ads in another currency or objective
+        are listed in `population.omitted`. CPMr uses Meta's daily reach summed
+        over the window (`reach_summed_daily`), which overcounts repeat reach.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: conversion
+          in: query
+          required: true
+          description: "`meta:<action_type>` (Meta's count), `mythic:event:<event>` or `mythic:deals` (Mythic attribution; needs the Data API, refused for HIPAA locations)."
+          schema: { type: string, example: "meta:lead" }
+        - { name: from, in: query, schema: { type: string, format: date }, description: "Default: 29 days before `to`. At most 366 days." }
+        - { name: to, in: query, schema: { type: string, format: date }, description: "Default: today (UTC)." }
+        - name: window
+          in: query
+          description: "Meta conversions only. Attribution window, default `7d_click`. `value` is each ad set's own setting and answers 422 when the ads use several."
+          schema: { type: string, enum: [7d_click, 1d_click, 28d_click, 1d_view, 1d_ev, value] }
+        - { name: model, in: query, description: "Mythic conversions only. Default `last`; `linear` gives fractional counts.", schema: { type: string, enum: [last, first, linear] } }
+        - { name: pipeline, in: query, description: "`mythic:deals` only: one pipeline by exact name.", schema: { type: string } }
+        - { name: account_id, in: query, schema: { type: string, pattern: "^(act_)?[0-9]+$" } }
+        - { name: objective, in: query, description: "Meta objective to compare within. Default: the top-spend objective.", schema: { type: string, example: OUTCOME_LEADS } }
+        - { name: target_cpa, in: query, description: "What-if target for every ad, in the account currency. Never saved.", schema: { type: number, exclusiveMinimum: true, minimum: 0 } }
+        - { name: confidence, in: query, schema: { type: number, minimum: 0.5, maximum: 0.995, default: 0.9 } }
+        - { name: group_by, in: query, schema: { type: string, enum: [hook_type, angle, offer, format, campaign] } }
+        - { name: new_customers, in: query, description: "Not supported: `true` answers 422 `new_customers_unsupported`.", schema: { type: boolean } }
+      responses:
+        "200":
+          description: Decisions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Decisions" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "402": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /client/v1/creatives/decisions/targets:
+    get:
+      summary: Get target CPAs
+      operationId: getCreativeCpaTargets
+      description: Saved target CPAs for one conversion.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - { name: conversion, in: query, required: true, schema: { type: string, example: "meta:lead" } }
+      responses:
+        "200":
+          description: Targets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/CpaTargets" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+    put:
+      summary: Set target CPAs
+      operationId: setCreativeCpaTargets
+      description: >-
+        Replace every saved target of one conversion in one transaction. Needs
+        an agency key or `creative_analysis:write`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [conversion, currency]
+              properties:
+                conversion: { type: string, example: "meta:lead" }
+                currency: { type: string, pattern: "^[A-Z]{3}$", example: USD }
+                client_target_cpa: { type: number, nullable: true, example: 40 }
+                campaigns: { type: object, additionalProperties: { type: number }, example: { "120212345678901234": 60 } }
+      responses:
+        "200":
+          description: The saved targets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/CpaTargets" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     BearerAuth:
@@ -232,6 +335,98 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
   schemas:
+    CpaTargets:
+      type: object
+      properties:
+        conversion: { type: string }
+        client: { type: number, nullable: true }
+        campaigns: { type: object, additionalProperties: { type: number } }
+        currency: { type: string, nullable: true }
+    Decision:
+      type: object
+      properties:
+        zone: { type: string, enum: [scale, test, kill, unclassifiable] }
+        reason: { type: string, nullable: true, enum: [no_spend, invalid_target, missing_outcomes, invalid_conversions, null] }
+        band: { type: string, nullable: true, enum: [converting, no_conversions, null] }
+        cpa: { type: number, nullable: true }
+        p_cpa_below_target: { type: number, nullable: true }
+        p_cpa_above_target: { type: number, nullable: true }
+        cpa_interval: { type: array, nullable: true, items: { type: number }, description: Central posterior interval of the CPA at the confidence. }
+        target_cpa: { type: number, nullable: true }
+        target_source: { type: string, nullable: true, enum: [request, campaign, client, spend_weighted, null] }
+    DecisionPoint:
+      allOf:
+        - $ref: "#/components/schemas/Decision"
+        - type: object
+          properties:
+            ad_id: { type: string }
+            ad_name: { type: string, nullable: true }
+            account_id: { type: string }
+            campaign_id: { type: string }
+            campaign_name: { type: string, nullable: true }
+            adset_id: { type: string }
+            adset_name: { type: string, nullable: true }
+            currency: { type: string, nullable: true }
+            objective: { type: string, nullable: true }
+            attribution_settings: { type: array, items: { type: string } }
+            first_date: { type: string, format: date }
+            last_date: { type: string, format: date }
+            days_with_spend: { type: integer }
+            spend: { type: number }
+            impressions: { type: integer }
+            reach_summed_daily: { type: integer, nullable: true, description: "Meta's daily reach summed over the window. Not unique reach." }
+            reach_missing_days: { type: integer, nullable: true }
+            cpmr: { type: number, nullable: true, description: "Spend per 1,000 reach_summed_daily." }
+            conversions: { type: number, nullable: true, description: Null when unknown (never a guessed zero). Fractional with linear attribution. }
+            outcome_missing: { type: string, nullable: true, enum: [not_in_actions_copy, not_in_attribution, attribution_row_cap, attribution_sampled, attribution_unavailable, null] }
+            quadrant: { type: object, nullable: true, properties: { cpmr: { type: string, enum: [low, high] }, cpa: { type: string, enum: [low, high] } } }
+            format: { type: string, nullable: true }
+            tags: { type: object, nullable: true, additionalProperties: { type: array, items: { type: string } } }
+            analysis_status: { type: string }
+    Decisions:
+      type: object
+      properties:
+        window: { type: object, properties: { from: { type: string }, to: { type: string }, days: { type: integer } } }
+        conversion: { type: object, description: "source, key, and action_type + window (meta) or event/deals + model + attribution coverage (mythic)." }
+        confidence: { type: number }
+        currency: { type: string, nullable: true }
+        objective: { type: string, nullable: true }
+        targets: { type: object, properties: { client: { type: number, nullable: true }, campaigns: { type: object }, currency: { type: string, nullable: true }, override: { type: number, nullable: true }, applied: { type: boolean } } }
+        population:
+          type: object
+          properties:
+            ads_with_spend: { type: integer }
+            spend: { type: number }
+            decided_ads: { type: integer }
+            zones: { type: object, properties: { scale: { type: integer }, test: { type: integer }, kill: { type: integer }, unclassifiable: { type: integer } } }
+            unclassifiable_by_reason: { type: object, additionalProperties: { type: object, properties: { ads: { type: integer }, spend: { type: number } } } }
+            omitted_by_reason: { type: object, additionalProperties: { type: object, properties: { ads: { type: integer }, spend: { type: number } } } }
+            omitted: { type: array, items: { type: object, properties: { ad_id: { type: string }, reason: { type: string, enum: [other_currency, mixed_currency, other_objective] }, spend: { type: number } } } }
+            currencies: { type: array, items: { type: object } }
+            objectives: { type: array, items: { type: object } }
+            ads_without_actions_copy: { type: integer }
+        medians: { type: object, properties: { by_account: { type: object, additionalProperties: { type: object, properties: { cpmr: { type: number, nullable: true }, cpa: { type: number, nullable: true }, cpa_infinite: { type: boolean }, ads: { type: integer } } } } } }
+        points: { type: array, items: { $ref: "#/components/schemas/DecisionPoint" } }
+        groups:
+          type: object
+          nullable: true
+          properties:
+            by: { type: string }
+            overlapping: { type: boolean }
+            note: { type: string }
+            items: { type: array, items: { allOf: [ { $ref: "#/components/schemas/Decision" }, { type: object, properties: { value: { type: string }, label: { type: string, nullable: true }, ad_ids: { type: array, items: { type: string } }, ads: { type: integer }, spend: { type: number }, conversions: { type: number }, excluded_missing_outcomes: { type: integer }, untargeted_ads: { type: integer } } } ] } }
+            without_value: { type: object, properties: { ads: { type: integer }, spend: { type: number }, not_analyzed: { type: integer } } }
+        group_values: { type: object, nullable: true, additionalProperties: { type: array, items: { type: string } }, description: "ad_id -> pool values, so a chart can re-pool on a target drag." }
+        curves:
+          type: array
+          items:
+            type: object
+            properties:
+              target_cpa: { type: number }
+              zero_conversion_kill_spend: { type: number }
+              points: { type: array, items: { type: object, properties: { spend: { type: number }, scale_max_cpa: { type: number, nullable: true }, kill_min_cpa: { type: number, nullable: true }, scale_min_conversions: { type: number, nullable: true }, kill_max_conversions: { type: number, nullable: true }, killable: { type: boolean }, kill_only_without_conversions: { type: boolean } } } }
+        available_action_types: { type: array, items: { type: object, properties: { action_type: { type: string }, count: { type: number } } } }
+        notes: { type: object, additionalProperties: { type: string } }
     CreativeIntelligence:
       type: object
       required: [as_of, complete, totals, performance, readiness, cohorts_total, cohorts_truncated, cohorts, limitations]

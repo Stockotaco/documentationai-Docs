@@ -594,6 +594,11 @@
                     "title": "Introduction",
                     "path": "creatives-api/overview",
                     "icon": "file-text"
+                  },
+                  {
+                    "title": "Scale / Test / Kill",
+                    "path": "creatives-api/decisions",
+                    "icon": "chart-line"
                   }
                 ]
               },

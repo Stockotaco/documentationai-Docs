@@ -1,0 +1,75 @@
+---
+title: Scale / Test / Kill
+description: >-
+  Which of a client's Meta ads to scale, keep testing or kill against a target
+  CPA, with CPMr x CPA quadrants and pooled hook, angle, offer, format and
+  campaign groups.
+---
+
+## Overview
+
+`GET /client/v1/creatives/decisions` decides every Meta ad of the client that had spend in the window. It needs the Creative Analysis feature (Pro plan) and reads only the client's Airbyte data copies, never the live Meta API.
+
+Each ad gets a zone:
+
+- **scale**: P(CPA < target) is at least the confidence (default 0.9).
+- **kill**: P(CPA > target) is at least the confidence.
+- **test**: neither yet.
+- **unclassifiable**: no spend, no valid target, or unknown conversions. The `reason` says which. Unknown conversions are never read as zero.
+
+The probabilities come from a Gamma-Poisson model of conversions per unit of spend with a Jeffreys prior: the conversion rate is Gamma(conversions + 0.5, spend). An ad with no conversions is still decided. At confidence 0.9 it becomes killable once its spend passes about 1.35 times the target, and it is plotted in its own `no_conversions` band. Fractional conversions (linear attribution) are allowed.
+
+Zones describe the observed cost per conversion. They are not causal: they do not say an ad caused its conversions, what pausing it would save, or that an attribute caused a group's result.
+
+## Conversions
+
+`conversion` is required.
+
+| Value | Counts | Notes |
+| --- | --- | --- |
+| `meta:<action_type>` | Meta's own count for that action type, e.g. `meta:lead` | `window` picks the attribution window, default `7d_click`. `value` (each ad set's own setting) answers 422 when the ads use more than one setting. A window the connection never returns answers 422. `available_action_types` lists what the window has. |
+| `mythic:event:<event>` | Mythic attribution of that event to the ad (identity-resolved, across sessions) | `model` is `last` (default), `first` or `linear`. Needs the Data API in the plan. Refused for HIPAA locations. |
+| `mythic:deals` | Won CRM deals, optionally one `pipeline` | As above. |
+
+Ad-level Mythic attribution needs the ad id in the landing URL or a click id Mythic can map. Conversions it cannot place on an ad are reported under `conversion.attribution` and never assigned to one. When the attribution result is cut at 500 rows or sampled, every ad's count is unknown (`outcome_missing`) rather than partial.
+
+`new_customers=true` (only a person's first-ever conversion) is not supported yet and answers 422. No substitute count is used.
+
+## Targets
+
+The target for an ad is, in order:
+
+1. `target_cpa` on the request: a what-if for every ad. It is never saved.
+2. The ad's campaign target, saved with `PUT /client/v1/creatives/decisions/targets`.
+3. The client's default target, saved the same way.
+
+Targets are saved per conversion, because a lead target is not a purchase target, and in a currency. Saved targets in another currency than the ads are not applied (`targets.applied: false`). Saving needs an agency key or an `mcp_` key with `creative_analysis:write`. The `PUT` replaces every target of that conversion.
+
+A pooled group uses the spend-weighted target of its ads, or none when one of its ads has none.
+
+## Which ads are compared
+
+The population is every ad with spend in the window. Ads are compared only within one currency and one campaign objective: by default the ones with the most spend, or `objective=` to choose. Ads left out are listed in `population.omitted` with their spend.
+
+## CPMr and quadrants
+
+`cpmr` is spend per 1,000 `reach_summed_daily`. That is Meta's daily reach summed over the days of the window, because the Airbyte data has reach per ad per day only. It counts a person reached on several days more than once, so CPMr reads low for long-running ads. It is not unique reach over the range.
+
+Quadrants split each ad account at its median CPMr and median CPA. The medians use the ads with spend, reach and known conversions. An ad with no conversions counts as an infinite CPA. `cpa_infinite` is true when that is the median.
+
+## Groups
+
+`group_by` pools spend and conversions per value and decides each pool:
+
+- `hook_type`, `angle`, `offer`: tags from the creative analysis. An ad can carry several, so pools overlap and their spend does not add up to the total. Ads without tags (not analysed yet) are counted in `groups.without_value`.
+- `format`, `campaign`: each ad is in exactly one pool.
+
+## Charts
+
+Every ad has `spend`, `cpa`, `cpmr`, `zone`, `band` and `quadrant`. `curves` hold the decision boundaries for each target in use: the CPA below which an ad at that spend is scaled (`scale_max_cpa`) and above which it is killed (`kill_min_cpa`). Both approach the target as spend grows.
+
+The math is one pure module in the Mythic repository (`packages/shared/src/creative-decisions.mjs`). A chart can run it to re-decide the ads and the pools when someone drags the target, using `points` and `group_values` from the response, with no new request.
+
+## MCP
+
+`get_creative_decisions`, `get_creative_cpa_targets` and `set_creative_cpa_targets` call these routes.
