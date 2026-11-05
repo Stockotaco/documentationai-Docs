@@ -40,7 +40,7 @@ subsequent tool operates on that client for the session.
 ## Base URL
 
 ```text
-https://mythic-mcp-server-production.up.railway.app/mcp
+https://mcp.mythicdata.io/mcp
 ```
 
 `POST /mcp` speaks JSON-RPC 2.0 (Streamable HTTP) and serves two protocol eras
@@ -57,7 +57,7 @@ opt in to either era.
 ### Pinning a client in the URL
 
 ```text
-https://mythic-mcp-server-production.up.railway.app/mcp/c/<location_id>
+https://mcp.mythicdata.io/mcp/c/<location_id>
 ```
 
 An agency-wide key connected to `/mcp/c/<location_id>` behaves exactly like a
@@ -76,7 +76,7 @@ There is no OAuth flow — configure the key as a static header. The server says
 <CodeGroup>
 ```bash Claude Code
 claude mcp add --transport http mythic \
-  https://mythic-mcp-server-production.up.railway.app/mcp \
+  https://mcp.mythicdata.io/mcp \
   --header "Authorization: Bearer mcp_your_api_key"
 ```
 
@@ -85,7 +85,7 @@ claude mcp add --transport http mythic \
   "mcpServers": {
     "mythic": {
       "type": "http",
-      "url": "https://mythic-mcp-server-production.up.railway.app/mcp",
+      "url": "https://mcp.mythicdata.io/mcp",
       "headers": { "Authorization": "Bearer mcp_your_api_key" }
     }
   }
@@ -93,7 +93,7 @@ claude mcp add --transport http mythic \
 ```
 
 ```bash Verify with curl
-curl -X POST https://mythic-mcp-server-production.up.railway.app/mcp \
+curl -X POST https://mcp.mythicdata.io/mcp \
   -H "Authorization: Bearer mcp_your_api_key" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
