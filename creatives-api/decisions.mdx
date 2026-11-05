@@ -28,7 +28,7 @@ Zones describe the observed cost per conversion. They are not causal: they do no
 | Value | Counts | Notes |
 | --- | --- | --- |
 | `meta:<action_type>` | Meta's own count for that action type, e.g. `meta:lead` | `window` picks the attribution window, default `7d_click`. `value` (each ad set's own setting) answers 422 when the ads use more than one setting. A window the connection never returns answers 422. `available_action_types` lists what the window has. |
-| `mythic:event:<event>` | Mythic attribution of that event to the ad (identity-resolved, across sessions) | `model` is `last` (default), `first` or `linear`. Needs the Data API in the plan. Refused for HIPAA locations. |
+| `mythic:event:<event>` | Mythic attribution of that event to the ad (identity-resolved, across sessions) | `model` is `last` (default), `first` or `linear`. Needs the Data API in the plan. Refused with 403 for HIPAA locations, and with a retryable 503 `privacy_unknown` when the location's privacy configuration cannot be read. |
 | `mythic:deals` | Won CRM deals, optionally one `pipeline` | As above. |
 
 Ad-level Mythic attribution needs the ad id in the landing URL or a click id Mythic can map. Conversions it cannot place on an ad are reported under `conversion.attribution` and never assigned to one. When the attribution result is cut at 500 rows or sampled, every ad's count is unknown (`outcome_missing`) rather than partial.
@@ -43,13 +43,24 @@ The target for an ad is, in order:
 2. The ad's campaign target, saved with `PUT /client/v1/creatives/decisions/targets`.
 3. The client's default target, saved the same way.
 
-Targets are saved per conversion, because a lead target is not a purchase target, and in a currency. Saved targets in another currency than the ads are not applied (`targets.applied: false`). Saving needs an agency key or an `mcp_` key with `creative_analysis:write`. The `PUT` replaces every target of that conversion, so `client_target_cpa` and `campaigns` are both required: a missing or invalid value answers 400 and changes nothing. Send `null` to clear the client default and `{}` to clear every campaign target.
+Targets are saved per conversion, because a lead target is not a purchase target, and in a currency. Saved targets apply only when their currency is the ads' currency (`targets.applied`). Saving needs an agency key or an `mcp_` key with `creative_analysis:write`. The `PUT` replaces every target of that conversion, so `client_target_cpa` and `campaigns` are both required: a missing or invalid value answers 400 and changes nothing. Send `null` to clear the client default and `{}` to clear every campaign target.
 
 A pooled group uses the spend-weighted target of its ads, or none when one of its ads has none.
 
 ## Which ads are compared
 
-The population is every ad with spend in the window. Ads are compared only within one currency and one campaign objective: by default the ones with the most spend, or `objective=` to choose. Every other ad is listed in `population.omitted` with its spend and reason: another currency or objective, or a currency or objective that is not known yet. Until the ad actions copy has run for a client, no objective is known, every ad is kept and Meta counts are unknown.
+The population is every ad with spend in the window. Ads are compared only within one currency and one campaign objective: by default the ones with the most spend, or `objective=` to choose. Every other ad is listed in `population.omitted` with its spend and reason: another currency or objective, or a currency or objective that is not known yet. An ad whose currency is unknown is never decided, even when no ad's currency is known. Until the ad actions copy has run for a client, no objective is known, every ad is kept and Meta counts are unknown.
+
+## Data coverage
+
+Meta counts, reach and CPMr come from a daily copy of the client's Airbyte data that is separate from the spend copy. An ad's numbers from that copy are used only when, for every day the ad has spend, the copy has a row from the same or a newer sync with the same spend. Otherwise they are unknown and `actions_coverage` says why:
+
+- `actions_incomplete`: some days are not copied yet (for example during the first backfill).
+- `actions_stale`: the spend was copied again after the last actions copy.
+- `actions_spend_mismatch`: the two copies disagree on a day's spend (Meta restated it).
+- `not_in_actions_copy` or `actions_coverage_unknown`: no actions data for the ad.
+
+A copied day with no conversions counts as zero. `population.actions_coverage` counts ads by state.
 
 ## CPMr and quadrants
 

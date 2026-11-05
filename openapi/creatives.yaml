@@ -260,6 +260,7 @@ paths:
         "402": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /client/v1/creatives/decisions/targets:
     get:
       summary: Get target CPAs
@@ -380,7 +381,8 @@ components:
             reach_missing_days: { type: integer, nullable: true }
             cpmr: { type: number, nullable: true, description: "Spend per 1,000 reach_summed_daily." }
             conversions: { type: number, nullable: true, description: Null when unknown (never a guessed zero). Fractional with linear attribution. }
-            outcome_missing: { type: string, nullable: true, enum: [not_in_actions_copy, not_in_attribution, attribution_row_cap, attribution_sampled, attribution_unavailable, null] }
+            outcome_missing: { type: string, nullable: true, enum: [not_in_actions_copy, actions_incomplete, actions_stale, actions_spend_mismatch, actions_coverage_unknown, not_in_attribution, attribution_row_cap, attribution_sampled, attribution_unavailable, null] }
+            actions_coverage: { type: string, enum: [aligned, not_in_actions_copy, actions_incomplete, actions_stale, actions_spend_mismatch, actions_coverage_unknown], description: "Whether the actions copy covers every spend day at the same or a newer copy. Meta counts, reach and CPMr are null unless aligned." }
             quadrant: { type: object, nullable: true, properties: { cpmr: { type: string, enum: [low, high] }, cpa: { type: string, enum: [low, high] } } }
             format: { type: string, nullable: true }
             tags: { type: object, nullable: true, additionalProperties: { type: array, items: { type: string } } }
@@ -393,7 +395,7 @@ components:
         confidence: { type: number }
         currency: { type: string, nullable: true }
         objective: { type: string, nullable: true }
-        targets: { type: object, properties: { client: { type: number, nullable: true }, campaigns: { type: object }, currency: { type: string, nullable: true }, override: { type: number, nullable: true }, applied: { type: boolean } } }
+        targets: { type: object, properties: { client: { type: number, nullable: true }, campaigns: { type: object }, currency: { type: string, nullable: true }, override: { type: number, nullable: true }, applied: { type: boolean, description: "Saved targets were applied: their currency equals the population's." }, override_applied: { type: boolean } } }
         population:
           type: object
           properties:
@@ -407,6 +409,7 @@ components:
             currencies: { type: array, items: { type: object } }
             objectives: { type: array, items: { type: object } }
             ads_without_actions_copy: { type: integer }
+            actions_coverage: { type: object, additionalProperties: { type: integer }, description: Ads per actions_coverage state. }
         medians: { type: object, properties: { by_account: { type: object, additionalProperties: { type: object, properties: { cpmr: { type: number, nullable: true }, cpa: { type: number, nullable: true }, cpa_infinite: { type: boolean }, ads: { type: integer } } } } } }
         points: { type: array, items: { $ref: "#/components/schemas/DecisionPoint" } }
         groups:
