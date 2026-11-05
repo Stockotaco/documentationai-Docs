@@ -285,7 +285,9 @@ paths:
       operationId: setCreativeCpaTargets
       description: >-
         Replace every saved target of one conversion in one transaction. Needs
-        an agency key or `creative_analysis:write`.
+        an agency key or `creative_analysis:write`. Every field is required: a
+        missing or invalid value answers 400 and changes nothing. `null`
+        clears the client default and `{}` clears every campaign target.
       parameters:
         - $ref: "#/components/parameters/LocationId"
       requestBody:
@@ -294,7 +296,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [conversion, currency]
+              required: [conversion, currency, client_target_cpa, campaigns]
               properties:
                 conversion: { type: string, example: "meta:lead" }
                 currency: { type: string, pattern: "^[A-Z]{3}$", example: USD }
@@ -401,7 +403,7 @@ components:
             zones: { type: object, properties: { scale: { type: integer }, test: { type: integer }, kill: { type: integer }, unclassifiable: { type: integer } } }
             unclassifiable_by_reason: { type: object, additionalProperties: { type: object, properties: { ads: { type: integer }, spend: { type: number } } } }
             omitted_by_reason: { type: object, additionalProperties: { type: object, properties: { ads: { type: integer }, spend: { type: number } } } }
-            omitted: { type: array, items: { type: object, properties: { ad_id: { type: string }, reason: { type: string, enum: [other_currency, mixed_currency, other_objective] }, spend: { type: number } } } }
+            omitted: { type: array, items: { type: object, properties: { ad_id: { type: string }, reason: { type: string, enum: [other_currency, mixed_currency, currency_unknown, other_objective, objective_unknown] }, spend: { type: number } } } }
             currencies: { type: array, items: { type: object } }
             objectives: { type: array, items: { type: object } }
             ads_without_actions_copy: { type: integer }

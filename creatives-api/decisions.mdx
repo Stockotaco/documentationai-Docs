@@ -43,13 +43,13 @@ The target for an ad is, in order:
 2. The ad's campaign target, saved with `PUT /client/v1/creatives/decisions/targets`.
 3. The client's default target, saved the same way.
 
-Targets are saved per conversion, because a lead target is not a purchase target, and in a currency. Saved targets in another currency than the ads are not applied (`targets.applied: false`). Saving needs an agency key or an `mcp_` key with `creative_analysis:write`. The `PUT` replaces every target of that conversion.
+Targets are saved per conversion, because a lead target is not a purchase target, and in a currency. Saved targets in another currency than the ads are not applied (`targets.applied: false`). Saving needs an agency key or an `mcp_` key with `creative_analysis:write`. The `PUT` replaces every target of that conversion, so `client_target_cpa` and `campaigns` are both required: a missing or invalid value answers 400 and changes nothing. Send `null` to clear the client default and `{}` to clear every campaign target.
 
 A pooled group uses the spend-weighted target of its ads, or none when one of its ads has none.
 
 ## Which ads are compared
 
-The population is every ad with spend in the window. Ads are compared only within one currency and one campaign objective: by default the ones with the most spend, or `objective=` to choose. Ads left out are listed in `population.omitted` with their spend.
+The population is every ad with spend in the window. Ads are compared only within one currency and one campaign objective: by default the ones with the most spend, or `objective=` to choose. Every other ad is listed in `population.omitted` with its spend and reason: another currency or objective, or a currency or objective that is not known yet. Until the ad actions copy has run for a client, no objective is known, every ad is kept and Meta counts are unknown.
 
 ## CPMr and quadrants
 
