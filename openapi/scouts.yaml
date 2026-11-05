@@ -368,7 +368,7 @@ paths:
                   required: [location_id, skill]
                   properties:
                     location_id: { type: string, description: "One of the agency's clients." }
-                    skill: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, spend_efficiency, landing_pages, data_pipeline, signal_triage, competitor_creative, custom], description: "Cannot change after creation." }
+                    skill: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, spend_efficiency, landing_pages, data_pipeline, signal_triage, competitor_creative, creative_performance, creative_readiness, custom], description: "Cannot change after creation." }
                 - $ref: "#/components/schemas/ScoutInput"
       responses:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/ScoutResponse" } } } }
@@ -749,7 +749,7 @@ components:
         id: { type: string, format: uuid }
         location_id: { type: string }
         name: { type: string }
-        skill: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, spend_efficiency, landing_pages, data_pipeline, signal_triage, competitor_creative, custom] }
+        skill: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, spend_efficiency, landing_pages, data_pipeline, signal_triage, competitor_creative, creative_performance, creative_readiness, custom] }
         instructions: { type: string, nullable: true }
         schedule: { $ref: "#/components/schemas/Schedule" }
         delivery:
@@ -831,7 +831,7 @@ components:
     Skill:
       type: object
       properties:
-        id: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, spend_efficiency, landing_pages, data_pipeline, signal_triage, competitor_creative, custom] }
+        id: { type: string, enum: [error_tracking, attribution_drift, conversion_delivery, spend_efficiency, landing_pages, data_pipeline, signal_triage, competitor_creative, creative_performance, creative_readiness, custom] }
         name: { type: string }
         description: { type: string }
         families:
@@ -841,7 +841,7 @@ components:
         trigger: { type: string, enum: [schedule, signals], description: "signals: a scheduled run starts only when new unattached signals exist." }
         default_schedule: { $ref: "#/components/schemas/Schedule" }
         requires_instructions: { type: boolean }
-        requires_feature: { type: string, nullable: true, description: "A plan feature the client needs besides scouts (competitor_creative: competitor_ads)." }
+        requires_feature: { type: string, nullable: true, description: "A plan feature the client needs besides scouts (competitor_creative: competitor_ads; creative_performance and creative_readiness: creative_analysis)." }
         version: { type: string, example: "2026-10-19.1" }
         playbook_md: { type: string, description: The standing instructions the scout follows. }
     Restricted:

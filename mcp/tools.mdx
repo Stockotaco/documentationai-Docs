@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 335 tools across
+  Every tool the Mythic MCP server exposes — 336 tools across
   33 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 335 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 336 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -325,8 +325,8 @@ Competitor Facebook pages one client tracks in the Meta Ad Library, their scrape
 | `list_competitor_pages`<br /><span style={{opacity: 0.7}}>List Competitor Pages</span> | `competitor_ads:read` | Competitor Facebook pages this client tracks in the Meta Ad Library (at most 10), with each page's last refresh (status, counts, error) and next scheduled refresh. | `GET /client/v1/competitor-ads/pages` |
 | `list_competitor_ads`<br /><span style={{opacity: 0.7}}>List Competitor Ads</span> | `competitor_ads:read` | Scraped competitor ads, newest Ad Library start date first: copy, headline, CTA, format, days running, hook text with its video seconds, hook/angle/offer tags, an E.P.I.C. | `GET /client/v1/competitor-ads/ads` |
 | `get_competitor_ad`<br /><span style={{opacity: 0.7}}>Get Competitor Ad</span> | `competitor_ads:read` | One competitor ad with its full analysis (hook, intro, problem, mechanism, offer and CTA text with confidence and video seconds; every tag probability; the E.P.I.C. | `GET /client/v1/competitor-ads/ads/:id` |
-| `get_competitor_ad_brand`<br /><span style={{opacity: 0.7}}>Get Ad Brand</span> | `competitor_ads:read` | This client's saved brand profile for ad prompts (product, audience, benefits, angles, proof, offers, must_avoid, compliance), or null. | `GET /client/v1/competitor-ads/brand` |
 | `get_competitor_ads_summary`<br /><span style={{opacity: 0.7}}>Get Competitor Ads Summary</span> | `competitor_ads:read` | What this client's competitors run, overall and per page, counted per ad (a carousel is one ad): ad and active counts, formats, new ads in the last 7/30 days, shares of hook types, angles and offer elements… | `GET /client/v1/competitor-ads/summary` |
+| `get_competitor_ad_brand`<br /><span style={{opacity: 0.7}}>Get Ad Brand</span> | `competitor_ads:read` | This client's saved brand profile for ad prompts (product, audience, benefits, angles, proof, offers, must_avoid, compliance), or null. | `GET /client/v1/competitor-ads/brand` |
 | `add_competitor_page`<br /><span style={{opacity: 0.7}}>Add Competitor Page</span> | `competitor_ads:write` | Track a competitor Facebook page for this client (max 10). | `POST /client/v1/competitor-ads/pages` |
 | `update_competitor_page`<br /><span style={{opacity: 0.7}}>Update Competitor Page</span> | `competitor_ads:write` | Change a tracked page: label, country, max_ads, or active (false pauses its daily refresh and works on every plan). | `PATCH /client/v1/competitor-ads/pages/:id` |
 | `delete_competitor_page`<br /><span style={{opacity: 0.7}}>Delete Competitor Page</span> | `competitor_ads:write` | Stop tracking a page and delete its stored ads for this client. | `DELETE /client/v1/competitor-ads/pages/:id` |
@@ -341,6 +341,7 @@ One client's own Meta ads and creatives copied from its Airbyte data, with media
 | Tool | Scope | What it does | Proxies |
 | --- | --- | --- | --- |
 | `list_creatives`<br /><span style={{opacity: 0.7}}>List Creatives</span> | `creative_analysis:read` | The client's own Meta ads with their creative, highest 90-day spend first: copy, headline, CTA, landing URL, format (image, video, carousel, dynamic), campaign/ad set/ad names, 90-day spend and impressions f… | `GET /client/v1/creatives` |
+| `get_creative_intelligence`<br /><span style={{opacity: 0.7}}>Get Creative Intelligence</span> | `creative_analysis:read` | Complete stored-population own-ad readiness counts and ratios (media, transcripts, analysis, active/spending gaps, source freshness), with bounded account/campaign hook, angle, offer and format distributions. | `GET /client/v1/creatives/intelligence` |
 | `get_creatives_summary`<br /><span style={{opacity: 0.7}}>Get Creatives Summary</span> | `creative_analysis:read` | What this client itself runs on Meta, overall and per ad account, in the same shape as get_competitor_ads_summary so the two compare 1:1: ad and active counts, formats, new ads in the last 7/30 days, shares… | `GET /client/v1/creatives/summary` |
 | `get_creative`<br /><span style={{opacity: 0.7}}>Get Creative</span> | `creative_analysis:read` | One of the client's own Meta ads with its full creative (carousel cards, dynamic asset feed), the full analysis (hook, offer and CTA text with confidence and video seconds; every tag probability; the E.P.I.C. | `GET /client/v1/creatives/:ad_id` |
 | `get_creatives_sync`<br /><span style={{opacity: 0.7}}>Get Creatives Sync</span> | `creative_analysis:read` | Where this client's own Meta creatives are read from (managed or legacy Airbyte dataset), the last sync's status, time, counts and error, and a traversal still in progress (large datasets are read over sever… | `GET /client/v1/creatives/sync` |

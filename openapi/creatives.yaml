@@ -83,6 +83,39 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "402": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /client/v1/creatives/intelligence:
+    get:
+      summary: Creative readiness and coverage
+      operationId: getCreativeIntelligence
+      description: >-
+        Exact aggregates over all stored non-gone own ads, without PostgREST page
+        sampling. Complete describes the stored population, not upstream Meta
+        completeness. Includes source/sync freshness, stage counts and ratios,
+        active/spending analysis gaps, and bounded account/campaign distributions
+        for hook type, angle, offer and format. Up to 10 cohorts by ad count are
+        listed, reduced further to keep the coherent response within 10000 JSON
+        characters. cohorts_total and cohorts_truncated disclose omissions.
+        Spend is a rolling 90-day source snapshot in raw account units, never
+        cross-account money or proof of success. Outcome performance is explicitly
+        unavailable without verified objective, currency and attribution joins.
+        Read-only, creative_analysis:read and creative_analysis entitlement. No
+        competitor entitlement, model call, live Meta request or ad mutation.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Complete stored-population counts and bounded coverage cohorts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/CreativeIntelligence" }
+        "401": { $ref: "#/components/responses/Error" }
+        "402": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
   /client/v1/creatives/summary:
     get:
       summary: Summary
@@ -196,6 +229,52 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
   schemas:
+    CreativeIntelligence:
+      type: object
+      required: [as_of, complete, totals, performance, readiness, cohorts_total, cohorts_truncated, cohorts, limitations]
+      properties:
+        as_of: { type: string, format: date-time }
+        complete: { type: boolean, description: "Counts cover every stored non-gone row, not all upstream ads.", example: true }
+        population: { type: string }
+        totals:
+          type: object
+          description: "Exact ads, active_ads, spending_ads, spend_unknown_ads, analyzed_ads, missing_creatives, active_analysis_gaps, spending_analysis_gaps, oldest_seen_at, newest_seen_at and analysis_ad_coverage. No cross-account spend sum."
+          additionalProperties: true
+        performance:
+          type: object
+          properties:
+            status: { type: string, enum: [unavailable] }
+            reason: { type: string }
+            missing: { type: array, items: { type: string } }
+            rules: { type: array, items: { type: string } }
+        readiness:
+          type: object
+          description: "pipeline_enabled, stages, checks, sync, airbyte and queue_policy. Each stage has eligible_ads, states (with ratios), failed_ads, failed_ratio, old_pending_ads and age_basis. Transcript denominator is eligible ads, not unique videos. Queue investigation threshold is 48 hours; media enqueue age is unavailable. Unknown is not healthy."
+          properties:
+            pipeline_enabled: { type: boolean }
+            stages: { type: array, items: { type: object, additionalProperties: true } }
+            checks:
+              type: array
+              items:
+                type: object
+                properties:
+                  code: { type: string }
+                  status: { type: string, enum: [open, healthy, unknown] }
+                additionalProperties: true
+            sync: { type: object, nullable: true, additionalProperties: true }
+            airbyte: { type: object, additionalProperties: true, description: "Location Meta connection counts and freshness timestamps; freshness verdict unknown without connection schedules. Raw error strings and credentials are not returned." }
+            queue_policy: { type: string }
+        cohorts_total: { type: integer }
+        cohorts_truncated: { type: boolean }
+        cohort_order: { type: string }
+        cohorts:
+          type: array
+          maxItems: 10
+          items:
+            type: object
+            description: "One account/campaign, currency and objective null. Contains ads/active_ads, known-spend counts, raw source spend, analysis ad/spend coverage and dimensions. Each dimension has family, label, ads, spend_known_ads, spend_90d_raw, example_ad_ids, ad_share and spend_share. Multi-label shares overlap. No cross-cohort comparison of success."
+            additionalProperties: true
+        limitations: { type: array, items: { type: string } }
     Error:
       type: object
       properties:

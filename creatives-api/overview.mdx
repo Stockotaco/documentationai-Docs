@@ -78,3 +78,37 @@ The E.P.I.C. test is Mythic's interpretation of Chris Rocheleau's publicly descr
 ## MCP tools
 
 `get_creatives_sync`, `get_creatives_summary`, `list_creatives`, `get_creative` and `sync_creatives`. See [MCP tools](/mcp/tools).
+
+## Complete readiness and coverage
+
+`GET /client/v1/creatives/intelligence` (`get_creative_intelligence` in MCP) needs
+`creative_analysis:read` and the `creative_analysis` plan feature, with the same
+location binding and privacy rules as other creatives reads. No model call or
+live Meta request is made.
+
+The response contains exact counts over **every stored non-gone ad**, not a
+sample page: active/spending ads, unknown spend, missing creatives, analysis
+coverage, and media/transcript/analysis states with ratios. Transcript counts are
+eligible ads, not unique shared videos. Source Airbyte errors/freshness and
+Mythic traversal freshness are separate. No raw error text or credentials appear.
+An absent source or timestamp is unknown, not healthy. Normal short queues are
+not alarms. Analysis/transcript work older than 48 hours merits investigation;
+media enqueue age is not available, so pending media is not labeled stuck.
+
+`cohorts` lists up to 10 account/campaign groups by ad count, reduced further to
+keep the complete JSON response under 10,000 characters. `cohorts_total` and
+`cohorts_truncated` disclose omissions. Each group has hook-type, angle, offer
+and format counts, known raw spend, within-cohort shares and example `ad_id`s.
+Multi-label tag shares overlap; unclassified values are coverage gaps. A partial
+sync can mean incomplete upstream coverage even when stored-row counts are exact.
+
+`performance.status` is currently `unavailable`: these snapshots have no verified
+ad-level outcome, campaign-objective, currency and attribution-window join.
+Do not calculate CPA/ROAS, claim success from spend, pool accounts/campaigns or
+mistake creation age for continuous runtime. Spend is a rolling 90-day source
+snapshot, not a daily or weekly performance series.
+
+The opt-in **Creative performance** weekly scout includes coverage and next-test
+hypotheses in one ordinary report. The daily **Creative readiness** scout monitors
+queues and source readiness. Both are agency BYOK only and use existing Scout
+schedules, settings and delivery channels. See [Scouts](/agency-api/scouts#own-ad-creative-scouts).
