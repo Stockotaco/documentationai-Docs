@@ -270,8 +270,9 @@ paths:
         window, with the counts Meta reported per attribution window, to pick a
         `meta:` conversion. Not every event the Pixel or Conversions API
         received, and not event delivery status. No decisions or attribution
-        are computed. Only `from`, `to` and `account_id` are accepted; any other
-        parameter answers 400.
+        are computed. The only filters are `from`, `to` and `account_id`,
+        plus the usual `location_id` location context; any other parameter
+        answers 400.
       parameters:
         - $ref: "#/components/parameters/LocationId"
         - { name: from, in: query, schema: { type: string, format: date }, description: "First day. Default: 29 days before `to`." }
@@ -379,7 +380,7 @@ components:
         data_state:
           type: string
           enum: [no_actions_copy, no_ad_days_in_window, no_actions_in_reports, actions_reported]
-          description: "no_actions_copy: nothing imported for this client yet. no_ad_days_in_window: imported, no ad-days in these dates. no_actions_in_reports: ad-days imported, none carries an action. actions_reported: the list is not empty."
+          description: "no_actions_copy: no action-report rows imported for this client yet. no_ad_days_in_window: No imported action-report ad-days match these dates/account. This does not establish that no ads ran. Spend may exist and the import may be behind (compare imported.spend_ad_days). no_actions_in_reports: Imported action-report ad-days match, and none of those imported rows carries an action. This does not establish that Meta recorded no actions. actions_reported: the list is not empty."
         imported:
           type: object
           properties:
