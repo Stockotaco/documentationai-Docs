@@ -19,7 +19,7 @@ Records are kept **30 days** and read back through `/client/v1/logs`:
 
 - **Search** by level, service, body text, attributes, person (`distinct_id`), session or trace id, newest first, keyset-paged.
 - **Volume** per time bucket and level, and the **services** and **attribute keys** present.
-- **Patterns**: lines that differ only in volatile tokens (dates, UUIDs, hex ids, long numbers) are grouped, with a masked template, counts and a sample. `new_only` shows patterns that did not occur in the days before the window.
+- **Patterns**: lines that differ only in volatile tokens (dates, UUIDs, hex ids, long numbers, URLs, quoted paths) are grouped, with a masked template, counts and a sample. `new_only` shows patterns that did not occur in the days before the window.
 - **Traces**: every record that shares a trace id, oldest first, with when the request started and ended, its services and its spans. Built from logs: Mythic does not ingest spans.
 - **Digest**: a summary of a window, at most 64 KB, for an agent to read whole: totals, services, top, error and new patterns, each with its pattern id, counts and one sample record.
 
@@ -71,16 +71,19 @@ The default is the last hour (24 hours for `/digest`). A window spans at most 30
 | `levels` | Comma list of `trace`, `debug`, `info`, `warn`, `error`, `fatal`. |
 | `services` | Comma list of service names (OpenTelemetry `service.name`), at most 20. |
 | `q` | Body search, case-insensitive. Whitespace-separated terms must all match; `"double quotes"` keep a phrase. At most 5 terms. |
+| `exclude` | Repeatable. Drops records whose body contains any of these substrings, case-insensitively. Each value is used as is (commas are not split). At most 10 values of at most 256 bytes. `exclude=No route matches URL` hides bot-scanner 404s so real errors rank first. Works on search, volume, services, attributes, patterns, one pattern, its occurrences and the digest. |
 | `attr` | Repeatable. `key=value` matches a string value or the JSON text of a number or boolean (`http.status_code=500`); a bare `key` matches records that have it. Resource attributes are `resource.<key>`. At most 5. |
 | `distinct_id`, `session_id` | Records linked to a person or session ([how records are linked](/logs/otlp-ingestion#link-logs-to-people-and-sessions)). |
 | `distinct_ids` | Records linked to any of these distinct ids: a comma list or the param repeated, at most 50 values of at most 256 bytes, none containing a comma. |
 | `received_before` | Records Mythic accepted strictly before this instant, so late-arriving records cannot change a read you have pinned. |
 | `trace_id` | 32 hex characters. `GET /traces/{trace_id}` reads the whole trace with a summary. |
-| `pattern_id` | One pattern. |
+| `pattern_id` | One pattern (`v2:` or `v1:` id). |
 
 ## Patterns
 
-A pattern id is `v1:` followed by a hash of the service, the level and the first 1 KB of the body with these masked: ISO dates and date-times, UUIDs, `0x` hex, bare hex runs of 8 or more characters, and numbers of 4 or more digits. **Short numbers are kept**, so `upstream status 200` and `upstream status 500` are different patterns while `order 12345 placed` and `order 67890 placed` are one.
+A pattern id is `v2:` followed by a hash of the service, the level and the first 1 KB of the body with these masked: the `line:col` of `file://` stack frames (the file path is kept), `http`/`https` URLs (`<url>`), quoted absolute paths such as `"/.git/config"` or `'/news/'` (`"<path>"`), ISO dates and date-times, UUIDs, `0x` hex, bare hex runs of 8 or more characters, and numbers of 4 or more digits. **Short numbers are kept**, so `upstream status 200` and `upstream status 500` are different patterns while `order 12345 placed` and `order 67890 placed` are one, and `No route matches URL "/.git/config"` and `No route matches URL "/news/"` are one.
+
+Records stored before URL and path masking keep their `v1:` ids until the 30-day retention drops them. `v1:` ids still work in `pattern_id` and `/patterns/{id}`. For `new_only`, a `v1:` record in the lookback counts as history for its `v2:` pattern, so the switch does not make old lines look new. A window that spans the switch can list the same kind of line twice, once per version.
 
 `new_only=1` keeps patterns with no record in the `lookback_days` (1 to 7, default 7) before `from`. The response's `baseline` says how much of that lookback is still within the 30-day retention (`complete`, `covered_days`): a pattern is only "new" against the part of the baseline that still exists.
 

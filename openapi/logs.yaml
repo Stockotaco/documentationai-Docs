@@ -82,6 +82,7 @@ paths:
         - $ref: "#/components/parameters/Levels"
         - $ref: "#/components/parameters/Services"
         - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/Exclude"
         - $ref: "#/components/parameters/Attr"
         - $ref: "#/components/parameters/DistinctId"
         - $ref: "#/components/parameters/DistinctIds"
@@ -146,6 +147,7 @@ paths:
         - $ref: "#/components/parameters/Levels"
         - $ref: "#/components/parameters/Services"
         - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/Exclude"
         - $ref: "#/components/parameters/Attr"
         - $ref: "#/components/parameters/DistinctId"
         - $ref: "#/components/parameters/DistinctIds"
@@ -185,6 +187,7 @@ paths:
         - $ref: "#/components/parameters/Range"
         - $ref: "#/components/parameters/Levels"
         - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/Exclude"
         - $ref: "#/components/parameters/Attr"
         - name: limit
           in: query
@@ -298,11 +301,20 @@ paths:
       summary: List patterns
       operationId: listLogPatterns
       description: >
-        Records grouped by pattern: bodies that differ only in ISO dates, UUIDs,
-        hex ids and numbers of 4 or more digits. Short numbers are kept, so
-        status codes stay apart. `new_only=1` keeps patterns with no record in
-        the `lookback_days` before `from` and adds `baseline`, which says how
-        much of that lookback the 30-day retention still covers.
+        Records grouped by pattern: bodies that differ only in http(s) URLs,
+        quoted absolute paths (`"/.git/config"`, `'/news/'`), the line:col of
+        `file://` stack frames, ISO dates, UUIDs, hex ids and numbers of 4 or
+        more digits. Short numbers are kept, so status codes stay apart.
+        `new_only=1` keeps patterns with no record in the `lookback_days`
+        before `from` and adds `baseline`, which says how much of that
+        lookback the 30-day retention still covers.
+
+        Pattern ids are `v2:<32 hex>`. Records stored before the URL and path
+        masking keep `v1:` ids until the 30-day retention drops them, and
+        `v1:` ids still work as filters. A `v1:` record in the lookback still
+        counts as history for its `v2:` pattern, so `new_only` does not report
+        it as new. A window that spans the switch can list the same kind of
+        line twice, once per version.
       parameters:
         - $ref: "#/components/parameters/LocationId"
         - $ref: "#/components/parameters/From"
@@ -311,6 +323,7 @@ paths:
         - $ref: "#/components/parameters/Levels"
         - $ref: "#/components/parameters/Services"
         - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/Exclude"
         - $ref: "#/components/parameters/Attr"
         - name: new_only
           in: query
@@ -350,6 +363,7 @@ paths:
         - $ref: "#/components/parameters/From"
         - $ref: "#/components/parameters/To"
         - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/Exclude"
       responses:
         "200":
           description: The pattern
@@ -378,6 +392,7 @@ paths:
         - $ref: "#/components/parameters/From"
         - $ref: "#/components/parameters/To"
         - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/Exclude"
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Order"
         - $ref: "#/components/parameters/Cursor"
@@ -407,6 +422,7 @@ paths:
         - $ref: "#/components/parameters/Levels"
         - $ref: "#/components/parameters/Services"
         - $ref: "#/components/parameters/Q"
+        - $ref: "#/components/parameters/Exclude"
         - $ref: "#/components/parameters/Attr"
         - $ref: "#/components/parameters/DistinctId"
         - $ref: "#/components/parameters/DistinctIds"
@@ -514,6 +530,18 @@ components:
       in: query
       description: Case-insensitive body search. Whitespace-separated terms must all match; double quotes keep a phrase. At most 5 terms.
       schema: { type: string, example: "timeout \"connection reset\"" }
+    Exclude:
+      name: exclude
+      in: query
+      description: >-
+        Repeatable. Drops records whose body contains ANY of these substrings,
+        case-insensitively. Each value is taken verbatim (commas allowed, not
+        split). At most 10 values of at most 256 bytes; blank values are
+        ignored. For example `exclude=No route matches URL` hides bot-scanner
+        404s so real errors rank first in patterns and the digest.
+      style: form
+      explode: true
+      schema: { type: array, maxItems: 10, items: { type: string, maxLength: 256 }, example: ["No route matches URL"] }
     Attr:
       name: attr
       in: query
@@ -556,12 +584,18 @@ components:
     PatternIdFilter:
       name: pattern_id
       in: query
-      schema: { type: string, example: "v1:892ea82429dfa0bf975caecb03a9e5ea" }
+      description: >-
+        `v2:<32 hex>`, or `v1:<32 hex>` for records stored before the v2
+        masking (see List patterns). Both are accepted.
+      schema: { type: string, example: "v2:892ea82429dfa0bf975caecb03a9e5ea" }
     PatternId:
       name: id
       in: path
       required: true
-      schema: { type: string, example: "v1:892ea82429dfa0bf975caecb03a9e5ea" }
+      description: >-
+        `v2:<32 hex>`, or `v1:<32 hex>` for records stored before the v2
+        masking (see List patterns). Both are accepted.
+      schema: { type: string, example: "v2:892ea82429dfa0bf975caecb03a9e5ea" }
     Limit:
       name: limit
       in: query
@@ -761,7 +795,7 @@ components:
     Pattern:
       type: object
       properties:
-        pattern_id: { type: string, example: "v1:892ea82429dfa0bf975caecb03a9e5ea" }
+        pattern_id: { type: string, example: "v2:892ea82429dfa0bf975caecb03a9e5ea" }
         template: { type: string, example: "order <num> placed for user 42" }
         count: { type: integer }
         errors: { type: integer }
