@@ -4,7 +4,9 @@ info:
   title: Data
   description: >
     Read-only event analytics and BigQuery export status for agencies.
-    Event endpoints are location-scoped; export is agency-wide. Served from
+    Event endpoints are location-scoped; export is agency-wide. The one write
+    is ignoring an exception issue for a client, which changes alerting, not
+    the recorded data. Served from
     Mythic Analytics. Person profiles and the identity graph live in the
     People API.
 servers:
@@ -1227,6 +1229,13 @@ paths:
         **Time window**: `date_from`/`date_to`, or `hours_back` for a window
         ending now. **Segment scoping**: pass `segment_id` to count only errors
         from that segment's members.
+
+
+        **Ignored issues**: each row carries `ignored`, true when the issue was
+        ignored for this client (`PUT /exceptions/issues/{id}/ignore`). Ignored
+        issues are listed by default; `ignored=exclude` hides them and
+        `ignored=only` returns only them (at most the 200 most recently
+        ignored, sorted and paged in the same way).
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
@@ -1257,6 +1266,14 @@ paths:
             type: string
             default: desc
             enum: [asc, desc]
+        - name: ignored
+          in: query
+          required: false
+          description: "Ignored issues: `include` (default) lists them, `exclude` hides them, `only` returns only them."
+          schema:
+            type: string
+            default: include
+            enum: [include, exclude, only]
         - $ref: "#/components/parameters/SegmentId"
         - $ref: "#/components/parameters/ExcludeSegmentId"
         - name: limit
@@ -1282,7 +1299,7 @@ paths:
                       data:
                         type: array
                         items:
-                          $ref: "#/components/schemas/ExceptionIssue"
+                          $ref: "#/components/schemas/ExceptionIssueRow"
         "400":
           $ref: "#/components/responses/LocationRequired"
         "401":
@@ -1303,8 +1320,10 @@ paths:
       operationId: getExceptionIssue
       description: >
         The detail-header view: the same aggregates and `volume_series` as a
-        list row, fetched by the stable `issue_id`. Returns `404`
-        (`issue_not_found`) when no occurrences match the id in the window.
+        list row, fetched by the stable `issue_id`, plus `ignored`,
+        `ignored_at` and `note` when the issue is ignored for this client.
+        Returns `404` (`issue_not_found`) when no occurrences match the id in
+        the window.
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
@@ -1331,7 +1350,7 @@ paths:
                 properties:
                   success: { type: boolean, example: true }
                   data:
-                    $ref: "#/components/schemas/ExceptionIssue"
+                    $ref: "#/components/schemas/ExceptionIssueDetail"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1408,6 +1427,120 @@ paths:
           $ref: "#/components/responses/UpstreamError"
         "503":
           $ref: "#/components/responses/NotConfigured"
+  /exceptions/issues/{id}/ignore:
+    put:
+      summary: Ignore an exception issue
+      operationId: ignoreExceptionIssue
+      description: >
+        Ignore one issue for this client so it stops alerting. The daily
+        exceptions alert never raises it again, and its open `exceptions`
+        alert is resolved now (`resolved_by: user`, no notification). Its
+        errors are still recorded and still listed, with `ignored: true`.
+        Use it for errors that are not the site's fault, such as an in-app
+        browser's own injected script.
+
+
+        Idempotent: a repeated call keeps the original `ignored_at` and
+        `ignored_by`. An omitted `note` keeps the stored one, `"note": null`
+        clears it. Needs an agency key (`ak_`) with a bound location, or an
+        `mcp_` key with `exceptions:write`; location secret keys (`sk_`) are
+        read-only and get `403`.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/ExceptionIssueIdPath"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                note:
+                  type: string
+                  nullable: true
+                  maxLength: 500
+                  description: Why the issue is ignored.
+                  example: "In-app browser script (iabjs://), not the site."
+      responses:
+        "200":
+          description: The issue is ignored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/ExceptionIssueIgnore"
+                      - type: object
+                        properties:
+                          alerts_resolved:
+                            type: integer
+                            description: Open exceptions alerts for this issue this call resolved (0 or 1).
+                            example: 1
+        "400":
+          description: >
+            `invalid_issue_id` (not a stable issue id), `invalid_json` or
+            `invalid_body` (unknown field, note not a string or over 500
+            characters), or `location_required`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+    delete:
+      summary: Stop ignoring an exception issue
+      operationId: unignoreExceptionIssue
+      description: >
+        Stop ignoring one issue for this client. Alerting resumes on the next
+        daily exceptions sweep if the issue still clears the alert bar; an
+        alert the ignore resolved is not reopened. Idempotent: `removed` is
+        false when the issue was not ignored.
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - $ref: "#/components/parameters/ExceptionIssueIdPath"
+      responses:
+        "200":
+          description: The issue is not ignored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/ExceptionIssueIgnore"
+                      - type: object
+                        properties:
+                          removed:
+                            type: boolean
+                            description: Whether an ignore was removed.
+        "400":
+          description: "`invalid_issue_id` or `location_required`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
   /export:
     get:
       summary: BigQuery export status
@@ -2103,6 +2236,12 @@ components:
       schema:
         type: string
         format: uuid
+    ExceptionIssueIdPath:
+      name: id
+      in: path
+      required: true
+      description: "The stable `issue_id` from the issue list, e.g. `v1:` + 32 lowercase hex characters. URL-encode the colon or send it as is."
+      schema: { type: string, pattern: "^v[0-9]{1,3}:[0-9a-f]{32}$" }
     ExcludeSegmentId:
       name: exclude_segment_id
       in: query
@@ -2494,6 +2633,35 @@ components:
             properties:
               bucket: { type: string, format: date-time }
               count: { type: integer }
+    ExceptionIssueRow:
+      description: An issue list row. `ignored` is true when the issue is ignored for this client.
+      allOf:
+        - $ref: "#/components/schemas/ExceptionIssue"
+        - type: object
+          properties:
+            ignored: { type: boolean, example: false }
+    ExceptionIssueDetail:
+      description: The issue detail. `ignored_at` and `note` are null when the issue is not ignored.
+      allOf:
+        - $ref: "#/components/schemas/ExceptionIssue"
+        - type: object
+          properties:
+            ignored: { type: boolean, example: true }
+            ignored_at: { type: string, format: date-time, nullable: true }
+            note: { type: string, nullable: true, example: "In-app browser script (iabjs://), not the site." }
+    ExceptionIssueIgnore:
+      type: object
+      description: The ignore state of one issue for one client.
+      properties:
+        location_id: { type: string }
+        issue_id: { type: string, example: "v1:2cb3c285a82cd4ca56c51c666a7105df" }
+        ignored: { type: boolean }
+        ignored_at: { type: string, format: date-time, nullable: true }
+        ignored_by:
+          type: string
+          nullable: true
+          description: "`user` for an agency key, `mcp:<key prefix>` for a scoped key."
+        note: { type: string, nullable: true }
     ExceptionOccurrence:
       type: object
       description: One raw `$exception` event belonging to an issue.

@@ -13,7 +13,7 @@ The Data API accepts three key types, all passed as a bearer token in the `Autho
 |----------|--------|-------|
 | Agency key | `ak_` | All locations linked to the agency |
 | Location secret key | `sk_` | A single location |
-| Scoped key | `mcp_` | Only the routes its [scopes](/mcp/authentication#using-an-mcp_-key-over-http) grant — `people:read`, `events:read`, `sessions:read`, `replays:read`, `exceptions:read`, `heatmaps:read`, `bigquery_export:read` here |
+| Scoped key | `mcp_` | Only the routes its [scopes](/mcp/authentication#using-an-mcp_-key-over-http) grant — `people:read`, `events:read`, `sessions:read`, `replays:read`, `exceptions:read`, `heatmaps:read`, `bigquery_export:read` here, plus `exceptions:write` to ignore an exception issue |
 
 <ParamField header="Authorization" param-type="string" required="true" deprecated="false">
   Bearer token. Format: `Bearer ak_...` for an agency key, or `Bearer sk_...` for a location secret key.

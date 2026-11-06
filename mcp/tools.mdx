@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 341 tools across
+  Every tool the Mythic MCP server exposes — 343 tools across
   33 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 341 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 343 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -96,14 +96,16 @@ Compact, LLM-ready timelines of recorded visitor sessions (no PII).
 
 ## Error Tracking
 
-Grouped JavaScript exceptions, occurrences and digests.
+Grouped JavaScript exceptions, occurrences and digests, and ignoring an issue for one client so it stops alerting (errors are still recorded).
 
 | Tool | Scope | What it does | Proxies |
 | --- | --- | --- | --- |
 | `list_exception_issues`<br /><span style={{opacity: 0.7}}>List Exception Issues</span> | `exceptions:read` | Grouped JavaScript error issues — one row per fingerprinted issue (stable issue_id from error type + normalized message) with occurrence/session/user counts and a volume sparkline. | `GET /client/v1/data/exceptions/issues` |
-| `get_exception_issue`<br /><span style={{opacity: 0.7}}>Get Exception Issue</span> | `exceptions:read` | Detail header for ONE grouped error issue by its stable issue_id (from list_exception_issues): counts, first/last seen and volume series over the window. | `GET /client/v1/data/exceptions/issues/:id` |
+| `get_exception_issue`<br /><span style={{opacity: 0.7}}>Get Exception Issue</span> | `exceptions:read` | Detail header for ONE grouped error issue by its stable issue_id (from list_exception_issues): counts, first/last seen and volume series over the window, plus `ignored`, `ignored_at` and `note` when the issu… | `GET /client/v1/data/exceptions/issues/:id` |
 | `list_exception_occurrences`<br /><span style={{opacity: 0.7}}>List Exception Occurrences</span> | `exceptions:read` | Raw occurrences of ONE error issue — individual events with parsed stack frames, page URL and session_id, newest first. | `GET /client/v1/data/exceptions/issues/:id/occurrences` |
 | `get_exception_digest`<br /><span style={{opacity: 0.7}}>Get Exception Digest</span> | `exceptions:read` | Weekly error digest in one call: summary with week-over-week deltas, a daily bar series, the top issues, and issues NEW this week (new = not seen in the preceding `new_lookback_days`, default 90). | `GET /client/v1/data/exceptions/digest` |
+| `ignore_exception_issue`<br /><span style={{opacity: 0.7}}>Ignore Exception Issue</span> | `exceptions:write` | Ignore ONE error issue for this client so it stops alerting: the daily exceptions alert never raises it again and its open alert resolves now. | `PUT /client/v1/data/exceptions/issues/:id/ignore` |
+| `unignore_exception_issue`<br /><span style={{opacity: 0.7}}>Unignore Exception Issue</span> | `exceptions:write` | Stop ignoring ONE error issue for this client. | `DELETE /client/v1/data/exceptions/issues/:id/ignore` |
 
 ## Logs
 
