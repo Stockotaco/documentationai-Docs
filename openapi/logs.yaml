@@ -425,6 +425,41 @@ paths:
                 properties:
                   success: { type: boolean, example: true }
                   data: { $ref: "#/components/schemas/Digest" }
+  /client/v1/logs/traces/{trace_id}:
+    get:
+      summary: Get a trace's logs
+      operationId: getTraceLogs
+      description: >
+        Every record that shares one trace id (one request across services),
+        oldest first, at most 500, with a summary. Built from logs only:
+        Mythic does not ingest spans. Default window 24 hours, so pass
+        `from`/`to` around a record's timestamp for older traces. Filters
+        and paging params answer 400 `param_not_allowed`. `meta.complete` is
+        false when more records exist or the 4 MB bound cut the list; continue
+        with `GET /client/v1/logs?trace_id=...&order=asc&cursor=<next_cursor>`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: trace_id
+          in: path
+          required: true
+          description: 32 hex characters, not all zeros.
+          schema: { type: string, example: 5b8efff798038103d269b633813fc60c }
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/BodyMaxBytes"
+      responses:
+        "200":
+          description: The trace
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/Trace" }
+        "400": { $ref: "#/components/responses/BadParams" }
+        "404": { $ref: "#/components/responses/NotFound" }
 components:
   securitySchemes:
     BearerAuth:
@@ -516,7 +551,7 @@ components:
     TraceId:
       name: trace_id
       in: query
-      description: 32 hex characters. A filter only.
+      description: 32 hex characters. For a whole trace with a summary, use `GET /client/v1/logs/traces/{trace_id}`.
       schema: { type: string }
     PatternIdFilter:
       name: pattern_id
@@ -768,4 +803,49 @@ components:
         error_patterns: { type: array, items: { $ref: "#/components/schemas/Pattern" } }
         new_patterns: { type: array, items: { $ref: "#/components/schemas/Pattern" } }
         new_patterns_baseline: { $ref: "#/components/schemas/Baseline" }
+    Trace:
+      type: object
+      properties:
+        trace_id: { type: string, example: 5b8efff798038103d269b633813fc60c }
+        summary:
+          type: object
+          description: Over the returned records.
+          properties:
+            started_at: { type: string, format: date-time }
+            ended_at: { type: string, format: date-time }
+            duration_ms: { type: integer, description: Last record time minus first record time. }
+            records: { type: integer }
+            errors: { type: integer, description: error + fatal records. }
+            levels: { type: object, additionalProperties: { type: integer } }
+            services:
+              type: array
+              description: In order of first appearance.
+              items:
+                type: object
+                properties:
+                  service: { type: string }
+                  records: { type: integer }
+                  errors: { type: integer }
+            spans:
+              type: array
+              description: In order of first appearance. Records with no span id group under span_id null.
+              items:
+                type: object
+                properties:
+                  span_id: { type: string, nullable: true, example: eee19b7ec3c1b174 }
+                  services: { type: array, items: { type: string } }
+                  first_at: { type: string, format: date-time }
+                  last_at: { type: string, format: date-time }
+                  records: { type: integer }
+                  errors: { type: integer }
+        records: { type: array, items: { $ref: "#/components/schemas/LogRecord" } }
+        next_cursor: { type: string, nullable: true, description: Continue with GET /client/v1/logs?trace_id=&order=asc. }
+        meta:
+          type: object
+          properties:
+            from: { type: string, format: date-time }
+            to: { type: string, format: date-time }
+            limit: { type: integer, example: 500 }
+            complete: { type: boolean, description: All of the trace's records in the window are in records. }
+            truncated: { type: boolean, description: The ~4 MB response bound cut the list. }
         truncated: { type: boolean }

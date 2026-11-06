@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 340 tools across
+  Every tool the Mythic MCP server exposes — 341 tools across
   33 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 340 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 341 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -121,6 +121,7 @@ OpenTelemetry log records sent over OTLP: search, record detail, volume, service
 | `get_log_pattern`<br /><span style={{opacity: 0.7}}>Get Log Pattern</span> | `logs:read` | One pattern by pattern_id: template, counts, first/last seen, sample, and its volume series over the window. | `GET /client/v1/logs/patterns/:id` |
 | `list_log_pattern_occurrences`<br /><span style={{opacity: 0.7}}>List Log Pattern Occurrences</span> | `logs:read` | The records of ONE pattern, paged exactly like search_logs (next_cursor). | `GET /client/v1/logs/patterns/:id/occurrences` |
 | `get_log_digest`<br /><span style={{opacity: 0.7}}>Get Log Digest</span> | `logs:read` | START HERE for logs. | `GET /client/v1/logs/digest` |
+| `get_trace_logs`<br /><span style={{opacity: 0.7}}>Get Trace Logs</span> | `logs:read` | Every log record that shares one trace id (one request across services), oldest first, up to 500, with a summary: start, end, duration, level counts, services and spans (span_id, services, first/last time, r… | `GET /client/v1/logs/traces/:trace_id` |
 
 ## Heatmaps
 

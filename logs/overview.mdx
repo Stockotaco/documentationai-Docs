@@ -20,6 +20,7 @@ Records are kept **30 days** and read back through `/client/v1/logs`:
 - **Search** by level, service, body text, attributes, person (`distinct_id`), session or trace id, newest first, keyset-paged.
 - **Volume** per time bucket and level, and the **services** and **attribute keys** present.
 - **Patterns**: lines that differ only in volatile tokens (dates, UUIDs, hex ids, long numbers) are grouped, with a masked template, counts and a sample. `new_only` shows patterns that did not occur in the days before the window.
+- **Traces**: every record that shares a trace id, oldest first, with when the request started and ended, its services and its spans. Built from logs: Mythic does not ingest spans.
 - **Digest**: a summary of a window, at most 64 KB, for an agent to read whole: totals, services, top, error and new patterns, each with its pattern id, counts and one sample record.
 
 Every endpoint has an MCP tool (`get_log_digest`, `search_logs`, `list_log_patterns`, and so on), under the `logs:read` scope.
@@ -74,7 +75,7 @@ The default is the last hour (24 hours for `/digest`). A window spans at most 30
 | `distinct_id`, `session_id` | Records linked to a person or session ([how records are linked](/logs/otlp-ingestion#link-logs-to-people-and-sessions)). |
 | `distinct_ids` | Records linked to any of these distinct ids: a comma list or the param repeated, at most 50 values of at most 256 bytes, none containing a comma. |
 | `received_before` | Records Mythic accepted strictly before this instant, so late-arriving records cannot change a read you have pinned. |
-| `trace_id` | 32 hex characters. A filter only; there is no trace view. |
+| `trace_id` | 32 hex characters. `GET /traces/{trace_id}` reads the whole trace with a summary. |
 | `pattern_id` | One pattern. |
 
 ## Patterns
@@ -82,6 +83,10 @@ The default is the last hour (24 hours for `/digest`). A window spans at most 30
 A pattern id is `v1:` followed by a hash of the service, the level and the first 1 KB of the body with these masked: ISO dates and date-times, UUIDs, `0x` hex, bare hex runs of 8 or more characters, and numbers of 4 or more digits. **Short numbers are kept**, so `upstream status 200` and `upstream status 500` are different patterns while `order 12345 placed` and `order 67890 placed` are one.
 
 `new_only=1` keeps patterns with no record in the `lookback_days` (1 to 7, default 7) before `from`. The response's `baseline` says how much of that lookback is still within the 30-day retention (`complete`, `covered_days`): a pattern is only "new" against the part of the baseline that still exists.
+
+## Traces
+
+`GET /client/v1/logs/traces/{trace_id}` returns up to 500 records that share the trace id, oldest first, and a `summary`: `started_at`, `ended_at`, `duration_ms`, level counts, services and spans (`span_id`, its services, first and last time, record and error counts; records with no span id group under `span_id: null`). It takes a window (default 24 hours) and `body_max_bytes`; filters and paging answer 400 `param_not_allowed`. When `meta.complete` is false, more records exist: continue with `GET /client/v1/logs?trace_id=...&order=asc&cursor=<next_cursor>`. Durations come from log timestamps, so a span that logged nothing does not appear.
 
 ## Pagination and limits
 
@@ -101,6 +106,7 @@ A pattern id is `v1:` followed by a hash of the service, the level and the first
 | `GET /client/v1/logs/patterns/{id}` | One pattern and its volume series |
 | `GET /client/v1/logs/patterns/{id}/occurrences` | The pattern's records |
 | `GET /client/v1/logs/digest` | A summary of the window, at most 64 KB |
+| `GET /client/v1/logs/traces/{trace_id}` | One trace's records, oldest first, with a summary |
 
 A person's and a session's logs are also read from the Data API, with the same records and gates (the plan must include Logs; a scoped `mcp_` key also needs `logs:read`):
 
