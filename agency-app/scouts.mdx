@@ -106,6 +106,9 @@ status, priority or scout.
 A resolved report stays resolved. On the day you picked, Mythic checks
 whether the problem actually went away:
 
+- If the report was resolved by an [approved fix](#approve-a-fix), Mythic
+  first measures the fix's own check. A clear pass or fail decides the
+  outcome. If there was too little to measure, it goes on to the steps below.
 - If the report's signals are still resolved and none fired again, it is
   marked **Stayed fixed** without a model call.
 - If one of its signals fired again, a new report is filed right away.
@@ -142,10 +145,17 @@ anything itself.
 - **Reject** asks for a reason. The scout does not propose the same fix on
   that report again.
 - **Undo**, on an applied fix, shows the values it restores. If someone
-  changed the setting after the fix, undo is refused so their change is kept.
+  changed a field the fix set after it was applied, undo is refused so their
+  change is kept. Changes to other fields do not block undo and stay as they
+  are.
 
-If the change is refused, the fix shows **Failed** with the reason, and you
-can approve again or reject. See [Approved fixes](/agency-api/scouts#approved-fixes)
+If the change is refused or Mythic could not confirm it, the fix shows
+**Failed** with the reason, and you can approve again or reject. Approving
+again after an unconfirmed change does not write twice. While an approve or
+undo is running, the fix is locked for up to 5 minutes.
+
+Mythic reads the setting just before it writes, and the write replaces it. An
+edit someone makes to the same setting in that moment is overwritten. See [Approved fixes](/agency-api/scouts#approved-fixes)
 for the API.
 
 To get new reports in Slack or a webhook, pick channels in the scout's

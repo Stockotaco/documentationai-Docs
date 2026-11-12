@@ -423,10 +423,14 @@ curl -X PATCH https://mythic-analytics.gulp.workers.dev/client/v1/scouts/reports
 
 **How.** When it is due:
 
-1. **From signals, without a model.** If any of the report's signals (same
+1. **From the fix's success check.** On a report resolved by an
+   [approved fix](#approved-fixes), a `pass` or `fail` from the last 30
+   minutes decides first. `unknown` or no fresh result goes on to the next
+   step.
+2. **From signals, without a model.** If any of the report's signals (same
    source and subject) is open again, the problem is back. If all of them
    stayed resolved and the report has no tool-call evidence, it recovered.
-2. **Otherwise a scout checks.** The scout that filed the report runs once
+3. **Otherwise a scout checks.** The scout that filed the report runs once
    with `triggered_by: "recheck"`, on your model key, with the resolved report
    (summary, evidence notes, suggested action, who resolved it and the note)
    and its signals. It measures the same thing again and records whether it
@@ -506,24 +510,53 @@ curl -X POST https://mythic-analytics.gulp.workers.dev/client/v1/scouts/reports/
   -d '{ "fix_id": "FIX_ID" }'
 ```
 
-Mythic reads the target and stores the changed fields as `before` (once, on the
-first approve), writes the change, reads the target again and stores `after`.
-Then the fix is `applied`, the report is **resolved** with the note `Fix
-applied: <title>`, and its [re-check](#re-check-after-resolve) is scheduled
-after the fix's `success_check.window_days`. The response holds the fix and the
-report's list row. Approving an applied fix writes nothing and returns
-`already: true`.
+An approve or undo first claims the fix for 5 minutes (`in_progress: true`),
+so a second one at the same time answers `409 fix_in_progress`. Under the
+claim, Mythic reads the target and stores the fields the fix sets as `before`,
+checks the claim is still live, writes the change, then reads the target again.
+The fix is `applied`, the report is **resolved** with the note `Fix applied:
+<title>`, and its [re-check](#re-check-after-resolve) is scheduled after the
+fix's `success_check.window_days`. The response holds the fix and the report's
+list row. Approving an applied fix writes nothing and returns `already: true`.
 
-If the write route refuses, the fix becomes `failed` with `error` (`stage`,
-`route_status`, `route_error`) and the call answers `422 fix_apply_failed`.
-Approve again once the cause is fixed, or reject. An approve and an undo hold a
-2-minute claim on the fix (`in_progress: true`), so two at once answer `409
-fix_in_progress`.
+`before`, `after` and `after_observed` hold only the fields the fix sets: a fix
+that sets only `utm_passthrough` has `before: { "utm_passthrough": false }`.
+An ignore fix holds `ignored` and `note`.
+
+| Field | Holds |
+| --- | --- |
+| `before` | The values Mythic read before writing. Undo restores them |
+| `after` | The fix's expected result, never a later read. Undo compares the target with it |
+| `after_observed` | The values read straight after the write, for display. `null` when that read failed |
+
+A missing target, a guard failure (`422 fix_invalid`) or a refused read
+releases the claim and changes nothing. When the write itself fails, `error`
+and `details` carry an `outcome`:
+
+| `outcome` | Status | What happened | Then |
+| --- | --- | --- | --- |
+| `refused` | `422 fix_apply_failed` | The route answered 4xx | The fix is `failed` and `before` is cleared, so the next approve reads the target fresh |
+| `unconfirmed` | `502 fix_apply_failed` | The request threw, timed out after 25 seconds, or answered 5xx | The fix is `failed` and `before` is kept. A retry settles `applied` without writing again when the target already holds the fix's result |
+
+In both cases approve again, or reject.
+
+<Callout kind="warning">
+  The link, destination and exception-ignore routes have no compare-and-set,
+  so a fix write is protected only by the claim. Mythic sends a write only
+  while its claim is live, with a 25-second timeout. A write already sent can
+  still land after its claim expires, and an edit someone makes between
+  Mythic's read and its write is overwritten.
+</Callout>
 
 ### Success check
 
 Every fix names how Mythic measures whether it worked (`success_check`),
-over the time since it was applied, at most `window_days` (1 to 7):
+over the time since it was applied, at most `window_days` (1 to 7). The window
+never reaches back before the fix: `exception_issue_sessions` and
+`tagged_session_share` start at the next UTC midnight after it begins, and
+`destination_success_rate` counts whole hours back from now. With under 12
+hours to measure, Mythic reads nothing and the result is `unknown` with
+`reason: "window_too_short"`.
 
 | `metric` | Kind | Passes when | `params` |
 | --- | --- | --- | --- |
@@ -535,7 +568,8 @@ over the time since it was applied, at most `window_days` (1 to 7):
 Ignoring an issue does not stop its errors, so that check only confirms they
 stay at the level the scout called noise.
 
-The check runs when the re-check is due, before anything else, and settles it:
+The check runs just before the re-check is due. A `pass` or `fail` from the
+last 30 minutes decides the re-check before open signals are looked at:
 
 | `check_result.status` | Re-check outcome |
 | --- | --- |
@@ -553,13 +587,18 @@ does not propose the same fix on that report again.
 ### Undo
 
 `POST /scouts/reports/{id}/fix/undo` with `{ "fix_id": "..." }` writes the
-`before` values back, with your key, through the same route. Mythic reads the
-target first. If any field the fix set no longer matches `after`, someone
-changed it since, and undo answers `409 fix_drifted` with `details.current` and
-`details.expected` instead of overwriting that change. An ignored issue with no
-events in 90 days can always be undone. The fix becomes `undone`; the report
-stays resolved and its re-check runs the normal way. A refused undo leaves the
-fix `applied` with `error` set.
+`before` values back, with your key, through the same route. Mythic claims the
+fix, then reads the target. If any field the fix set no longer matches `after`,
+someone changed it since, and undo answers `409 fix_drifted` with
+`details.current` and `details.expected` (only the fields the fix set) instead
+of overwriting that change. The fix stays `applied` and nothing is recorded.
+Fields the fix did not set are not compared, and undo leaves them as they are.
+An ignored issue with no events in 90 days can always be undone.
+
+The fix becomes `undone`; the report stays resolved and its re-check runs the
+normal way. A refused undo (`422`, `outcome: refused`) leaves the fix `applied`
+with `error` set. After an unconfirmed undo (`502`), a retry settles `undone`
+without writing when the target already holds `before`.
 
 ### Errors
 
@@ -576,21 +615,22 @@ All three routes answer these, besides the [auth errors](#authentication):
 | 404 | `fix_not_found` | The fix is not on this report, or a newer proposal replaced it |
 | 409 | `fix_target_missing` | Approve or undo: the link (Mythic looks among the client's first 2,000) or destination does not exist |
 | 409 | `fix_drifted` | Undo: the target changed after the fix was applied |
-| 409 | `fix_in_progress` | Another approve or undo holds the claim. Try again in a minute |
+| 409 | `fix_in_progress` | Another approve or undo holds the 5-minute claim. Try again later |
 | 409 | `fix_state_conflict` | The fix is in the wrong state: approving a rejected or undone fix, rejecting an applied one, undoing one that is not applied |
 | 409 | `fix_report_closed` | Approve: the report is not open or snoozed |
-| 409 | `fix_claim_lost` | Another request took over the claim while this one ran |
+| 409 | `fix_claim_lost` | This request's claim expired or was taken over. Before its write, nothing was written. After it, the write may have landed, and the next approve or undo reads the target again |
 | 422 | `fix_invalid` | Approve: the new `destination_url` would change the link's hostname, or the destination has no valid `trigger_rules` to restore later |
-| 422 | `fix_apply_failed` | The write route refused. `details`: `stage` (`snapshot`, `apply` or `undo`), `route_status`, `route_error` (a string for links, `{ code, message, details }` otherwise) |
-| 502 | `fix_apply_failed` | The write threw before an answer (`route_status: null`). Sending the request again is safe |
+| 422 | `fix_apply_failed` | The route answered 4xx. `details`: `stage` (`snapshot`, `apply` or `undo`), `outcome: "refused"` (absent on `snapshot`), `route_status`, `route_error` (a string for links, `{ code, message, details }` otherwise) |
+| 502 | `fix_apply_failed` | Unconfirmed: the request threw, timed out after 25 seconds or answered 5xx. `details`: `stage`, `outcome: "unconfirmed"`, `route_status` (the 5xx status, else `null`), `route_error`. Sending the request again is safe |
 | 503 | `privacy_unknown`, `fix_unavailable`, or the plan code | Try again after `Retry-After` |
 
 ### Events
 
 Each outcome publishes an event to the client's event stream, with
 `distinct_id` `client-scout`: `$scout_fix_applied`, `$scout_fix_rejected`,
-`$scout_fix_undone` and `$scout_fix_failed` (also for a refused undo, with
-`action: "undo"` and `state: "applied"`). Properties: `fix_id`, `report_id`,
+`$scout_fix_undone` and `$scout_fix_failed` (for a failed approve, and for a
+refused undo with `action: "undo"` and `state: "applied"`). A released claim,
+such as a drifted undo or a missing target, publishes nothing. Properties: `fix_id`, `report_id`,
 `agency_id`, `location_id`, `scout_id`, `run_id`, `skill`, `kind`, `state`,
 `action` (`apply`, `undo` or `reject`), `metric` and `decided_by`. Events never
 carry the payload, the before or after values, the reason or error text.
