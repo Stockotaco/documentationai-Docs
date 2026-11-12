@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 343 tools across
+  Every tool the Mythic MCP server exposes — 346 tools across
   33 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 343 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 346 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -556,6 +556,9 @@ Agency-wide keys only — a key bound to one client cannot hold this scope.
 | `get_scout_run`<br /><span style={{opacity: 0.7}}>Get Scout Run</span> | `scouts:read` | One scout run. | `GET /client/v1/scouts/:id/runs/:runId` |
 | `list_scout_notes`<br /><span style={{opacity: 0.7}}>List Scout Notes</span> | `scouts:read` | A scout's steering notes: short guidance people added ("ignore /docs pages", "Black Friday sale runs Nov 25-30"). | `GET /client/v1/scouts/:id/notes` |
 | `update_scout_report`<br /><span style={{opacity: 0.7}}>Update Scout Report</span> | `scouts:write` | Triage a report: resolve (terminal; a recurrence is filed as a new report), dismiss with a reason (the scout reads it on its next runs, for 30 days, so it stops re-filing; add_note: true also keeps the reaso… | `PATCH /client/v1/scouts/reports/:id` |
+| `approve_scout_fix`<br /><span style={{opacity: 0.7}}>Approve Scout Fix</span> | `scouts:write` | Apply the fix a scout proposed on a report, as this key, through the existing write route (ignore_exception_issue: PUT the issue ignore; update_link: PATCH the link; update_destination: PATCH enabled / trigg… | `POST /client/v1/scouts/reports/:id/fix/approve` |
+| `reject_scout_fix`<br /><span style={{opacity: 0.7}}>Reject Scout Fix</span> | `scouts:write` | Reject a proposed (or failed) fix; nothing changes in the client's setup and the scout does not propose the same fix on this report again. | `POST /client/v1/scouts/reports/:id/fix/reject` |
+| `undo_scout_fix`<br /><span style={{opacity: 0.7}}>Undo Scout Fix</span> | `scouts:write` | Undo an applied fix: restore the stored before value, as this key. | `POST /client/v1/scouts/reports/:id/fix/undo` |
 | `create_scout`<br /><span style={{opacity: 0.7}}>Create Scout</span> | `scouts:write` | Create a scheduled client scout that reads the client's data with the agency's own model key and files one report per finding into the inbox. | `POST /client/v1/scouts` |
 | `update_scout`<br /><span style={{opacity: 0.7}}>Update Scout</span> | `scouts:write` | Change a scout's name, instructions, schedule, delivery, model, auto_pause or run_only_when, pause it (enabled:false) or resume it (enabled:true, which also clears a paused_reason set by Mythic). | `PATCH /client/v1/scouts/:id` |
 | `delete_scout`<br /><span style={{opacity: 0.7}}>Delete Scout</span> | `scouts:write` | Delete a scout. | `DELETE /client/v1/scouts/:id` |
