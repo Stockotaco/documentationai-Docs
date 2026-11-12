@@ -11,6 +11,10 @@ The **API & MCP keys** screen lists the keys your agency uses outside the app:
 your own scripts, and AI clients connected to Mythic's MCP server. Each key
 works for both the API and MCP.
 
+The screen is under **Setup** in two places. From **All clients** it lists
+every key in your agency. Inside a client it lists only the keys that reach
+that client, and **Create key** makes a key for that client.
+
 The app's own chat panel uses separate keys that Mythic manages for you. The
 agency chat uses a key that reaches every client. When you pick a client, the
 chat switches to a key limited to that client. Client portal chats use a
@@ -22,7 +26,7 @@ reach further than its key allows, whatever it is asked.
 | Column | What it shows |
 | --- | --- |
 | **Name** | The key's name, and whether it is **Active** or **Inactive** |
-| **Reaches** | The client the key works for, or every client |
+| **Reaches** | The client the key works for, or every client. Not shown inside a client |
 | **Created** | When the key was made |
 | **Last used** | When the key was last used |
 
@@ -35,7 +39,7 @@ on. **Delete** removes it for good: anything using it stops working at once.
   <Step title="Name it and pick a client">
     Click **Create key**. Give it a name that says where it is used, such as
     "Claude Desktop", and choose the client it reaches. Keys made here reach
-    one client only.
+    one client only. Inside a client, the key reaches that client.
   </Step>
   <Step title="Choose its scopes">
     For each area, such as People, Sessions, Insights or Dashboards, choose
