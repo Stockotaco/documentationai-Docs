@@ -21,7 +21,7 @@ paths:
     get:
       summary: List tracked pages
       operationId: listCompetitorPages
-      description: Competitor pages this client tracks (at most 10), with the last refresh and the next scheduled one.
+      description: Competitor pages this client tracks (at most 20), with the last refresh and the next scheduled one.
       parameters:
         - $ref: "#/components/parameters/LocationId"
       responses:
@@ -37,7 +37,7 @@ paths:
                   limits:
                     type: object
                     properties:
-                      max_pages: { type: integer, example: 10 }
+                      max_pages: { type: integer, example: 20 }
                       max_ads: { type: integer, example: 600 }
                   pipeline_enabled: { type: boolean }
         "401": { $ref: "#/components/responses/Error" }

@@ -10,7 +10,7 @@ import TierGated from "/snippets/tier-gated.mdx"
 
 ## Overview
 
-Add up to 10 competitor Facebook pages per client. Mythic scrapes each page's Meta Ad Library ads once a day, or now when you ask, and keeps every ad it has seen.
+Add up to 20 competitor Facebook pages per client. Mythic scrapes each page's Meta Ad Library ads once a day, or now when you ask, and keeps every ad it has seen.
 
 For every ad Mythic:
 
@@ -232,7 +232,7 @@ An answer that fails gets one repair turn with the errors; a second failure retu
 | 400 | `invalid_page`, `invalid_tag`, `invalid_since`, `invalid_landing_url`, `invalid_domain`, … | Bad input. The message names the field. |
 | 402 | `feature_not_in_plan` | The client's plan does not include competitor ads. |
 | 403 | `agency_required`, `location_disabled` | Write with a read-only key, or the client is disabled. |
-| 409 | `already_tracked`, `page_limit`, `refresh_in_progress` | Duplicate page, 10 pages already, or a refresh is running. |
+| 409 | `already_tracked`, `page_limit`, `refresh_in_progress` | Duplicate page, 20 pages already, or a refresh is running. |
 | 429 | `refreshed_recently`, `refresh_budget_exhausted`, `rate_limited` | See `Retry-After`. |
 | 502, 504 | `scraper_failed`, `scraper_untrusted_redirect`, `scraper_timeout` | The Ad Library scrape failed. Retry later. |
 | 503 | `pipeline_disabled`, `scraper_not_configured` | Refreshes are switched off. |
