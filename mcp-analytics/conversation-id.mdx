@@ -32,10 +32,10 @@ Session state lives in the shared client, not in the server object, so a server 
 
 ## The session header
 
-`@mythic-analytics/mcp/http` sets an `Mcp-Session-Id` header for servers that do not set one:
+`@mythic-data/mcp/http` sets an `Mcp-Session-Id` header for servers that do not set one:
 
 ```ts
-import { mythicSessionNode, mythicSessionFetch } from '@mythic-analytics/mcp/http';
+import { mythicSessionNode, mythicSessionFetch } from '@mythic-data/mcp/http';
 
 // Express and other (req, res, next) servers
 // Mount after a JSON body parser so it can see initialize.

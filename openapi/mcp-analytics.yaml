@@ -5,7 +5,7 @@ info:
   description: >
     Analytics for a client's own MCP server: tool calls, errors, latency,
     sessions, MCP clients, agent intents, intent clusters and missing
-    capabilities, recorded by the `@mythic-analytics/mcp` SDK.
+    capabilities, recorded by the `@mythic-data/mcp` SDK.
 
 
     Ingestion (`POST /ingest` with `$mcp_*` events) uses the location's

@@ -9,8 +9,8 @@ description: >-
 
 | Import | Exports |
 | --- | --- |
-| `@mythic-analytics/mcp` | `instrument`, `createMythicClient`, `MythicMCP` |
-| `@mythic-analytics/mcp/http` | `mythicSessionNode`, `mythicSessionFetch` |
+| `@mythic-data/mcp` | `instrument`, `createMythicClient`, `MythicMCP` |
+| `@mythic-data/mcp/http` | `mythicSessionNode`, `mythicSessionFetch` |
 
 The package is ESM with no runtime dependencies and needs Node.js 18 or later.
 
@@ -72,7 +72,7 @@ If discovery is incomplete because of the page cap, deadline, cursor cycle, inva
 ## The client
 
 ```ts
-import { createMythicClient } from '@mythic-analytics/mcp';
+import { createMythicClient } from '@mythic-data/mcp';
 
 const client = createMythicClient({ apiKey: 'pk_…', host: 'https://mythic-analytics.gulp.workers.dev' });
 ```
@@ -104,7 +104,7 @@ Use **one client per process** and pass it to every server instance. A server bu
 A server with its own JSON-RPC dispatcher uses `MythicMCP` and calls it from the dispatcher. It takes the same options as `instrument` and applies the same schema injection, redaction and caps. The constructor throws a `TypeError` when neither `apiKey` nor `client` is given.
 
 ```ts
-import { MythicMCP } from '@mythic-analytics/mcp';
+import { MythicMCP } from '@mythic-data/mcp';
 
 const mythic = new MythicMCP({ client }); // client from createMythicClient({ apiKey, host })
 

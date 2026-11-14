@@ -1,7 +1,7 @@
 ---
 title: Installation
 description: >-
-  Add @mythic-analytics/mcp to an MCP server with the location's publishable
+  Add @mythic-data/mcp to an MCP server with the location's publishable
   key, and check that events arrive.
 ---
 
@@ -18,7 +18,7 @@ The publishable key identifies the location. It is the same `pk_` key the browse
 ## Install
 
 ```bash
-npm install @mythic-analytics/mcp
+npm install @mythic-data/mcp
 ```
 
 The package has no runtime dependencies. `@modelcontextprotocol/sdk` releases below 1.22.0 are not verified.
@@ -30,7 +30,7 @@ The package has no runtime dependencies. `@modelcontextprotocol/sdk` releases be
 
 ```ts
 import { McpServer } from '@modelcontextprotocol/server';
-import { createMythicClient, instrument } from '@mythic-analytics/mcp';
+import { createMythicClient, instrument } from '@mythic-data/mcp';
 
 // One client per process, shared by every server instance.
 const mythic = createMythicClient({
@@ -70,10 +70,10 @@ const analytics = instrument(server, { client: mythic });
   </Step>
   <Step title="Add the session middleware (Streamable HTTP only)">
 
-`instrument` cannot set HTTP headers. On a Streamable HTTP server, add the middleware from `@mythic-analytics/mcp/http` so a client's calls stay in one session across requests:
+`instrument` cannot set HTTP headers. On a Streamable HTTP server, add the middleware from `@mythic-data/mcp/http` so a client's calls stay in one session across requests:
 
 ```ts
-import { mythicSessionNode } from '@mythic-analytics/mcp/http';
+import { mythicSessionNode } from '@mythic-data/mcp/http';
 
 app.use('/mcp', express.json(), mythicSessionNode({ sessionSecret: process.env.MYTHIC_SESSION_SECRET }));
 ```
