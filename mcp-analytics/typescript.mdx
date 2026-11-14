@@ -24,7 +24,7 @@ const handle = instrument(server, { client: mythic, ...options });
 
 `server` is an `McpServer` or a low-level `Server` from `@modelcontextprotocol/server` 2.x or `@modelcontextprotocol/sdk` 1.22.0 to 1.32.2 (the tested range; older 1.x releases are not verified). The SDK finds the low-level server (`server.server` on an `McpServer`) and wraps its request handlers for `initialize`, `tools/list`, `tools/call` and `resources/read`, including handlers set later.
 
-For a paginated `tools/list`, `instrument` reads at most 20 pages, with a 2-second deadline for SDK-initiated discovery through your own list handler. This deadline does not include the host page the client requested. Discovery runs on a first page with more pages (to find host tool names), and on a server built per request that gets a `tools/call` before any `tools/list` (to index the tools).
+For a paginated `tools/list`, `instrument` reads at most 20 pages, with a 2-second deadline for SDK-initiated discovery through your own list handler. This deadline does not include the host page the client requested. Discovery runs on a first page with more pages (to find host tool names), and on a server built per request that gets a `tools/call` or a cursor-page `tools/list` before any first-page `tools/list` (to index the tools). A fresh stateless cursor-page response keeps its schemas unchanged unless this bounded discovery establishes completeness.
 
 If discovery is incomplete because of the page cap, deadline, cursor cycle, invalid page or handler failure, the SDK injects no fields or virtual tool and does not intercept calls as virtual `get_more_tools` calls. Host calls pass through unchanged until a complete first-page discovery.
 
