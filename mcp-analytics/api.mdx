@@ -92,4 +92,4 @@ Parameters, responses, intents and missing-capability reports are text from agen
 | 409 | `no_model_key`, `already_computing`, `erasure_in_progress` |
 | 429 | `rate_limited`, with `Retry-After`: 120 requests per minute per location, one recompute per hour |
 | 502 | `query_failed`: the analytics store did not answer |
-| 503 | `privacy_unknown`, `not_configured`, `lookup_failed`. Retry |
+| 503 | `privacy_unknown`, `not_configured`, `lookup_failed`. Retry. Recompute also returns `intent_clusters_disabled` with `Retry-After: 3600` when clustering is switched off, without queueing a run |

@@ -632,8 +632,10 @@ paths:
         The latest cluster snapshot: the last 7 days, computed with the
         agency's own model key. Takes no window or filter params (400
         `param_not_allowed`). Without a model key, `status` is `no_key` and
-        `clusters` is empty. `computing` covers a run in progress and a
-        recompute queued for the next 5-minute tick.
+        `clusters` is empty. `computing` covers a run with a live lease and,
+        while clustering is enabled, a recompute queued for the next 5-minute
+        tick. While clustering is disabled, stale queued requests do not read
+        as `computing`; a computation with a live lease still does.
       parameters:
         - $ref: "#/components/parameters/LocationId"
       responses:
@@ -662,7 +664,8 @@ paths:
         runs it; `GET /intents/clusters` reads `computing` until it finishes.
         One per hour per location. Needs an agency key (`ak_`) or an `mcp_` key
         with `mcp_analytics:write`; a location secret key (`sk_`) is read-only
-        and answers 403 `forbidden`.
+        and answers 403 `forbidden`. When clustering is switched off, answers
+        503 `intent_clusters_disabled` with `Retry-After: 3600` and queues nothing.
       parameters:
         - $ref: "#/components/parameters/LocationId"
       responses:
@@ -686,12 +689,20 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "409":
-          description: "`no_model_key` (add a model key for the client or agency), `already_computing`, or `erasure_in_progress` (a personal-data erasure is running for this client; retry when it finishes)."
+          description: "`no_model_key` (add a model key for the client or agency), `already_computing`, or `erasure_in_progress` (a personal-data erasure fence is held; no automatic expiry, and recompute stays blocked until deletion is verified and all fences are released)."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "429": { $ref: "#/components/responses/RateLimited" }
-        "503": { $ref: "#/components/responses/Unavailable" }
+        "503":
+          description: "`intent_clusters_disabled` when clustering is switched off (nothing is queued), or `privacy_unknown`, `not_configured`, `lookup_failed`."
+          headers:
+            Retry-After:
+              description: "3600 seconds for `intent_clusters_disabled`."
+              schema: { type: integer, example: 3600 }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /client/v1/mcp-analytics/missing-capabilities:
     get:
       summary: List missing capabilities

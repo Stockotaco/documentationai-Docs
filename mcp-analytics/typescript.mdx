@@ -24,7 +24,9 @@ const handle = instrument(server, { client: mythic, ...options });
 
 `server` is an `McpServer` or a low-level `Server` from `@modelcontextprotocol/server` 2.x or `@modelcontextprotocol/sdk` 1.22.0 to 1.32.2 (the tested range; older 1.x releases are not verified). The SDK finds the low-level server (`server.server` on an `McpServer`) and wraps its request handlers for `initialize`, `tools/list`, `tools/call` and `resources/read`, including handlers set later.
 
-For a paginated `tools/list`, `instrument` reads up to 20 pages through your own list handler: on a first page with more pages (to find a host `get_more_tools` on a later page), and on a server built per request that gets a `tools/call` before any `tools/list` (to know which fields it injected on each tool).
+For a paginated `tools/list`, `instrument` reads at most 20 pages, with a 2-second deadline for SDK-initiated discovery through your own list handler. This deadline does not include the host page the client requested. Discovery runs on a first page with more pages (to find host tool names), and on a server built per request that gets a `tools/call` before any `tools/list` (to index the tools).
+
+If discovery is incomplete because of the page cap, deadline, cursor cycle, invalid page or handler failure, the SDK injects no fields or virtual tool and does not intercept calls as virtual `get_more_tools` calls. Host calls pass through unchanged until a complete first-page discovery.
 
 `observed` lists the methods the SDK wraps and grows as handlers are registered. `unobserved` lists methods registered before `instrument` that it could not reach. Calling `instrument` before registering tools avoids this. `instrument` never throws: given an object that is not an MCP server, or no `apiKey` or `client`, it logs a warning and returns a handle that observes nothing.
 
@@ -131,7 +133,7 @@ try {
 
 | Method | Records |
 | --- | --- |
-| `prepareToolList(tools, { firstPage?, hostToolNames? })` | Nothing. Returns the list with `context`, `conversation_id` when enabled, and `get_more_tools` on the first page. Pass `firstPage: false` for later pages. With a paginated list, pass the later pages' tool names as `hostToolNames` on the first page, so a host tool named `get_more_tools` on a later page suppresses the virtual one. |
+| `prepareToolList(tools, { firstPage?, hostToolNames?, discoveryComplete? })` | Nothing. Returns the list with `context`, `conversation_id` when enabled, and `get_more_tools` on the first page. Pass `firstPage: false` for later pages. With a paginated list, pass the later pages' tool names as `hostToolNames` on the first page, so a host tool named `get_more_tools` on a later page suppresses the virtual one. Pass `discoveryComplete: false` if discovery is capped or fails. This disables field and virtual-tool injection and virtual interception until a complete first-page discovery. |
 | `prepareToolCall(name, args)` | Nothing. Returns `{ toolName, arguments, intent, intentSource, conversationId, isMissingCapability }`, with the injected fields removed from `arguments`. |
 | `missingCapabilityReply()` | Nothing. The fixed result to return for `get_more_tools`. |
 | `captureInitialize(info)` | `$mcp_initialize` |
