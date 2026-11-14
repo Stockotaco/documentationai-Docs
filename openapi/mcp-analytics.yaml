@@ -1070,6 +1070,7 @@ components:
         distinct_id: { type: string }
         client_name: { type: string }
         client_version: { type: string }
+        protocol_version: { type: string, nullable: true, description: "MCP protocol revision of the request, e.g. 2025-06-18 or 2026-07-28. Null when the SDK could not tell." }
         server_name: { type: string }
         intent: { type: string, nullable: true }
         intent_source: { type: string, nullable: true, enum: [context_parameter, fallback, null] }

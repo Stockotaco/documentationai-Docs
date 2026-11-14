@@ -12,8 +12,10 @@ A session groups the calls of one agent conversation. The SDK picks the first of
 1. The `conversation_id` argument, when `enableConversationId` is on.
 2. The session id set by the [session middleware](#the-session-header).
 3. The transport's own session id (stdio, or a Streamable HTTP server that keeps sessions).
-4. `sessionKey(ctx)` from your code, with a 30-minute idle window.
-5. One session per client, kept in memory, with a 30-minute idle window.
+4. `sessionKey(ctx)` from your code, combined with the client name and version, with a 30-minute idle window.
+5. One session per client, kept in memory, with a 30-minute idle window. On a server built per request, the key is the client name and version plus, when the request is authenticated, a hash of the principal.
+
+The principal is a user id your auth layer puts in `authInfo.extra` (`sub`, `userId`, `user_id` or `principal`), else `authInfo.token`, else the `Authorization` or `X-API-Key` header. Only a hash is used, never the credential. `authInfo.clientId` alone is not a principal: it names the OAuth client app, which many users share. So one client app never merges different users on a hosted server, and one key never merges different client apps.
 
 The stored `session_id` is `mcps_` followed by 32 hex characters, a hash of the server name and the raw id. When the transport has its own session id, a hash of it is also kept as `mcp_session_id`: `mcpsid_` followed by 16 hex characters. Mythic never stores the raw transport id.
 
@@ -66,7 +68,11 @@ instrument(server, {
 });
 ```
 
-Return a value that is stable for one caller. Calls with the same key and no gap over 30 minutes form one session.
+Return a value that is stable for one caller. Calls with the same key, from the same client app (name and version), with no gap over 30 minutes, form one session.
+
+<Callout kind="info">
+From SDK 3.110, sessions on servers without a transport session id are split by client app and by authenticated principal. Before 3.110, a `sessionKey` grouped every client app on that key into one session, and stateless servers grouped every user of one client app. Session and anonymous-user counts go up after the upgrade, and sessions recorded before it do not continue.
+</Callout>
 
 ## conversation_id
 
