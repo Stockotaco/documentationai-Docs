@@ -26,22 +26,25 @@ The package has no runtime dependencies. `@modelcontextprotocol/sdk` releases be
 ## Instrument the server
 
 <Steps>
-  <Step title="Call instrument after creating the server">
+  <Step title="Create one client, then instrument the server">
 
 ```ts
 import { McpServer } from '@modelcontextprotocol/server';
-import { instrument } from '@mythic-analytics/mcp';
+import { createMythicClient, instrument } from '@mythic-analytics/mcp';
+
+// One client per process, shared by every server instance.
+const mythic = createMythicClient({
+  apiKey: process.env.MYTHIC_PUBLISHABLE_KEY, // pk_…
+  host: 'https://mythic-analytics.gulp.workers.dev',
+});
 
 const server = new McpServer({ name: 'acme-crm', version: '1.4.0' });
-
-const analytics = instrument(server, {
-  apiKey: process.env.MYTHIC_PUBLISHABLE_KEY, // pk_…
-});
+const analytics = instrument(server, { client: mythic });
 
 server.registerTool('search_contacts', { /* … */ }, async (args) => { /* … */ });
 ```
 
-Tools registered before or after `instrument` are both observed. Calling `instrument` twice on the same server returns the first handle, so nothing is counted twice.
+This is the snippet the client's **MCP analytics → Setup** tab shows, with the location's key and the ingestion host filled in. Tools registered before or after `instrument` are both observed. Calling `instrument` twice on the same server returns the first handle, so nothing is counted twice.
 
   </Step>
   <Step title="Flush before the process exits">
@@ -53,16 +56,15 @@ process.once('SIGTERM', async () => {
 });
 ```
 
-Events are queued in memory and sent every 5 seconds or every 20 events. On a serverless runtime, create the client yourself with `waitUntil` so the send outlives the response:
+Events are queued in memory and sent every 5 seconds or every 20 events. On a serverless runtime, give the client `waitUntil` so the send outlives the response:
 
 ```ts
-import { createMythicClient, instrument } from '@mythic-analytics/mcp';
-
-const client = createMythicClient({
+const mythic = createMythicClient({
   apiKey: env.MYTHIC_PUBLISHABLE_KEY,
+  host: 'https://mythic-analytics.gulp.workers.dev',
   waitUntil: (p) => ctx.waitUntil(p),
 });
-const analytics = instrument(server, { client });
+const analytics = instrument(server, { client: mythic });
 ```
 
   </Step>
@@ -105,7 +107,7 @@ Nothing else changes: tool results, errors and schemas reach the client exactly 
 To record volume, errors, latency, sessions and clients only, with no arguments, responses, intents or added tools:
 
 ```ts
-instrument(server, { apiKey: process.env.MYTHIC_PUBLISHABLE_KEY, metadataOnly: true });
+instrument(server, { client: mythic, metadataOnly: true });
 ```
 
 ## When ingestion refuses events
@@ -117,4 +119,4 @@ instrument(server, { apiKey: process.env.MYTHIC_PUBLISHABLE_KEY, metadataOnly: t
 | 429 | `quota_exceeded` | Pauses for `Retry-After`, at most 15 minutes |
 | 5xx, network failure | `mcp_unavailable`, `privacy_unknown`, `entitlements_unavailable` on 503 | Retries twice, honoring `Retry-After` up to 30 seconds, then drops the batch |
 
-`client.stats()` on a [client you created](/mcp-analytics/typescript#the-client) reports sent, dropped and rejected counts. See [Events](/mcp-analytics/events#ingestion) for the full contract.
+`mythic.stats()` reports sent, dropped and rejected counts. See [Events](/mcp-analytics/events#ingestion) for the full contract.

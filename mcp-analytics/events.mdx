@@ -17,7 +17,7 @@ description: >-
 | `$exception` | A tool handler throws (error type `exception`) and `captureExceptions` is on | `$exception_type`, `$exception_message`, `$mcp_tool_name`, `$exception_source: 'mcp_tool'` |
 | `$set` | Once per session, when `identify` returns `properties` and `metadataOnly` is off | The person properties, redacted |
 
-`$exception` and `$set` are ordinary Mythic events. They go through the main event pipeline, so a tool exception appears in error tracking and `$set` updates the person. They are sent in their own batches, never mixed with `$mcp_*` events.
+`$exception` and `$set` are ordinary Mythic events. They go through the main event pipeline, so a tool exception appears in error tracking and `$set` updates the person. They are sent in their own batches, never mixed with `$mcp_*` events. They get the same redaction and caps as `$mcp_*` events, including the event size check: `$exception_message` is cut to 1 KB, then redacted like any other value.
 
 ### Common fields
 
@@ -81,9 +81,9 @@ A request holds MCP events only, or none. A batch that mixes `$mcp_*` events wit
 | Listed tools | At most 500 names of at most 200 characters |
 | Duration | An integer from 0 to 86,400,000 ms |
 | Other properties | Up to 20 scalar non-`$mcp_` properties, at most 2 KB, kept as `extra` |
-| Daily ceiling per location | 2,000,000 events or 5 GB, then `quota_exceeded` until UTC midnight |
+| Daily ceiling per location | 2,000,000 events or 5 GB received since UTC midnight, then `quota_exceeded` until UTC midnight |
 
-The daily ceiling is checked every 5 minutes, so a location can pass it by up to 5 minutes of volume before sending is paused.
+The daily ceiling counts events by when Mythic received them, not by their own timestamp, so backdated events count toward today. It is checked every 5 minutes, so a location can pass it by up to 5 minutes of volume before sending is paused.
 
 ### Responses
 

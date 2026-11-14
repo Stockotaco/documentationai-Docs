@@ -61,7 +61,7 @@ It works with clients that send `Mcp-Session-Id` back on every request. It does 
 
 ```ts
 instrument(server, {
-  apiKey: process.env.MYTHIC_PUBLISHABLE_KEY,
+  client: mythic, // from createMythicClient({ apiKey, host })
   sessionKey: (ctx) => ctx.headers?.['x-user-id'],
 });
 ```

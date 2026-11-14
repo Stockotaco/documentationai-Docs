@@ -7,7 +7,7 @@ description: >-
 
 ## Where redaction happens
 
-The SDK redacts every event **on the client's server, before it is sent**. Mythic never receives what the SDK removed.
+The SDK redacts every event **on the client's server, before it is sent**. Mythic never receives what the SDK removed. The same redaction and caps apply to every event the SDK sends, including the `$exception` and `$set` events.
 
 The order: build the event, merge `eventProperties`, redact, truncate, run `beforeSend`, then redact value patterns and truncate again, then a final size check. Text your `beforeSend` adds is redacted too. The SDK never changes the objects your tools return.
 
@@ -42,7 +42,7 @@ The order: build the event, merge `eventProperties`, redact, truncate, run `befo
 | Keys or items per object or array | 100 |
 | String | 8,192 characters |
 | Event | 32 KB, at most 60 KB with `limits.eventBytes` |
-| Work per value | 5,000 nodes and 256 KB scanned. The rest becomes `"[TRUNCATED]"`. A cycle becomes `"[CIRCULAR]"`. |
+| Work per value | 5,000 nodes and 256 KB scanned. The rest becomes `"[TRUNCATED]"`. A string that looks like JSON and is too large to parse within the budget becomes `"[TRUNCATED]"` whole, so no unparsed part of it is sent. A cycle becomes `"[CIRCULAR]"`. |
 
 Mythic applies its own caps on arrival: 24 KB each for parameters and response, 64 KB per record. See [Events](/mcp-analytics/events#limits).
 
@@ -78,7 +78,7 @@ Records are kept **90 days**, then deleted. Intent cluster snapshots are kept 8 
 
 ## Erasing a person
 
-Mythic has no self-serve erasure API. An operator erasure deletes the person's MCP records by `distinct_id` and by session, and clears the location's cluster snapshot. These remain:
+Mythic has no self-serve erasure API. An operator erasure deletes the person's MCP records by `distinct_id` and by session. Before any delete, it fences the location's intent clusters: the snapshot is cleared, a run in progress can no longer save its result, and recomputes answer `409 erasure_in_progress`. When every delete succeeds the fence is lifted and clusters are recomputed from the remaining data. An erasure with failures keeps the fence for 6 hours. These remain:
 
 - Parameter, response or intent text that names the person without one of their ids, until the 90-day retention deletes it
 - Excerpts quoted in client scout reports

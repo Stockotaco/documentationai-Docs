@@ -15,7 +15,7 @@ Without `identify`, each event's `distinct_id` is `mcp_anon_` plus a hash of the
 
 ```ts
 instrument(server, {
-  apiKey: process.env.MYTHIC_PUBLISHABLE_KEY,
+  client: mythic, // from createMythicClient({ apiKey, host })
   identify: (ctx) => {
     const user = (ctx.authInfo as { extra?: { user?: { id: string; plan?: string; company?: string } } } | undefined)?.extra?.user;
     if (!user) return null;

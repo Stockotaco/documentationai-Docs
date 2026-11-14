@@ -11,7 +11,7 @@ import TierGated from "/snippets/tier-gated.mdx"
 
 MCP Analytics answers the questions a client asks once its product has an MCP server: **which tools do agents actually call, which ones fail, what were the agents trying to do, and what did they look for and not find?**
 
-The client adds the TypeScript SDK `@mythic-analytics/mcp` to its MCP server with one call, `instrument(server, { apiKey: 'pk_…' })`. The SDK records each `initialize`, `tools/list`, `tools/call` and `resources/read` the server answers and sends them to Mythic with the location's publishable key. See [Installation](/mcp-analytics/installation).
+The client adds the TypeScript SDK `@mythic-analytics/mcp` to its MCP server: `createMythicClient({ apiKey: 'pk_…', host })` once per process, then `instrument(server, { client })`. The SDK records each `initialize`, `tools/list`, `tools/call` and `resources/read` the server answers and sends them to Mythic with the location's publishable key. See [Installation](/mcp-analytics/installation).
 
 What you get for each client:
 

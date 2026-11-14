@@ -82,7 +82,7 @@ The window is fixed. Clusters ignore the page's time range and filters, and `GET
 | --- | --- |
 | `no_key` | No model key for the client or agency. `error` says to add one |
 | `none` | No snapshot. When the last run found fewer than 20 distinct intents, `error` starts with `too_few:` |
-| `computing` | A run is in progress. The previous snapshot, if still unexpired, is returned with it |
+| `computing` | A run is in progress, or a recompute is queued for the next 5-minute tick. The previous snapshot, if still unexpired, is returned with it |
 | `ready` | `clusters` holds the snapshot, with `computed_at`, `window`, `provider`, `model` and `coverage` |
 | `error` | The last run failed and no unexpired snapshot exists. `error` says why. Runs retry after 1 hour, doubling up to 24 hours |
 
@@ -92,4 +92,14 @@ A failed run never hides a good snapshot: while an unexpired snapshot exists, th
 
 ### Recompute
 
-`POST /client/v1/mcp-analytics/intents/clusters/recompute` starts a run now and answers `202 { status: 'computing' }`. It needs `mcp_analytics:write` on a scoped key, and is limited to one per hour per location. It answers `409 no_model_key` without a key, `429 rate_limited` with `Retry-After: 3600` for a second call within the hour, and `409 already_computing` while a run is going.
+`POST /client/v1/mcp-analytics/intents/clusters/recompute` queues a run and answers `202 { status: 'computing' }`. The run starts on the next cron tick, within about 5 minutes, and `GET /intents/clusters` reads `computing` until it finishes.
+
+It needs an agency key (`ak_`) or an `mcp_` key with `mcp_analytics:write`, and is limited to one per hour per location.
+
+| Status | `error.code` | When |
+| --- | --- | --- |
+| 403 | `forbidden` | A location secret key (`sk_`): it is read-only |
+| 409 | `no_model_key` | No model key for the client or agency |
+| 429 | `rate_limited` | A second call within the hour. `Retry-After: 3600` |
+| 409 | `already_computing` | A run is in progress |
+| 409 | `erasure_in_progress` | A personal-data erasure is running for this client. Retry when it finishes |

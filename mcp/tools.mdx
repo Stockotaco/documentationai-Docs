@@ -145,7 +145,7 @@ Traffic from the client’s own MCP servers sent by @mythic-analytics/mcp: tool 
 | `get_mcp_intent_clusters`<br /><span style={{opacity: 0.7}}>Get MCP Intent Clusters</span> | `mcp_analytics:read` | Intents grouped by meaning, from the latest fixed 7-day snapshot computed daily with the agency's own model key (BYOK embeddings). | `GET /client/v1/mcp-analytics/intents/clusters` |
 | `list_mcp_missing_capabilities`<br /><span style={{opacity: 0.7}}>List MCP Missing Capabilities</span> | `mcp_analytics:read` | Capabilities agents reported missing through the get_more_tools tool, grouped by normalized text, with reports, sessions, users, how often the agent was blocked, the tools it tried, and the latest goal. | `GET /client/v1/mcp-analytics/missing-capabilities` |
 | `get_mcp_setup_status`<br /><span style={{opacity: 0.7}}>Get MCP Setup Status</span> | `mcp_analytics:read` | Install status of @mythic-analytics/mcp for a client: its publishable key and ingest URL, whether ingestion is paused by the daily volume ceiling, first and last event, events in the last 24 hours, and the M… | `GET /client/v1/mcp-analytics/setup` |
-| `recompute_mcp_intent_clusters`<br /><span style={{opacity: 0.7}}>Recompute MCP Intent Clusters</span> | `mcp_analytics:write` | Recompute a client's intent clusters now instead of waiting for the daily run. | `POST /client/v1/mcp-analytics/intents/clusters/recompute` |
+| `recompute_mcp_intent_clusters`<br /><span style={{opacity: 0.7}}>Recompute MCP Intent Clusters</span> | `mcp_analytics:write` | Recompute a client's intent clusters within about 5 minutes instead of waiting for the daily run (the next cron tick runs it). | `POST /client/v1/mcp-analytics/intents/clusters/recompute` |
 
 ## Heatmaps
 

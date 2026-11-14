@@ -40,7 +40,9 @@ paths:
         record, 4 MB of records accepted per request, 24 KB each for
         parameters and response. Timestamps are clamped to between 7 days ago
         and 60 seconds ahead. Each location also has a daily ceiling of
-        2,000,000 events or 5 GB, checked every 5 minutes; past it, ingestion
+        2,000,000 events or 5 GB received since UTC midnight (counted by
+        when Mythic received them, not the event timestamp), checked every 5
+        minutes; past it, ingestion
         answers 429 `quota_exceeded` until UTC midnight. Delivery is at least
         once.
       security:
@@ -630,7 +632,8 @@ paths:
         The latest cluster snapshot: the last 7 days, computed with the
         agency's own model key. Takes no window or filter params (400
         `param_not_allowed`). Without a model key, `status` is `no_key` and
-        `clusters` is empty.
+        `clusters` is empty. `computing` covers a run in progress and a
+        recompute queued for the next 5-minute tick.
       parameters:
         - $ref: "#/components/parameters/LocationId"
       responses:
@@ -655,13 +658,16 @@ paths:
       summary: Recompute intent clusters
       operationId: recomputeMcpIntentClusters
       description: >
-        Starts a cluster run now. One per hour per location. Scoped keys need
-        `mcp_analytics:write`.
+        Queues a cluster run. The next cron tick, within about 5 minutes,
+        runs it; `GET /intents/clusters` reads `computing` until it finishes.
+        One per hour per location. Needs an agency key (`ak_`) or an `mcp_` key
+        with `mcp_analytics:write`; a location secret key (`sk_`) is read-only
+        and answers 403 `forbidden`.
       parameters:
         - $ref: "#/components/parameters/LocationId"
       responses:
         "202":
-          description: The run started
+          description: The run is queued
           content:
             application/json:
               schema:
@@ -674,14 +680,17 @@ paths:
                       status: { type: string, enum: [computing] }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "402": { $ref: "#/components/responses/NotInPlan" }
-        "403": { $ref: "#/components/responses/Forbidden" }
+        "403":
+          description: "`forbidden` (an `sk_` key: read-only), `hipaa_restricted` or `insufficient_scope` (an `mcp_` key without `mcp_analytics:write`)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "409":
-          description: "`no_model_key` (add a model key for the client or agency) or `already_computing`."
+          description: "`no_model_key` (add a model key for the client or agency), `already_computing`, or `erasure_in_progress` (a personal-data erasure is running for this client; retry when it finishes)."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "429": { $ref: "#/components/responses/RateLimited" }
-        "502": { $ref: "#/components/responses/QueryFailed" }
         "503": { $ref: "#/components/responses/Unavailable" }
   /client/v1/mcp-analytics/missing-capabilities:
     get:

@@ -17,11 +17,14 @@ The package is ESM with no runtime dependencies and needs Node.js 18 or later.
 ## instrument(server, options)
 
 ```ts
-const handle = instrument(server, options);
+const mythic = createMythicClient({ apiKey: 'pk_…', host: 'https://mythic-analytics.gulp.workers.dev' });
+const handle = instrument(server, { client: mythic, ...options });
 // handle: { capture, flush, shutdown, observed, unobserved, mythic, client }
 ```
 
 `server` is an `McpServer` or a low-level `Server` from `@modelcontextprotocol/server` 2.x or `@modelcontextprotocol/sdk` 1.22.0 to 1.32.2 (the tested range; older 1.x releases are not verified). The SDK finds the low-level server (`server.server` on an `McpServer`) and wraps its request handlers for `initialize`, `tools/list`, `tools/call` and `resources/read`, including handlers set later.
+
+For a paginated `tools/list`, `instrument` reads up to 20 pages through your own list handler: on a first page with more pages (to find a host `get_more_tools` on a later page), and on a server built per request that gets a `tools/call` before any `tools/list` (to know which fields it injected on each tool).
 
 `observed` lists the methods the SDK wraps and grows as handlers are registered. `unobserved` lists methods registered before `instrument` that it could not reach. Calling `instrument` before registering tools avoids this. `instrument` never throws: given an object that is not an MCP server, or no `apiKey` or `client`, it logs a warning and returns a handle that observes nothing.
 
@@ -29,8 +32,8 @@ const handle = instrument(server, options);
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `apiKey` | | The location's publishable key (`pk_…`). Creates a client when `client` is not given. |
-| `client` | | A client from `createMythicClient`. Preferred: one per process. |
+| `client` | | A client from `createMythicClient`. One per process, shared by every server instance. |
+| `apiKey` | | Shortcut: a publishable key (`pk_…`) that creates a client with default settings when `client` is not given. Prefer `client`. |
 | `context` | `true` | Add the optional `context` argument to every tool. See [Intent](/mcp-analytics/intent). |
 | `intentFallback(call)` | | `({ toolName, arguments, info }) => string`. An intent for a call that has no `context`, stored with `intent_source: 'fallback'`. |
 | `reportMissing` | `true` | Add the `get_more_tools` tool. See [Missing capabilities](/mcp-analytics/missing-capability). |
@@ -69,7 +72,7 @@ const handle = instrument(server, options);
 ```ts
 import { createMythicClient } from '@mythic-analytics/mcp';
 
-const client = createMythicClient({ apiKey: 'pk_…' });
+const client = createMythicClient({ apiKey: 'pk_…', host: 'https://mythic-analytics.gulp.workers.dev' });
 ```
 
 | Option | Default | Meaning |
@@ -101,7 +104,7 @@ A server with its own JSON-RPC dispatcher uses `MythicMCP` and calls it from the
 ```ts
 import { MythicMCP } from '@mythic-analytics/mcp';
 
-const mythic = new MythicMCP({ apiKey: 'pk_…' }); // or { client }
+const mythic = new MythicMCP({ client }); // client from createMythicClient({ apiKey, host })
 
 // tools/list: answer with the prepared list
 const tools = mythic.prepareToolList(myTools);
@@ -128,7 +131,7 @@ try {
 
 | Method | Records |
 | --- | --- |
-| `prepareToolList(tools, { firstPage? })` | Nothing. Returns the list with `context`, `conversation_id` when enabled, and `get_more_tools` on the first page. Pass `firstPage: false` for later pages. |
+| `prepareToolList(tools, { firstPage?, hostToolNames? })` | Nothing. Returns the list with `context`, `conversation_id` when enabled, and `get_more_tools` on the first page. Pass `firstPage: false` for later pages. With a paginated list, pass the later pages' tool names as `hostToolNames` on the first page, so a host tool named `get_more_tools` on a later page suppresses the virtual one. |
 | `prepareToolCall(name, args)` | Nothing. Returns `{ toolName, arguments, intent, intentSource, conversationId, isMissingCapability }`, with the injected fields removed from `arguments`. |
 | `missingCapabilityReply()` | Nothing. The fixed result to return for `get_more_tools`. |
 | `captureInitialize(info)` | `$mcp_initialize` |

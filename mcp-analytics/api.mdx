@@ -18,7 +18,7 @@ https://mythic-analytics.gulp.workers.dev/client/v1/mcp-analytics
 
 <ClientV1Auth />
 
-Scoped keys (`mcp_`) need `mcp_analytics:read`, and `mcp_analytics:write` for `POST /intents/clusters/recompute`. The agency rollup `GET /client/v1/agency/mcp-analytics` needs an agency-wide key with `agency:read`.
+Scoped keys (`mcp_`) need `mcp_analytics:read`. `POST /intents/clusters/recompute` needs an agency key or an `mcp_` key with `mcp_analytics:write`. A location secret key (`sk_`) is read-only and gets `403 forbidden` there. The agency rollup `GET /client/v1/agency/mcp-analytics` needs an agency-wide key with `agency:read`.
 
 <TierGated />
 
@@ -57,7 +57,7 @@ Every route except `/calls/{uuid}`, `/intents/clusters` and `/setup` takes a win
 | `GET /breakdown` | Usage by `client`, `client_version`, `server_version`, `protocol_version`, `transport`, `model` or `category` |
 | `GET /intents` | Intents with their calls, errors and tools. Needs no model key |
 | `GET /intents/clusters` | The latest cluster snapshot and its status |
-| `POST /intents/clusters/recompute` | Start a cluster run. 202 |
+| `POST /intents/clusters/recompute` | Queue a cluster run for the next 5-minute tick. 202 |
 | `GET /missing-capabilities` | Missing-capability reports grouped by text |
 | `GET /setup` | Publishable key, ingestion URL, plan, privacy mode, last event and servers seen |
 | `GET /client/v1/agency/mcp-analytics` | Every client's totals for the window, or why it is restricted |
@@ -86,10 +86,10 @@ Parameters, responses, intents and missing-capability reports are text from agen
 | --- | --- |
 | 400 | `invalid_<param>`, `param_not_allowed` |
 | 402 | `feature_not_in_plan` |
-| 403 | `hipaa_restricted`, `insufficient_scope` |
+| 403 | `hipaa_restricted`, `insufficient_scope`, `forbidden` (an `sk_` key recomputing clusters) |
 | 404 | `not_found` |
 | 405 | `method_not_allowed` |
-| 409 | `no_model_key`, `already_computing` |
+| 409 | `no_model_key`, `already_computing`, `erasure_in_progress` |
 | 429 | `rate_limited`, with `Retry-After`: 120 requests per minute per location, one recompute per hour |
 | 502 | `query_failed`: the analytics store did not answer |
 | 503 | `privacy_unknown`, `not_configured`, `lookup_failed`. Retry |
