@@ -1,0 +1,61 @@
+---
+title: Alerts and scouts
+description: >-
+  The tool failure alert, the weekly MCP report, the mcp_tools scout skill and
+  MCP signals.
+---
+
+## Alerts
+
+MCP analytics raises two kinds of [alert](/agency-api/alerts). Route them to Slack or a webhook with the agency's alert rules like any other source.
+
+| Source | Raised when | Severity | How often |
+| --- | --- | --- | --- |
+| `mcp_tools` | A tool had 10 or more calls in the last 15 minutes and half or more failed. One alert per tool. It resolves when the tool has 5 or more calls with under 20% failing | `warning`, `critical` at 50+ calls with 90%+ failing | Every 5 minutes |
+| `mcp_reports` | The weekly summary: calls, error rate, sessions, the 3 worst tools, the number of intent clusters and missing-capability reports, and a link to the client's MCP analytics | `info` | Mondays, 09:10 UTC |
+
+An open tool alert stays open while the tool has no calls. A client that turns on HIPAA mode or leaves a plan with MCP analytics raises nothing new, and its open alerts stay open until it is eligible again.
+
+<Callout kind="info">
+MCP alerts carry numbers, tool names, server names and error types only. No intent, missing-capability or error message text is sent to Slack or a webhook.
+</Callout>
+
+## Signals
+
+An MCP alert about a client is also a [scout signal](/agency-api/scouts#signals):
+
+| Source | Family (scope to read it) | Raised when |
+| --- | --- | --- |
+| `mcp_tools` | `mcp_analytics` | A tool is failing |
+| `mcp_reports` | `mcp_analytics` | The weekly report |
+
+MCP signal payloads hold numbers and names only, so they are listed in full, unlike visitor-derived sources. The MCP data behind them is privacy-gated: a scout reads it only when the location is in standard privacy mode, and a report built from it is treated as privacy-sensitive in lists and deliveries.
+
+## The mcp_tools scout skill
+
+A [scout](/agency-api/scouts) with the skill `mcp_tools` reviews one client's MCP server every day.
+
+| Skill | Reads | What it watches |
+| --- | --- | --- |
+| `mcp_tools` | `mcp_analytics` | Tools that hurt agents: high error rates, repeated identical calls, slow p95 and oversized responses, weighted by how many calls, sessions and users they reach. Stays quiet when the server had under 50 calls in 7 days |
+
+It needs:
+
+- MCP analytics in the client's plan, and a client that is not in HIPAA mode. The scout reads only in standard privacy mode.
+- A [model key](/agency-api/scouts#model-key), like every scout.
+- On a scoped `mcp_` key, `scouts:write` to create it and `mcp_analytics:read` to read its reports.
+
+No instructions are required. Add your own to point it at tools that matter most.
+
+```bash
+curl -X POST https://mythic-analytics.gulp.workers.dev/client/v1/scouts \
+  -H "Authorization: Bearer $MYTHIC_AGENCY_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "location_id": "loc_123", "skill": "mcp_tools" }'
+```
+
+The scout reads with these tools: `get_mcp_overview`, `list_mcp_tools`, `get_mcp_tool`, `list_mcp_tool_errors`, `list_mcp_calls`, `list_mcp_sessions`, `list_mcp_intents` and `list_mcp_missing_capabilities`.
+
+<Callout kind="warning">
+A scout report can quote MCP data. An operator erasure of a person does not remove those excerpts. See [Privacy and redaction](/mcp-analytics/privacy#erasing-a-person).
+</Callout>

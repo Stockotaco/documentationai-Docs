@@ -1,0 +1,86 @@
+---
+title: Privacy and redaction
+description: >-
+  What the SDK redacts before an event leaves the server, the caps, what it
+  cannot catch, HIPAA, retention and where intent text goes.
+---
+
+## Where redaction happens
+
+The SDK redacts every event **on the client's server, before it is sent**. Mythic never receives what the SDK removed.
+
+The order: build the event, merge `eventProperties`, redact, truncate, run `beforeSend`, then redact value patterns and truncate again, then a final size check. Text your `beforeSend` adds is redacted too. The SDK never changes the objects your tools return.
+
+## What is redacted
+
+**Keys.** A value under any key matching this pattern becomes `"[REDACTED]"`, at any depth:
+
+```text
+/(pass(word|wd)?|secret|token|api[_-]?key|authorization|cookie|credential|private[_-]?key|signature|bearer|jwt|ssn|cvv|card[_-]?number)/i
+```
+
+**Values.** These are replaced wherever they appear in a string:
+
+- Mythic keys: `pk_`, `sk_`, `ak_` and `mcp_` followed by 16 or more letters or digits
+- `Bearer` followed by 20 or more characters
+- JSON Web Tokens
+- OpenAI and OpenRouter keys (`sk-…`, `sk-or-…`), Google API keys (`AIza…`), GitHub tokens (`ghp_…`), Slack tokens (`xoxb-…` and the like), AWS access key ids (`AKIA…`)
+
+**URLs.** User and password in a URL are removed. Query values under a sensitive key are redacted. Slack and Discord webhook URLs are replaced with `[REDACTED_URL]` whatever key holds them.
+
+**Text blocks.** `structuredContent` and every content block of a result are checked. A text block that is JSON (most tools return JSON as text) is parsed, redacted as a structure and serialized again. Resource text is treated the same way.
+
+**Personal data** (on by default): email addresses, phone numbers, card numbers that pass the Luhn check, and US Social Security numbers. `redact: { pii: false }` turns this off.
+
+**Binary.** Image and audio blocks, resource blobs and base64-looking strings of 10 KB or more become `{ type, mimeType, bytes }`.
+
+## Caps
+
+| Cap | Default |
+| --- | --- |
+| Depth | 10 |
+| Keys or items per object or array | 100 |
+| String | 8 KB |
+| Event | 32 KB, at most 60 KB with `limits.eventBytes` |
+| Work per value | 5,000 nodes and 256 KB scanned. The rest becomes `"[TRUNCATED]"`. Cycles are detected. |
+
+Mythic applies its own caps on arrival: 24 KB each for parameters and response, 64 KB per record. See [Events](/mcp-analytics/events#limits).
+
+## What redaction cannot catch
+
+<Callout kind="alert">
+A secret or personal detail in free text that matches no pattern is not caught. "My password is hunter2" inside a sentence is sent as written.
+</Callout>
+
+If a tool handles data that must not leave the server:
+
+- Keep only named fields: `captureParameters: ['query', 'limit']`, or per tool, `captureParameters: (tool) => tool === 'search' ? ['query'] : false`. `captureResponses` takes the same forms.
+- Drop or edit events in `beforeSend`.
+- Use `metadataOnly: true`. It turns off parameters, responses, intent, error messages, `get_more_tools` and exceptions, and keeps volume, errors, latency, sessions and clients.
+
+## HIPAA
+
+MCP analytics is **refused on HIPAA locations**. Ingestion answers `403 hipaa_restricted` and stores nothing. Every read, the MCP tools, the scout and the alerts answer or skip the same way. If a location's privacy configuration cannot be read, ingestion and reads answer `503 privacy_unknown` rather than assume the location is not HIPAA.
+
+A location that turns HIPAA mode on after receiving MCP events stops being readable at once. Removing the stored events is an operator task: ask Mythic support.
+
+## Retention
+
+Records are kept **90 days**, then deleted. Intent cluster snapshots are kept 8 days.
+
+## Intent text and your model provider
+
+[Intent clusters](/mcp-analytics/intent#intent-clusters) send the location's redacted intent text, at most 500 intents per run, to the **agency's own** model provider (OpenRouter, Gemini or Cloudflare) to embed it. Nothing is sent without a model key. OpenRouter calls ask providers not to collect the data. What the provider keeps is governed by the agency's agreement with that provider.
+
+## Alerts carry no text
+
+[MCP alerts](/mcp-analytics/alerts-and-scouts) hold numbers, tool names, server names and error types only. No intent, missing-capability or error message text reaches Slack or a webhook through them.
+
+## Erasing a person
+
+Mythic has no self-serve erasure API. An operator erasure deletes the person's MCP records by `distinct_id` and by session, and clears the location's cluster snapshot. These remain:
+
+- Parameter, response or intent text that names the person without one of their ids, until the 90-day retention deletes it
+- Excerpts quoted in client scout reports
+- Copies already delivered to Slack or webhooks
+- Intent text already sent to the agency's embedding provider

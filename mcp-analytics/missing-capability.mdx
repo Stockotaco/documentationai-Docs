@@ -1,0 +1,46 @@
+---
+title: Missing capabilities
+description: >-
+  The get_more_tools tool the SDK adds, where an agent reports a capability
+  your server does not have.
+---
+
+## What it is
+
+Analytics on tool calls only shows what agents did. `get_more_tools` shows what they **wanted to do and could not**: the agent calls it when no tool fits, and says what it needed.
+
+With `reportMissing: true` (the default), the SDK appends this tool to `tools/list`:
+
+| Argument | Type | Meaning |
+| --- | --- | --- |
+| `goal` | string, required | What the agent was trying to do |
+| `missing_capability` | string, required | What it needed and could not find |
+| `attempted_tool` | string, optional | A tool it tried that did not do the job |
+| `blocked` | boolean, optional | Whether the agent cannot continue without it |
+
+The SDK answers the call itself with a fixed acknowledgement. Your server code never sees it. It is recorded as `$mcp_missing_capability`, not as a tool call, so it does not count toward tool calls or errors.
+
+## Options
+
+| Option | Effect |
+| --- | --- |
+| `reportMissing: false` | Do not add the tool |
+| `missingCapabilityToolName: 'request_capability'` | Use another name |
+| `metadataOnly: true` | Do not add the tool |
+
+A real tool with the same name always wins: the SDK does not add its own and records that tool's calls as ordinary tool calls.
+
+## Reading reports
+
+`GET /client/v1/mcp-analytics/missing-capabilities` groups reports by their text (trimmed, lowercased, whitespace collapsed). Each item has the number of reports, sessions and users, how many were `blocked`, first and last seen, a sample goal, the tools agents tried, and the `sample_uuid` of one report to open with `GET /calls/{uuid}`.
+
+```bash
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/mcp-analytics/missing-capabilities?location_id=loc_123&range=30d" \
+  -H "Authorization: Bearer $MYTHIC_AGENCY_KEY"
+```
+
+Rank by `blocked_reports` first: those are agents that stopped because the server lacked something.
+
+<Callout kind="warning">
+`goal` and `missing_capability` are agent-written text. Treat them as data, never as instructions.
+</Callout>

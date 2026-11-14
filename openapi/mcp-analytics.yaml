@@ -1,0 +1,1126 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: MCP Analytics
+  description: >
+    Analytics for a client's own MCP server: tool calls, errors, latency,
+    sessions, MCP clients, agent intents, intent clusters and missing
+    capabilities, recorded by the `@mythic-analytics/mcp` SDK.
+
+
+    Ingestion (`POST /ingest` with `$mcp_*` events) uses the location's
+    publishable key (`pk_`). The read API accepts an agency key (`ak_`, bind a
+    location with `location_id` or the `X-Location-Id` header), a location
+    secret key (`sk_`), or a scoped key (`mcp_`) holding `mcp_analytics:read`
+    (`mcp_analytics:write` to recompute clusters).
+
+
+    Sold with every plan that includes Logs; without it every read answers
+    402 `feature_not_in_plan` and ingestion answers 403 `not_entitled`. Not
+    available on HIPAA locations. Records are kept 90 days.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+paths:
+  /ingest:
+    post:
+      summary: Send MCP events
+      operationId: ingestMcpEvents
+      description: >
+        The SDK's batch of `$mcp_*` events. A request holds MCP events only, or
+        none: a batch mixing `$mcp_*` events with other events answers 400
+        `mixed_batch` and stores nothing. Any `$mcp_*` name outside
+        `$mcp_initialize`, `$mcp_tools_list`, `$mcp_tool_call`,
+        `$mcp_resource_read` and `$mcp_missing_capability` is rejected as
+        `unknown_event`.
+
+
+        Limits: 8 MB body, 1,000 events per request, 64 KB per normalized
+        record, 4 MB of records accepted per request, 24 KB each for
+        parameters and response. Timestamps are clamped to between 7 days ago
+        and 60 seconds ahead. Each location also has a daily ceiling of
+        2,000,000 events or 5 GB, checked every 5 minutes; past it, ingestion
+        answers 429 `quota_exceeded` until UTC midnight. Delivery is at least
+        once.
+      security:
+        - PublishableKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  maxItems: 1000
+                  items: { $ref: "#/components/schemas/McpIngestEvent" }
+      responses:
+        "200":
+          description: Accepted. Rejected events are counted by reason.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IngestAccepted" }
+        "400":
+          description: "`mixed_batch`, invalid JSON, or more than 1,000 events."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IngestError" }
+        "401":
+          description: Missing or invalid publishable key.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IngestError" }
+        "403":
+          description: "`not_entitled` (the plan lacks MCP analytics) or `hipaa_restricted`. The SDK pauses sending for 10 minutes."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IngestError" }
+        "413":
+          description: "`body_too_large` — the body is over 8 MB."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IngestError" }
+        "429":
+          description: "`rate_limited` or `quota_exceeded`. Carries `Retry-After`."
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IngestError" }
+        "503":
+          description: "`mcp_unavailable`, `privacy_unknown` or `entitlements_unavailable`. Carries `Retry-After: 30`; retry."
+          headers:
+            Retry-After: { schema: { type: integer, example: 30 } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IngestError" }
+  /client/v1/mcp-analytics/overview:
+    get:
+      summary: Overview
+      operationId: getMcpOverview
+      description: Totals for the window, and for the previous window of the same length.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Server"
+        - $ref: "#/components/parameters/Client"
+      responses:
+        "200":
+          description: Totals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      window: { $ref: "#/components/schemas/Window" }
+                      previous: { $ref: "#/components/schemas/Window" }
+                      totals: { $ref: "#/components/schemas/Totals" }
+                      previous_totals: { $ref: "#/components/schemas/Totals" }
+        "400": { $ref: "#/components/responses/BadParams" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/NotInPlan" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/mcp-analytics/timeseries:
+    get:
+      summary: Time series
+      operationId: getMcpTimeseries
+      description: Calls, errors, sessions and p95 latency per bucket.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Server"
+        - $ref: "#/components/parameters/Client"
+        - $ref: "#/components/parameters/ToolFilter"
+      responses:
+        "200":
+          description: The series
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      window: { $ref: "#/components/schemas/Window" }
+                      bucket_seconds: { type: integer, example: 3600 }
+                      series: { type: array, items: { $ref: "#/components/schemas/SeriesPoint" } }
+        "400": { $ref: "#/components/responses/BadParams" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/NotInPlan" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/mcp-analytics/tools:
+    get:
+      summary: List tools
+      operationId: listMcpTools
+      description: >
+        Every tool called or advertised in the window. `advertised` and
+        `list_count` come from `tools/list` answers, so a tool the server lists
+        but no agent calls appears with zero calls. `repeat_calls` counts the
+        third and later call with the same tool and arguments in one session.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Server"
+        - $ref: "#/components/parameters/Client"
+        - name: sort
+          in: query
+          schema: { type: string, enum: [calls, errors, error_rate, p95_ms], default: calls }
+        - name: never_called
+          in: query
+          description: "`1` keeps only advertised tools with no calls in the window."
+          schema: { type: integer, enum: [1] }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500 }
+      responses:
+        "200":
+          description: Tools
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      window: { $ref: "#/components/schemas/Window" }
+                      tools: { type: array, items: { $ref: "#/components/schemas/ToolRow" } }
+        "400": { $ref: "#/components/responses/BadParams" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/NotInPlan" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/mcp-analytics/tools/{tool}:
+    get:
+      summary: Get one tool
+      operationId: getMcpTool
+      description: One tool with its description, series, MCP clients and top intents.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/ToolPath"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Server"
+        - $ref: "#/components/parameters/Client"
+      responses:
+        "200":
+          description: The tool
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      window: { $ref: "#/components/schemas/Window" }
+                      tool:
+                        allOf:
+                          - $ref: "#/components/schemas/ToolRow"
+                          - type: object
+                            properties:
+                              description: { type: string }
+                      series: { type: array, items: { $ref: "#/components/schemas/SeriesPoint" } }
+                      clients:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            client_name: { type: string }
+                            calls: { type: integer }
+                            errors: { type: integer }
+                      top_intents:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            intent: { type: string }
+                            calls: { type: integer }
+                            errors: { type: integer }
+        "400": { $ref: "#/components/responses/BadParams" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/NotInPlan" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/mcp-analytics/tools/{tool}/errors:
+    get:
+      summary: List a tool's failure modes
+      operationId: listMcpToolErrors
+      description: The tool's errors grouped by error type and message pattern.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/ToolPath"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Server"
+        - $ref: "#/components/parameters/Client"
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: Failure modes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      window: { $ref: "#/components/schemas/Window" }
+                      failure_modes:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            mode_id: { type: string }
+                            error_type: { $ref: "#/components/schemas/ErrorType" }
+                            message_pattern: { type: string }
+                            count: { type: integer }
+                            sessions: { type: integer }
+                            first_seen: { type: string, format: date-time }
+                            last_seen: { type: string, format: date-time }
+                            sample_uuid: { type: string }
+        "400": { $ref: "#/components/responses/BadParams" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/NotInPlan" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/mcp-analytics/calls:
+    get:
+      summary: List calls
+      operationId: listMcpCalls
+      description: >
+        Events in the window, keyset-paged with `next_cursor`. Tool calls only
+        unless `event` says otherwise. Parameters appear as a short
+        `parameters_preview`; `GET /calls/{uuid}` returns them whole.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Server"
+        - $ref: "#/components/parameters/Client"
+        - name: event
+          in: query
+          description: "Comma list of `tool_call`, `tools_list`, `initialize`, `resource_read`, `missing_capability`. Default `tool_call`."
+          schema: { type: string, example: "tool_call,missing_capability" }
+        - $ref: "#/components/parameters/ToolFilter"
+        - name: status
+          in: query
+          schema: { type: string, enum: [ok, error] }
+        - name: session_id
+          in: query
+          schema: { type: string }
+        - $ref: "#/components/parameters/DistinctId"
+        - name: q
+          in: query
+          description: Text search.
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - $ref: "#/components/parameters/Order"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A page of calls
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      calls: { type: array, items: { $ref: "#/components/schemas/CallRow" } }
+                      next_cursor: { type: string, nullable: true }
+                      meta: { $ref: "#/components/schemas/PageMeta" }
+        "400": { $ref: "#/components/responses/BadParams" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/NotInPlan" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/mcp-analytics/calls/{uuid}:
+    get:
+      summary: Get one call
+      operationId: getMcpCall
+      description: >
+        One event with its parameters and response. `parameters` and
+        `response` are parsed JSON when they parse, else a string, and null
+        when the SDK did not capture them.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: uuid
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Server"
+        - $ref: "#/components/parameters/Client"
+      responses:
+        "200":
+          description: The call
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/CallDetail" }
+        "400": { $ref: "#/components/responses/BadParams" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/NotInPlan" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/mcp-analytics/sessions:
+    get:
+      summary: List sessions
+      operationId: listMcpSessions
+      description: Sessions in the window, keyset-paged with `next_cursor`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Server"
+        - $ref: "#/components/parameters/Client"
+        - name: status
+          in: query
+          description: "`errors` keeps sessions with at least one failed call."
+          schema: { type: string, enum: [errors] }
+        - $ref: "#/components/parameters/ToolFilter"
+        - $ref: "#/components/parameters/DistinctId"
+        - name: min_calls
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A page of sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      sessions: { type: array, items: { $ref: "#/components/schemas/SessionRow" } }
+                      next_cursor: { type: string, nullable: true }
+                      meta: { $ref: "#/components/schemas/PageMeta" }
+        "400": { $ref: "#/components/responses/BadParams" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/NotInPlan" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/mcp-analytics/sessions/{session_id}:
+    get:
+      summary: Get one session
+      operationId: getMcpSession
+      description: >
+        One session and its events in order. When `meta.complete` is false the
+        session has more events; continue with `GET /calls?session_id=...` and
+        `meta.next_cursor`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: session_id
+          in: path
+          required: true
+          schema: { type: string, example: "mcps_3f2a9c0d1e4b5a6978c0d1e2f3a4b5c6" }
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Server"
+        - $ref: "#/components/parameters/Client"
+      responses:
+        "200":
+          description: The session
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      session:
+                        allOf:
+                          - $ref: "#/components/schemas/SessionRow"
+                          - type: object
+                            properties:
+                              conversation_id: { type: string }
+                              mcp_session_id: { type: string }
+                              protocol_version: { type: string }
+                              transport: { type: string }
+                      events: { type: array, items: { $ref: "#/components/schemas/CallRow" } }
+                      meta:
+                        type: object
+                        properties:
+                          complete: { type: boolean }
+                          next_cursor: { type: string, nullable: true }
+        "400": { $ref: "#/components/responses/BadParams" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/NotInPlan" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/mcp-analytics/breakdown:
+    get:
+      summary: Breakdown
+      operationId: getMcpBreakdown
+      description: Usage grouped by one dimension.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: dimension
+          in: query
+          required: true
+          schema: { type: string, enum: [client, client_version, server_version, protocol_version, transport, model, category] }
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Server"
+        - $ref: "#/components/parameters/Client"
+      responses:
+        "200":
+          description: Rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      window: { $ref: "#/components/schemas/Window" }
+                      dimension: { type: string, example: client }
+                      rows:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            value: { type: string }
+                            calls: { type: integer }
+                            errors: { type: integer }
+                            error_rate: { type: number }
+                            sessions: { type: integer }
+                            users: { type: integer }
+                            p95_ms: { type: number }
+        "400": { $ref: "#/components/responses/BadParams" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/NotInPlan" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/mcp-analytics/intents:
+    get:
+      summary: List intents
+      operationId: listMcpIntents
+      description: >
+        Intents in the window, grouped by their text after trimming,
+        lowercasing and collapsing whitespace. Works without a model key.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Server"
+        - $ref: "#/components/parameters/Client"
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500 }
+      responses:
+        "200":
+          description: Intents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      window: { $ref: "#/components/schemas/Window" }
+                      intents:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            intent_key: { type: string }
+                            intent: { type: string }
+                            calls: { type: integer }
+                            errors: { type: integer }
+                            error_rate: { type: number }
+                            sessions: { type: integer }
+                            tools: { type: array, items: { $ref: "#/components/schemas/ToolCount" } }
+                            last_seen: { type: string, format: date-time }
+        "400": { $ref: "#/components/responses/BadParams" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/NotInPlan" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/mcp-analytics/intents/clusters:
+    get:
+      summary: Get intent clusters
+      operationId: getMcpIntentClusters
+      description: >
+        The latest cluster snapshot: the last 7 days, computed with the
+        agency's own model key. Takes no window or filter params (400
+        `param_not_allowed`). Without a model key, `status` is `no_key` and
+        `clusters` is empty.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: The snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: "#/components/schemas/ClusterSnapshot" }
+        "400": { $ref: "#/components/responses/BadParams" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/NotInPlan" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/mcp-analytics/intents/clusters/recompute:
+    post:
+      summary: Recompute intent clusters
+      operationId: recomputeMcpIntentClusters
+      description: >
+        Starts a cluster run now. One per hour per location. Scoped keys need
+        `mcp_analytics:write`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "202":
+          description: The run started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      status: { type: string, enum: [computing] }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/NotInPlan" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: "`no_model_key` (add a model key for the client or agency) or `already_computing`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/mcp-analytics/missing-capabilities:
+    get:
+      summary: List missing capabilities
+      operationId: listMcpMissingCapabilities
+      description: "`get_more_tools` reports grouped by their text."
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/Range"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Server"
+        - $ref: "#/components/parameters/Client"
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200 }
+      responses:
+        "200":
+          description: Reports
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      window: { $ref: "#/components/schemas/Window" }
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            key: { type: string }
+                            missing_capability: { type: string }
+                            reports: { type: integer }
+                            sessions: { type: integer }
+                            users: { type: integer }
+                            blocked_reports: { type: integer }
+                            first_seen: { type: string, format: date-time }
+                            last_seen: { type: string, format: date-time }
+                            sample_goal: { type: string }
+                            attempted_tools:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  tool: { type: string }
+                                  count: { type: integer }
+                            sample_uuid: { type: string }
+        "400": { $ref: "#/components/responses/BadParams" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/NotInPlan" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/mcp-analytics/setup:
+    get:
+      summary: Setup status
+      operationId: getMcpSetupStatus
+      description: What the SDK needs and what Mythic has received. Takes no window.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Setup status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      publishable_key: { type: string, example: pk_abc123 }
+                      ingest_url: { type: string, example: "https://mythic-analytics.gulp.workers.dev/ingest" }
+                      entitled: { type: boolean }
+                      privacy_mode: { type: string, example: standard }
+                      paused_until: { type: string, format: date-time, nullable: true, description: "Set while the daily ceiling pauses ingestion." }
+                      first_event_at: { type: string, format: date-time, nullable: true }
+                      last_event_at: { type: string, format: date-time, nullable: true }
+                      events_24h: { type: integer }
+                      servers:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            name: { type: string }
+                            version: { type: string }
+                            lib_version: { type: string }
+                            last_seen: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "402": { $ref: "#/components/responses/NotInPlan" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/agency/mcp-analytics:
+    get:
+      summary: Agency rollup
+      operationId: getAgencyMcpAnalytics
+      description: >
+        Every client's MCP totals for the window. A client that is HIPAA, lacks
+        MCP analytics in its plan, or whose settings cannot be read returns
+        `restricted` and no numbers. Needs an agency-wide key; scoped keys need
+        `agency:read`.
+      parameters:
+        - name: range
+          in: query
+          schema: { type: string, enum: [1h, 6h, 24h, 7d, 30d, 90d], default: 7d }
+      responses:
+        "200":
+          description: Per-client totals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      window: { $ref: "#/components/schemas/Window" }
+                      locations:
+                        type: array
+                        items:
+                          oneOf:
+                            - $ref: "#/components/schemas/AgencyLocationRow"
+                            - $ref: "#/components/schemas/AgencyRestrictedRow"
+        "400": { $ref: "#/components/responses/BadParams" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Agency key (`ak_`) or location secret key (`sk_`).
+        Scoped keys (`mcp_`) are accepted too and need `mcp_analytics:read`. See [Using an mcp_ key over HTTP](/mcp/authentication).
+    PublishableKey:
+      type: http
+      scheme: bearer
+      description: The location's publishable key (`pk_`). Ingestion only.
+  parameters:
+    LocationId:
+      name: location_id
+      in: query
+      required: false
+      description: Location to scope to. Required for `ak_` keys (or send the `X-Location-Id` header); ignored for `sk_`.
+      schema: { type: string }
+    Range:
+      name: range
+      in: query
+      description: Preset window ending now. Ignored when `from` is set.
+      schema: { type: string, enum: [1h, 6h, 24h, 7d, 30d, 90d], default: 7d }
+    From:
+      name: from
+      in: query
+      description: Window start, ISO 8601. A window spans at most 90 days.
+      schema: { type: string, format: date-time }
+    To:
+      name: to
+      in: query
+      description: Window end, ISO 8601. Default now.
+      schema: { type: string, format: date-time }
+    Server:
+      name: server
+      in: query
+      description: One MCP server name.
+      schema: { type: string }
+    Client:
+      name: client
+      in: query
+      description: One MCP client name.
+      schema: { type: string }
+    ToolFilter:
+      name: tool
+      in: query
+      description: One tool name.
+      schema: { type: string }
+    ToolPath:
+      name: tool
+      in: path
+      required: true
+      description: The tool name.
+      schema: { type: string, example: search_contacts }
+    DistinctId:
+      name: distinct_id
+      in: query
+      schema: { type: string }
+    Order:
+      name: order
+      in: query
+      schema: { type: string, enum: [desc, asc], default: desc }
+    Cursor:
+      name: cursor
+      in: query
+      description: "`next_cursor` from the previous page."
+      schema: { type: string }
+  responses:
+    BadParams:
+      description: "A parameter is invalid: `invalid_<param>`, or `param_not_allowed` for a window or filter on clusters."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing or invalid key, or an `ak_` key with no location bound.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotInPlan:
+      description: "`feature_not_in_plan` — the plan does not include MCP analytics."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: "`hipaa_restricted` (not available on HIPAA locations) or `insufficient_scope` (a scoped key lacks the scope)."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: "`not_found`"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: "`rate_limited` — 120 reads per minute per location; one cluster recompute per hour."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unavailable:
+      description: "`privacy_unknown` — the location's configuration could not be read. Retry."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string, example: hipaa_restricted }
+            message: { type: string }
+    IngestError:
+      type: object
+      properties:
+        status: { type: integer, example: 0 }
+        code: { type: string, example: rate_limited }
+    IngestAccepted:
+      type: object
+      properties:
+        status: { type: integer, example: 1 }
+        processed: { type: integer, example: 20 }
+        rejected: { type: integer, example: 0 }
+        reasons:
+          type: object
+          description: Rejected events by reason. Only reasons that occurred are present.
+          properties:
+            too_large: { type: integer }
+            invalid_timestamp: { type: integer }
+            invalid_distinct_id: { type: integer }
+            unknown_event: { type: integer }
+            invalid_properties: { type: integer }
+            batch_too_large: { type: integer }
+    McpIngestEvent:
+      type: object
+      required: [event, properties]
+      properties:
+        event:
+          type: string
+          enum: [$mcp_initialize, $mcp_tools_list, $mcp_tool_call, $mcp_resource_read, $mcp_missing_capability]
+        distinct_id: { type: string, minLength: 1, maxLength: 200 }
+        timestamp: { type: number, description: Epoch milliseconds. }
+        uuid: { type: string, maxLength: 64 }
+        properties:
+          type: object
+          description: "`$mcp_*` fields as listed on the Events page, plus up to 20 scalar extra properties."
+          additionalProperties: true
+    ErrorType:
+      type: string
+      nullable: true
+      enum: [tool_error, input_validation, output_validation, not_found, disabled, protocol_error, exception, null]
+    Window:
+      type: object
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+    Totals:
+      type: object
+      properties:
+        calls: { type: integer }
+        errors: { type: integer }
+        error_rate: { type: number }
+        sessions: { type: integer }
+        users: { type: integer }
+        tools_called: { type: integer }
+        tools_advertised: { type: integer }
+        p50_ms: { type: number }
+        p95_ms: { type: number }
+        intents_captured: { type: integer }
+        intent_coverage: { type: number }
+        missing_capability_reports: { type: integer }
+        tools_lists: { type: integer }
+        initializes: { type: integer }
+        resource_reads: { type: integer }
+    SeriesPoint:
+      type: object
+      properties:
+        bucket: { type: string, format: date-time }
+        calls: { type: integer }
+        errors: { type: integer }
+        sessions: { type: integer }
+        p95_ms: { type: number }
+    ToolCount:
+      type: object
+      properties:
+        tool: { type: string }
+        calls: { type: integer }
+    ToolRow:
+      type: object
+      properties:
+        tool: { type: string, example: search_contacts }
+        category: { type: string }
+        calls: { type: integer }
+        errors: { type: integer }
+        error_rate: { type: number }
+        p50_ms: { type: number }
+        p95_ms: { type: number }
+        sessions: { type: integer }
+        users: { type: integer }
+        avg_response_bytes: { type: number }
+        max_response_bytes: { type: integer }
+        repeat_calls: { type: integer }
+        advertised: { type: boolean }
+        list_count: { type: integer }
+        first_seen: { type: string, format: date-time, nullable: true }
+        last_called: { type: string, format: date-time, nullable: true }
+    CallRow:
+      type: object
+      properties:
+        uuid: { type: string }
+        timestamp: { type: string, format: date-time }
+        event: { type: string, enum: [tool_call, tools_list, initialize, resource_read, missing_capability] }
+        tool: { type: string, nullable: true }
+        is_error: { type: boolean }
+        error_type: { $ref: "#/components/schemas/ErrorType" }
+        error_message: { type: string, nullable: true }
+        duration_ms: { type: integer, nullable: true }
+        session_id: { type: string }
+        distinct_id: { type: string }
+        client_name: { type: string }
+        client_version: { type: string }
+        server_name: { type: string }
+        intent: { type: string, nullable: true }
+        intent_source: { type: string, nullable: true, enum: [context_parameter, fallback, null] }
+        parameters_preview: { type: string, nullable: true }
+        response_bytes: { type: integer }
+        truncated: { type: boolean }
+    CallDetail:
+      allOf:
+        - $ref: "#/components/schemas/CallRow"
+        - type: object
+          properties:
+            parameters: { description: "Parsed JSON when it parses, else a string. Null when not captured." }
+            response: { description: "Parsed JSON when it parses, else a string. Null when not captured." }
+            parameters_truncated: { type: boolean }
+            response_truncated: { type: boolean }
+            conversation_id: { type: string }
+            mcp_session_id: { type: string }
+            protocol_version: { type: string }
+            transport: { type: string }
+            lib_version: { type: string }
+            model: { type: string }
+            extra: { type: object, additionalProperties: true }
+    SessionRow:
+      type: object
+      properties:
+        session_id: { type: string }
+        started_at: { type: string, format: date-time }
+        last_at: { type: string, format: date-time }
+        duration_ms: { type: integer }
+        calls: { type: integer }
+        errors: { type: integer }
+        tools: { type: array, items: { type: string } }
+        distinct_id: { type: string }
+        client_name: { type: string }
+        client_version: { type: string }
+        server_name: { type: string }
+        first_intent: { type: string, nullable: true }
+        missing_capability_reports: { type: integer }
+    PageMeta:
+      type: object
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        order: { type: string, enum: [desc, asc] }
+        limit: { type: integer }
+        truncated: { type: boolean }
+    Cluster:
+      type: object
+      properties:
+        id: { type: string }
+        label: { type: string, description: "The cluster's most-called intent, at most 80 characters." }
+        intents: { type: integer }
+        calls: { type: integer }
+        errors: { type: integer }
+        error_rate: { type: number }
+        sessions: { type: integer }
+        routing_entropy: { type: number, description: How spread the cluster's calls are across tools. }
+        tools: { type: array, items: { $ref: "#/components/schemas/ToolCount" } }
+        sample_intents: { type: array, items: { type: string } }
+    ClusterSnapshot:
+      type: object
+      properties:
+        status: { type: string, enum: [no_key, none, computing, ready, error] }
+        computed_at: { type: string, format: date-time, nullable: true }
+        window:
+          type: object
+          nullable: true
+          properties:
+            from: { type: string, format: date-time }
+            to: { type: string, format: date-time }
+        provider: { type: string, nullable: true, example: openrouter }
+        model: { type: string, nullable: true, example: openai/text-embedding-3-small }
+        coverage:
+          type: object
+          nullable: true
+          properties:
+            intents_considered: { type: integer }
+            intents_total: { type: integer }
+            calls_share: { type: number }
+        clusters: { type: array, items: { $ref: "#/components/schemas/Cluster" } }
+        unclustered:
+          type: object
+          nullable: true
+          properties:
+            intents: { type: integer }
+            calls: { type: integer }
+        error: { type: string, nullable: true }
+    AgencyLocationRow:
+      type: object
+      required: [location_id, name, calls]
+      properties:
+        location_id: { type: string }
+        name: { type: string }
+        calls: { type: integer }
+        errors: { type: integer }
+        error_rate: { type: number }
+        sessions: { type: integer }
+        last_event_at: { type: string, format: date-time, nullable: true }
+    AgencyRestrictedRow:
+      type: object
+      required: [location_id, name, restricted]
+      properties:
+        location_id: { type: string }
+        name: { type: string }
+        restricted: { type: string, enum: [hipaa, not_entitled, unknown] }

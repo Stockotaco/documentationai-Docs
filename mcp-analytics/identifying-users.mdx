@@ -1,0 +1,40 @@
+---
+title: Identifying users
+description: >-
+  Attach MCP calls to the people in Mythic with identify(), or leave them
+  anonymous per session.
+---
+
+## Anonymous by default
+
+Without `identify`, each event's `distinct_id` is `mcp_anon_` plus a hash of the session. Users in the analytics then count sessions, not people.
+
+## identify
+
+`identify(ctx)` returns the person behind a request. `ctx` is the MCP request context, which carries the transport's auth info and headers.
+
+```ts
+instrument(server, {
+  apiKey: process.env.MYTHIC_PUBLISHABLE_KEY,
+  identify: (ctx) => {
+    const user = ctx.http?.authInfo?.extra?.user;
+    if (!user) return null;
+    return {
+      distinctId: user.id,
+      properties: { plan: user.plan, company: user.company },
+    };
+  },
+});
+```
+
+- `distinctId` is 1 to 200 characters. Use the same id your website or app sends to Mythic, so MCP activity joins the same person.
+- `properties` are sent once per session as a standard `$set` event, which updates the person.
+- Return `null` to keep the call anonymous.
+
+## Persons
+
+`$mcp_*` events never create a person. Reads join to an existing person by `distinct_id`: filter calls and sessions with `distinct_id=…`, and the person appears in Mythic only once something else (your site, your app, or the `$set` above) has identified them.
+
+<Callout kind="info">
+`properties` pass through the same redaction as every other field. A property named `api_key` or holding an email address is redacted unless you turn PII redaction off.
+</Callout>

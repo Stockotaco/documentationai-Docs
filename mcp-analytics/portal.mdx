@@ -1,0 +1,46 @@
+---
+title: Agency app
+description: >-
+  The client's MCP analytics screen in the agency app, its tabs, and the
+  agency-wide rollup.
+---
+
+## Where to find it
+
+Open a client and choose **MCP analytics** under Analyze. The screen shows for agency members on clients whose plan includes MCP analytics. The agency menu has an **MCP analytics** rollup across every client.
+
+The time range and filters (server, client, tool, status) are kept in the URL, so a link opens the same view.
+
+## Tabs
+
+| Tab | Shows |
+| --- | --- |
+| **Dashboard** | Calls, errors, error rate, sessions, users and p95 latency with the change against the previous period. A calls and errors chart, top tools, the MCP clients breakdown, top intent clusters and top missing capabilities |
+| **Activity** | Every call, filterable by tool, status, client, person and text. Open a call to see its parameters and response as stored |
+| **Sessions** | Sessions with their calls, errors, tools and first intent. Open one for its calls in order |
+| **Tools** | Every tool with calls, error rate, latency, response size and repeat calls. **Never called** lists tools the server advertises that no agent has called |
+| **Intents** | Intent clusters, with their window and coverage, and the raw intents list below |
+| **Missing** | Missing-capability reports, most blocked first |
+| **Setup** | Install steps, a code snippet with the location's publishable key, the last event received and the servers seen |
+
+A tool and a session each have their own page, opened from the Tools and Sessions tables.
+
+## Intents without a model key
+
+Clusters need the agency's model key. Without one, the Intents tab says **Add a model key to group intents** and links to the client's model keys. The raw intents list still loads. Clusters always cover the last 7 days and do not change with the page's time range. See [Intent](/mcp-analytics/intent#intent-clusters).
+
+## Empty and blocked states
+
+| State | What you see |
+| --- | --- |
+| No events yet | A link to Setup |
+| Fewer than 20 intents | Clusters wait until 20 distinct intents exist |
+| One call per session | A hint to add `sessionKey` or `enableConversationId` |
+| Plan lacks MCP analytics | An upgrade notice |
+| HIPAA location | MCP analytics is not available |
+
+Parameters and responses are shown as plain text, with `[REDACTED]` and truncation markers as the SDK sent them.
+
+## Agency rollup
+
+The agency **MCP analytics** screen lists each client with calls, errors, error rate, sessions and its last event. A client that is HIPAA, not on a plan with MCP analytics, or whose settings cannot be read shows the reason and no numbers.

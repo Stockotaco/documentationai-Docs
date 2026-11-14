@@ -1,0 +1,102 @@
+---
+title: Queries
+description: >-
+  API recipes for common MCP analytics questions. There is no SQL surface over
+  MCP data, so each question is a route and its params.
+---
+
+## Before you start
+
+MCP data has no SQL or Explore surface. Every question below is one or two calls to [`/client/v1/mcp-analytics`](/mcp-analytics/api). Each example uses an agency key bound to a location:
+
+```bash
+export MYTHIC="https://mythic-analytics.gulp.workers.dev/client/v1/mcp-analytics"
+export AUTH="Authorization: Bearer $MYTHIC_AGENCY_KEY"
+export LOC="location_id=loc_123"
+```
+
+## Which tools fail most?
+
+```bash
+curl "$MYTHIC/tools?$LOC&range=7d&sort=error_rate" -H "$AUTH"
+```
+
+Error rate ranks a tool with one failed call first. Sort by `errors` to rank by volume instead. Then read one tool's failure modes:
+
+```bash
+curl "$MYTHIC/tools/search_contacts/errors?$LOC&range=7d" -H "$AUTH"
+```
+
+Each failure mode has its `error_type`, a `message_pattern`, a count, sessions and a `sample_uuid` to open with `GET /calls/{uuid}`.
+
+## Which tools does no agent use?
+
+```bash
+curl "$MYTHIC/tools?$LOC&range=30d&never_called=1" -H "$AUTH"
+```
+
+Tools the server listed in `tools/list` with no call in the window. `list_count` says how often they were listed.
+
+## Which tools do agents call over and over?
+
+```bash
+curl "$MYTHIC/tools?$LOC&range=7d&sort=calls" -H "$AUTH"
+```
+
+`repeat_calls` counts the third and later call with the same tool and the same arguments in one session. A high count usually means the result did not give the agent what it needed.
+
+## Which tools return too much?
+
+Compare `avg_response_bytes` and `max_response_bytes` in `GET /tools`. Large responses cost agents context and slow them down.
+
+## Is one MCP client worse than the others?
+
+```bash
+curl "$MYTHIC/breakdown?$LOC&range=7d&dimension=client" -H "$AUTH"
+```
+
+Use `dimension=client_version` to see whether a client release changed the error rate, or `server_version` to compare your own releases.
+
+## Did errors start with a release?
+
+```bash
+curl "$MYTHIC/timeseries?$LOC&range=30d&tool=search_contacts" -H "$AUTH"
+curl "$MYTHIC/breakdown?$LOC&range=30d&dimension=server_version" -H "$AUTH"
+```
+
+## What did one person do?
+
+```bash
+curl "$MYTHIC/sessions?$LOC&range=30d&distinct_id=user_42" -H "$AUTH"
+curl "$MYTHIC/sessions/mcps_3f2a…?$LOC" -H "$AUTH"
+```
+
+## Which calls failed in the last hour?
+
+```bash
+curl "$MYTHIC/calls?$LOC&range=1h&status=error&limit=200" -H "$AUTH"
+```
+
+Follow `next_cursor` with `cursor=` for more.
+
+## What do agents want that the server cannot do?
+
+```bash
+curl "$MYTHIC/missing-capabilities?$LOC&range=30d" -H "$AUTH"
+```
+
+## Which goals route to which tools?
+
+```bash
+curl "$MYTHIC/intents/clusters?$LOC" -H "$AUTH"
+```
+
+A cluster with high `routing_entropy` is a goal agents send to many different tools: a sign that tool names or descriptions overlap. Without a model key, read `GET /intents` for exact intents instead.
+
+## How are all my clients doing?
+
+```bash
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/agency/mcp-analytics?range=7d" -H "$AUTH"
+```
+
+Needs an agency-wide key. Restricted clients come back with `restricted` and no numbers.

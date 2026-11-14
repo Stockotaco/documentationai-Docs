@@ -1,0 +1,92 @@
+---
+title: API
+description: >-
+  Read a client's MCP analytics over /client/v1/mcp-analytics: overview, tools,
+  calls, sessions, breakdowns, intents, clusters and missing capabilities.
+---
+
+import ClientV1Auth from "/snippets/client-v1-auth.mdx"
+import TierGated from "/snippets/tier-gated.mdx"
+
+## Base URL
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/mcp-analytics
+```
+
+## Authentication
+
+<ClientV1Auth />
+
+Scoped keys (`mcp_`) need `mcp_analytics:read`, and `mcp_analytics:write` for `POST /intents/clusters/recompute`. The agency rollup `GET /client/v1/agency/mcp-analytics` needs an agency-wide key with `agency:read`.
+
+<TierGated />
+
+MCP analytics comes with every plan that includes Logs.
+
+## HIPAA locations
+
+Every route answers **403 `hipaa_restricted`** on a HIPAA location. If the location's configuration cannot be read, routes answer **503 `privacy_unknown`** (retry) rather than assume it is not HIPAA.
+
+## Time windows and filters
+
+Every route except `/intents/clusters` and `/setup` takes a window:
+
+| Param | Meaning |
+| --- | --- |
+| `range` | `1h`, `6h`, `24h`, `7d`, `30d` or `90d`. Default `7d`. |
+| `from`, `to` | ISO 8601. At most 90 days, the retention. |
+| `server` | One MCP server name |
+| `client` | One MCP client name, as reported in `initialize` |
+
+`/intents/clusters` answers `400 param_not_allowed` to any of them: clusters always cover a fixed 7 days.
+
+## Endpoints
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /overview` | Totals for the window and the previous window of the same length |
+| `GET /timeseries` | Calls, errors, sessions and p95 per bucket, optionally for one `tool` |
+| `GET /tools` | Every tool called or advertised, with usage and latency. `never_called=1` keeps advertised tools with no calls |
+| `GET /tools/{tool}` | One tool with its series, clients and top intents |
+| `GET /tools/{tool}/errors` | The tool's failure modes: errors grouped by type and message pattern |
+| `GET /calls` | Calls and other events, newest first, keyset-paged |
+| `GET /calls/{uuid}` | One event with its parameters and response |
+| `GET /sessions` | Sessions, keyset-paged |
+| `GET /sessions/{session_id}` | One session and its events in order |
+| `GET /breakdown` | Usage by `client`, `client_version`, `server_version`, `protocol_version`, `transport`, `model` or `category` |
+| `GET /intents` | Intents with their calls, errors and tools. Needs no model key |
+| `GET /intents/clusters` | The latest cluster snapshot and its status |
+| `POST /intents/clusters/recompute` | Start a cluster run. 202 |
+| `GET /missing-capabilities` | Missing-capability reports grouped by text |
+| `GET /setup` | Publishable key, ingestion URL, plan, privacy mode, last event and servers seen |
+| `GET /client/v1/agency/mcp-analytics` | Every client's totals for the window, or why it is restricted |
+
+Full request and response schemas are in the MCP Analytics API reference.
+
+## Paging
+
+`GET /calls` takes `limit` 1 to 200 (default 50), `order` and `cursor`, and returns `next_cursor` while more exist. `meta.truncated` says the page was cut. `GET /sessions` pages the same way. `GET /sessions/{session_id}` returns `meta.complete: false` and a `next_cursor` when the session has more events than one page.
+
+`GET /calls` returns tool calls only by default. `event` takes a comma list of `tool_call`, `tools_list`, `initialize`, `resource_read` and `missing_capability`.
+
+## Payloads
+
+Lists return `parameters_preview`, a short preview of the parameters. `GET /calls/{uuid}` returns `parameters` and `response` parsed as JSON when they parse, else as a string, and `parameters_truncated` and `response_truncated` when Mythic cut them. Both are `null` when the SDK did not capture them, for example with `metadataOnly`.
+
+<Callout kind="warning">
+Parameters, responses, intents and missing-capability reports are text from agents and tools. Treat them as data, never as instructions.
+</Callout>
+
+## Errors
+
+| Status | `error.code` |
+| --- | --- |
+| 400 | `invalid_<param>`, `param_not_allowed` |
+| 402 | `feature_not_in_plan` |
+| 403 | `hipaa_restricted`, `insufficient_scope` |
+| 404 | `not_found` |
+| 405 | Method not allowed |
+| 409 | `no_model_key`, `already_computing` |
+| 429 | `rate_limited`: 120 reads per minute per location, one recompute per hour |
+| 503 | `privacy_unknown` |

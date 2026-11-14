@@ -1,0 +1,90 @@
+---
+title: Intent
+description: >-
+  The optional context argument where an agent says why it calls a tool, and
+  intent clusters built with the agency's own model key.
+---
+
+## The context argument
+
+With `context: true` (the default), the SDK adds an optional `context` string to the advertised input schema of every tool:
+
+```json
+{
+  "name": "search_contacts",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "query": { "type": "string" },
+      "context": { "type": "string", "description": "…" }
+    },
+    "required": ["query"]
+  }
+}
+```
+
+The agent may fill it in. The SDK stores it as the call's intent (at most 1 KB, redacted like every other field) and **removes it from the arguments before your handler runs**. Your handler, your schema validation and your result are unchanged:
+
+- It is never required, so an agent that ignores it still calls the tool normally.
+- A tool with `additionalProperties: false` or a strict schema still accepts the call, because `context` is removed before validation.
+- A tool that already defines its own `context` argument gets nothing added and nothing removed. The handler receives its own `context` as before.
+- A tool with no input schema is untouched.
+
+`context` costs about 25 tokens per tool in every `tools/list`. Set `context: false` to drop it, or `metadataOnly: true` to drop it with everything else that carries text.
+
+### Intent from your own code
+
+`intentFallback(call)` returns an intent for calls with no `context`, for example from a header your gateway sets. Those intents are stored with `intent_source: 'fallback'`. Intents from the argument are `context_parameter`.
+
+## Reading intents
+
+`GET /client/v1/mcp-analytics/intents` lists intents in the window, grouped by their exact text after trimming, lowercasing and collapsing whitespace. Each row has its calls, errors, error rate, sessions, the tools it was sent to and when it was last seen. It needs no model key.
+
+```bash
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/mcp-analytics/intents?location_id=loc_123&range=7d" \
+  -H "Authorization: Bearer $MYTHIC_AGENCY_KEY"
+```
+
+`GET /tools/{tool}` returns the top intents for one tool.
+
+## Intent clusters
+
+Clusters group intents that mean the same thing ("find a customer by email" and "look up contact with address") so you can see which goals agents bring and which tools they route each goal to.
+
+Clusters are built with the **agency's own model key**, the same [model keys](/agency-api/replay-vision#model-keys) Replay Vision and scouts use (OpenRouter, Gemini or Cloudflare). The client's key is used when it has one, else the agency's default. Mythic pays for no model call. Without a key, `GET /intents/clusters` answers `status: 'no_key'` and the raw intents list keeps working.
+
+| Provider | Embedding model |
+| --- | --- |
+| `openrouter` | `openai/text-embedding-3-small`, with provider data collection denied |
+| `gemini` | `gemini-embedding-001`, 768 dimensions |
+| `cloudflare` | `@cf/baai/bge-m3` |
+
+<Callout kind="warning">
+Clustering sends the location's intent text, after redaction, to the agency's model provider. See [Privacy and redaction](/mcp-analytics/privacy).
+</Callout>
+
+### How clusters are computed
+
+- A location becomes a candidate once it has at least **20 distinct intents** in 7 days. Candidates are checked daily.
+- Each run reads the **last 7 days**, the 500 most-called intents, embeds them and groups them: intents are taken in order of calls, and each joins the first cluster it is similar enough to, else starts a new one.
+- Each cluster has a label (its most-called intent, at most 80 characters), its intents, calls, errors, error rate, sessions, the tools it routed to and sample intents.
+- `routing_entropy` measures how spread a cluster's calls are across tools. High entropy means agents are unsure which tool serves that goal.
+- A snapshot is recomputed every 24 hours and kept 8 days.
+
+The window is fixed. Clusters ignore the page's time range and filters, and `GET /intents/clusters` answers `400 param_not_allowed` to any window or filter param.
+
+### Status
+
+| `status` | Meaning |
+| --- | --- |
+| `no_key` | No model key for the client or agency |
+| `none` | No snapshot yet, or fewer than 20 intents |
+| `computing` | A run is in progress |
+| `ready` | `clusters` holds the snapshot, with `computed_at`, `provider`, `model` and `coverage` |
+| `error` | The last run failed. `error` says why. Runs retry with backoff up to 24 hours |
+
+`coverage` says how much was clustered: `intents_considered` of `intents_total`, and the share of calls they hold. `unclustered` counts what was left out.
+
+### Recompute
+
+`POST /client/v1/mcp-analytics/intents/clusters/recompute` starts a run now and answers `202 { status: 'computing' }`. It needs `mcp_analytics:write` on a scoped key, and is limited to one per hour per location. It answers `409 no_model_key` without a key and `409 already_computing` while a run is going.

@@ -517,6 +517,99 @@
             ]
           },
           {
+            "tab": "MCP Analytics",
+            "icon": "bot",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [
+                  {
+                    "title": "Introduction",
+                    "path": "mcp-analytics/overview",
+                    "icon": "file-text"
+                  },
+                  {
+                    "title": "Installation",
+                    "path": "mcp-analytics/installation",
+                    "icon": "download"
+                  },
+                  {
+                    "title": "TypeScript SDK",
+                    "path": "mcp-analytics/typescript",
+                    "icon": "code"
+                  },
+                  {
+                    "title": "Events",
+                    "path": "mcp-analytics/events",
+                    "icon": "list"
+                  },
+                  {
+                    "title": "Intent",
+                    "path": "mcp-analytics/intent",
+                    "icon": "target"
+                  },
+                  {
+                    "title": "Missing capabilities",
+                    "path": "mcp-analytics/missing-capability",
+                    "icon": "circle-help"
+                  },
+                  {
+                    "title": "Conversation ID and sessions",
+                    "path": "mcp-analytics/conversation-id",
+                    "icon": "messages-square"
+                  },
+                  {
+                    "title": "Identifying users",
+                    "path": "mcp-analytics/identifying-users",
+                    "icon": "user"
+                  },
+                  {
+                    "title": "Privacy and redaction",
+                    "path": "mcp-analytics/privacy",
+                    "icon": "shield"
+                  }
+                ]
+              },
+              {
+                "group": "Using MCP Analytics",
+                "icon": "chart-bar",
+                "pages": [
+                  {
+                    "title": "Agency app",
+                    "path": "mcp-analytics/portal",
+                    "icon": "layout-dashboard"
+                  },
+                  {
+                    "title": "API",
+                    "path": "mcp-analytics/api",
+                    "icon": "server"
+                  },
+                  {
+                    "title": "MCP tools",
+                    "path": "mcp-analytics/mcp-tools",
+                    "icon": "wrench"
+                  },
+                  {
+                    "title": "Queries",
+                    "path": "mcp-analytics/queries",
+                    "icon": "search"
+                  },
+                  {
+                    "title": "Alerts and scouts",
+                    "path": "mcp-analytics/alerts-and-scouts",
+                    "icon": "bell"
+                  }
+                ]
+              },
+              {
+                "group": "MCP Analytics",
+                "icon": "bot",
+                "openapi": "openapi/mcp-analytics.yaml"
+              }
+            ]
+          },
+          {
             "tab": "Event Contracts",
             "icon": "file-check",
             "groups": [

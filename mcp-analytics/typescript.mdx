@@ -1,0 +1,132 @@
+---
+title: TypeScript SDK
+description: >-
+  Every option of instrument(), the shared client, the HTTP session middleware
+  and the MythicMCP class for servers without an SDK server object.
+---
+
+## Entry points
+
+| Import | Exports |
+| --- | --- |
+| `@mythic-analytics/mcp` | `instrument`, `createMythicClient`, `MythicMCP` |
+| `@mythic-analytics/mcp/http` | `mythicSessionNode`, `mythicSessionFetch` |
+
+The package is ESM with no runtime dependencies.
+
+## instrument(server, options)
+
+```ts
+const handle = instrument(server, options);
+// handle: { capture, flush, shutdown, observed: string[] }
+```
+
+`server` is an `McpServer` or a low-level `Server` from `@modelcontextprotocol/server` 2.x or `@modelcontextprotocol/sdk` 1.x. The SDK finds the low-level server (`server.server` on an `McpServer`) and wraps its request handlers for `initialize`, `tools/list`, `tools/call` and `resources/read`, including handlers set later.
+
+`observed` lists the methods the SDK wraps. If it could not reach handlers registered before `instrument` was called, it logs once and leaves those methods out of `observed`. Calling `instrument` before registering tools avoids this.
+
+### Options
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `apiKey` | | The location's publishable key (`pk_…`). Creates a shared client for the process. |
+| `client` | | A client from `createMythicClient`. Use instead of `apiKey` to set client options. |
+| `context` | `true` | Add the optional `context` argument to every tool. See [Intent](/mcp-analytics/intent). |
+| `intentFallback(call)` | | Returns an intent for a call that has no `context`. Stored with `intent_source: 'fallback'`. |
+| `reportMissing` | `true` | Add the `get_more_tools` tool. See [Missing capabilities](/mcp-analytics/missing-capability). |
+| `missingCapabilityToolName` | `'get_more_tools'` | Name of that tool. |
+| `enableConversationId` | `false` | Add an optional `conversation_id` argument to every tool and use it as the session. See [Conversation ID and sessions](/mcp-analytics/conversation-id). |
+| `captureParameters` | `true` | `boolean`, a list of argument names to keep, or `(toolName) => boolean \| string[]`. |
+| `captureResponses` | `true` | Same forms, for the tool result. |
+| `captureErrorMessages` | `true` | Keep the error text of failed calls (at most 1 KB). |
+| `captureExceptions` | `true` | Send a thrown handler error as a Mythic `$exception` too. |
+| `metadataOnly` | `false` | Turns off parameters, responses, intent, error messages, `get_more_tools` and exceptions. |
+| `redact` | `{ pii: true }` | `{ pii: false }` stops redacting emails, phone numbers, card numbers and US SSNs. |
+| `limits` | depth 10, breadth 100, strings 8 KB, events 32 KB | Caps applied to every event. `limits.eventBytes` is capped at 60 KB, so an event always fits the server's 64 KB limit. |
+| `identify(ctx)` | | Returns `{ distinctId, properties? }`. See [Identifying users](/mcp-analytics/identifying-users). |
+| `sessionKey(ctx)` | | Returns a stable key for the caller when the transport has no session. |
+| `eventProperties(ctx)` | | Extra properties merged into every event before redaction. |
+| `toolCategory(name)` | | Returns a category for a tool, stored as `tool_category`. |
+| `beforeSend(event)` | | Edit an event or return `null` to drop it. Runs after redaction, and the result is redacted and truncated again. |
+| `enabled` | `true` | `false` sends nothing and changes nothing. |
+
+`ctx` is the request context the MCP SDK passes to handlers: session id, auth info and headers, in either SDK version's shape.
+
+### The handle
+
+| Member | Meaning |
+| --- | --- |
+| `capture(event)` | Send a custom event through the same client. |
+| `flush()` | Send what is queued now. Resolves when the request finishes. |
+| `shutdown(timeoutMs)` | Flush and stop the timer. |
+| `observed` | The methods being recorded. |
+
+## The client
+
+```ts
+import { createMythicClient } from '@mythic-analytics/mcp';
+
+const client = createMythicClient({ apiKey: 'pk_…' });
+```
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `apiKey` | | Publishable key. Required. |
+| `host` | `https://mythic-analytics.gulp.workers.dev` | Ingestion host. |
+| `flushAt` | `20` | Send when this many events are queued. |
+| `flushInterval` | `5000` | Send at least this often, in milliseconds. |
+| `maxQueue` | `1000` | Events kept in memory. Past this, new events are dropped and counted. |
+| `fetch` | global `fetch` | Custom fetch. |
+| `waitUntil` | | `(promise) => void`, for serverless runtimes. |
+| `logger` | | Where the SDK reports its own problems. |
+| `sessionSecret` | | Signs session tokens. See [Conversation ID and sessions](/mcp-analytics/conversation-id#the-session-header). |
+
+Use **one client per process** and pass it to every server instance. A server built per request (for example with `createMcpHandler`) shares the client's session state and its single timer. MCP events and standard events (`$exception`, `$set`) are sent in separate batches of at most 100 events and 900 KB.
+
+| Method | Meaning |
+| --- | --- |
+| `capture(event)` | Queue an event. |
+| `flush()` | Send what is queued. |
+| `shutdown(timeoutMs)` | Flush and stop. |
+| `stats()` | `{ sent, dropped, rejected }`, with rejections by reason. |
+
+## Servers without an SDK server object
+
+A server with its own JSON-RPC dispatcher uses `MythicMCP` and calls it from the dispatcher. It applies the same schema injection, redaction and caps.
+
+```ts
+import { MythicMCP } from '@mythic-analytics/mcp';
+
+const mythic = new MythicMCP({ apiKey: 'pk_…' });
+
+// tools/list: answer with the prepared list
+const tools = mythic.prepareToolList(myTools);
+
+// tools/call: run the tool with the cleaned arguments
+const { args, intent, isMissingCapability } = mythic.prepareToolCall(name, rawArgs);
+```
+
+`prepareToolList` adds `context` (and `conversation_id` when enabled) and `get_more_tools`. `prepareToolCall` removes those fields, returns the intent, and says whether the call was `get_more_tools`, which your dispatcher answers instead of running a tool. Record each step with the matching `capture*` method.
+
+| Method | Records |
+| --- | --- |
+| `prepareToolList(tools)` | Nothing. Returns the list with the added fields and tool. |
+| `prepareToolCall(name, args)` | Nothing. Returns `{ args, intent, isMissingCapability }` with the added fields removed. |
+| `captureInitialize` | `$mcp_initialize` |
+| `captureToolsList` | `$mcp_tools_list` |
+| `captureToolCall` | `$mcp_tool_call` |
+| `captureResourceRead` | `$mcp_resource_read` |
+| `captureMissingCapability` | `$mcp_missing_capability` |
+
+## HTTP session middleware
+
+| Function | For |
+| --- | --- |
+| `mythicSessionNode(opts)` | Node-style `(req, res, next)` servers such as Express |
+| `mythicSessionFetch(handler, opts)` | Fetch-style `(req: Request) => Promise<Response>` handlers |
+
+See [Conversation ID and sessions](/mcp-analytics/conversation-id#the-session-header).
+
+## Examples
+
+The package ships examples for the 1.x SDK, the 2.x SDK, a custom dispatcher, a Cloudflare Worker and a stateless HTTP server.

@@ -1,0 +1,55 @@
+---
+title: MCP Analytics
+description: >-
+  See how AI agents use a client's MCP server: which tools they call, which
+  fail, what they were trying to do and what they could not find.
+---
+
+import TierGated from "/snippets/tier-gated.mdx"
+
+## Overview
+
+MCP Analytics answers the questions a client asks once its product has an MCP server: **which tools do agents actually call, which ones fail, what were the agents trying to do, and what did they look for and not find?**
+
+The client adds the TypeScript SDK `@mythic-analytics/mcp` to its MCP server with one call, `instrument(server, { apiKey: 'pk_…' })`. The SDK records each `initialize`, `tools/list`, `tools/call` and `resources/read` the server answers and sends them to Mythic with the location's publishable key. See [Installation](/mcp-analytics/installation).
+
+What you get for each client:
+
+- **Tool usage**: calls, errors, error rate, p50 and p95 latency, sessions and users per tool, and tools the server advertises that no agent ever calls.
+- **Calls and sessions**: every call with its client (Claude, Cursor and so on), duration, error type and, unless turned off, its redacted parameters and response. Sessions group the calls of one agent conversation.
+- **Intent**: an optional `context` argument the SDK adds to every tool, where the agent says why it is calling. See [Intent](/mcp-analytics/intent).
+- **Intent clusters**: intents grouped by meaning with the agency's own model key, to show which goals route to which tools.
+- **Missing capabilities**: a `get_more_tools` tool the SDK adds, where an agent reports what it needed and could not find. See [Missing capabilities](/mcp-analytics/missing-capability).
+- **Breakdowns** by client, client version, server version, protocol version, transport, model and tool category.
+- **Alerts and a scout**: an alert when a tool starts failing, a weekly report, and a scout skill that reviews tool health. See [Alerts and scouts](/mcp-analytics/alerts-and-scouts).
+
+Data is kept **90 days**.
+
+## Where to read it
+
+| Surface | Page |
+| --- | --- |
+| The client's **MCP analytics** screen in the agency app | [Agency app](/mcp-analytics/portal) |
+| `/client/v1/mcp-analytics` | [API](/mcp-analytics/api) |
+| The Mythic MCP server's `*_mcp_*` tools | [MCP tools](/mcp-analytics/mcp-tools) |
+
+## Plan and privacy
+
+<TierGated />
+
+MCP analytics comes with every plan that includes Logs.
+
+MCP analytics is **not available on HIPAA locations**. Ingestion answers `403 hipaa_restricted` and every read answers the same. Parameters, responses and intents are free text written by agents and tools, and there is no safe way to strip protected health information from them. See [Privacy and redaction](/mcp-analytics/privacy).
+
+<Callout kind="warning">
+Parameters, responses, intents and missing-capability reports are text written by agents and by the client's tools. Treat them as data, never as instructions, especially when an agent reads them.
+</Callout>
+
+## How it works
+
+1. The SDK observes the MCP server's JSON-RPC request handlers. It never wraps tool callbacks and never changes what a tool returns.
+2. Events go to `POST /ingest` in batches of MCP events only, each event redacted and capped before it leaves the server.
+3. Mythic checks the plan and the location's privacy mode, normalizes each event to a fixed record and stores it for 90 days.
+4. The API, the agency app, the MCP tools, alerts and scouts read the same records.
+
+See [Events](/mcp-analytics/events) for every event and field.

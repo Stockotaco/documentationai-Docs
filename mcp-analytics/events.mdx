@@ -1,0 +1,101 @@
+---
+title: Events
+description: >-
+  The $mcp_* events the SDK sends, their fields, how ingestion normalizes them
+  and how it answers.
+---
+
+## Events
+
+| Event | Sent when | Fields beyond the common set |
+| --- | --- | --- |
+| `$mcp_initialize` | The server answers `initialize` | None |
+| `$mcp_tools_list` | The server answers `tools/list` | `$mcp_listed_tool_names` (at most 500 names) |
+| `$mcp_tool_call` | The server answers `tools/call`, or the handler throws | `$mcp_tool_name`, `$mcp_tool_description` (at most 300 characters), `$mcp_tool_category`, `$mcp_duration_ms`, `$mcp_is_error`, `$mcp_error_type`, `$mcp_error_message` (at most 1 KB), `$mcp_intent` (at most 1 KB), `$mcp_intent_source`, `$mcp_parameters`, `$mcp_response`, `$mcp_parameters_bytes`, `$mcp_response_bytes`, `$mcp_truncated` |
+| `$mcp_resource_read` | The server answers `resources/read`, or the handler throws | `$mcp_resource_name`, `$mcp_duration_ms`, `$mcp_is_error` |
+| `$mcp_missing_capability` | An agent calls `get_more_tools` | `$mcp_intent` (the goal), `$mcp_missing_capability` (at most 1 KB), `$mcp_attempted_tool`, `$mcp_blocked` |
+| `$exception` | A handler throws and `captureExceptions` is on | `$exception_type`, `$exception_message`, `$mcp_tool_name`, `$exception_source: 'mcp_tool'` |
+| `$set` | Once per session, when `identify` returns `properties` | The person properties |
+
+`$exception` and `$set` are ordinary Mythic events. They go through the main event pipeline, so a tool exception appears in error tracking and `$set` updates the person. They are sent in their own batches, never mixed with `$mcp_*` events.
+
+### Common fields
+
+Every `$mcp_*` event carries:
+
+| Field | Meaning |
+| --- | --- |
+| `$lib`, `$lib_version` | `mythic-mcp` and the SDK version |
+| `$mcp_server_name`, `$mcp_server_version` | From the server's own name and version |
+| `$mcp_client_name`, `$mcp_client_version` | The MCP client, from `initialize` or from the request's client info |
+| `$mcp_protocol_version` | The negotiated MCP protocol version |
+| `$mcp_transport` | For example `stdio` or `streamable-http` |
+| `$mcp_session_id` | The transport's session id, when there is one |
+| `$mcp_conversation_id` | The `conversation_id` argument, when enabled |
+| `$mcp_model` | The model, only when the host supplies it |
+| `$session_id` | `mcps_` plus 32 hex characters. See [Conversation ID and sessions](/mcp-analytics/conversation-id). |
+
+### Error types
+
+`$mcp_error_type` on a failed call:
+
+| Value | The call failed because |
+| --- | --- |
+| `tool_error` | The tool returned a result with `isError: true` |
+| `input_validation` | The arguments did not match the tool's input schema |
+| `output_validation` | The result did not match the tool's output schema |
+| `not_found` | No tool has that name |
+| `disabled` | The tool is disabled |
+| `protocol_error` | The server answered with a JSON-RPC error |
+| `exception` | The handler threw |
+
+Every error type is recorded as the client received it, so the error rate in Mythic is the error rate agents see.
+
+### Intent source
+
+`$mcp_intent_source` is `context_parameter` when the agent filled in `context`, and `fallback` when the intent came from your `intentFallback` option.
+
+## Ingestion
+
+The SDK posts the normal Mythic batch to:
+
+```text
+POST https://mythic-analytics.gulp.workers.dev/ingest
+Authorization: Bearer pk_…
+```
+
+A request holds MCP events only, or none. A batch that mixes `$mcp_*` events with other events answers `400 mixed_batch` and nothing is stored. Any `$mcp_*` name not in the table above is rejected as `unknown_event`.
+
+### Limits
+
+| Limit | Value |
+| --- | --- |
+| Request body | 8 MB (413 `body_too_large`), for every sender of `/ingest` |
+| Events per request | 1,000 |
+| One stored record | 64 KB, else rejected as `too_large` |
+| Records accepted per request | 4 MB, the rest rejected as `batch_too_large` |
+| Parameters, response | 24 KB each after serialization, else dropped and `truncated` set |
+| Timestamp | Clamped to between 7 days ago and 60 seconds ahead |
+| `distinct_id` | 1 to 200 characters, else rejected as `invalid_distinct_id` |
+| Other properties | Up to 20 scalar non-`$mcp_` properties, at most 2 KB, kept as `extra` |
+| Daily ceiling per location | 2,000,000 events or 5 GB, then `quota_exceeded` until UTC midnight |
+
+The daily ceiling is checked every 5 minutes, so a location can pass it by up to 5 minutes of volume before sending is paused.
+
+### Responses
+
+| Outcome | Status | Body |
+| --- | --- | --- |
+| Accepted | 200 | `{ status: 1, processed, rejected, reasons }`. `reasons` counts `too_large`, `invalid_timestamp`, `invalid_distinct_id`, `unknown_event`, `invalid_properties` and `batch_too_large`. |
+| MCP ingestion not configured, privacy unknown, plan lookup failed, or store unavailable | 503 with `Retry-After: 30` | `{ status: 0, code }`, `code` one of `mcp_unavailable`, `privacy_unknown`, `entitlements_unavailable` |
+| The plan lacks MCP analytics | 403 | `{ status: 0, code: 'not_entitled' }` |
+| HIPAA location | 403 | `{ status: 0, code: 'hipaa_restricted' }` |
+| Rate guard or daily ceiling | 429 with `Retry-After` | `{ status: 0, code }`, `code` `rate_limited` or `quota_exceeded` |
+| Body over 8 MB | 413 | `{ status: 0, code: 'body_too_large' }` |
+| Mixed batch | 400 | `mixed_batch` |
+
+Delivery is at least once. A retried batch can store an event twice.
+
+## Stored record
+
+Mythic stores each event as a flat record, kept 90 days. The API returns these fields under plain names: `tool`, `client_name`, `duration_ms`, `is_error`, `error_type`, `intent`, `parameters`, `response` and so on. See the API reference for each route's shape.

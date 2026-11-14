@@ -1,0 +1,74 @@
+---
+title: Conversation ID and sessions
+description: >-
+  How the SDK groups calls into sessions on stdio, Streamable HTTP and
+  stateless servers, and the optional conversation_id argument.
+---
+
+## How a session is chosen
+
+A session groups the calls of one agent conversation. The SDK picks the first of these that exists:
+
+1. The `conversation_id` argument, when `enableConversationId` is on.
+2. The session id set by the [session middleware](#the-session-header).
+3. The transport's own session id (stdio, or a Streamable HTTP server that keeps sessions).
+4. `sessionKey(ctx)` from your code, with a 30-minute idle window.
+5. One session per client, kept in memory, with a 30-minute idle window.
+
+The stored `session_id` is `mcps_` followed by 32 hex characters, a hash of the server name and the raw id. The raw transport id is kept separately as `mcp_session_id`.
+
+Session state lives in the shared client, not in the server object, so a server built for every request still keeps one session per conversation. The client keeps at most 10,000 sessions.
+
+## Which one you need
+
+| Server | Sessions come from | What to add |
+| --- | --- | --- |
+| stdio | The process: one client per process | Nothing |
+| Streamable HTTP that keeps sessions (`Mcp-Session-Id`) | The transport | Nothing |
+| Streamable HTTP without sessions | The session middleware | `mythicSessionNode` or `mythicSessionFetch` |
+| Stateless, a server per request (for example `createMcpHandler`) | Your code | `sessionKey(ctx)` or `enableConversationId` |
+
+**Sessions look fragmented** (one call per session) when none of these applies. Add `sessionKey` or `enableConversationId`.
+
+## The session header
+
+`@mythic-analytics/mcp/http` sets an `Mcp-Session-Id` header for servers that do not set one:
+
+```ts
+import { mythicSessionNode, mythicSessionFetch } from '@mythic-analytics/mcp/http';
+
+// Express and other (req, res, next) servers
+app.use('/mcp', mythicSessionNode({ sessionSecret: process.env.MYTHIC_SESSION_SECRET }));
+
+// Fetch-style handlers
+export default { fetch: mythicSessionFetch(handler, { sessionSecret: env.MYTHIC_SESSION_SECRET }) };
+```
+
+- On an `initialize` request with no `Mcp-Session-Id`, it creates a token and sets the header on the response, for JSON and SSE replies.
+- On later requests that send the header back, it makes that session available to `instrument`.
+- A header the transport sets itself always wins.
+
+The token is `mys1.<id>.<issued>.<signature>` with `sessionSecret`, or `mys0.<id>.<issued>` without. It is valid 24 hours.
+
+<Callout kind="alert">
+The session token is an analytics hint. Never use it for authorization.
+</Callout>
+
+It works with clients that send `Mcp-Session-Id` back on every request. It does nothing for stdio, or for stateless clients that never send it back: use `sessionKey` or `enableConversationId` there.
+
+## sessionKey
+
+```ts
+instrument(server, {
+  apiKey: process.env.MYTHIC_PUBLISHABLE_KEY,
+  sessionKey: (ctx) => ctx.http?.authInfo?.clientId,
+});
+```
+
+Return a value that is stable for one caller. Calls with the same key and no gap over 30 minutes form one session.
+
+## conversation_id
+
+With `enableConversationId: true`, the SDK adds an optional `conversation_id` string to every tool's schema and removes it before your handler runs, as it does for [`context`](/mcp-analytics/intent#the-context-argument). An agent that sends the same value on every call keeps its calls in one session across reconnects and servers. A tool that defines its own `conversation_id` is left alone.
+
+It is off by default because it adds a field to every tool and depends on the agent filling it in.
