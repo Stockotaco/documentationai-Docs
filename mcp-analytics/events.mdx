@@ -9,7 +9,8 @@ description: >-
 
 | Event | Sent when | Fields beyond the common set |
 | --- | --- | --- |
-| `$mcp_initialize` | The server answers `initialize` | None |
+| `$mcp_initialize` | The server answers `initialize` (2025-era connect) | None |
+| `$mcp_server_discover` | The server answers `server/discover` (2026-07-28 connect; these clients never send `initialize`) | None. Client name, version and protocol come from the request's `_meta` |
 | `$mcp_tools_list` | The server answers `tools/list` | `$mcp_listed_tool_names` (at most 500 names) |
 | `$mcp_tool_call` | The server answers `tools/call`, or the handler throws | `$mcp_tool_name` (at most 200 characters), `$mcp_tool_description` (at most 300), `$mcp_tool_category` (at most 100), `$mcp_duration_ms`, `$mcp_is_error`, `$mcp_error_type`, `$mcp_error_message` (at most 1 KB), `$mcp_intent` (at most 1 KB), `$mcp_intent_source`, `$mcp_parameters`, `$mcp_response`, `$mcp_parameters_bytes`, `$mcp_response_bytes`, `$mcp_truncated` |
 | `$mcp_resource_read` | The server answers `resources/read`, or the handler throws | `$mcp_resource_name` (the resource URI, redacted, at most 500 characters), `$mcp_duration_ms`, `$mcp_is_error` |

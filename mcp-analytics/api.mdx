@@ -70,7 +70,7 @@ Full request and response schemas are in the MCP Analytics API reference.
 
 Other limits: `/tools` 1 to 500 (default 100), `/tools/{tool}/errors` 1 to 100 (default 20), `/breakdown` 1 to 500 (default 100), `/intents` 1 to 500 (default 100), `/missing-capabilities` 1 to 200 (default 50). `q` on `/calls` searches tool names, intents and error messages.
 
-`GET /calls` returns tool calls only by default. `event` takes a comma list of `tool_call`, `tools_list`, `initialize`, `resource_read` and `missing_capability`.
+`GET /calls` returns tool calls only by default. `event` takes a comma list of `tool_call`, `tools_list`, `initialize`, `server_discover`, `resource_read` and `missing_capability`. In `GET /overview`, `initializes` counts every connection (2025-era `initialize` plus 2026-07-28 `server/discover`) and `server_discovers` is the modern share.
 
 ## Payloads
 

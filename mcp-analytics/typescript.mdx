@@ -139,6 +139,7 @@ try {
 | `prepareToolCall(name, args)` | Nothing. Returns `{ toolName, arguments, intent, intentSource, conversationId, isMissingCapability }`, with the injected fields removed from `arguments`. |
 | `missingCapabilityReply()` | Nothing. The fixed result to return for `get_more_tools`. |
 | `captureInitialize(info)` | `$mcp_initialize` |
+| `captureServerDiscover(info)` | `$mcp_server_discover` |
 | `captureToolsList(info, toolNames)` | `$mcp_tools_list` |
 | `captureToolCall(info, call, { result?, error?, startedAt?, durationMs? })` | `$mcp_tool_call`, and `$exception` for a thrown error |
 | `captureResourceRead(info, { uri, isError, startedAt?, durationMs? })` | `$mcp_resource_read` |

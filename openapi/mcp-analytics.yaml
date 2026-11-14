@@ -31,7 +31,7 @@ paths:
         The SDK's batch of `$mcp_*` events. A request holds MCP events only, or
         none: a batch mixing `$mcp_*` events with other events answers 400
         `mixed_batch` and stores nothing. Any `$mcp_*` name outside
-        `$mcp_initialize`, `$mcp_tools_list`, `$mcp_tool_call`,
+        `$mcp_initialize`, `$mcp_server_discover`, `$mcp_tools_list`, `$mcp_tool_call`,
         `$mcp_resource_read` and `$mcp_missing_capability` is rejected as
         `unknown_event`.
 
@@ -339,7 +339,7 @@ paths:
         - $ref: "#/components/parameters/Client"
         - name: event
           in: query
-          description: "Comma list of `tool_call`, `tools_list`, `initialize`, `resource_read`, `missing_capability`. Default `tool_call`."
+          description: "Comma list of `tool_call`, `tools_list`, `initialize`, `server_discover`, `resource_read`, `missing_capability`. Default `tool_call`."
           schema: { type: string, example: "tool_call,missing_capability" }
         - $ref: "#/components/parameters/ToolFilter"
         - name: status
@@ -987,7 +987,7 @@ components:
       properties:
         event:
           type: string
-          enum: [$mcp_initialize, $mcp_tools_list, $mcp_tool_call, $mcp_resource_read, $mcp_missing_capability]
+          enum: [$mcp_initialize, $mcp_server_discover, $mcp_tools_list, $mcp_tool_call, $mcp_resource_read, $mcp_missing_capability]
         distinct_id: { type: string, minLength: 1, maxLength: 200, description: "The SDK sends `mcp_anon_<hash>` unless `identify` names the user." }
         timestamp: { type: number, description: Epoch milliseconds. }
         uuid: { type: string, maxLength: 64 }
@@ -1020,7 +1020,8 @@ components:
         intent_coverage: { type: number }
         missing_capability_reports: { type: integer }
         tools_lists: { type: integer }
-        initializes: { type: integer }
+        initializes: { type: integer, description: "Connections: 2025-era `initialize` plus 2026-07-28 `server/discover` (modern clients never send `initialize`)." }
+        server_discovers: { type: integer, description: "The 2026-07-28 `server/discover` connections included in `initializes`." }
         resource_reads: { type: integer }
     SeriesPoint:
       type: object
@@ -1059,7 +1060,7 @@ components:
       properties:
         uuid: { type: string }
         timestamp: { type: string, format: date-time }
-        event: { type: string, enum: [tool_call, tools_list, initialize, resource_read, missing_capability] }
+        event: { type: string, enum: [tool_call, tools_list, initialize, server_discover, resource_read, missing_capability] }
         tool: { type: string, nullable: true }
         is_error: { type: boolean }
         error_type: { $ref: "#/components/schemas/ErrorType" }
