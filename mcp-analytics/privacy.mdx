@@ -68,7 +68,9 @@ A location that turns HIPAA mode on after receiving MCP events stops being reada
 
 ## Retention
 
-Records are kept **90 days**, then deleted. Intent cluster snapshots are kept 8 days.
+Analytics records are kept **90 days**, then deleted. Intent cluster snapshots are kept 8 days. Raw Tinybird landing payloads are kept 3 days.
+
+Failed ingestion payloads can also be held in the pull-only `mythic-mcp-dead-letter-recovery` subscription. This is **additional raw-payload retention outside Tinybird**: unacknowledged messages are kept for up to **3 days (259200 seconds) after publication to the dead-letter topic**, not from the original event timestamp. Acknowledged messages are not retained. There is no automatic replay.
 
 ## Intent text and your model provider
 
@@ -86,6 +88,7 @@ Each fence atomically saves the original identity, person and session deletion s
 
 These remain:
 
+- Queued Pub/Sub messages, including the raw MCP dead-letter backlog until its [retention limit](#retention). The erasure executor does **not selectively purge queued messages**. Deleting analytics records or intent clusters does not remove these copies. Replay can reintroduce erased data: **never replay without checking completed erasure requests for the affected locations and subjects and proving their erased data is excluded**. If safe exclusion cannot be established, do not replay; let the messages expire.
 - Parameter, response or intent text that names the person without one of their ids, until the 90-day retention deletes it
 - Excerpts quoted in client scout reports
 - Copies already delivered to Slack or webhooks
