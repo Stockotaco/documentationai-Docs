@@ -26,6 +26,8 @@ const handle = instrument(server, { client: mythic, ...options });
 
 For a paginated `tools/list`, `instrument` reads at most 20 pages, with a 2-second deadline for SDK-initiated discovery through your own list handler. This deadline does not include the host page the client requested. Discovery runs on a first page with more pages (to find host tool names), and on a server built per request that gets a `tools/call` or a cursor-page `tools/list` before any first-page `tools/list` (to index the tools). A fresh stateless cursor-page response keeps its schemas unchanged unless this bounded discovery establishes completeness.
 
+Discovery only runs when the SDK edits `tools/list` (`context`, `conversation_id` or `get_more_tools` on). With `metadataOnly`, or with all three off, it never reads your list handler: calls pass through untouched. Cursors are opaque: any `cursor`, including an empty string, is a later page, and discovery follows a `nextCursor` of `""`. Only an absent `nextCursor` ends the list.
+
 If discovery is incomplete because of the page cap, deadline, cursor cycle, invalid page or handler failure, the SDK injects no fields or virtual tool and does not intercept calls as virtual `get_more_tools` calls. Host calls pass through unchanged until a complete first-page discovery.
 
 `observed` lists the methods the SDK wraps and grows as handlers are registered. `unobserved` lists methods registered before `instrument` that it could not reach. Calling `instrument` before registering tools avoids this. `instrument` never throws: given an object that is not an MCP server, or no `apiKey` or `client`, it logs a warning and returns a handle that observes nothing.
@@ -49,13 +51,13 @@ If discovery is incomplete because of the page cap, deadline, cursor cycle, inva
 | `redact` | `{ pii: true }` | `{ pii: false }` stops redacting emails, phone numbers, card numbers and US SSNs. Key, value and URL redaction cannot be turned off. |
 | `limits` | `{ depth: 10, breadth: 100, string: 8192, eventBytes: 32768 }` | Caps applied to every event. `string` is in characters. `eventBytes` is clamped to 60 KB, so an event always fits the server's 64 KB limit. |
 | `identify(ctx)` | | Returns `{ distinctId, properties? }`, or a promise of it. `null`, `undefined` or a throw keeps the call anonymous. See [Identifying users](/mcp-analytics/identifying-users). |
-| `sessionKey(ctx)` | | Returns a stable key for the caller when the transport has no session. |
+| `sessionKey(ctx)` | | Returns a stable key for the caller when the transport has no session. The SDK combines it with the client name and version. |
 | `eventProperties(ctx)` | | Extra properties merged into every event before redaction. |
 | `toolCategory(name)` | | Returns a category for a tool (at most 100 characters), stored as `tool_category`. |
 | `beforeSend(event)` | | Edit an event, or return `null` to drop it. A throw drops it too. Runs after redaction, and the result is redacted and truncated again. |
 | `enabled` | `true` | `false` sends nothing and changes nothing. |
 
-`ctx` is the SDK's view of one request, the same in both MCP SDK versions: `method`, `toolName`, `arguments` (with injected fields removed), `transportSessionId`, `headers` (lowercased), `authInfo`, `client` and `server` (`{ name, version }`), `protocolVersion`, `transport`, `conversationId`, `model`, and `raw`, the host SDK's own request context.
+`ctx` is the SDK's view of one request, the same in both MCP SDK versions. See [Stateless requests](#stateless-requests-protocol-2026-07-28) for where `client` and `protocolVersion` come from. Fields: `method`, `toolName`, `arguments` (with injected fields removed), `transportSessionId`, `headers` (lowercased), `authInfo`, `client` and `server` (`{ name, version }`), `protocolVersion`, `transport`, `conversationId`, `model`, and `raw`, the host SDK's own request context.
 
 ### The handle
 
@@ -142,7 +144,22 @@ try {
 | `captureResourceRead(info, { uri, isError, startedAt?, durationMs? })` | `$mcp_resource_read` |
 | `captureMissingCapability(info, args)` | `$mcp_missing_capability` |
 
+## Stateless requests (protocol 2026-07-28)
+
+MCP protocol revision 2026-07-28 has no `initialize` handshake and no `Mcp-Session-Id`. Each request names its client and protocol version in `_meta`. A server built per request (for example with `createMcpHandler`) is observed the same way as any other.
+
+| Field | Read from, first match wins |
+| --- | --- |
+| Client name and version | The request's `_meta` `io.modelcontextprotocol/clientInfo`, else this server instance's `initialize`, else the low-level server's recorded client |
+| Protocol version | The request's `_meta` `io.modelcontextprotocol/protocolVersion`, else this instance's `initialize` result, else the server's negotiated version, else the `mcp-protocol-version` request header |
+
+The header fallback covers 2025-era HTTP clients on a server built per request, where the instance that answered `initialize` is gone by the next call. Client capabilities are not recorded.
+
+Sessions on such servers are split by client app and by authenticated principal. See [Conversation ID and sessions](/mcp-analytics/conversation-id).
+
 ## HTTP session middleware
+
+The middleware only matters for the 2025 protocol, on Streamable HTTP servers that do not issue their own `Mcp-Session-Id`. It acts on `initialize`, so it does nothing for stdio or for 2026-07-28 requests.
 
 | Function | For |
 | --- | --- |
@@ -156,3 +173,13 @@ See [Conversation ID and sessions](/mcp-analytics/conversation-id#the-session-he
 ## Examples
 
 The package ships examples for the 1.x SDK, the 2.x SDK, a custom dispatcher, a Cloudflare Worker and a stateless HTTP server.
+
+## Changes in 3.110
+
+| Version | Change |
+| --- | --- |
+| 3.110.0 | Sessions on servers without a transport session id are split by client app (name and version) and, when the request is authenticated, by a hash of the principal. `sessionKey(ctx)` is combined with the client name and version. Session and anonymous-user counts go up after the upgrade, and sessions recorded before it do not continue. |
+| 3.110.0 | With nothing injected into `tools/list` (`metadataOnly`, or `context`, `conversation_id` and `get_more_tools` all off), a server built per request no longer runs tool discovery. |
+| 3.110.0 | An empty-string cursor is a valid cursor: it is a later page, and discovery follows it. |
+| 3.110.0 | The protocol version falls back to the `mcp-protocol-version` request header. |
+| 3.110.0, 3.110.1 | The `/calls` and `/sessions` lists return `protocol_version`. See the [API reference](/mcp-analytics/api). |

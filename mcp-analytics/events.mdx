@@ -27,8 +27,8 @@ Every `$mcp_*` event carries:
 | --- | --- |
 | `$lib`, `$lib_version` | `mythic-mcp` and the SDK version |
 | `$mcp_server_name`, `$mcp_server_version` | From the server's own name and version |
-| `$mcp_client_name`, `$mcp_client_version` | The MCP client, from `initialize` or from the request's client info |
-| `$mcp_protocol_version` | The negotiated MCP protocol version |
+| `$mcp_client_name`, `$mcp_client_version` | The MCP client, from the request's `_meta` client info (protocol 2026-07-28) or from `initialize` |
+| `$mcp_protocol_version` | The request's protocol version: `_meta`, else the negotiated version, else the `mcp-protocol-version` header |
 | `$mcp_transport` | `stdio`, `streamable_http` or `in_memory`, from the connected transport |
 | `$mcp_session_id` | `mcpsid_` plus 16 hex characters, a hash of the transport's session id, when there is one |
 | `$mcp_conversation_id` | The `conversation_id` argument (at most 200 characters), when enabled |

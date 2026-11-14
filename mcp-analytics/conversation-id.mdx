@@ -27,14 +27,14 @@ Session state lives in the shared client, not in the server object, so a server 
 | --- | --- | --- |
 | stdio | The process: one client per process | Nothing |
 | Streamable HTTP that keeps sessions (`Mcp-Session-Id`) | The transport | Nothing |
-| Streamable HTTP without sessions | The session middleware | `mythicSessionNode` or `mythicSessionFetch` |
-| Stateless, a server per request (for example `createMcpHandler`) | Your code | `sessionKey(ctx)` or `enableConversationId` |
+| Streamable HTTP without sessions, 2025 protocol | The session middleware | `mythicSessionNode` or `mythicSessionFetch` |
+| Stateless, a server per request (for example `createMcpHandler`), or any 2026-07-28 request | Client app and authenticated principal, with a 30-minute idle window | Nothing. `sessionKey(ctx)` or `enableConversationId` for finer sessions |
 
-**Sessions look fragmented** (one call per session) when none of these applies. Add `sessionKey` or `enableConversationId`.
+**Sessions look fragmented** (one call per session) when none of these applies. Add `sessionKey` or `enableConversationId`. An unauthenticated stateless server groups every user of one client app into one session: add `sessionKey` there.
 
 ## The session header
 
-`@mythic-data/mcp/http` sets an `Mcp-Session-Id` header for servers that do not set one:
+`@mythic-data/mcp/http` sets an `Mcp-Session-Id` header for 2025-protocol servers that do not set one. Protocol 2026-07-28 has no `initialize` and no `Mcp-Session-Id`, so the middleware does nothing for it:
 
 ```ts
 import { mythicSessionNode, mythicSessionFetch } from '@mythic-data/mcp/http';
