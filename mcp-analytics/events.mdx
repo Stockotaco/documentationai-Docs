@@ -10,7 +10,7 @@ description: >-
 | Event | Sent when | Fields beyond the common set |
 | --- | --- | --- |
 | `$mcp_initialize` | The server answers `initialize` (2025-era connect) | None |
-| `$mcp_server_discover` | The server answers `server/discover` (2026-07-28 connect; these clients never send `initialize`) | None. Client name, version and protocol come from the request's `_meta` |
+| `$mcp_server_discover` | The server answers `server/discover` (2026-07-28 connect; these clients never send `initialize`) | None. Client name, version, protocol and capabilities come from the request's `_meta` |
 | `$mcp_tools_list` | The server answers `tools/list` | `$mcp_listed_tool_names` (at most 500 names) |
 | `$mcp_tool_call` | The server answers `tools/call`, or the handler throws | `$mcp_tool_name` (at most 200 characters), `$mcp_tool_description` (at most 300), `$mcp_tool_category` (at most 100), `$mcp_duration_ms`, `$mcp_is_error`, `$mcp_error_type`, `$mcp_error_message` (at most 1 KB), `$mcp_intent` (at most 1 KB), `$mcp_intent_source`, `$mcp_parameters`, `$mcp_response`, `$mcp_parameters_bytes`, `$mcp_response_bytes`, `$mcp_truncated` |
 | `$mcp_resource_read` | The server answers `resources/read`, or the handler throws | `$mcp_resource_name` (the resource URI, redacted, at most 500 characters), `$mcp_duration_ms`, `$mcp_is_error` |
@@ -30,6 +30,7 @@ Every `$mcp_*` event carries:
 | `$mcp_server_name`, `$mcp_server_version` | From the server's own name and version |
 | `$mcp_client_name`, `$mcp_client_version` | The MCP client, from the request's `_meta` client info (protocol 2026-07-28) or from `initialize` |
 | `$mcp_protocol_version` | The request's protocol version: `_meta`, else the negotiated version, else the `mcp-protocol-version` header |
+| `$mcp_client_capabilities` | The capability names the client declared, sorted: top-level keys of the `_meta` `io.modelcontextprotocol/clientCapabilities` (2026-07-28) or of `initialize` `params.capabilities`, with `extensions` replaced by each extension id (for example `io.modelcontextprotocol/ui`). No nested values, at most 32 names of at most 100 characters. Absent when the client sent none |
 | `$mcp_transport` | `stdio`, `streamable_http` or `in_memory`, from the connected transport |
 | `$mcp_session_id` | `mcpsid_` plus 16 hex characters, a hash of the transport's session id, when there is one |
 | `$mcp_conversation_id` | The `conversation_id` argument (at most 200 characters), when enabled |

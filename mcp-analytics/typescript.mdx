@@ -57,7 +57,7 @@ If discovery is incomplete because of the page cap, deadline, cursor cycle, inva
 | `beforeSend(event)` | | Edit an event, or return `null` to drop it. A throw drops it too. Runs after redaction, and the result is redacted and truncated again. |
 | `enabled` | `true` | `false` sends nothing and changes nothing. |
 
-`ctx` is the SDK's view of one request, the same in both MCP SDK versions. See [Stateless requests](#stateless-requests-protocol-2026-07-28) for where `client` and `protocolVersion` come from. Fields: `method`, `toolName`, `arguments` (with injected fields removed), `transportSessionId`, `headers` (lowercased), `authInfo`, `client` and `server` (`{ name, version }`), `protocolVersion`, `transport`, `conversationId`, `model`, and `raw`, the host SDK's own request context.
+`ctx` is the SDK's view of one request, the same in both MCP SDK versions. See [Stateless requests](#stateless-requests-protocol-2026-07-28) for where `client` and `protocolVersion` come from. Fields: `method`, `toolName`, `arguments` (with injected fields removed), `transportSessionId`, `headers` (lowercased), `authInfo`, `client` and `server` (`{ name, version }`), `protocolVersion`, `clientCapabilities` (the compact list of declared capability names), `transport`, `conversationId`, `model`, and `raw`, the host SDK's own request context.
 
 ### The handle
 
@@ -153,8 +153,9 @@ MCP protocol revision 2026-07-28 has no `initialize` handshake and no `Mcp-Sessi
 | --- | --- |
 | Client name and version | The request's `_meta` `io.modelcontextprotocol/clientInfo`, else this server instance's `initialize`, else the low-level server's recorded client |
 | Protocol version | The request's `_meta` `io.modelcontextprotocol/protocolVersion`, else this instance's `initialize` result, else the server's negotiated version, else the `mcp-protocol-version` request header |
+| Client capabilities | The request's `_meta` `io.modelcontextprotocol/clientCapabilities`, else this instance's `initialize` `params.capabilities`, else the low-level server's recorded capabilities |
 
-The header fallback covers 2025-era HTTP clients on a server built per request, where the instance that answered `initialize` is gone by the next call. Client capabilities are not recorded.
+The header fallback covers 2025-era HTTP clients on a server built per request, where the instance that answered `initialize` is gone by the next call.
 
 Sessions on such servers are split by client app and by authenticated principal. See [Conversation ID and sessions](/mcp-analytics/conversation-id).
 
@@ -184,3 +185,5 @@ The package ships examples for the 1.x SDK, the 2.x SDK, a custom dispatcher, a 
 | 3.110.0 | An empty-string cursor is a valid cursor: it is a later page, and discovery follows it. |
 | 3.110.0 | The protocol version falls back to the `mcp-protocol-version` request header. |
 | 3.110.0, 3.110.1 | The `/calls` and `/sessions` lists return `protocol_version`. See the [API reference](/mcp-analytics/api). |
+| 3.111.0 | `server/discover` (the 2026-07-28 connect) is recorded as `$mcp_server_discover` and counted as a connection. |
+| 3.112.0 | Every event carries `$mcp_client_capabilities`, the capability names the client declared, from `_meta` or `initialize`. A custom dispatcher passes `clientCapabilities` in its request info; build it with `clientCapabilityList(capabilities)`. |

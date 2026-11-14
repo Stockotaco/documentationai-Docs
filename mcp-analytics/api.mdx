@@ -74,6 +74,8 @@ Other limits: `/tools` 1 to 500 (default 100), `/tools/{tool}/errors` 1 to 100 (
 
 ## Payloads
 
+`GET /overview` also returns `capabilities`: for each capability the MCP clients declared in the window (for example `elicitation`, `sampling`, `roots`, or `io.modelcontextprotocol/ui` for MCP Apps), the number of distinct clients, sessions and users. `GET /sessions` rows and `GET /calls/{uuid}` carry `client_capabilities`, the sorted list the client declared, or `[]` when it sent none.
+
 Rows in the `GET /calls` and `GET /sessions` lists carry `protocol_version`, the MCP protocol revision (for example `2025-06-18` or `2026-07-28`), or `null` when the SDK could not tell.
 
 Lists return `parameters_preview`, a short preview of the parameters. `GET /calls/{uuid}` returns `parameters` and `response` parsed as JSON when they parse, else as a string, and `parameters_truncated` and `response_truncated` when Mythic cut them. Both are `null` when the SDK did not capture them, for example with `metadataOnly`.

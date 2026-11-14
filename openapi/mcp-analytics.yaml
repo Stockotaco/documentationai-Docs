@@ -127,6 +127,10 @@ paths:
                       previous: { $ref: "#/components/schemas/Window" }
                       totals: { $ref: "#/components/schemas/Totals" }
                       previous_totals: { $ref: "#/components/schemas/Totals" }
+                      capabilities:
+                        type: array
+                        description: "Per capability the MCP clients declared in the window (top-level ClientCapabilities keys plus extension ids, e.g. `io.modelcontextprotocol/ui` for MCP Apps), most sessions first, at most 100. Empty when no client sent capabilities (SDK before 3.112.0)."
+                        items: { $ref: "#/components/schemas/CapabilityRow" }
         "400": { $ref: "#/components/responses/BadParams" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "402": { $ref: "#/components/responses/NotInPlan" }
@@ -1092,7 +1096,20 @@ components:
             transport: { type: string }
             lib_version: { type: string }
             model: { type: string }
+            client_capabilities: { $ref: "#/components/schemas/ClientCapabilities" }
             extra: { type: object, additionalProperties: true }
+    ClientCapabilities:
+      type: array
+      items: { type: string }
+      description: "Capability names the client declared, sorted: top-level ClientCapabilities keys (e.g. elicitation, roots, sampling, tasks) plus extension ids (e.g. io.modelcontextprotocol/ui). No nested values. Empty when not sent."
+      example: [elicitation, io.modelcontextprotocol/ui, roots, sampling]
+    CapabilityRow:
+      type: object
+      properties:
+        capability: { type: string, example: roots }
+        clients: { type: integer, description: "Distinct MCP client names that declared it." }
+        sessions: { type: integer }
+        users: { type: integer }
     SessionRow:
       type: object
       properties:
@@ -1110,6 +1127,7 @@ components:
         server_name: { type: string }
         first_intent: { type: string, nullable: true }
         missing_capability_reports: { type: integer }
+        client_capabilities: { $ref: "#/components/schemas/ClientCapabilities" }
     PageMeta:
       type: object
       properties:
