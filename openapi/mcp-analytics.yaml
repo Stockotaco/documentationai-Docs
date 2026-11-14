@@ -506,7 +506,6 @@ paths:
                             properties:
                               conversation_id: { type: string }
                               mcp_session_id: { type: string }
-                              protocol_version: { type: string }
                               transport: { type: string }
                       events: { type: array, items: { $ref: "#/components/schemas/CallRow" } }
                       meta:
@@ -1106,6 +1105,7 @@ components:
         distinct_id: { type: string }
         client_name: { type: string }
         client_version: { type: string }
+        protocol_version: { type: string, nullable: true, description: "MCP protocol revision of the session's latest event. Null when the SDK could not tell." }
         server_name: { type: string }
         first_intent: { type: string, nullable: true }
         missing_capability_reports: { type: integer }
