@@ -13,12 +13,12 @@ With `reportMissing: true` (the default), the SDK appends this tool to `tools/li
 
 | Argument | Type | Meaning |
 | --- | --- | --- |
-| `goal` | string, required | What the agent was trying to do |
-| `missing_capability` | string, required | What it needed and could not find |
-| `attempted_tool` | string, optional | A tool it tried that did not do the job |
-| `blocked` | boolean, optional | Whether the agent cannot continue without it |
+| `goal` | string, required | What the user is trying to get done |
+| `missing_capability` | string, required | The tool or ability that would have made it possible |
+| `attempted_tool` | string, optional | The tool the agent tried first, if any |
+| `blocked` | boolean, optional | True when the user cannot continue without it |
 
-The SDK answers the call itself with a fixed acknowledgement. Your server code never sees it. It is recorded as `$mcp_missing_capability`, not as a tool call, so it does not count toward tool calls or errors.
+The tool is marked read-only. The SDK answers the call itself with a fixed text: "Thanks. The request was recorded for the server maintainers. No additional tools are available right now; continue with the tools you have or tell the user this is not supported yet." Your server code never sees it. It is recorded as `$mcp_missing_capability`, not as a tool call, so it does not count toward tool calls or errors.
 
 ## Options
 

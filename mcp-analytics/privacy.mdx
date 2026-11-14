@@ -24,13 +24,13 @@ The order: build the event, merge `eventProperties`, redact, truncate, run `befo
 - Mythic keys: `pk_`, `sk_`, `ak_` and `mcp_` followed by 16 or more letters or digits
 - `Bearer` followed by 20 or more characters
 - JSON Web Tokens
-- OpenAI and OpenRouter keys (`sk-…`, `sk-or-…`), Google API keys (`AIza…`), GitHub tokens (`ghp_…`), Slack tokens (`xoxb-…` and the like), AWS access key ids (`AKIA…`)
+- OpenAI, Anthropic and OpenRouter keys (`sk-…`, `sk-or-…`), Google API keys (`AIza…`), GitHub tokens (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`), Slack tokens (`xoxa-`, `xoxb-`, `xoxp-`, `xoxr-`, `xoxs-`), AWS access key ids (`AKIA…`)
 
 **URLs.** User and password in a URL are removed. Query values under a sensitive key are redacted. Slack and Discord webhook URLs are replaced with `[REDACTED_URL]` whatever key holds them.
 
-**Text blocks.** `structuredContent` and every content block of a result are checked. A text block that is JSON (most tools return JSON as text) is parsed, redacted as a structure and serialized again. Resource text is treated the same way.
+**JSON inside strings.** `structuredContent` and every content block of a result are checked. Any string that is a JSON object or array, such as a text block (most tools return JSON as text) or resource text, is parsed, redacted as a structure and serialized again.
 
-**Personal data** (on by default): email addresses, phone numbers, card numbers that pass the Luhn check, and US Social Security numbers. `redact: { pii: false }` turns this off.
+**Personal data** (on by default): email addresses, phone numbers, card numbers that pass the Luhn check, and US Social Security numbers. `redact: { pii: false }` turns this off. Key, value and URL redaction cannot be turned off.
 
 **Binary.** Image and audio blocks, resource blobs and base64-looking strings of 10 KB or more become `{ type, mimeType, bytes }`.
 
@@ -40,9 +40,9 @@ The order: build the event, merge `eventProperties`, redact, truncate, run `befo
 | --- | --- |
 | Depth | 10 |
 | Keys or items per object or array | 100 |
-| String | 8 KB |
+| String | 8,192 characters |
 | Event | 32 KB, at most 60 KB with `limits.eventBytes` |
-| Work per value | 5,000 nodes and 256 KB scanned. The rest becomes `"[TRUNCATED]"`. Cycles are detected. |
+| Work per value | 5,000 nodes and 256 KB scanned. The rest becomes `"[TRUNCATED]"`. A cycle becomes `"[CIRCULAR]"`. |
 
 Mythic applies its own caps on arrival: 24 KB each for parameters and response, 64 KB per record. See [Events](/mcp-analytics/events#limits).
 

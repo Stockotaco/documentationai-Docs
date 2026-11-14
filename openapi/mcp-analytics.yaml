@@ -130,6 +130,7 @@ paths:
         "402": { $ref: "#/components/responses/NotInPlan" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/QueryFailed" }
         "503": { $ref: "#/components/responses/Unavailable" }
   /client/v1/mcp-analytics/timeseries:
     get:
@@ -164,6 +165,7 @@ paths:
         "402": { $ref: "#/components/responses/NotInPlan" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/QueryFailed" }
         "503": { $ref: "#/components/responses/Unavailable" }
   /client/v1/mcp-analytics/tools:
     get:
@@ -190,7 +192,7 @@ paths:
           schema: { type: integer, enum: [1] }
         - name: limit
           in: query
-          schema: { type: integer, minimum: 1, maximum: 500 }
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
       responses:
         "200":
           description: Tools
@@ -210,6 +212,7 @@ paths:
         "402": { $ref: "#/components/responses/NotInPlan" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/QueryFailed" }
         "503": { $ref: "#/components/responses/Unavailable" }
   /client/v1/mcp-analytics/tools/{tool}:
     get:
@@ -266,6 +269,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/QueryFailed" }
         "503": { $ref: "#/components/responses/Unavailable" }
   /client/v1/mcp-analytics/tools/{tool}/errors:
     get:
@@ -282,7 +286,7 @@ paths:
         - $ref: "#/components/parameters/Client"
         - name: limit
           in: query
-          schema: { type: integer, minimum: 1, maximum: 100 }
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
       responses:
         "200":
           description: Failure modes
@@ -314,6 +318,7 @@ paths:
         "402": { $ref: "#/components/responses/NotInPlan" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/QueryFailed" }
         "503": { $ref: "#/components/responses/Unavailable" }
   /client/v1/mcp-analytics/calls:
     get:
@@ -344,7 +349,7 @@ paths:
         - $ref: "#/components/parameters/DistinctId"
         - name: q
           in: query
-          description: Text search.
+          description: Searches tool names, intents and error messages. At most 200 characters.
           schema: { type: string }
         - name: limit
           in: query
@@ -371,6 +376,7 @@ paths:
         "402": { $ref: "#/components/responses/NotInPlan" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/QueryFailed" }
         "503": { $ref: "#/components/responses/Unavailable" }
   /client/v1/mcp-analytics/calls/{uuid}:
     get:
@@ -385,12 +391,7 @@ paths:
         - name: uuid
           in: path
           required: true
-          schema: { type: string }
-        - $ref: "#/components/parameters/Range"
-        - $ref: "#/components/parameters/From"
-        - $ref: "#/components/parameters/To"
-        - $ref: "#/components/parameters/Server"
-        - $ref: "#/components/parameters/Client"
+          schema: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9_.:-]{1,64}$" }
       responses:
         "200":
           description: The call
@@ -407,6 +408,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/QueryFailed" }
         "503": { $ref: "#/components/responses/Unavailable" }
   /client/v1/mcp-analytics/sessions:
     get:
@@ -428,10 +430,10 @@ paths:
         - $ref: "#/components/parameters/DistinctId"
         - name: min_calls
           in: query
-          schema: { type: integer, minimum: 1 }
+          schema: { type: integer, minimum: 0 }
         - name: limit
           in: query
-          schema: { type: integer, minimum: 1 }
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
         - $ref: "#/components/parameters/Cursor"
       responses:
         "200":
@@ -447,21 +449,27 @@ paths:
                     properties:
                       sessions: { type: array, items: { $ref: "#/components/schemas/SessionRow" } }
                       next_cursor: { type: string, nullable: true }
-                      meta: { $ref: "#/components/schemas/PageMeta" }
+                      meta:
+                        type: object
+                        properties:
+                          from: { type: string, format: date-time }
+                          to: { type: string, format: date-time }
+                          limit: { type: integer }
         "400": { $ref: "#/components/responses/BadParams" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "402": { $ref: "#/components/responses/NotInPlan" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/QueryFailed" }
         "503": { $ref: "#/components/responses/Unavailable" }
   /client/v1/mcp-analytics/sessions/{session_id}:
     get:
       summary: Get one session
       operationId: getMcpSession
       description: >
-        One session and its events in order. When `meta.complete` is false the
-        session has more events; continue with `GET /calls?session_id=...` and
-        `meta.next_cursor`.
+        One session and its events in order. The window defaults to the last
+        90 days. When `meta.complete` is false the session has more events; pass
+        `meta.next_cursor` back as `cursor`.
       parameters:
         - $ref: "#/components/parameters/LocationId"
         - name: session_id
@@ -473,6 +481,10 @@ paths:
         - $ref: "#/components/parameters/To"
         - $ref: "#/components/parameters/Server"
         - $ref: "#/components/parameters/Client"
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 500 }
+        - $ref: "#/components/parameters/Cursor"
       responses:
         "200":
           description: The session
@@ -506,6 +518,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/QueryFailed" }
         "503": { $ref: "#/components/responses/Unavailable" }
   /client/v1/mcp-analytics/breakdown:
     get:
@@ -518,6 +531,9 @@ paths:
           in: query
           required: true
           schema: { type: string, enum: [client, client_version, server_version, protocol_version, transport, model, category] }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
         - $ref: "#/components/parameters/Range"
         - $ref: "#/components/parameters/From"
         - $ref: "#/components/parameters/To"
@@ -554,6 +570,7 @@ paths:
         "402": { $ref: "#/components/responses/NotInPlan" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/QueryFailed" }
         "503": { $ref: "#/components/responses/Unavailable" }
   /client/v1/mcp-analytics/intents:
     get:
@@ -571,7 +588,7 @@ paths:
         - $ref: "#/components/parameters/Client"
         - name: limit
           in: query
-          schema: { type: integer, minimum: 1, maximum: 500 }
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
       responses:
         "200":
           description: Intents
@@ -603,6 +620,7 @@ paths:
         "402": { $ref: "#/components/responses/NotInPlan" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/QueryFailed" }
         "503": { $ref: "#/components/responses/Unavailable" }
   /client/v1/mcp-analytics/intents/clusters:
     get:
@@ -630,6 +648,7 @@ paths:
         "402": { $ref: "#/components/responses/NotInPlan" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/QueryFailed" }
         "503": { $ref: "#/components/responses/Unavailable" }
   /client/v1/mcp-analytics/intents/clusters/recompute:
     post:
@@ -662,6 +681,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/QueryFailed" }
         "503": { $ref: "#/components/responses/Unavailable" }
   /client/v1/mcp-analytics/missing-capabilities:
     get:
@@ -677,7 +697,7 @@ paths:
         - $ref: "#/components/parameters/Client"
         - name: limit
           in: query
-          schema: { type: integer, minimum: 1, maximum: 200 }
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
       responses:
         "200":
           description: Reports
@@ -718,6 +738,7 @@ paths:
         "402": { $ref: "#/components/responses/NotInPlan" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/QueryFailed" }
         "503": { $ref: "#/components/responses/Unavailable" }
   /client/v1/mcp-analytics/setup:
     get:
@@ -759,6 +780,7 @@ paths:
         "402": { $ref: "#/components/responses/NotInPlan" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "502": { $ref: "#/components/responses/QueryFailed" }
         "503": { $ref: "#/components/responses/Unavailable" }
   /client/v1/agency/mcp-analytics:
     get:
@@ -793,6 +815,7 @@ paths:
                             - $ref: "#/components/schemas/AgencyLocationRow"
                             - $ref: "#/components/schemas/AgencyRestrictedRow"
         "400": { $ref: "#/components/responses/BadParams" }
+        "502": { $ref: "#/components/responses/QueryFailed" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/RateLimited" }
@@ -818,7 +841,7 @@ components:
     Range:
       name: range
       in: query
-      description: Preset window ending now. Ignored when `from` is set.
+      description: "Preset window ending now. Sending it with `from` answers 400 `invalid_range`."
       schema: { type: string, enum: [1h, 6h, 24h, 7d, 30d, 90d], default: 7d }
     From:
       name: from
@@ -828,7 +851,7 @@ components:
     To:
       name: to
       in: query
-      description: Window end, ISO 8601. Default now.
+      description: Window end, ISO 8601, exclusive. Default now. Needs `from`.
       schema: { type: string, format: date-time }
     Server:
       name: server
@@ -891,12 +914,19 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     RateLimited:
-      description: "`rate_limited` — 120 reads per minute per location; one cluster recompute per hour."
+      description: "`rate_limited` — 120 requests per minute per location; one cluster recompute per hour. Carries `Retry-After`."
+      headers:
+        Retry-After: { schema: { type: integer, example: 60 } }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    QueryFailed:
+      description: "`query_failed` — the analytics store did not answer."
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     Unavailable:
-      description: "`privacy_unknown` — the location's configuration could not be read. Retry."
+      description: "`privacy_unknown` (the location's configuration could not be read), `not_configured` or `lookup_failed`. Retry."
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -915,6 +945,7 @@ components:
       properties:
         status: { type: integer, example: 0 }
         code: { type: string, example: rate_limited }
+        error: { type: string, description: A human-readable message. }
     IngestAccepted:
       type: object
       properties:
@@ -933,12 +964,12 @@ components:
             batch_too_large: { type: integer }
     McpIngestEvent:
       type: object
-      required: [event, properties]
+      required: [event]
       properties:
         event:
           type: string
           enum: [$mcp_initialize, $mcp_tools_list, $mcp_tool_call, $mcp_resource_read, $mcp_missing_capability]
-        distinct_id: { type: string, minLength: 1, maxLength: 200 }
+        distinct_id: { type: string, minLength: 1, maxLength: 200, description: "The SDK sends `mcp_anon_<hash>` unless `identify` names the user." }
         timestamp: { type: number, description: Epoch milliseconds. }
         uuid: { type: string, maxLength: 64 }
         properties:

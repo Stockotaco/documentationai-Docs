@@ -9,7 +9,7 @@ description: >-
 
 - The client's plan includes MCP analytics (it comes with Logs) and the location is not in HIPAA mode.
 - The location's **publishable key** (`pk_…`). The agency app shows it on the client's **MCP analytics → Setup** tab, and `GET /client/v1/mcp-analytics/setup` returns it as `publishable_key`.
-- A Node.js MCP server built on `@modelcontextprotocol/server` 2.x or `@modelcontextprotocol/sdk` 1.x. A server with its own JSON-RPC dispatcher uses [`MythicMCP`](/mcp-analytics/typescript#servers-without-an-sdk-server-object) instead.
+- A Node.js MCP server built on `@modelcontextprotocol/server` 2.x or `@modelcontextprotocol/sdk` 1.22.0 to 1.32.2, on Node.js 18 or later. A server with its own JSON-RPC dispatcher uses [`MythicMCP`](/mcp-analytics/typescript#servers-without-an-sdk-server-object) instead.
 
 <Callout kind="info">
 The publishable key identifies the location. It is the same `pk_` key the browser snippet uses and is not a secret.
@@ -21,7 +21,7 @@ The publishable key identifies the location. It is the same `pk_` key the browse
 npm install @mythic-analytics/mcp
 ```
 
-The package has no runtime dependencies. The README lists the `@modelcontextprotocol/sdk` 1.x versions it is tested against.
+The package has no runtime dependencies. `@modelcontextprotocol/sdk` releases below 1.22.0 are not verified.
 
 ## Instrument the server
 
@@ -73,10 +73,10 @@ const analytics = instrument(server, { client });
 ```ts
 import { mythicSessionNode } from '@mythic-analytics/mcp/http';
 
-app.use('/mcp', mythicSessionNode({ sessionSecret: process.env.MYTHIC_SESSION_SECRET }));
+app.use('/mcp', express.json(), mythicSessionNode({ sessionSecret: process.env.MYTHIC_SESSION_SECRET }));
 ```
 
-Skip this for stdio servers. See [Conversation ID and sessions](/mcp-analytics/conversation-id).
+Mount it after a JSON body parser so it can see `initialize`. Skip this for stdio servers. See [Conversation ID and sessions](/mcp-analytics/conversation-id).
 
   </Step>
   <Step title="Check that events arrive">
@@ -112,9 +112,9 @@ instrument(server, { apiKey: process.env.MYTHIC_PUBLISHABLE_KEY, metadataOnly: t
 
 | Status | `code` | What the SDK does |
 | --- | --- | --- |
-| 403 | `not_entitled`, `hipaa_restricted` | Pauses sending for 10 minutes |
+| 401, 403 | Invalid key, `not_entitled`, `hipaa_restricted` | Pauses sending for 10 minutes. Events captured while paused are dropped |
 | 429 | `rate_limited` | Retries twice, honoring `Retry-After` up to 30 seconds, then drops the batch |
 | 429 | `quota_exceeded` | Pauses for `Retry-After`, at most 15 minutes |
-| 503 | `mcp_unavailable`, `privacy_unknown`, `entitlements_unavailable` | Retries twice, honoring `Retry-After` up to 30 seconds, then drops the batch |
+| 5xx, network failure | `mcp_unavailable`, `privacy_unknown`, `entitlements_unavailable` on 503 | Retries twice, honoring `Retry-After` up to 30 seconds, then drops the batch |
 
 `client.stats()` on a [client you created](/mcp-analytics/typescript#the-client) reports sent, dropped and rejected counts. See [Events](/mcp-analytics/events#ingestion) for the full contract.

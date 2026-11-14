@@ -11,13 +11,13 @@ Without `identify`, each event's `distinct_id` is `mcp_anon_` plus a hash of the
 
 ## identify
 
-`identify(ctx)` returns the person behind a request. `ctx` is the MCP request context, which carries the transport's auth info and headers.
+`identify(ctx)` returns the person behind a request, or a promise of it. `ctx` is the SDK's view of the request, with the transport's `authInfo` and lowercased `headers` when it has them. See [TypeScript SDK](/mcp-analytics/typescript#options).
 
 ```ts
 instrument(server, {
   apiKey: process.env.MYTHIC_PUBLISHABLE_KEY,
   identify: (ctx) => {
-    const user = ctx.http?.authInfo?.extra?.user;
+    const user = (ctx.authInfo as { extra?: { user?: { id: string; plan?: string; company?: string } } } | undefined)?.extra?.user;
     if (!user) return null;
     return {
       distinctId: user.id,
@@ -28,8 +28,8 @@ instrument(server, {
 ```
 
 - `distinctId` is 1 to 200 characters. Use the same id your website or app sends to Mythic, so MCP activity joins the same person.
-- `properties` are sent once per session as a standard `$set` event, which updates the person.
-- Return `null` to keep the call anonymous.
+- `properties` are sent once per session as a standard `$set` event, which updates the person. `metadataOnly` turns this off.
+- Return `null` or `undefined` to keep the call anonymous. A throw also keeps it anonymous.
 
 ## Persons
 

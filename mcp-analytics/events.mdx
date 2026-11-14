@@ -11,11 +11,11 @@ description: >-
 | --- | --- | --- |
 | `$mcp_initialize` | The server answers `initialize` | None |
 | `$mcp_tools_list` | The server answers `tools/list` | `$mcp_listed_tool_names` (at most 500 names) |
-| `$mcp_tool_call` | The server answers `tools/call`, or the handler throws | `$mcp_tool_name`, `$mcp_tool_description` (at most 300 characters), `$mcp_tool_category`, `$mcp_duration_ms`, `$mcp_is_error`, `$mcp_error_type`, `$mcp_error_message` (at most 1 KB), `$mcp_intent` (at most 1 KB), `$mcp_intent_source`, `$mcp_parameters`, `$mcp_response`, `$mcp_parameters_bytes`, `$mcp_response_bytes`, `$mcp_truncated` |
-| `$mcp_resource_read` | The server answers `resources/read`, or the handler throws | `$mcp_resource_name`, `$mcp_duration_ms`, `$mcp_is_error` |
-| `$mcp_missing_capability` | An agent calls `get_more_tools` | `$mcp_intent` (the goal), `$mcp_missing_capability` (at most 1 KB), `$mcp_attempted_tool`, `$mcp_blocked` |
-| `$exception` | A handler throws and `captureExceptions` is on | `$exception_type`, `$exception_message`, `$mcp_tool_name`, `$exception_source: 'mcp_tool'` |
-| `$set` | Once per session, when `identify` returns `properties` | The person properties |
+| `$mcp_tool_call` | The server answers `tools/call`, or the handler throws | `$mcp_tool_name` (at most 200 characters), `$mcp_tool_description` (at most 300), `$mcp_tool_category` (at most 100), `$mcp_duration_ms`, `$mcp_is_error`, `$mcp_error_type`, `$mcp_error_message` (at most 1 KB), `$mcp_intent` (at most 1 KB), `$mcp_intent_source`, `$mcp_parameters`, `$mcp_response`, `$mcp_parameters_bytes`, `$mcp_response_bytes`, `$mcp_truncated` |
+| `$mcp_resource_read` | The server answers `resources/read`, or the handler throws | `$mcp_resource_name` (the resource URI, redacted, at most 500 characters), `$mcp_duration_ms`, `$mcp_is_error` |
+| `$mcp_missing_capability` | An agent calls `get_more_tools` | `$mcp_intent` (the goal), `$mcp_missing_capability` (at most 1 KB), `$mcp_attempted_tool` (at most 200 characters), `$mcp_blocked` |
+| `$exception` | A tool handler throws (error type `exception`) and `captureExceptions` is on | `$exception_type`, `$exception_message`, `$mcp_tool_name`, `$exception_source: 'mcp_tool'` |
+| `$set` | Once per session, when `identify` returns `properties` and `metadataOnly` is off | The person properties, redacted |
 
 `$exception` and `$set` are ordinary Mythic events. They go through the main event pipeline, so a tool exception appears in error tracking and `$set` updates the person. They are sent in their own batches, never mixed with `$mcp_*` events.
 
@@ -29,9 +29,9 @@ Every `$mcp_*` event carries:
 | `$mcp_server_name`, `$mcp_server_version` | From the server's own name and version |
 | `$mcp_client_name`, `$mcp_client_version` | The MCP client, from `initialize` or from the request's client info |
 | `$mcp_protocol_version` | The negotiated MCP protocol version |
-| `$mcp_transport` | For example `stdio` or `streamable-http` |
-| `$mcp_session_id` | The transport's session id, when there is one |
-| `$mcp_conversation_id` | The `conversation_id` argument, when enabled |
+| `$mcp_transport` | `stdio`, `streamable_http` or `in_memory`, from the connected transport |
+| `$mcp_session_id` | `mcpsid_` plus 16 hex characters, a hash of the transport's session id, when there is one |
+| `$mcp_conversation_id` | The `conversation_id` argument (at most 200 characters), when enabled |
 | `$mcp_model` | The model, only when the host supplies it |
 | `$session_id` | `mcps_` plus 32 hex characters. See [Conversation ID and sessions](/mcp-analytics/conversation-id). |
 
@@ -77,6 +77,9 @@ A request holds MCP events only, or none. A batch that mixes `$mcp_*` events wit
 | Parameters, response | 24 KB each after serialization, else dropped and `truncated` set |
 | Timestamp | Clamped to between 7 days ago and 60 seconds ahead |
 | `distinct_id` | 1 to 200 characters, else rejected as `invalid_distinct_id` |
+| Names | Tool, server and client names at most 200 characters, versions at most 64, `conversation_id` at most 200, resource URI at most 500 |
+| Listed tools | At most 500 names of at most 200 characters |
+| Duration | An integer from 0 to 86,400,000 ms |
 | Other properties | Up to 20 scalar non-`$mcp_` properties, at most 2 KB, kept as `extra` |
 | Daily ceiling per location | 2,000,000 events or 5 GB, then `quota_exceeded` until UTC midnight |
 
@@ -92,7 +95,9 @@ The daily ceiling is checked every 5 minutes, so a location can pass it by up to
 | HIPAA location | 403 | `{ status: 0, code: 'hipaa_restricted' }` |
 | Rate guard or daily ceiling | 429 with `Retry-After` | `{ status: 0, code }`, `code` `rate_limited` or `quota_exceeded` |
 | Body over 8 MB | 413 | `{ status: 0, code: 'body_too_large' }` |
-| Mixed batch | 400 | `mixed_batch` |
+| Mixed batch | 400 | `{ status: 0, code: 'mixed_batch' }` |
+
+Every refusal also carries a human-readable `error` string.
 
 Delivery is at least once. A retried batch can store an event twice.
 

@@ -16,7 +16,10 @@ With `context: true` (the default), the SDK adds an optional `context` string to
     "type": "object",
     "properties": {
       "query": { "type": "string" },
-      "context": { "type": "string", "description": "…" }
+      "context": {
+        "type": "string",
+        "description": "Optional. One sentence on why you are calling this tool and what the user is trying to get done. Used only for analytics."
+      }
     },
     "required": ["query"]
   }
@@ -34,7 +37,7 @@ The agent may fill it in. The SDK stores it as the call's intent (at most 1 KB, 
 
 ### Intent from your own code
 
-`intentFallback(call)` returns an intent for calls with no `context`, for example from a header your gateway sets. Those intents are stored with `intent_source: 'fallback'`. Intents from the argument are `context_parameter`.
+`intentFallback({ toolName, arguments, info })` returns an intent for calls with no `context`, for example from a header your gateway sets. Those intents are stored with `intent_source: 'fallback'`. Intents from the argument are `context_parameter`.
 
 ## Reading intents
 
@@ -77,14 +80,16 @@ The window is fixed. Clusters ignore the page's time range and filters, and `GET
 
 | `status` | Meaning |
 | --- | --- |
-| `no_key` | No model key for the client or agency |
-| `none` | No snapshot yet, or fewer than 20 intents |
-| `computing` | A run is in progress |
-| `ready` | `clusters` holds the snapshot, with `computed_at`, `provider`, `model` and `coverage` |
-| `error` | The last run failed. `error` says why. Runs retry with backoff up to 24 hours |
+| `no_key` | No model key for the client or agency. `error` says to add one |
+| `none` | No snapshot. When the last run found fewer than 20 distinct intents, `error` starts with `too_few:` |
+| `computing` | A run is in progress. The previous snapshot, if still unexpired, is returned with it |
+| `ready` | `clusters` holds the snapshot, with `computed_at`, `window`, `provider`, `model` and `coverage` |
+| `error` | The last run failed and no unexpired snapshot exists. `error` says why. Runs retry after 1 hour, doubling up to 24 hours |
+
+A failed run never hides a good snapshot: while an unexpired snapshot exists, the status is `ready`.
 
 `coverage` says how much was clustered: `intents_considered` of `intents_total`, and the share of calls they hold. `unclustered` counts what was left out.
 
 ### Recompute
 
-`POST /client/v1/mcp-analytics/intents/clusters/recompute` starts a run now and answers `202 { status: 'computing' }`. It needs `mcp_analytics:write` on a scoped key, and is limited to one per hour per location. It answers `409 no_model_key` without a key and `409 already_computing` while a run is going.
+`POST /client/v1/mcp-analytics/intents/clusters/recompute` starts a run now and answers `202 { status: 'computing' }`. It needs `mcp_analytics:write` on a scoped key, and is limited to one per hour per location. It answers `409 no_model_key` without a key, `429 rate_limited` with `Retry-After: 3600` for a second call within the hour, and `409 already_computing` while a run is going.

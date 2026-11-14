@@ -30,12 +30,12 @@ Every route answers **403 `hipaa_restricted`** on a HIPAA location. If the locat
 
 ## Time windows and filters
 
-Every route except `/intents/clusters` and `/setup` takes a window:
+Every route except `/calls/{uuid}`, `/intents/clusters` and `/setup` takes a window:
 
 | Param | Meaning |
 | --- | --- |
-| `range` | `1h`, `6h`, `24h`, `7d`, `30d` or `90d`. Default `7d`. |
-| `from`, `to` | ISO 8601. At most 90 days, the retention. |
+| `range` | `1h`, `6h`, `24h`, `7d`, `30d` or `90d`, ending now. Default `7d` (`90d` on `/sessions/{session_id}`). |
+| `from`, `to` | ISO 8601. `to` defaults to now and needs `from`. At most 90 days, the retention. Sending `range` with `from` answers `400 invalid_range`. |
 | `server` | One MCP server name |
 | `client` | One MCP client name, as reported in `initialize` |
 
@@ -66,7 +66,9 @@ Full request and response schemas are in the MCP Analytics API reference.
 
 ## Paging
 
-`GET /calls` takes `limit` 1 to 200 (default 50), `order` and `cursor`, and returns `next_cursor` while more exist. `meta.truncated` says the page was cut. `GET /sessions` pages the same way. `GET /sessions/{session_id}` returns `meta.complete: false` and a `next_cursor` when the session has more events than one page.
+`GET /calls` takes `limit` 1 to 200 (default 50), `order` (`desc` or `asc`) and `cursor`, and returns `next_cursor` while more exist. `GET /sessions` takes `limit` 1 to 200 (default 50) and `cursor`. `GET /sessions/{session_id}` returns up to `limit` events (at most 500, the default) and, when the session has more, `meta.complete: false` and `meta.next_cursor` to pass back as `cursor`.
+
+Other limits: `/tools` 1 to 500 (default 100), `/tools/{tool}/errors` 1 to 100 (default 20), `/breakdown` 1 to 500 (default 100), `/intents` 1 to 500 (default 100), `/missing-capabilities` 1 to 200 (default 50). `q` on `/calls` searches tool names, intents and error messages.
 
 `GET /calls` returns tool calls only by default. `event` takes a comma list of `tool_call`, `tools_list`, `initialize`, `resource_read` and `missing_capability`.
 
@@ -86,7 +88,8 @@ Parameters, responses, intents and missing-capability reports are text from agen
 | 402 | `feature_not_in_plan` |
 | 403 | `hipaa_restricted`, `insufficient_scope` |
 | 404 | `not_found` |
-| 405 | Method not allowed |
+| 405 | `method_not_allowed` |
 | 409 | `no_model_key`, `already_computing` |
-| 429 | `rate_limited`: 120 reads per minute per location, one recompute per hour |
-| 503 | `privacy_unknown` |
+| 429 | `rate_limited`, with `Retry-After`: 120 requests per minute per location, one recompute per hour |
+| 502 | `query_failed`: the analytics store did not answer |
+| 503 | `privacy_unknown`, `not_configured`, `lookup_failed`. Retry |

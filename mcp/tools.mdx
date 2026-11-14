@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 343 tools across
-  33 scope families — with the scope each one needs and the
+  Every tool the Mythic MCP server exposes — 359 tools across
+  34 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 343 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 359 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -124,6 +124,28 @@ OpenTelemetry log records sent over OTLP: search, record detail, volume, service
 | `list_log_pattern_occurrences`<br /><span style={{opacity: 0.7}}>List Log Pattern Occurrences</span> | `logs:read` | The records of ONE pattern, paged exactly like search_logs (next_cursor). | `GET /client/v1/logs/patterns/:id/occurrences` |
 | `get_log_digest`<br /><span style={{opacity: 0.7}}>Get Log Digest</span> | `logs:read` | START HERE for logs. | `GET /client/v1/logs/digest` |
 | `get_trace_logs`<br /><span style={{opacity: 0.7}}>Get Trace Logs</span> | `logs:read` | Every log record that shares one trace id (one request across services), oldest first, up to 500, with a summary: start, end, duration, level counts, services and spans (span_id, services, first/last time, r… | `GET /client/v1/logs/traces/:trace_id` |
+
+## MCP Analytics
+
+Traffic from the client’s own MCP servers sent by @mythic-analytics/mcp: tool usage, errors, latency, sessions, agent intents and their clusters, missing capabilities and setup status. Recomputing intent clusters is the only write.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `get_mcp_overview`<br /><span style={{opacity: 0.7}}>Get MCP Overview</span> | `mcp_analytics:read` | START HERE for MCP analytics. | `GET /client/v1/mcp-analytics/overview` |
+| `get_mcp_timeseries`<br /><span style={{opacity: 0.7}}>Get MCP Timeseries</span> | `mcp_analytics:read` | Tool calls, errors, sessions and p95 latency per time bucket (bucket size chosen from the window; empty buckets are zeros). | `GET /client/v1/mcp-analytics/timeseries` |
+| `list_mcp_tools`<br /><span style={{opacity: 0.7}}>List MCP Tools</span> | `mcp_analytics:read` | Per-tool usage: calls, errors, error rate, p50/p95 latency, sessions, users, response sizes, repeat_calls (third and later identical calls in one session, a retry signal), and whether the tool was advertised… | `GET /client/v1/mcp-analytics/tools` |
+| `get_mcp_tool`<br /><span style={{opacity: 0.7}}>Get MCP Tool</span> | `mcp_analytics:read` | One tool: its usage row and description, calls over time, calls by MCP client, and the top intents agents gave when calling it. | `GET /client/v1/mcp-analytics/tools/:tool` |
+| `list_mcp_tool_errors`<br /><span style={{opacity: 0.7}}>List MCP Tool Errors</span> | `mcp_analytics:read` | How one tool fails: errors grouped by error type and a masked message pattern (numbers, ids and quoted text replaced), with counts, sessions and a sample event uuid for get_mcp_call. | `GET /client/v1/mcp-analytics/tools/:tool/errors` |
+| `list_mcp_calls`<br /><span style={{opacity: 0.7}}>List MCP Calls</span> | `mcp_analytics:read` | MCP events newest first (default tool calls only), filtered by tool, status, session, distinct_id or a search over tool name, intent and error message. | `GET /client/v1/mcp-analytics/calls` |
+| `get_mcp_call`<br /><span style={{opacity: 0.7}}>Get MCP Call</span> | `mcp_analytics:read` | One MCP event with its full redacted parameters and response (null when not captured or over 24 KB), error, intent, client, transport and session. | `GET /client/v1/mcp-analytics/calls/:uuid` |
+| `list_mcp_sessions`<br /><span style={{opacity: 0.7}}>List MCP Sessions</span> | `mcp_analytics:read` | MCP sessions most recent first: duration, calls, errors, tools used, client, the first intent and missing-capability reports. | `GET /client/v1/mcp-analytics/sessions` |
+| `get_mcp_session`<br /><span style={{opacity: 0.7}}>Get MCP Session</span> | `mcp_analytics:read` | One session with every event in order (up to 500 per page; meta.complete=false means pass meta.next_cursor as cursor). | `GET /client/v1/mcp-analytics/sessions/:session_id` |
+| `get_mcp_breakdown`<br /><span style={{opacity: 0.7}}>Get MCP Breakdown</span> | `mcp_analytics:read` | Tool calls broken down by one dimension: client, client_version, server_version, protocol_version, transport, model or category. | `GET /client/v1/mcp-analytics/breakdown` |
+| `list_mcp_intents`<br /><span style={{opacity: 0.7}}>List MCP Intents</span> | `mcp_analytics:read` | Distinct intents agents gave for their tool calls (the optional context argument), most-called first, with error rate, sessions and the tools each was routed to. | `GET /client/v1/mcp-analytics/intents` |
+| `get_mcp_intent_clusters`<br /><span style={{opacity: 0.7}}>Get MCP Intent Clusters</span> | `mcp_analytics:read` | Intents grouped by meaning, from the latest fixed 7-day snapshot computed daily with the agency's own model key (BYOK embeddings). | `GET /client/v1/mcp-analytics/intents/clusters` |
+| `list_mcp_missing_capabilities`<br /><span style={{opacity: 0.7}}>List MCP Missing Capabilities</span> | `mcp_analytics:read` | Capabilities agents reported missing through the get_more_tools tool, grouped by normalized text, with reports, sessions, users, how often the agent was blocked, the tools it tried, and the latest goal. | `GET /client/v1/mcp-analytics/missing-capabilities` |
+| `get_mcp_setup_status`<br /><span style={{opacity: 0.7}}>Get MCP Setup Status</span> | `mcp_analytics:read` | Install status of @mythic-analytics/mcp for a client: its publishable key and ingest URL, whether ingestion is paused by the daily volume ceiling, first and last event, events in the last 24 hours, and the M… | `GET /client/v1/mcp-analytics/setup` |
+| `recompute_mcp_intent_clusters`<br /><span style={{opacity: 0.7}}>Recompute MCP Intent Clusters</span> | `mcp_analytics:write` | Recompute a client's intent clusters now instead of waiting for the daily run. | `POST /client/v1/mcp-analytics/intents/clusters/recompute` |
 
 ## Heatmaps
 
@@ -594,6 +616,7 @@ Agency-wide keys only — a key bound to one client cannot hold this scope.
 | Tool | Scope | What it does | Proxies |
 | --- | --- | --- | --- |
 | `get_agency_stats`<br /><span style={{opacity: 0.7}}>Get Agency Stats</span> | `agency:read` | Cross-location rollup for the whole agency: one row per location with event volume, unique users, unique sessions over a date window, plus the all-time live person count. | `GET /client/v1/agency/stats` |
+| `get_agency_mcp_summary`<br /><span style={{opacity: 0.7}}>Get Agency MCP Summary</span> | `agency:read` | MCP analytics across the agency's clients: one row per location with tool calls, errors, error rate, sessions and the last MCP event. | `GET /client/v1/agency/mcp-analytics` |
 | `get_agency_destination_health`<br /><span style={{opacity: 0.7}}>Get Agency Destination Health</span> | `agency:read` | Delivery health of every location's activation destinations over a trailing window — one row per (location, destination) with success rate, failure counts, and the last error. | `GET /client/v1/agency/destinations/health` |
 | `get_agency_destination_quality`<br /><span style={{opacity: 0.7}}>Get Agency Destination Quality</span> | `agency:read` | Meta dataset quality for every client with a Meta CAPI destination, worst first — the answer to 'which of my clients has bad Meta tracking'. | `GET /client/v1/agency/destinations/quality` |
 | `get_agency_destination_quality_trend`<br /><span style={{opacity: 0.7}}>Get Agency Destination Quality Trend</span> | `agency:read` | How every client's Meta match quality MOVED, day by day — one row per (day, location) with that day's worst scored event, its match quality, and the critical/warning counts. | `GET /client/v1/agency/destinations/quality/trend` |

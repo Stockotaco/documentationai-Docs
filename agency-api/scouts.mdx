@@ -207,6 +207,7 @@ scout is created.
 | `competitor_creative` | `competitor_ads`, `creative_analysis` (read only) | Weekly (Monday 08:00): what competitors' Meta ads say, the hooks, angles, formats and E.P.I.C. patterns of ads running 30+ days, what is new this week, gaps for the client, and 3-5 ready ad prompts in `artifacts.ad_prompts` (same shape as [ad prompts](/competitor-ads-api/overview#ad-prompts)), written for the client's saved brand (`PUT /client/v1/competitor-ads/brand`). Compares against the client's own ads by spend when its plan has creative analysis. A prompt may cite only competitor ads running 30+ days that the run read, rewrite only an ad it read in full, quoting that ad's text in each section's `original`, and cite own ads only by an `ad_id` it read. Needs the competitor ads plan feature |
 | `creative_performance` | `creative_analysis` only | **Creative performance**, weekly Monday 08:00 in the client timezone. Own-ad allocation, recurring concepts, analysis/spend coverage gaps and evidence-linked next tests. Performance assessment is explicitly unavailable until compatible ad-level outcomes, objective, currency and attribution windows are connected. Spend and creation age do not prove success. Uses an existing saved brand profile when available; no brand is required. Needs `creative_analysis`, not competitor access. Ordinary markdown reports, no new artifacts |
 | `creative_readiness` | `creative_analysis` only | **Creative readiness**, daily 08:00. Exact stored-population source/sync freshness, errors, queue counts/ratios and active/spending analysis gaps. Short queues are normal; investigate pending analysis/transcripts older than 48 hours, without calling media stuck when its enqueue age is unknown. Edits recurring findings instead of repeating alarms. Closes only its own matching findings when a complete current-run intelligence result explicitly marks the check healthy, with evidence. Dry runs only preview resolution. Needs `creative_analysis`, not competitor access |
+| `mcp_tools` | `mcp_analytics` only | Daily read of the client's own [MCP server traffic](/mcp-analytics/alerts-and-scouts#the-mcp_tools-scout-skill): tools that fail, make agents retry, run slow or return too much, tools nobody calls, and capabilities agents report missing, weighted by the sessions and users they reach. Quiet under 50 tool calls a week. Needs the MCP analytics plan feature, and reads only in standard privacy mode |
 | `custom` | `exceptions`, `logs`, `events`, `sessions`, `links`, `destinations` | Your own instructions over every surface a scout can read |
 
 `instructions` (up to 8,000 characters) are your notes, added after the
@@ -215,7 +216,7 @@ skill's playbook: what to watch, what to ignore, business context. The
 
 Each read surface maps to a scope: `exceptions:read`, `logs:read`,
 `sessions:read`, `events:read`, `links:read`, `destinations:read`,
-`contracts:read`, `constraints:read`, and `airbyte:read` for the sync signals
+`contracts:read`, `constraints:read`, `mcp_analytics:read`, and `airbyte:read` for the sync signals
 a `data_pipeline` scout reads. The scout
 itself reads with only the scopes of its skill's surfaces, bound to its one
 client, under the same plan, privacy and HIPAA rules as your own calls. If a
@@ -470,6 +471,8 @@ the condition is real (its own threshold), so signals are facts, not guesses.
 | `sessions` | `sessions` | The site keeps starting new sessions |
 | `drift` | `incrementality` | An experiment drifted |
 | `replay_vision` | `replay_vision` | A Replay Vision monitor flagged a session |
+| `mcp_tools` | `mcp_analytics` | A tool on the client's MCP server is failing |
+| `mcp_reports` | `mcp_analytics` | The weekly MCP analytics report |
 
 `GET /scouts/signals` lists them, newest first (`location_id`, `status`
 open, resolved or all, `source`, `attached`, `limit`, `cursor`), each with the

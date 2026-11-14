@@ -58,6 +58,8 @@ https://mythic-analytics.gulp.workers.dev/client/v1/alerts
 | `exceptions` | A browser error issue is new (first seen in the last 7 days, not in the 90 before) and hit 3 or more sessions in 24 hours, or spikes: 10 or more sessions in 24 hours and at least 3 times its daily average over the 7 days before. One alert per issue; it resolves when the issue falls back under the bar. Not raised for HIPAA clients | `warning`, `critical` at 100+ sessions | Daily, ~08:40 UTC |
 | `destinations` | An enabled destination fails 5 deliveries in a row, or under 50% of 10 or more deliveries succeed in 24 hours. One alert per destination; it resolves on recovery or when the destination is disabled | `warning` | Hourly |
 | `destinations` | The platform rejects a destination's credential: the latest delivery failed with 401 or 403 | `critical` | Hourly |
+| `mcp_tools` | A tool on the client's own [MCP server](/mcp-analytics/alerts-and-scouts) had 10 or more calls in the last 15 minutes and half or more failed. One alert per tool; it resolves at 5 or more calls with 20% or fewer failing. Numbers, tool and server names and error types only. Not raised for HIPAA clients or plans without MCP analytics | `warning`, `critical` at 50+ calls with 90%+ failing | Every 5 minutes |
+| `mcp_reports` | The weekly MCP analytics report for a client with MCP traffic: calls, error rate, sessions, the 3 worst tools, intent clusters and missing-capability reports | `info` | Mondays, ~09:10 UTC |
 
 `airbyte` covers connections created through Mythic. A connection built
 directly in Airbyte has no Mythic record, so its syncs raise nothing.
