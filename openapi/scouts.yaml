@@ -253,6 +253,171 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "503": { $ref: "#/components/responses/Unavailable" }
+  /client/v1/scouts/reports/{id}/fix/approve:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      summary: Approve a fix
+      operationId: approveScoutFix
+      description: >
+        Apply the fix a scout proposed on this report. The scout never writes:
+        Mythic applies the fix with **your key** through the existing write
+        route (ignore_exception_issue: `PUT
+        /client/v1/data/exceptions/issues/{issue_id}/ignore`; update_link:
+        `PATCH /client/v1/links/{id}`; update_destination: `PATCH
+        /client/v1/destinations/{id}`), so that route's scopes, validation
+        and rate limit apply.
+
+
+        Mythic claims the fix for 5 minutes, reads the target and stores the
+        fields the fix sets as `before`, checks the claim is still live,
+        writes the change, reads the target again (`after_observed`, display
+        only) and settles. `after` is the fix's expected result. The fix
+        becomes `applied`, the report is resolved with the note `Fix applied:
+        <title>` and its re-check is scheduled after the fix's
+        `success_check.window_days`. A missing target, a guard failure or a
+        refused read releases the claim and changes nothing.
+
+
+        A refused write (the route answered 4xx: 422, `outcome: refused`)
+        leaves the fix `failed` with `before` cleared, so the next approve
+        reads the target fresh. An unconfirmed write (a throw, a 25-second
+        timeout or a 5xx: 502, `outcome: unconfirmed`) leaves the fix
+        `failed` and keeps `before`. A retry then settles `applied` without
+        writing again when the target already holds the fix's result.
+        Approving again is allowed in both cases. Approving an applied fix
+        writes nothing and returns `already: true`.
+
+
+        The target routes have no compare-and-set. Each write is sent only
+        while the claim is live, but a write already sent can land after the
+        claim expires, and an edit made between Mythic's read and its write is
+        overwritten.
+
+
+        Needs the read scope of every surface in the report's `families` and,
+        on an `mcp_` key, `<fix family>:read` and `<fix family>:write`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FixIdRequest" }
+      responses:
+        "200":
+          description: "Applied. `already: true` when it was already applied."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      fix: { $ref: "#/components/schemas/Fix" }
+                      report: { $ref: "#/components/schemas/ReportListItem" }
+                      already: { type: boolean, example: false }
+        "400": { $ref: "#/components/responses/FixBadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/FixForbidden" }
+        "404": { $ref: "#/components/responses/FixNotFound" }
+        "409":
+          description: >
+            fix_target_missing (the link, among the client's first 2,000, or
+            the destination does not exist), fix_in_progress (another approve
+            or undo holds the 5-minute claim), fix_state_conflict (the fix was
+            rejected or undone), fix_report_closed (the report is not open or
+            snoozed) or fix_claim_lost (this request's claim expired or was
+            taken over: before its write, so nothing was written, or before it
+            settled, so its write may have landed and the next approve reads
+            the target again).
+          content: { application/json: { schema: { $ref: "#/components/schemas/FixError" } } }
+        "422":
+          description: >
+            fix_invalid (the link's `destination_url` would change hostname,
+            or the destination has no valid `trigger_rules` to restore later)
+            or fix_apply_failed (the target route answered 4xx; `details` has
+            `stage`, `outcome: refused`, `route_status` and `route_error`. On
+            `stage: apply` the fix is now `failed` with `before` cleared).
+          content: { application/json: { schema: { $ref: "#/components/schemas/FixError" } } }
+        "502": { $ref: "#/components/responses/FixUnconfirmed" }
+        "503": { $ref: "#/components/responses/FixUnavailable" }
+  /client/v1/scouts/reports/{id}/fix/reject:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      summary: Reject a fix
+      operationId: rejectScoutFix
+      description: >
+        Turn down a `proposed` or `failed` fix. Nothing is written to the
+        target and the report keeps its status. The scout does not propose the
+        same fix on this report again. The optional `reason` is recorded on the
+        fix and in the report history. Same scope rules as approve.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [fix_id]
+              properties:
+                fix_id: { type: string, format: uuid, description: "`fix.id` from the report." }
+                reason: { type: string, maxLength: 1000, nullable: true, description: "Why. An empty string is stored as null." }
+      responses:
+        "200": { $ref: "#/components/responses/FixResult" }
+        "400": { $ref: "#/components/responses/FixBadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/FixForbidden" }
+        "404": { $ref: "#/components/responses/FixNotFound" }
+        "409":
+          description: "fix_state_conflict (the fix is not proposed or failed) or fix_in_progress (an approve holds the claim)."
+          content: { application/json: { schema: { $ref: "#/components/schemas/FixError" } } }
+        "503": { $ref: "#/components/responses/FixUnavailable" }
+  /client/v1/scouts/reports/{id}/fix/undo:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      summary: Undo a fix
+      operationId: undoScoutFix
+      description: >
+        Restore the `before` values of an `applied` fix, with your key, through
+        the same write route. Mythic claims the fix, then reads the target:
+        if any field the fix set no longer equals `after`, someone changed it
+        since and the undo is refused with `409 fix_drifted` (the fix stays
+        `applied`, nothing is recorded), so it never overwrites a later
+        change. Fields the fix did not set are not compared and are left as
+        they are. An ignored exception issue with no events in 90 days can
+        always be undone. The fix becomes `undone`; the report stays resolved
+        and its scheduled re-check runs the normal way. A refused undo (422)
+        keeps the fix `applied` with `error` set. After an unconfirmed undo
+        (502), a retry settles `undone` without writing when the target
+        already holds `before`. The same residual write window as approve
+        applies. Same scope rules as approve.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FixIdRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/FixResult" }
+        "400": { $ref: "#/components/responses/FixBadRequest" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "403": { $ref: "#/components/responses/FixForbidden" }
+        "404": { $ref: "#/components/responses/FixNotFound" }
+        "409":
+          description: >
+            fix_drifted (the target changed after the fix was applied;
+            `details.current` and `details.expected` hold only the fields the
+            fix set), fix_target_missing (the link or destination no longer
+            exists), fix_in_progress, fix_state_conflict (the fix is not
+            applied) or fix_claim_lost (the claim expired or was taken over).
+          content: { application/json: { schema: { $ref: "#/components/schemas/FixError" } } }
+        "422":
+          description: "fix_apply_failed: the target route answered 4xx to the restore. `details` has `stage: undo`, `outcome: refused`, `route_status` and `route_error`. The fix stays applied."
+          content: { application/json: { schema: { $ref: "#/components/schemas/FixError" } } }
+        "502": { $ref: "#/components/responses/FixUnconfirmed" }
+        "503": { $ref: "#/components/responses/FixUnavailable" }
   /client/v1/scouts/signals:
     get:
       summary: List signals
@@ -704,6 +869,36 @@ components:
     Unprocessable:
       description: "model_provider_mismatch, invalid_delivery_channel or scout_limit."
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    FixResult:
+      description: The fix and the report after the change.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success: { type: boolean, example: true }
+              data:
+                type: object
+                properties:
+                  fix: { $ref: "#/components/schemas/Fix" }
+                  report: { $ref: "#/components/schemas/ReportListItem" }
+    FixBadRequest:
+      description: "invalid_json (the body is not JSON) or invalid_fix_request (an unknown key, a missing or malformed `fix_id`, `reason` on approve or undo, or a reason over 1,000 characters). `details` lists every problem."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    FixForbidden:
+      description: "agency_required (an `sk_` or viewer key), insufficient_scope (with `required`; the key lacks a read scope of the report's families, or the fix family's read or write scope) or hipaa_restricted (the report was built from visitor data on a HIPAA location)."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    FixNotFound:
+      description: "not_found (no such report) or fix_not_found (the fix is not on this report, or a newer proposal replaced it)."
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    FixUnconfirmed:
+      description: "fix_apply_failed with `details.outcome: unconfirmed`: the write threw, timed out after 25 seconds or answered 5xx (`route_status` is the 5xx status, else null), or a read under the claim threw (`stage: snapshot`). Mythic does not know whether the change landed. Sending the same request again is safe."
+      content: { application/json: { schema: { $ref: "#/components/schemas/FixError" } } }
+    FixUnavailable:
+      description: "The plan could not be read (the entitlement code), the location's privacy mode could not be read (privacy_unknown), or fix_unavailable. Retry after Retry-After seconds."
+      headers:
+        Retry-After: { schema: { type: integer, example: 30 } }
+      content: { application/json: { schema: { $ref: "#/components/schemas/FixError" } } }
     Unavailable:
       description: "entitlements_unavailable or privacy_unknown; retry after Retry-After seconds."
       headers:
@@ -721,6 +916,96 @@ components:
             required: { type: string, description: "The scope to add, on insufficient_scope." }
             message: { type: string }
             details: { type: array, items: { type: string } }
+    FixError:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string, example: fix_apply_failed }
+            message: { type: string }
+            required: { type: string, description: "The scope to add, on insufficient_scope." }
+            details:
+              description: "A list of strings on invalid_fix_request. On fix_apply_failed: { stage (snapshot, apply or undo), outcome (refused on 422, unconfirmed on 502; absent on a refused snapshot read), route_status (null when the request threw or timed out), route_error (a string for links, { code, message, details } otherwise) }. On fix_drifted: { current, expected }, each holding only the fields the fix set."
+    FixIdRequest:
+      type: object
+      additionalProperties: false
+      required: [fix_id]
+      properties:
+        fix_id: { type: string, format: uuid, description: "`fix.id` from the report." }
+    FixSummary:
+      type: object
+      nullable: true
+      description: "On list rows and PATCH responses: the report's fix in short. Null when the scout never proposed one. Absent on restricted rows."
+      properties:
+        kind: { type: string, enum: [ignore_exception_issue, update_link, update_destination] }
+        state: { type: string, enum: [proposed, applied, rejected, failed, undone] }
+    Fix:
+      type: object
+      description: "A change a scout proposed for one report. Only a person's approval applies it, with that person's key."
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [ignore_exception_issue, update_link, update_destination] }
+        family: { type: string, enum: [exceptions, links, destinations], description: "The surface it changes. An `mcp_` key needs `<family>:read` and `<family>:write` to act on it." }
+        state: { type: string, enum: [proposed, applied, rejected, failed, undone, superseded], description: "superseded: a newer proposal replaced it. Never returned on a report." }
+        target: { type: string, description: "ignore_exception_issue: the issue id (v1:<32 hex>). update_link: the link id. update_destination: the destination id." }
+        title: { type: string, maxLength: 140 }
+        rationale: { type: string, maxLength: 600 }
+        payload:
+          type: object
+          additionalProperties: true
+          description: "The fields to set. ignore_exception_issue: { note? } (note up to 500 characters; may be empty). update_link: { destination_url?, utm_passthrough? }, at least one; destination_url must keep the link's hostname. update_destination: { enabled?, trigger_rules? }, at least one; trigger_rules replaces the whole object and may not hold custom_js rules."
+        success_check: { $ref: "#/components/schemas/FixCheck" }
+        before: { type: object, nullable: true, additionalProperties: true, description: "The target as Mythic read it under the approve's claim, holding only the fields the fix sets. ignore_exception_issue: { ignored, note }. update_link and update_destination: only the payload's keys, so a fix that sets only utm_passthrough has { utm_passthrough }. Cleared when the route refuses the write." }
+        after: { type: object, nullable: true, additionalProperties: true, description: "The fix's expected result for the same fields, never a later read. Undo compares the target with it." }
+        after_observed: { type: object, nullable: true, additionalProperties: true, description: "The same fields as read straight after the write. Display only. Null when that read failed or the ignored issue answered 404." }
+        error:
+          type: object
+          nullable: true
+          description: "Set on a failed fix, and on an applied fix whose undo was refused."
+          properties:
+            stage: { type: string, enum: [apply, undo] }
+            outcome: { type: string, enum: [refused, unconfirmed], description: "refused: the route answered 4xx. unconfirmed: the request threw, timed out or answered 5xx." }
+            route_status: { type: integer, nullable: true }
+            route_error: { description: "A string for links. { code, message, details } otherwise." }
+            message: { type: string }
+        check_result: { $ref: "#/components/schemas/FixCheckResult" }
+        check_evaluated_at: { type: string, format: date-time, nullable: true }
+        scout_id: { type: string, format: uuid, nullable: true }
+        run_id: { type: string, format: uuid, nullable: true, description: "The run that proposed it." }
+        decided_by: { type: string, nullable: true, description: "The key that approved or rejected it: key:<key name>, mcp key or agency key." }
+        decided_at: { type: string, format: date-time, nullable: true }
+        reject_reason: { type: string, nullable: true }
+        applied_at: { type: string, format: date-time, nullable: true }
+        undone_at: { type: string, format: date-time, nullable: true }
+        undone_by: { type: string, nullable: true }
+        in_progress: { type: boolean, description: "An approve or undo holds the 5-minute claim right now." }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    FixCheck:
+      type: object
+      description: "How Mythic tells whether the fix worked. Measured from max(applied_at, now minus window_days) to now, never before the fix: exception_issue_sessions and tagged_session_share start at the next UTC midnight after that time, destination_success_rate counts whole hours back from now. A window under 12 hours gives unknown with reason window_too_short."
+      properties:
+        metric: { type: string, enum: [exception_issue_sessions, tagged_session_share, event_count_per_day, destination_success_rate], description: "exception_issue_sessions (ignore_exception_issue, lte, integer 0 to 1,000,000). tagged_session_share (update_link, gte, 0 to 1). event_count_per_day and destination_success_rate (update_destination, gte; 0 to 100,000,000 and 0 to 1)." }
+        params: { type: object, additionalProperties: true, description: "tagged_session_share: { pathname? (starts with /), min_sessions? (1 to 100,000, default 50) }. event_count_per_day: { event } (required). destination_success_rate: { min_deliveries? (1 to 100,000, default 20) }. Empty otherwise." }
+        comparison: { type: string, enum: [lte, gte] }
+        threshold: { type: number, example: 5 }
+        window_days: { type: integer, minimum: 1, maximum: 7, description: "Also the days until the report's re-check." }
+    FixCheckResult:
+      type: object
+      nullable: true
+      description: "The success check's result at the re-check. Null until then."
+      properties:
+        status: { type: string, enum: [pass, fail, unknown], description: "A pass or fail recorded in the 30 minutes before the due re-check decides it, before open signals. pass: the re-check records recovered. fail: not_recovered, and a recurrence report is filed or the open one linked. unknown: the normal re-check runs (signals, then a scout run)." }
+        metric: { type: string }
+        comparison: { type: string, enum: [lte, gte] }
+        threshold: { type: number }
+        window_days: { type: integer }
+        observed: { type: number, nullable: true }
+        sample: { type: integer, description: "Sessions or deliveries measured. Only on metrics that have one." }
+        reason: { type: string, example: too_little_traffic, description: "Only on unknown. One of read_failed_<HTTP status>, too_little_traffic, too_few_deliveries, no_complete_day, window_too_short (under 12 hours to measure; no read is made), destination_missing, client_unavailable or unknown_metric." }
+        evaluated_at: { type: string, format: date-time }
     Schedule:
       type: object
       properties:
@@ -898,6 +1183,7 @@ components:
             headline: { type: string, description: "First line of the summary, up to 300 characters. Absent on restricted rows." }
             summary_md: { type: string, description: "Empty on restricted rows only." }
             restricted: { $ref: "#/components/schemas/Restricted" }
+            fix: { $ref: "#/components/schemas/FixSummary" }
     Report:
       allOf:
         - $ref: "#/components/schemas/ReportBase"
@@ -906,6 +1192,11 @@ components:
             summary_md: { type: string }
             actionability_explanation: { type: string }
             suggested_action: { type: string }
+            fix:
+              description: "The report's latest fix that was not replaced, rejected and undone ones included. Null when the scout never proposed one. PATCH responses carry the short FixSummary here instead."
+              allOf:
+                - $ref: "#/components/schemas/Fix"
+              nullable: true
             evidence: { type: array, items: { $ref: "#/components/schemas/Evidence" } }
             signals: { type: array, description: "The signals attached to this report. Each counts as evidence.", items: { $ref: "#/components/schemas/Signal" } }
             artifacts:
@@ -914,17 +1205,19 @@ components:
               description: "Structured data next to the markdown. competitor_creative reports carry { ad_prompts: [...] }: 3-5 prompts in the shape of POST /client/v1/competitor-ads/ad-prompts (see the competitor ads API), each citing only ads the run read: competitor ads that had run 30+ days, a rewrite of one it read in full, and the client's own ad_ids. At most 90,000 bytes (UTF-8)."
             history:
               type: array
-              description: "Filed, edited and status entries, oldest first."
+              description: "Filed, edited, status, re-check and fix entries, oldest first. Applying a fix also adds a status entry (resolved, note `Fix applied: <title>`) and a recheck entry (scheduled)."
               items:
                 type: object
                 properties:
                   at: { type: string, format: date-time }
-                  kind: { type: string, enum: [filed, edited, status, recheck] }
-                  run_id: { type: string, format: uuid }
+                  kind: { type: string, enum: [filed, edited, status, recheck, fix] }
+                  run_id: { type: string, format: uuid, description: "On fix entries, only when proposed." }
                   scout_id: { type: string, format: uuid }
-                  status: { type: string }
-                  by: { type: string }
-                  note: { type: string }
+                  status: { type: string, description: "On fix entries: proposed, applied, failed, rejected, undone or undo_failed." }
+                  by: { type: string, description: "On fix entries: scout, or the key that acted." }
+                  note: { type: string, description: "On fix entries: the reject reason or the error message (rejected, failed, undo_failed)." }
+                  fix_id: { type: string, format: uuid, description: "Fix entries only." }
+                  fix_kind: { type: string, description: "Fix entries only." }
             provider: { type: string, nullable: true }
             model_used: { type: string, nullable: true }
     Signal:

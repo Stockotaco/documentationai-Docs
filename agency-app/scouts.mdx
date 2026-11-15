@@ -106,6 +106,9 @@ status, priority or scout.
 A resolved report stays resolved. On the day you picked, Mythic checks
 whether the problem actually went away:
 
+- If the report was resolved by an [approved fix](#approve-a-fix), Mythic
+  first measures the fix's own check. A clear pass or fail decides the
+  outcome. If there was too little to measure, it goes on to the steps below.
 - If the report's signals are still resolved and none fired again, it is
   marked **Stayed fixed** without a model call.
 - If one of its signals fired again, a new report is filed right away.
@@ -126,6 +129,34 @@ report page says which.
 Until the check runs, the resolved report's page lets you pick a different
 number of days (counted from the resolve) and click **Change date**, or click
 **Cancel re-check**. Nothing else on a resolved report can change.
+
+### Approve a fix
+
+Some scouts propose a fix with a report: ignore an error, change a short
+link's destination URL or UTM pass-through, or turn a destination on or off
+or change its trigger rules. The inbox row shows **Fix proposed**, and the
+report page shows the fix above the triage buttons. The scout never changes
+anything itself.
+
+- **Approve** opens a dialog with each field the fix changes, its value now
+  and after, and how Mythic will check that it worked (for example, how many
+  days it watches a metric). Confirm, and Mythic makes the change with your
+  agency's key, resolves the report and checks again after those days.
+- **Reject** asks for a reason. The scout does not propose the same fix on
+  that report again.
+- **Undo**, on an applied fix, shows the values it restores. If someone
+  changed a field the fix set after it was applied, undo is refused so their
+  change is kept. Changes to other fields do not block undo and stay as they
+  are.
+
+If the change is refused or Mythic could not confirm it, the fix shows
+**Failed** with the reason, and you can approve again or reject. Approving
+again after an unconfirmed change does not write twice. While an approve or
+undo is running, the fix is locked for up to 5 minutes.
+
+Mythic reads the setting just before it writes, and the write replaces it. An
+edit someone makes to the same setting in that moment is overwritten. See [Approved fixes](/agency-api/scouts#approved-fixes)
+for the API.
 
 To get new reports in Slack or a webhook, pick channels in the scout's
 **Delivery** step. Each new open report is sent once. Updates and suppressed
