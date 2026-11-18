@@ -277,7 +277,7 @@ paths:
                           fetch_cost_usd: { type: number, nullable: true }
                           analysis: { type: object, nullable: true, description: "The page tagged with the ad taxonomy: fields and tags." }
                           analysis_cost_usd: { type: number, nullable: true }
-                          ads: { type: array, items: { $ref: "#/components/schemas/Ad" } }
+                          ads: { type: array, description: "Each ad as in the list, with congruency in its detail form.", items: { allOf: [{ $ref: "#/components/schemas/Ad" }, { type: object, properties: { congruency: { $ref: "#/components/schemas/CongruencyDetail" } } }] } }
                           ads_truncated: { type: boolean }
         "404": { $ref: "#/components/responses/Error" }
   /client/v1/competitor-ads/summary:
@@ -444,7 +444,7 @@ components:
         skip_reason: { type: string, nullable: true, enum: [lead_form, messenger, instant_experience, app_store, social_profile, redirector, not_http, null] }
         score: { type: integer, nullable: true, minimum: 0, maximum: 100 }
         band: { type: string, nullable: true, enum: [high, medium, low, null], description: "high 70+, medium 40-69, low under 40." }
-        current: { type: boolean, description: "False when the page changed since this score; a re-score is pending." }
+        current: { type: boolean, description: "True only when the score read the current page version with the current scorer. Otherwise the score is history: a re-score is pending or failed." }
         summary: { type: string, nullable: true }
         mismatch_count: { type: integer, nullable: true }
         scored_at: { type: string, format: date-time, nullable: true }
@@ -758,6 +758,7 @@ components:
         first_seen_at: { type: string, format: date-time }
         last_seen_at: { type: string, format: date-time }
         last_seen_active_at: { type: string, format: date-time, nullable: true }
+        congruency: { $ref: "#/components/schemas/Congruency" }
     AdDetail:
       allOf:
         - $ref: "#/components/schemas/Ad"
