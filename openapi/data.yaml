@@ -335,6 +335,18 @@ paths:
 
 
         `GET /client/v1/data/events/breakdown?dimension=page&segment_id=9f4e...`
+
+
+        **One page**: pass `pathname` to count only events on that page path.
+        With `dimension=page` the response is one row of range totals for the
+        page (unique visitors and sessions are exact over the whole range, not
+        summed per day), and `value` echoes `pathname` as you sent it. With
+        `dimension=referring_domain` it lists the page's top referring
+        domains. Add `event_type=$pageview` so the counts cover page views
+        only, matching `/pages/daily`:
+
+
+        `GET /client/v1/data/events/breakdown?dimension=referring_domain&pathname=/status/acme&event_type=$pageview&limit=5`
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
@@ -369,6 +381,18 @@ paths:
             counts all events.
           schema:
             type: string
+        - name: pathname
+          in: query
+          required: false
+          description: >
+            Keep only events on this page path, such as `/pricing`. Exact
+            match, case-insensitive, and a trailing slash is ignored
+            (`/Pricing/` matches `/pricing`). Must start with `/` and carry no
+            query string or fragment.
+          schema:
+            type: string
+            maxLength: 2048
+            example: /status/acme
         - $ref: "#/components/parameters/SegmentId"
         - name: limit
           in: query
@@ -394,13 +418,107 @@ paths:
                         items:
                           $ref: "#/components/schemas/BreakdownRow"
         "400":
-          description: Unknown `dimension` (`invalid_dimension`), or no location bound (`location_required`)
+          description: Unknown `dimension` (`invalid_dimension`), a malformed `pathname` (`invalid_pathname`), or no location bound (`location_required`)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           $ref: "#/components/responses/SegmentNotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/NotConfigured"
+  /pages/daily:
+    get:
+      summary: Daily traffic for one page
+      operationId: getPageDaily
+      description: >
+        Page views, unique visitors and unique sessions per UTC day for one
+        page path, such as a public status page. Counts `$pageview` events.
+        The path matches exactly, case-insensitive, and a trailing slash is
+        ignored. Every day in the range has a row; days without views are
+        `0`. Unique visitors and sessions are exact per day, so do not sum
+        them across days: for range totals call `/events/breakdown` with
+        `dimension=page`, the same `pathname` and `event_type=$pageview`.
+
+
+        `GET /client/v1/data/pages/daily?pathname=/status/acme&date_from=2026-10-20&date_to=2026-11-18`
+      parameters:
+        - $ref: "#/components/parameters/LocationIdHeader"
+        - $ref: "#/components/parameters/LocationIdQuery"
+        - name: pathname
+          in: query
+          required: true
+          description: >
+            Page path, such as `/status/acme`. Must start with `/` and carry
+            no query string or fragment.
+          schema:
+            type: string
+            maxLength: 2048
+            example: /status/acme
+        - name: date_from
+          in: query
+          required: false
+          description: First day (`YYYY-MM-DD`, UTC, inclusive). Default 29 days before `date_to`.
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          required: false
+          description: Last day (`YYYY-MM-DD`, UTC, inclusive). Default today.
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: One row per day, oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  pathname:
+                    type: string
+                    description: The `pathname` you sent.
+                    example: /status/acme
+                  date_from:
+                    type: string
+                    format: date
+                    example: "2026-10-20"
+                  date_to:
+                    type: string
+                    format: date
+                    example: "2026-11-18"
+                  rows:
+                    type: integer
+                    description: Number of days in the range.
+                    example: 30
+                  cached:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PageDailyRow"
+        "400":
+          description: >
+            `invalid_param`: `pathname` missing or malformed, a date not in
+            `YYYY-MM-DD` form, `date_from` after `date_to`, or a range over 92
+            days. `location_required` when no location is bound.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -2572,6 +2690,26 @@ components:
         unique_sessions:
           type: integer
           example: 910
+    PageDailyRow:
+      type: object
+      description: One UTC day of traffic for one page.
+      properties:
+        day:
+          type: string
+          format: date
+          example: "2026-11-18"
+        pageviews:
+          type: integer
+          description: "`$pageview` events on the page that day."
+          example: 42
+        unique_users:
+          type: integer
+          description: Distinct visitors (`distinct_id`) that day.
+          example: 17
+        unique_sessions:
+          type: integer
+          description: Distinct sessions that day.
+          example: 19
     DigestMetric:
       type: object
       description: >
