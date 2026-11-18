@@ -61,6 +61,78 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "402": { $ref: "#/components/responses/Error" }
+  /client/v1/creatives/landing-pages:
+    get:
+      summary: List landing pages
+      operationId: listCreativeLandingPages
+      description: "Landing pages these ads pointed at in the last 2 days (all=true: every page), with fetch status and congruency stats."
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - { name: status, in: query, schema: { type: string, enum: [pending, ok, failed, skipped] } }
+        - { name: domain, in: query, schema: { type: string }, description: "Host without www." }
+        - { name: all, in: query, schema: { type: boolean } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+        - { name: cursor, in: query, schema: { type: string }, description: next_cursor from the previous page. }
+      responses:
+        "200":
+          description: Landing pages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { type: array, items: { $ref: "#/components/schemas/LandingPage" } }
+                  next_cursor: { type: string, nullable: true }
+        "400": { $ref: "#/components/responses/Error" }
+        "402": { $ref: "#/components/responses/Error" }
+  /client/v1/creatives/landing-pages/{id}:
+    get:
+      summary: Get a landing page
+      operationId: getCreativeLandingPage
+      description: "The page text and analysis, and up to 50 ads pointing at it with their congruency and mismatches."
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Landing page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/LandingPage"
+                      - type: object
+                        properties:
+                          above_fold: { type: string, nullable: true }
+                          page_text: { type: string, nullable: true, description: "Rendered page text, at most 12,000 characters." }
+                          text_chars: { type: integer, nullable: true }
+                          text_truncated: { type: boolean, nullable: true }
+                          fetch_ms: { type: integer, nullable: true }
+                          fetch_method: { type: string, nullable: true }
+                          fetch_cost_usd: { type: number, nullable: true }
+                          analysis: { type: object, nullable: true, description: "The page tagged with the ad taxonomy: fields and tags." }
+                          analysis_cost_usd: { type: number, nullable: true }
+                          ads: { type: array, items: { $ref: "#/components/schemas/Creative" } }
+                          ads_truncated: { type: boolean }
+                          post_click:
+                            type: object
+                            nullable: true
+                            description: "Sessions from the Mythic SDK whose entry page is this page (host and path) in the last 30 days. Conversions are not included."
+                            properties:
+                              days: { type: integer }
+                              sessions: { type: integer }
+                              meta_sessions: { type: integer }
+                              bounce_rate: { type: number, nullable: true }
+                              avg_pageviews: { type: number, nullable: true }
+                              avg_duration_s: { type: number, nullable: true }
+                              conversions: { type: integer, nullable: true }
+                          post_click_error: { type: string }
+        "404": { $ref: "#/components/responses/Error" }
   /client/v1/creatives/{ad_id}:
     get:
       summary: Get a creative
@@ -243,7 +315,7 @@ paths:
         - { name: objective, in: query, description: "Meta objective to compare within. Default: the top-spend objective.", schema: { type: string, example: OUTCOME_LEADS } }
         - { name: target_cpa, in: query, description: "What-if target for every ad, in the account currency. Never saved.", schema: { type: number, exclusiveMinimum: true, minimum: 0 } }
         - { name: confidence, in: query, schema: { type: number, minimum: 0.5, maximum: 0.995, default: 0.9 } }
-        - { name: group_by, in: query, schema: { type: string, enum: [hook_type, angle, offer, format, campaign] } }
+        - { name: group_by, in: query, schema: { type: string, enum: [hook_type, angle, offer, format, campaign, congruency] } }
         - { name: new_customers, in: query, description: "Not supported: `true` answers 422 `new_customers_unsupported`.", schema: { type: boolean } }
       responses:
         "200":
@@ -370,6 +442,74 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
   schemas:
+    Congruency:
+      type: object
+      nullable: true
+      description: "Does the landing page deliver what the ad promises? Null when the ad has no http(s) link."
+      properties:
+        status: { type: string, enum: [scored, pending, failed, page_unavailable, not_queued] }
+        landing_page_id: { type: string, format: uuid, nullable: true }
+        page_status: { type: string, enum: [pending, ok, failed, skipped] }
+        skip_reason: { type: string, nullable: true, enum: [lead_form, messenger, instant_experience, app_store, social_profile, redirector, not_http, null] }
+        score: { type: integer, nullable: true, minimum: 0, maximum: 100 }
+        band: { type: string, nullable: true, enum: [high, medium, low, null], description: "high 70+, medium 40-69, low under 40." }
+        current: { type: boolean, description: "False when the page changed since this score; a re-score is pending." }
+        summary: { type: string, nullable: true }
+        mismatch_count: { type: integer, nullable: true }
+        scored_at: { type: string, format: date-time, nullable: true }
+    Mismatch:
+      type: object
+      properties:
+        kind: { type: string, enum: [offer, price, claim, headline, cta, product, audience, other] }
+        severity: { type: string, enum: [high, medium, low] }
+        ad_quote: { type: string, description: "Exact words from the ad, checked against the ad text." }
+        page_quote: { type: string, nullable: true, description: "Exact words from the page, checked against the page text. Null when the page lacks it." }
+        missing_on_page: { type: boolean }
+        explanation: { type: string, nullable: true }
+    CongruencyDetail:
+      allOf:
+        - $ref: "#/components/schemas/Congruency"
+        - type: object
+          properties:
+            mismatches: { type: array, items: { $ref: "#/components/schemas/Mismatch" } }
+            dropped_mismatches: { type: integer, description: "Mismatches the model gave whose quotes were not in the texts." }
+            tag_diff:
+              type: object
+              description: "Deterministic diff of ad and page tags: offer (ad, page, missing_on_page, page_only), angle (shared, ad_only, page_only, overlap), hook_type (ad, page, shared, match) and headline_coverage (0-1)."
+            error: { type: string, nullable: true }
+            model: { type: string, nullable: true }
+            input_tokens: { type: integer, nullable: true }
+            output_tokens: { type: integer, nullable: true }
+            cost_usd: { type: number, nullable: true }
+    LandingPage:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        url: { type: string }
+        domain: { type: string }
+        path: { type: string }
+        status: { type: string, enum: [pending, ok, failed, skipped] }
+        skip_reason: { type: string, nullable: true }
+        error: { type: string, nullable: true }
+        final_url: { type: string, nullable: true, description: "Where the link redirected to, when it did." }
+        title: { type: string, nullable: true }
+        headline: { type: string, nullable: true }
+        fetched_at: { type: string, format: date-time, nullable: true }
+        next_fetch_at: { type: string, format: date-time, nullable: true }
+        analysis_status: { type: string, enum: [pending, done, failed] }
+        congruency:
+          type: object
+          properties:
+            pairs: { type: integer, description: "Distinct ad copies pointing at this page." }
+            scored: { type: integer }
+            avg_score: { type: integer, nullable: true }
+            min_score: { type: integer, nullable: true }
+            bands:
+              type: object
+              properties:
+                high: { type: integer }
+                medium: { type: integer }
+                low: { type: integer }
     ReportedActions:
       type: object
       properties:
@@ -582,6 +722,15 @@ components:
     Creative:
       type: object
       properties:
+        landing_page:
+          type: object
+          nullable: true
+          description: "link_url normalized as competitor ads: tracking parameters removed, lowercase host, no trailing slash."
+          properties:
+            url: { type: string }
+            domain: { type: string }
+            path: { type: string }
+        congruency: { $ref: "#/components/schemas/Congruency" }
         id: { type: string, format: uuid }
         ad_id: { type: string }
         account_id: { type: string, nullable: true }
@@ -632,6 +781,7 @@ components:
         - $ref: "#/components/schemas/Creative"
         - type: object
           properties:
+            congruency: { $ref: "#/components/schemas/CongruencyDetail" }
             carousel_cards: { type: array, nullable: true, items: { type: object } }
             asset_feed: { type: object, nullable: true, description: "Dynamic creative variants: titles, bodies, descriptions, link_urls, call_to_action_types, video_ids, image_hashes." }
             media:

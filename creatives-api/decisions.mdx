@@ -90,6 +90,7 @@ Quadrants split each ad account at its median CPMr and median CPA. The medians u
 
 - `hook_type`, `angle`, `offer`: tags from the creative analysis. An ad can carry several, so pools overlap and their spend does not add up to the total. Ads without tags (not analysed yet) are counted in `groups.without_value`.
 - `format`, `campaign`: each ad is in exactly one pool.
+- `congruency`: the [landing page congruency](/creatives-api/overview#landing-page-congruency) band of the ad (`high`, `medium`, `low`). Each scored ad is in one pool; unscored ads (no link, page skipped, not scored yet) are counted in `groups.without_value` with `not_scored`. Each point carries `congruency_score` and `congruency_band`.
 
 ## Charts
 

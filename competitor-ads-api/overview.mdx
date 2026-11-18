@@ -173,6 +173,34 @@ Every ad carries `landing_page: { url, domain, path }`, the `link_url` Meta show
 
 `GET /ads` rows carry `epic: { all_stages_in_order, rules_met, rules_total }`.
 
+## Landing page congruency
+
+Does the landing page deliver what the ad promises? Mythic fetches the page every ad points at and scores each ad against it.
+
+- **Pages.** One per client and normalized landing URL, shared by every ad pointing at it. The page is rendered in a browser, its text is kept (bounded to 12,000 characters, plus its title, main headline and above-the-fold text) and tagged with the same hook type, angle and offer tags as ads. Pages are fetched when a first ad points at them, again every 7 days, and when a new ad points at a page fetched more than a day ago.
+- **Not fetched.** Links that are not a web page get `status: "skipped"` and a `skip_reason`: `lead_form` (Meta lead forms such as `fb.me`), `messenger` (Messenger, WhatsApp), `instant_experience`, `app_store`, `social_profile` (Facebook, Instagram, TikTok and similar profiles) or `redirector` (link shorteners). A link that redirects to one of these is skipped too.
+- **Score.** For each ad copy and page version, one model call compares the ad's hook, offer, CTA and claims with the page's headline, offer and CTA. `score` is 0 to 100 (100: the page delivers everything the ad promises), `band` is `high` (70+), `medium` (40 to 69) or `low` (under 40). Ads with the same copy pointing at the same page share one score. A changed page is re-scored; the last score stays readable with `current: false` until then.
+- **Mismatches.** Up to 8, each with `kind` (`offer`, `price`, `claim`, `headline`, `cta`, `product`, `audience`, `other`), `severity`, `ad_quote` and `page_quote` (null when the page lacks it, `missing_on_page: true`). Every quote is checked against the ad and page text, and a mismatch whose quote is not there is dropped (`dropped_mismatches`).
+- **Tag diff.** `tag_diff` is computed without a model: offer elements the ad has and the page lacks (`offer.missing_on_page`), shared angles and their overlap, whether the page opens with the ad's hook type, and `headline_coverage`, the share of the ad hook's words found in the page headline and above-the-fold text.
+
+Every ad in the list and detail carries `congruency`:
+
+| `status` | Meaning |
+| --- | --- |
+| `scored` | `score`, `band`, `summary` and `mismatch_count` are set. The detail adds `mismatches`, `tag_diff` and the model cost. |
+| `pending` | Waiting for the page fetch or the score. A previous score may be shown with `current: false`. |
+| `failed` | Scoring failed 3 times for this page version. |
+| `page_unavailable` | The page is `skipped` (see `skip_reason`) or could not be fetched. |
+| `not_queued` | The ad's analysis is not done yet. |
+
+`congruency` is `null` when the ad has no http(s) link.
+
+`GET /competitor-ads/landing-pages` lists the pages this client's competitors' ads pointed at in the last 2 days (`all=true` for every page), with `status`, title, headline and `congruency` stats: `pairs`, `scored`, `avg_score`, `min_score` and counts per band. Filters: `status`, `domain`. `GET /competitor-ads/landing-pages/{id}` adds the page text, its analysis and up to 50 ads pointing at it with their congruency and mismatches.
+
+<Callout kind="note">
+Page text is copied from a public web page and treated as untrusted data in the model prompt. The score describes message match, not page quality or conversion rate.
+</Callout>
+
 ## Summary
 
 `GET /summary` (optional `page_id`) returns `overall` and one entry per tracked page. Counts are per ad: a three-card carousel is one ad, carrying a tag when any of its cards does. Tag shares are over analysed ads only.
@@ -245,4 +273,4 @@ An answer that fails gets one repair turn with the errors; a second failure retu
 
 ## MCP tools
 
-`list_competitor_pages`, `add_competitor_page`, `update_competitor_page`, `delete_competitor_page`, `refresh_competitor_page`, `list_competitor_ads`, `get_competitor_ad`, `get_competitor_ads_summary`, `get_competitor_ad_brand`, `set_competitor_ad_brand`, `generate_ad_prompts`. See [MCP tools](/mcp/tools).
+`list_competitor_pages`, `add_competitor_page`, `update_competitor_page`, `delete_competitor_page`, `refresh_competitor_page`, `list_competitor_ads`, `get_competitor_ad`, `list_competitor_landing_pages`, `get_competitor_landing_page`, `get_competitor_ads_summary`, `get_competitor_ad_brand`, `set_competitor_ad_brand`, `generate_ad_prompts`. See [MCP tools](/mcp/tools).
