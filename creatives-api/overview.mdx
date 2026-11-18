@@ -80,7 +80,7 @@ Every ad in the list and detail carries `congruency`:
 | `pending` | Waiting for the page fetch or the score. A previous score may be shown with `current: false`. |
 | `failed` | Scoring failed 3 times for the current page version. A previous score may be shown with `current: false`. It is retried when the page changes. |
 | `page_unavailable` | The page is `skipped` (see `skip_reason`) or could not be fetched. |
-| `not_queued` | The ad's analysis is not done yet. |
+| `not_queued` | The ad's analysis is not done yet, or landing page scoring is not switched on yet (it is rolled out gradually; until then `congruency` is `null` or `not_queued`, `landing_page` can be `null` on older ads, and the landing page list is empty). |
 
 `congruency` is `null` when the ad has no http(s) link.
 
