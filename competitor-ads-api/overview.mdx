@@ -177,6 +177,10 @@ Every ad carries `landing_page: { url, domain, path }`, the `link_url` Meta show
 
 Does the landing page deliver what the ad promises? Mythic fetches the page every ad points at and scores each ad against it.
 
+<Callout kind="info">
+Landing page scoring is rolled out gradually and may not be switched on for your workspace yet. Until it is, ads carry no `congruency` field, the landing page list is empty and a landing page detail is `404 not_found`.
+</Callout>
+
 - **Pages.** One per client and normalized landing URL, shared by every ad pointing at it. The page is rendered in a browser, its text is kept (bounded to 12,000 characters, plus its title, main headline and above-the-fold text) and tagged with the same hook type, angle and offer tags as ads. Pages are fetched when a first ad points at them, again every 7 days, and when a new ad points at a page fetched more than a day ago.
 - **Not fetched.** Links that are not a web page get `status: "skipped"` and a `skip_reason`: `lead_form` (Meta lead forms such as `fb.me`), `messenger` (Messenger, WhatsApp), `instant_experience`, `app_store`, `social_profile` (Facebook, Instagram, TikTok and similar profiles) or `redirector` (link shorteners). Links to IP addresses, internal host names, non-default ports or with credentials are never requested (`skip_reason: "not_public:..."`). Redirects are followed by the rendering browser; a link that redirects to a lead form or app store reads as a page with little text.
 - **Score.** For each ad copy and page version, one model call compares the ad's hook, offer, CTA and claims with the page's headline, offer and CTA. `score` is 0 to 100 (100: the page delivers everything the ad promises), `band` is `high` (70+), `medium` (40 to 69) or `low` (under 40). Ads with the same copy pointing at the same page share one score. A changed page is re-scored; the last score stays readable with `current: false` until then, and only a `current` score counts in creative decisions.
@@ -191,7 +195,7 @@ Every ad in the list and detail carries `congruency`:
 | `pending` | Waiting for the page fetch or the score. A previous score may be shown with `current: false`. |
 | `failed` | Scoring failed 3 times for the current page version. A previous score may be shown with `current: false`. It is retried when the page changes. |
 | `page_unavailable` | The page is `skipped` (see `skip_reason`) or could not be fetched. |
-| `not_queued` | The ad's analysis is not done yet, or landing page scoring is not switched on yet (it is rolled out gradually; until then `congruency` is `not_queued` and the landing page list is empty). |
+| `not_queued` | The ad's analysis is not done yet, or its page was not queued yet. |
 
 `congruency` is `null` when the ad has no http(s) link.
 

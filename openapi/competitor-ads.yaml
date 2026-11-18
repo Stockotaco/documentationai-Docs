@@ -436,7 +436,7 @@ components:
     Congruency:
       type: object
       nullable: true
-      description: "Does the landing page deliver what the ad promises? Null when the ad has no http(s) link."
+      description: "Does the landing page deliver what the ad promises? Null when the ad has no http(s) link. The field is absent until landing page scoring is switched on for the workspace."
       properties:
         status: { type: string, enum: [scored, pending, failed, page_unavailable, not_queued] }
         landing_page_id: { type: string, format: uuid, nullable: true }
