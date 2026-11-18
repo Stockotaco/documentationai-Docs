@@ -441,7 +441,7 @@ components:
         status: { type: string, enum: [scored, pending, failed, page_unavailable, not_queued] }
         landing_page_id: { type: string, format: uuid, nullable: true }
         page_status: { type: string, enum: [pending, ok, failed, skipped] }
-        skip_reason: { type: string, nullable: true, enum: [lead_form, messenger, instant_experience, app_store, social_profile, redirector, not_http, null] }
+        skip_reason: { type: string, nullable: true, description: "lead_form, messenger, instant_experience, app_store, social_profile, redirector, not_http, or not_public:<why> (ip_literal, credentials, non_default_port, not_public). May gain values." }
         score: { type: integer, nullable: true, minimum: 0, maximum: 100 }
         band: { type: string, nullable: true, enum: [high, medium, low, null], description: "high 70+, medium 40-69, low under 40." }
         current: { type: boolean, description: "True only when the score read the current page version with the current scorer. Otherwise the score is history: a re-score is pending or failed." }
@@ -482,7 +482,7 @@ components:
         status: { type: string, enum: [pending, ok, failed, skipped] }
         skip_reason: { type: string, nullable: true }
         error: { type: string, nullable: true }
-        final_url: { type: string, nullable: true, description: "Where the link redirected to, when it did." }
+        final_url: { type: string, nullable: true, description: "Reserved: not set by the current fetcher." }
         title: { type: string, nullable: true }
         headline: { type: string, nullable: true }
         fetched_at: { type: string, format: date-time, nullable: true }
