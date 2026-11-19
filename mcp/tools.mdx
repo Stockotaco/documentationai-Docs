@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 364 tools across
-  34 scope families — with the scope each one needs and the
+  Every tool the Mythic MCP server exposes — 373 tools across
+  35 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 364 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 373 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -138,8 +138,8 @@ Traffic from the client’s own MCP servers sent by @mythic-data/mcp: tool usage
 | `get_mcp_tool`<br /><span style={{opacity: 0.7}}>Get MCP Tool</span> | `mcp_analytics:read` | One tool: its usage row and description, calls over time, calls by MCP client, and the top intents agents gave when calling it. | `GET /client/v1/mcp-analytics/tools/:tool` |
 | `list_mcp_tool_errors`<br /><span style={{opacity: 0.7}}>List MCP Tool Errors</span> | `mcp_analytics:read` | How one tool fails: errors grouped by error type and a masked message pattern (numbers, ids and quoted text replaced), with counts, sessions and a sample event uuid for get_mcp_call. | `GET /client/v1/mcp-analytics/tools/:tool/errors` |
 | `list_mcp_calls`<br /><span style={{opacity: 0.7}}>List MCP Calls</span> | `mcp_analytics:read` | MCP events newest first (default tool calls only), filtered by tool, status, session, distinct_id or a search over tool name, intent and error message. | `GET /client/v1/mcp-analytics/calls` |
-| `get_mcp_call`<br /><span style={{opacity: 0.7}}>Get MCP Call</span> | `mcp_analytics:read` | One MCP event with its full redacted parameters and response (null when not captured or over 24 KB), error, intent, client, transport and session. | `GET /client/v1/mcp-analytics/calls/:uuid` |
-| `list_mcp_sessions`<br /><span style={{opacity: 0.7}}>List MCP Sessions</span> | `mcp_analytics:read` | MCP sessions most recent first: duration, calls, errors, tools used, client, the first intent and missing-capability reports. | `GET /client/v1/mcp-analytics/sessions` |
+| `get_mcp_call`<br /><span style={{opacity: 0.7}}>Get MCP Call</span> | `mcp_analytics:read` | One MCP event with its full redacted parameters and response (null when not captured or over 24 KB), error, intent, client, the capabilities that client declared, transport and session. | `GET /client/v1/mcp-analytics/calls/:uuid` |
+| `list_mcp_sessions`<br /><span style={{opacity: 0.7}}>List MCP Sessions</span> | `mcp_analytics:read` | MCP sessions most recent first: duration, calls, errors, tools used, client and its declared capabilities, the first intent and missing-capability reports. | `GET /client/v1/mcp-analytics/sessions` |
 | `get_mcp_session`<br /><span style={{opacity: 0.7}}>Get MCP Session</span> | `mcp_analytics:read` | One session with every event in order (up to 500 per page; meta.complete=false means pass meta.next_cursor as cursor). | `GET /client/v1/mcp-analytics/sessions/:session_id` |
 | `get_mcp_breakdown`<br /><span style={{opacity: 0.7}}>Get MCP Breakdown</span> | `mcp_analytics:read` | Tool calls broken down by one dimension: client, client_version, server_version, protocol_version, transport, model or category. | `GET /client/v1/mcp-analytics/breakdown` |
 | `list_mcp_intents`<br /><span style={{opacity: 0.7}}>List MCP Intents</span> | `mcp_analytics:read` | Distinct intents agents gave for their tool calls (the optional context argument), most-called first, with error rate, sessions and the tools each was routed to. | `GET /client/v1/mcp-analytics/intents` |
@@ -492,6 +492,19 @@ Event transformers applied during ingestion.
 | `update_transformer`<br /><span style={{opacity: 0.7}}>Update Transformer</span> | `transformers:write` | Update a transformer. | `PATCH /client/v1/config/transformers/:id` |
 | `delete_transformer`<br /><span style={{opacity: 0.7}}>Delete Transformer</span> | `transformers:write` | Permanently delete a transformer by ID. | `DELETE /client/v1/config/transformers/:id` |
 
+## SEO Reports
+
+Client-level Google Search Console reports and organic landing page performance.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `get_search_console_connection`<br /><span style={{opacity: 0.7}}>Search Console Connection</span> | `seo:read` | Report readiness for this client’s Search Console property: not_connected, syncing (not yet copied), or ok. | `GET /client/v1/seo/status` |
+| `get_seo_overview`<br /><span style={{opacity: 0.7}}>SEO Overview</span> | `seo:read` | See this client’s finalized Google web search clicks, impressions, CTR, and impression-weighted position. | `GET /client/v1/seo/overview` |
+| `get_seo_trend`<br /><span style={{opacity: 0.7}}>SEO Trend</span> | `seo:read` | See finalized Google web search metrics by Pacific calendar day. | `GET /client/v1/seo/trend` |
+| `get_seo_queries`<br /><span style={{opacity: 0.7}}>SEO Queries</span> | `seo:read` | Rank this client’s visible Google search queries by current-period clicks, impressions, CTR, or position. | `GET /client/v1/seo/queries` |
+| `get_seo_pages`<br /><span style={{opacity: 0.7}}>SEO Pages</span> | `seo:read` | Rank Search Console pages by web clicks, impressions, CTR, or position. | `GET /client/v1/seo/pages` |
+| `get_seo_landing_pages`<br /><span style={{opacity: 0.7}}>SEO Landing Pages</span> | `seo:read` + `sessions:read` + `events:read` | Join ranked Search Console pages to Mythic Organic Search sessions, an optional conversion event, and all-traffic p75 Core Web Vitals by landing URL. | `GET /client/v1/seo/landing-pages` |
+
 ## Airbyte Sync
 
 Agency-grain sync orchestration: connections, schedules, pipelines, sync history.
@@ -583,6 +596,9 @@ Agency-wide keys only — a key bound to one client cannot hold this scope.
 | `get_scout_run`<br /><span style={{opacity: 0.7}}>Get Scout Run</span> | `scouts:read` | One scout run. | `GET /client/v1/scouts/:id/runs/:runId` |
 | `list_scout_notes`<br /><span style={{opacity: 0.7}}>List Scout Notes</span> | `scouts:read` | A scout's steering notes: short guidance people added ("ignore /docs pages", "Black Friday sale runs Nov 25-30"). | `GET /client/v1/scouts/:id/notes` |
 | `update_scout_report`<br /><span style={{opacity: 0.7}}>Update Scout Report</span> | `scouts:write` | Triage a report: resolve (terminal; a recurrence is filed as a new report), dismiss with a reason (the scout reads it on its next runs, for 30 days, so it stops re-filing; add_note: true also keeps the reaso… | `PATCH /client/v1/scouts/reports/:id` |
+| `approve_scout_fix`<br /><span style={{opacity: 0.7}}>Approve Scout Fix</span> | `scouts:write` | Apply the fix a scout proposed on a report, as this key, through the existing write route (ignore_exception_issue: PUT the issue ignore; update_link: PATCH the link; update_destination: PATCH enabled / trigg… | `POST /client/v1/scouts/reports/:id/fix/approve` |
+| `reject_scout_fix`<br /><span style={{opacity: 0.7}}>Reject Scout Fix</span> | `scouts:write` | Reject a proposed (or failed) fix; nothing changes in the client's setup and the scout does not propose the same fix on this report again. | `POST /client/v1/scouts/reports/:id/fix/reject` |
+| `undo_scout_fix`<br /><span style={{opacity: 0.7}}>Undo Scout Fix</span> | `scouts:write` | Undo an applied fix: restore the stored before value, as this key. | `POST /client/v1/scouts/reports/:id/fix/undo` |
 | `create_scout`<br /><span style={{opacity: 0.7}}>Create Scout</span> | `scouts:write` | Create a scheduled client scout that reads the client's data with the agency's own model key and files one report per finding into the inbox. | `POST /client/v1/scouts` |
 | `update_scout`<br /><span style={{opacity: 0.7}}>Update Scout</span> | `scouts:write` | Change a scout's name, instructions, schedule, delivery, model, auto_pause or run_only_when, pause it (enabled:false) or resume it (enabled:true, which also clears a paused_reason set by Mythic). | `PATCH /client/v1/scouts/:id` |
 | `delete_scout`<br /><span style={{opacity: 0.7}}>Delete Scout</span> | `scouts:write` | Delete a scout. | `DELETE /client/v1/scouts/:id` |

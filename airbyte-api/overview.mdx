@@ -156,6 +156,7 @@ The platform catalog is returned live by `GET /platforms`. At the time of writin
 | Key | Label |
 |-----|-------|
 | `google_ads` | Google Ads |
+| `google_search_console` | Google Search Console |
 | `meta_ads` | Meta Ads (Facebook) |
 | `bing_ads` | Bing Ads (Microsoft) |
 | `tiktok_ads` | TikTok Ads |
@@ -174,6 +175,7 @@ Every platform above is `supportsOauth: true`. That means the provider **credent
 | Platform | `supportsOauth` | `manualFields` | `preConsentFields` |
 |----------|-----------------|----------------|--------------------|
 | `google_ads` | `true` | `customer_id` (accepts several) | — |
+| `google_search_console` | `true` | `site_urls` (one property), `start_date` | — |
 | `meta_ads` | `true` | `account_id` (accepts several) | — |
 | `bing_ads` | `true` | `developer_token`, `tenant_id` | `tenant_id` |
 | `tiktok_ads` | `true` | — none | — |
@@ -184,6 +186,8 @@ Bing is the widest gap: fully OAuth-capable and still needs two inputs, because 
 <Callout kind="warning">
   **`preConsentFields` must be sent at initiation, not after.** The provider's login URL is built from them, so a `tenant_id` supplied later cannot retroactively change which tenant the user authenticated against. Send them in `source_config` on `POST /oauth/initiate` and Mythic forwards them to the provider.
 </Callout>
+
+For Google Search Console, use the default streams and a Mythic-managed destination. Omit `sync_frequency` to enroll in the client's pipeline automatically. See [SEO Reports](/seo-api/overview#connect-search-console) for the exact OAuth inputs and copy readiness.
 
 ### One connection, several ad accounts
 

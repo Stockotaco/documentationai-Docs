@@ -1,0 +1,94 @@
+---
+title: SEO Reports API
+description: Finalized Google Search Console web search metrics and Mythic organic landing-page performance for one client.
+---
+
+import ClientV1Auth from "/snippets/client-v1-auth.mdx"
+import TierGated from "/snippets/tier-gated.mdx"
+
+<ClientV1Auth />
+<TierGated />
+
+SEO reports require the location's `airbyte` plan feature. Landing-page reports also require `data_api`. An `mcp_` key needs `seo:read`, plus `sessions:read` and `events:read` for landing pages. Reports are unavailable for HIPAA locations. Call from your server, not from browser JavaScript.
+
+## Connect Search Console
+
+Use the [Airbyte OAuth flow](/airbyte-api/overview#connecting-with-oauth) with a Mythic-managed BigQuery destination. For OAuth initiation, send the client ID, `platform: "google_search_console"`, your registered `return_url`, and:
+
+```json
+{
+  "source_config": {
+    "site_urls": ["sc-domain:example.com"],
+    "start_date": "2026-09-01"
+  }
+}
+```
+
+Use exactly one property as registered with Google. A URL-prefix property includes protocol and the trailing slash, for example `https://www.example.com/`. The Google account must have access to it. OAuth requests `https://www.googleapis.com/auth/webmasters.readonly`. Omit `streams` and `sync_frequency` so Mythic uses the reporting streams and enrolls the connection in the client's pipeline. Data appears only after a successful **pipeline run and Tinybird copy**, not immediately after consent or a standalone Airbyte sync.
+
+## Reports
+
+All routes are `GET` under `/client/v1/seo`. MCP returns the same report fields plus `location_id`.
+
+| Route | MCP tool | Report |
+| --- | --- | --- |
+| `/status` | `get_search_console_connection` | Property and copy readiness |
+| `/overview` | `get_seo_overview` | One metrics object per period |
+| `/trend` | `get_seo_trend` | Metrics by Pacific calendar day |
+| `/queries` | `get_seo_queries` | Search queries ranked in the current period |
+| `/pages` | `get_seo_pages` | Search Console page URLs ranked in the current period |
+| `/landing-pages` | `get_seo_landing_pages` | Ranked pages plus on-site sessions, conversions and Core Web Vitals |
+
+### Parameters
+
+- `from`, `to`: inclusive ISO dates in Google's Pacific calendar. The maximum range is 366 days. Alternatively pass `days` and optionally `to`. Default: 28 days ending three days before today. Explicit dates can include more recent days, which may have no finalized rows yet.
+- `compare=true`: return the immediately preceding equal-length range. Trend dates align by day offset. Ranked reports keep only rows observed in the current period and sort and limit those rows before attaching comparisons.
+- `query_contains`, `page_contains`: case-insensitive literal substring filters, up to 200 characters. `country`: three-letter Search Console country code, e.g. `usa`. `device`: `desktop`, `mobile`, or `tablet`. Country and device are case-insensitive over HTTP.
+- `sort` (ranked reports): `clicks` (default), `impressions`, `ctr`, or `position`. Position sorts ascending, the others descending. Nulls sort last. `limit`: 1–100, default 25.
+- `conversion_event` (landing pages only): an exact case-sensitive Mythic event name. Omit for null conversions.
+
+```bash
+curl -G 'https://mythic-analytics.gulp.workers.dev/client/v1/seo/overview' \
+  -H "Authorization: Bearer $AK" \
+  --data-urlencode "location_id=$LOCATION_ID" \
+  --data-urlencode 'from=2026-11-01' --data-urlencode 'to=2026-11-07' \
+  --data-urlencode 'compare=true'
+```
+
+Example response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "ok",
+    "property": "sc-domain:example.com",
+    "synced_at": "2026-11-12T10:00:00.000Z",
+    "range": { "from": "2026-11-01", "to": "2026-11-07" },
+    "previous_range": { "from": "2026-10-25", "to": "2026-10-31" },
+    "grain": "gsc_date",
+    "metrics": { "clicks": 120, "impressions": 2000, "ctr": 0.06, "position": 8.2 },
+    "previous": { "clicks": 98, "impressions": 1800, "ctr": 0.05444444444444444, "position": 9.1 },
+    "cached": false
+  }
+}
+```
+
+### Response fields and availability
+
+- `not_connected`: no active connection; `property` and `synced_at` are null. `syncing`: configured but the necessary grain has not finished its first copy; `synced_at` is null. `ok`: an initial copy completed, even if it produced no rows. This is readiness, not a live Airbyte job state. Use `synced_at` to show freshness and [Airbyte](/airbyte-api/overview) to inspect failed or in-flight syncs. The status route requires all grains and returns the oldest of their latest successful copy times. A report checks only the grain it uses.
+- `/overview`: `metrics` and `previous` are each `{clicks, impressions, ctr, position}` or null. A not-ready report returns null totals. The list and trend routes return `rows: []` when not ready.
+- `/trend`: `rows` has `{date, metrics, previous}`. `metrics` is a metrics object or null. When present, `previous` contains `{date, clicks, impressions, ctr, position}` with the actual previous date. Days with no observation in either period are omitted.
+- `/queries` and `/pages`: each row has `query` or `page`, the four metrics, and `previous` (a metrics object or null). `/landing-pages` adds `onsite` and `onsite_previous` to each page row. Each on-site object has `sessions`, `conversions`, `lcp_p75_ms`, `inp_p75_ms`, and `cls_p75`. `onsite_previous` is null unless `compare=true`. `conversion_event` is echoed at report level (null if unset).
+- `previous_range` is null when not comparing. Missing observations are null, not a claim of zero activity. CTR is `clicks / impressions` (0–1). Position is weighted by impressions. Both are null with zero impressions.
+- Unfiltered overview and trend use Google's daily property totals. A single dimension uses the corresponding aggregate stream. Multi-dimension requests use the detailed stream. Google hides anonymized queries and may cap returned rows, so filtered totals and row sums need not equal a property total. The reports include finalized Google web search only, not paid search, rankings from external vendors, other search types, or backlinks.
+
+### How the landing-page join works
+
+We match the full landing URL without its query string or fragment. Scheme, host, path case, and trailing slash must otherwise match. Multiple Search Console URL variants with the same stripped URL are combined on this route only. Redirect targets and aliases are not inferred.
+
+Sessions are classified as **Organic Search** by Mythic's session channel rules, which exclude paid clicks. Conversions count distinct events by event UUID in those sessions, during the same reporting window. Missing visits or selected events count as zero. Core Web Vitals are p75 for all measured visits to that URL, not just organic visits. LCP and INP use milliseconds and CLS is unitless. A missing vital is null. Google filters select the Google rows and pages, but do not filter the on-site metrics for those pages. Search clicks and tracked sessions measure different populations and will not reconcile one to one.
+
+## Dashboard panels
+
+Save the reports as [analysis panels](/builder-api/insight-config#analysis-panels) to run them as the viewer. For example, use `insight_type: "line"` with `config.analysis: { "kind": "seo_trend", "params": { "days": 28, "compare": true } }`. The panel's `result` is the corresponding HTTP `data` object described above.

@@ -1,0 +1,418 @@
+openapi: "3.0.3"
+info:
+  title: SEO Reports API
+  version: 1.0.0
+  description: >
+    Finalized Search Console web search and organic landing-page reports for one
+    location. Requires the airbyte plan feature and seo:read for scoped keys.
+    Landing pages additionally require data_api and sessions:read plus events:read.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+paths:
+  /client/v1/seo/status:
+    get:
+      operationId: getSearchConsoleConnection
+      summary: Get Search Console connection readiness
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Report, including empty results if Search Console is not ready.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    $ref: "#/components/schemas/Status"
+        "400": { description: Invalid parameters or missing location binding. }
+        "401": { description: Missing or invalid API key. }
+        "402": { description: The effective location plan does not include the required feature. }
+        "403": { description: "Outside the key's roster or scopes, or HIPAA location." }
+        "429": { description: Rate limited. }
+        "502": { description: Could not read a required upstream service. }
+        "503": { description: Analytics or privacy configuration unavailable. }
+  /client/v1/seo/overview:
+    get:
+      operationId: getSeoOverview
+      summary: Get SEO totals for a location
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Days"
+        - $ref: "#/components/parameters/Compare"
+        - $ref: "#/components/parameters/QueryContains"
+        - $ref: "#/components/parameters/PageContains"
+        - $ref: "#/components/parameters/Country"
+        - $ref: "#/components/parameters/Device"
+      responses:
+        "200":
+          description: Report, including empty results if Search Console is not ready.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    $ref: "#/components/schemas/Overview"
+        "400": { description: Invalid parameters or missing location binding. }
+        "401": { description: Missing or invalid API key. }
+        "402": { description: The effective location plan does not include the required feature. }
+        "403": { description: "Outside the key's roster or scopes, or HIPAA location." }
+        "429": { description: Rate limited. }
+        "502": { description: Could not read a required upstream service. }
+        "503": { description: Analytics or privacy configuration unavailable. }
+  /client/v1/seo/trend:
+    get:
+      operationId: getSeoTrend
+      summary: Get daily SEO metrics
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Days"
+        - $ref: "#/components/parameters/Compare"
+        - $ref: "#/components/parameters/QueryContains"
+        - $ref: "#/components/parameters/PageContains"
+        - $ref: "#/components/parameters/Country"
+        - $ref: "#/components/parameters/Device"
+      responses:
+        "200":
+          description: Report, including empty results if Search Console is not ready.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    $ref: "#/components/schemas/Trend"
+        "400": { description: Invalid parameters or missing location binding. }
+        "401": { description: Missing or invalid API key. }
+        "402": { description: The effective location plan does not include the required feature. }
+        "403": { description: "Outside the key's roster or scopes, or HIPAA location." }
+        "429": { description: Rate limited. }
+        "502": { description: Could not read a required upstream service. }
+        "503": { description: Analytics or privacy configuration unavailable. }
+  /client/v1/seo/queries:
+    get:
+      operationId: getSeoQueries
+      summary: Rank Search Console queries
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Days"
+        - $ref: "#/components/parameters/Compare"
+        - $ref: "#/components/parameters/QueryContains"
+        - $ref: "#/components/parameters/PageContains"
+        - $ref: "#/components/parameters/Country"
+        - $ref: "#/components/parameters/Device"
+        - $ref: "#/components/parameters/Sort"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Report, including empty results if Search Console is not ready.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    $ref: "#/components/schemas/Queries"
+        "400": { description: Invalid parameters or missing location binding. }
+        "401": { description: Missing or invalid API key. }
+        "402": { description: The effective location plan does not include the required feature. }
+        "403": { description: "Outside the key's roster or scopes, or HIPAA location." }
+        "429": { description: Rate limited. }
+        "502": { description: Could not read a required upstream service. }
+        "503": { description: Analytics or privacy configuration unavailable. }
+  /client/v1/seo/pages:
+    get:
+      operationId: getSeoPages
+      summary: Rank Search Console pages
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Days"
+        - $ref: "#/components/parameters/Compare"
+        - $ref: "#/components/parameters/QueryContains"
+        - $ref: "#/components/parameters/PageContains"
+        - $ref: "#/components/parameters/Country"
+        - $ref: "#/components/parameters/Device"
+        - $ref: "#/components/parameters/Sort"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Report, including empty results if Search Console is not ready.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    $ref: "#/components/schemas/Pages"
+        "400": { description: Invalid parameters or missing location binding. }
+        "401": { description: Missing or invalid API key. }
+        "402": { description: The effective location plan does not include the required feature. }
+        "403": { description: "Outside the key's roster or scopes, or HIPAA location." }
+        "429": { description: Rate limited. }
+        "502": { description: Could not read a required upstream service. }
+        "503": { description: Analytics or privacy configuration unavailable. }
+  /client/v1/seo/landing-pages:
+    get:
+      operationId: getSeoLandingPages
+      summary: Get organic landing-page performance
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Days"
+        - $ref: "#/components/parameters/Compare"
+        - $ref: "#/components/parameters/QueryContains"
+        - $ref: "#/components/parameters/PageContains"
+        - $ref: "#/components/parameters/Country"
+        - $ref: "#/components/parameters/Device"
+        - $ref: "#/components/parameters/Sort"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/ConversionEvent"
+      responses:
+        "200":
+          description: Report, including empty results if Search Console is not ready.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    $ref: "#/components/schemas/LandingPages"
+        "400": { description: Invalid parameters or missing location binding. }
+        "401": { description: Missing or invalid API key. }
+        "402": { description: The effective location plan does not include the required feature. }
+        "403": { description: "Outside the key's roster or scopes, or HIPAA location." }
+        "429": { description: Rate limited. }
+        "502": { description: Could not read a required upstream service. }
+        "503": { description: Analytics or privacy configuration unavailable. }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    LocationId:
+      name: location_id
+      in: query
+      description: Bind the client for an agency key. Also accepted as X-Location-Id.
+      schema: { type: string }
+    From:
+      name: from
+      in: query
+      description: Inclusive start date. Send either from or days.
+      schema: { type: string, format: date }
+    To:
+      name: to
+      in: query
+      description: Inclusive end date. Defaults to three days before today.
+      schema: { type: string, format: date }
+    Days:
+      name: days
+      in: query
+      description: Lookback window ending at to. Do not send with from.
+      schema: { type: integer, minimum: 1, maximum: 366, default: 28 }
+    Compare:
+      name: compare
+      in: query
+      description: Compare to the immediately preceding equal-length period.
+      schema: { type: boolean, default: false }
+    QueryContains:
+      name: query_contains
+      in: query
+      description: Case-insensitive literal search-query substring.
+      schema: { type: string, minLength: 1, maxLength: 200 }
+    PageContains:
+      name: page_contains
+      in: query
+      description: Case-insensitive literal Search Console URL substring.
+      schema: { type: string, minLength: 1, maxLength: 200 }
+    Country:
+      name: country
+      in: query
+      description: ISO 3166-1 alpha-3 Search Console country code.
+      schema: { type: string, pattern: '^[A-Za-z]{3}$', example: usa }
+    Device:
+      name: device
+      in: query
+      description: Search Console device.
+      schema: { type: string, enum: [desktop, mobile, tablet] }
+    Sort:
+      name: sort
+      in: query
+      description: Current period metric. Position sorts ascending, other metrics descending.
+      schema: { type: string, enum: [clicks, impressions, ctr, position], default: clicks }
+    Limit:
+      name: limit
+      in: query
+      description: Maximum number of ranked current-period rows.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    ConversionEvent:
+      name: conversion_event
+      in: query
+      description: Exact Mythic event to count in Organic Search sessions. Omit for null conversions.
+      schema: { type: string, minLength: 1, maxLength: 128 }
+  schemas:
+    Status:
+      type: object
+      required: [status, property, synced_at]
+      properties:
+        status: { type: string, enum: [not_connected, syncing, ok] }
+        property: { type: string, nullable: true, example: "sc-domain:example.com" }
+        synced_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last completed copy of the requested grain, or the oldest latest copy across all grains for the status route.
+    Range:
+      type: object
+      nullable: true
+      required: [from, to]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+    Report:
+      allOf:
+        - $ref: "#/components/schemas/Status"
+        - type: object
+          required: [range, previous_range, grain, cached]
+          properties:
+            range: { $ref: "#/components/schemas/Range" }
+            previous_range: { $ref: "#/components/schemas/Range" }
+            grain: { type: string, enum: [gsc_date, gsc_query, gsc_page, gsc_country, gsc_device, gsc_detail] }
+            cached: { type: boolean }
+    Metrics:
+      type: object
+      nullable: true
+      required: [clicks, impressions, ctr, position]
+      properties:
+        clicks: { type: integer, format: int64, minimum: 0 }
+        impressions: { type: integer, format: int64, minimum: 0 }
+        ctr: { type: number, nullable: true, description: "Clicks divided by impressions, not a percentage." }
+        position: { type: number, nullable: true, description: Impression-weighted search position. }
+    TrendComparison:
+      type: object
+      nullable: true
+      required: [date, clicks, impressions, ctr, position]
+      properties:
+        date: { type: string, format: date }
+        clicks: { type: integer, format: int64, minimum: 0 }
+        impressions: { type: integer, format: int64, minimum: 0 }
+        ctr: { type: number, nullable: true, description: "Clicks divided by impressions, not a percentage." }
+        position: { type: number, nullable: true, description: Impression-weighted search position. }
+    TrendRow:
+      type: object
+      required: [date, metrics, previous]
+      properties:
+        date: { type: string, format: date }
+        metrics: { $ref: "#/components/schemas/Metrics" }
+        previous: { $ref: "#/components/schemas/TrendComparison" }
+    Onsite:
+      type: object
+      nullable: true
+      required: [sessions, conversions, lcp_p75_ms, inp_p75_ms, cls_p75]
+      properties:
+        sessions: { type: integer, format: int64 }
+        conversions: { type: integer, format: int64, nullable: true }
+        lcp_p75_ms: { type: number, nullable: true }
+        inp_p75_ms: { type: number, nullable: true }
+        cls_p75: { type: number, nullable: true }
+    Overview:
+      allOf:
+        - $ref: "#/components/schemas/Report"
+        - type: object
+          required: [metrics, previous]
+          properties:
+            metrics: { $ref: "#/components/schemas/Metrics" }
+            previous: { $ref: "#/components/schemas/Metrics" }
+    Trend:
+      allOf:
+        - $ref: "#/components/schemas/Report"
+        - type: object
+          required: [rows]
+          properties:
+            rows:
+              type: array
+              items: { $ref: "#/components/schemas/TrendRow" }
+    QueryRow:
+      type: object
+      required: [query, clicks, impressions, ctr, position, previous]
+      properties:
+        query: { type: string }
+        clicks: { type: integer, format: int64, minimum: 0 }
+        impressions: { type: integer, format: int64, minimum: 0 }
+        ctr: { type: number, nullable: true, description: "Clicks divided by impressions, not a percentage." }
+        position: { type: number, nullable: true, description: Impression-weighted search position. }
+        previous: { $ref: "#/components/schemas/Metrics" }
+    Queries:
+      allOf:
+        - $ref: "#/components/schemas/Report"
+        - type: object
+          required: [rows]
+          properties:
+            rows:
+              type: array
+              items: { $ref: "#/components/schemas/QueryRow" }
+    PageRow:
+      type: object
+      required: [page, clicks, impressions, ctr, position, previous]
+      properties:
+        page: { type: string }
+        clicks: { type: integer, format: int64, minimum: 0 }
+        impressions: { type: integer, format: int64, minimum: 0 }
+        ctr: { type: number, nullable: true, description: "Clicks divided by impressions, not a percentage." }
+        position: { type: number, nullable: true, description: Impression-weighted search position. }
+        previous: { $ref: "#/components/schemas/Metrics" }
+    Pages:
+      allOf:
+        - $ref: "#/components/schemas/Report"
+        - type: object
+          required: [rows]
+          properties:
+            rows:
+              type: array
+              items: { $ref: "#/components/schemas/PageRow" }
+    LandingPageRow:
+      type: object
+      required: [page, clicks, impressions, ctr, position, previous, onsite, onsite_previous]
+      properties:
+        page: { type: string }
+        clicks: { type: integer, format: int64, minimum: 0 }
+        impressions: { type: integer, format: int64, minimum: 0 }
+        ctr: { type: number, nullable: true, description: "Clicks divided by impressions, not a percentage." }
+        position: { type: number, nullable: true, description: Impression-weighted search position. }
+        previous: { $ref: "#/components/schemas/Metrics" }
+        onsite: { $ref: "#/components/schemas/Onsite" }
+        onsite_previous: { $ref: "#/components/schemas/Onsite" }
+    LandingPages:
+      allOf:
+        - $ref: "#/components/schemas/Report"
+        - type: object
+          required: [rows, conversion_event]
+          properties:
+            conversion_event: { type: string, nullable: true }
+            rows:
+              type: array
+              items: { $ref: "#/components/schemas/LandingPageRow" }

@@ -295,7 +295,9 @@ components:
         a `kind: trend` spec (`line`/`table` want an `interval`,
         `number`/`bar`/`pie` usually don't). Analysis panels: `constraints` →
         `table`/`number`/`bar`, `correlation` → `line`/`table`,
-        `scanner_summary` → `pie`/`bar`/`line`/`table`/`number`.
+        `scanner_summary` → `pie`/`bar`/`line`/`table`/`number`;
+        `seo_overview` → `number`/`table`, `seo_trend` → `line`/`table`,
+        `seo_queries`, `seo_pages`, `seo_landing_pages` → `table`/`bar`.
       enum: [number, line, bar, pie, table, funnel]
     InsightConfig:
       type: object
@@ -305,7 +307,7 @@ components:
         attribution for ad spend, CPA and ROAS); the full grammar is on the
         [Explore queries](/data-api/explore) page and a per-type walkthrough on
         the [Insight config reference](/builder-api/insight-config). `analysis`
-        runs a constraint finder, correlation or scanner summary as the viewer
+        runs a constraint finder, correlation, scanner summary, or SEO report as the viewer
         (not on public or embedded dashboards). Any other key is stored
         verbatim as display settings and never read by the runner, except
         `metric` on an attribution `number`.
@@ -320,7 +322,7 @@ components:
           properties:
             kind:
               type: string
-              enum: [constraints, correlation, scanner_summary]
+              enum: [constraints, correlation, scanner_summary, seo_overview, seo_trend, seo_queries, seo_pages, seo_landing_pages]
             params:
               type: object
               additionalProperties: true

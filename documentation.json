@@ -490,6 +490,22 @@
             ]
           },
           {
+            "tab": "SEO Reports",
+            "icon": "search",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [{ "title": "Introduction", "path": "seo-api/overview", "icon": "file-text" }]
+              },
+              {
+                "group": "SEO Reports",
+                "icon": "search",
+                "openapi": "openapi/seo.yaml"
+              }
+            ]
+          },
+          {
             "tab": "Logs",
             "icon": "scroll-text",
             "groups": [
