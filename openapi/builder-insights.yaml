@@ -297,7 +297,8 @@ components:
         `table`/`number`/`bar`, `correlation` → `line`/`table`,
         `scanner_summary` → `pie`/`bar`/`line`/`table`/`number`;
         `seo_overview` → `number`/`table`, `seo_trend` → `line`/`table`,
-        `seo_queries`, `seo_pages`, `seo_landing_pages` → `table`/`bar`.
+        `seo_queries`, `seo_pages`, `seo_landing_pages`, `seo_breakdown` → `table`/`bar`;
+        `seo_brand` → `number`/`table`/`bar`.
       enum: [number, line, bar, pie, table, funnel]
     InsightConfig:
       type: object
@@ -322,7 +323,7 @@ components:
           properties:
             kind:
               type: string
-              enum: [constraints, correlation, scanner_summary, seo_overview, seo_trend, seo_queries, seo_pages, seo_landing_pages]
+              enum: [constraints, correlation, scanner_summary, seo_overview, seo_trend, seo_queries, seo_pages, seo_landing_pages, seo_breakdown, seo_brand]
             params:
               type: object
               additionalProperties: true

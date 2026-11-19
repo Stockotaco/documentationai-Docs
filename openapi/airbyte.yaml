@@ -2239,7 +2239,12 @@ components:
           description: >
             Platform-specific source configuration, matching the platform's
             `requiredFields`. When `secret_id` is supplied, omit the fields flagged
-            `oauth: true` — Airbyte injects those credentials.
+            `oauth: true` — Airbyte injects those credentials. For
+            `google_search_console`, require `site_urls` (one property URI such as
+            `sc-domain:example.com` or `https://example.com/`, as a string or a
+            single-item array) and `start_date` (valid YYYY-MM-DD). Leave
+            `data_state` unset or `final`. Use a Mythic-managed BigQuery warehouse
+            and a client pipeline with Tinybird copy enabled.
         secret_id:
           type: string
           description: >
@@ -2256,7 +2261,8 @@ components:
           type: array
           description: >
             Stream selection. Defaults to the platform's `defaultStreams` when
-            omitted.
+            omitted. Search Console rejects custom streams on create and update.
+            Omit `streams`, `sync_frequency`, and `sync_hour_utc` for this platform.
           items:
             $ref: "#/components/schemas/Stream"
     OauthInitiateRequest:
@@ -2290,8 +2296,12 @@ components:
             everything in the platform's `requiredFields` NOT flagged `oauth: true`.
             Account identifiers are normalised, so `{ "account_id": "act_123" }` and
             `{ "account_ids": ["123"] }` are equally acceptable for Meta, and a
-            dashed Google `customer_id` is fine. Required for `meta_ads` and
-            `google_ads`.
+            dashed Google `customer_id` is fine. Required for `meta_ads`,
+            `google_ads`, and `google_search_console`. For Search Console send
+            `site_urls` (an exact property string or a single-item array) and
+            `start_date` (valid YYYY-MM-DD). Examples: `sc-domain:example.com` or
+            `https://example.com/`. Leave `data_state` unset or `final`. Use
+            Mythic-managed BigQuery and an enabled client pipeline with Tinybird copy.
         display_name:
           type: string
           example: Acme — Meta Ads
@@ -2304,7 +2314,7 @@ components:
           $ref: "#/components/schemas/SyncHourUtc"
         streams:
           type: array
-          description: Stream selection. Defaults to the platform's `defaultStreams`.
+          description: Stream selection. Defaults to the platform's `defaultStreams`. Search Console rejects custom streams. Omit `streams`, `sync_frequency`, and `sync_hour_utc` for Search Console.
           items:
             $ref: "#/components/schemas/Stream"
         oauth_input_configuration:

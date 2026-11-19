@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 373 tools across
+  Every tool the Mythic MCP server exposes — 375 tools across
   35 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 373 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 375 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -498,9 +498,11 @@ Client-level Google Search Console reports and organic landing page performance.
 
 | Tool | Scope | What it does | Proxies |
 | --- | --- | --- | --- |
-| `get_search_console_connection`<br /><span style={{opacity: 0.7}}>Search Console Connection</span> | `seo:read` | Report readiness for this client’s Search Console property: not_connected, syncing (not yet copied), or ok. | `GET /client/v1/seo/status` |
+| `get_search_console_connection`<br /><span style={{opacity: 0.7}}>Search Console Connection</span> | `seo:read` | Report readiness for this client’s Search Console property: not_connected, pipeline_disabled, copy_disabled, syncing (not yet copied), or ok. | `GET /client/v1/seo/status` |
 | `get_seo_overview`<br /><span style={{opacity: 0.7}}>SEO Overview</span> | `seo:read` | See this client’s finalized Google web search clicks, impressions, CTR, and impression-weighted position. | `GET /client/v1/seo/overview` |
 | `get_seo_trend`<br /><span style={{opacity: 0.7}}>SEO Trend</span> | `seo:read` | See finalized Google web search metrics by Pacific calendar day. | `GET /client/v1/seo/trend` |
+| `get_seo_breakdown`<br /><span style={{opacity: 0.7}}>SEO Breakdown</span> | `seo:read` | Rank Search Console metrics by device or country, with optional previous period and coverage. | `GET /client/v1/seo/breakdown` |
+| `get_seo_brand_split`<br /><span style={{opacity: 0.7}}>SEO Brand Split</span> | `seo:read` | Split property totals into branded and non-branded visible queries and the anonymized remainder. | `GET /client/v1/seo/brand` |
 | `get_seo_queries`<br /><span style={{opacity: 0.7}}>SEO Queries</span> | `seo:read` | Rank this client’s visible Google search queries by current-period clicks, impressions, CTR, or position. | `GET /client/v1/seo/queries` |
 | `get_seo_pages`<br /><span style={{opacity: 0.7}}>SEO Pages</span> | `seo:read` | Rank Search Console pages by web clicks, impressions, CTR, or position. | `GET /client/v1/seo/pages` |
 | `get_seo_landing_pages`<br /><span style={{opacity: 0.7}}>SEO Landing Pages</span> | `seo:read` + `sessions:read` + `events:read` | Join ranked Search Console pages to Mythic Organic Search sessions, an optional conversion event, and all-traffic p75 Core Web Vitals by landing URL. | `GET /client/v1/seo/landing-pages` |

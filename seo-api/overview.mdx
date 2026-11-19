@@ -24,7 +24,7 @@ Use the [Airbyte OAuth flow](/airbyte-api/overview#connecting-with-oauth) with a
 }
 ```
 
-Use exactly one property as registered with Google. A URL-prefix property includes protocol and the trailing slash, for example `https://www.example.com/`. The Google account must have access to it. OAuth requests `https://www.googleapis.com/auth/webmasters.readonly`. Omit `streams` and `sync_frequency` so Mythic uses the reporting streams and enrolls the connection in the client's pipeline. Data appears only after a successful **pipeline run and Tinybird copy**, not immediately after consent or a standalone Airbyte sync.
+Use exactly one property as registered with Google. `site_urls` can be that string or a single-item array. A URL-prefix property includes the protocol and trailing slash, for example `https://www.example.com/`. `start_date` is required. The Google account must have access to the property. OAuth requests `https://www.googleapis.com/auth/webmasters.readonly`. Omit `streams` and cadence fields. Search Console must use a Mythic-managed destination and an enabled client pipeline with Tinybird copy. Data appears only after a successful **pipeline run and Tinybird copy**, not immediately after consent or a standalone Airbyte sync.
 
 ## Reports
 
@@ -38,14 +38,20 @@ All routes are `GET` under `/client/v1/seo`. MCP returns the same report fields 
 | `/queries` | `get_seo_queries` | Search queries ranked in the current period |
 | `/pages` | `get_seo_pages` | Search Console page URLs ranked in the current period |
 | `/landing-pages` | `get_seo_landing_pages` | Ranked pages plus on-site sessions, conversions and Core Web Vitals |
+| `/breakdown` | `get_seo_breakdown` | Device or country rows |
+| `/brand` | `get_seo_brand_split` | Branded, non-branded and anonymized search |
 
 ### Parameters
 
 - `from`, `to`: inclusive ISO dates in Google's Pacific calendar. The maximum range is 366 days. Alternatively pass `days` and optionally `to`. Default: 28 days ending three days before today. Explicit dates can include more recent days, which may have no finalized rows yet.
 - `compare=true`: return the immediately preceding equal-length range. Trend dates align by day offset. Ranked reports keep only rows observed in the current period and sort and limit those rows before attaching comparisons.
 - `query_contains`, `page_contains`: case-insensitive literal substring filters, up to 200 characters. `country`: three-letter Search Console country code, e.g. `usa`. `device`: `desktop`, `mobile`, or `tablet`. Country and device are case-insensitive over HTTP.
-- `sort` (ranked reports): `clicks` (default), `impressions`, `ctr`, or `position`. Position sorts ascending, the others descending. Nulls sort last. `limit`: 1–100, default 25.
-- `conversion_event` (landing pages only): an exact case-sensitive Mythic event name. Omit for null conversions.
+- `/queries` accepts `page_equals`, the exact Search Console page URL. `/pages` accepts `query_equals`, the exact search query. Both are case-sensitive and combine with other filters.
+- Ranked reports (`/queries`, `/pages`, `/landing-pages`, `/breakdown`): `sort` is `clicks` (default), `impressions`, `ctr`, or `position`. Position sorts ascending, the others descending. Nulls sort last. `limit`: 1–1000, default 100. `offset`: rows to skip, default 0. JSON includes `total_rows` (before pagination) and `next_offset` (null at the end or past it).
+- `format=csv` on ranked HTTP routes returns the requested page as `text/csv`, including a header even when empty. With `compare=true`, it includes `previous_clicks`, `previous_impressions`, `previous_ctr`, and `previous_position`. Landing pages add `match`, `onsite_*`, and, for comparison, `previous_onsite_*` columns. Nulls are blank and formula-like text is escaped for spreadsheets. MCP and saved panels return JSON only.
+- `/landing-pages`: `conversion_event` is an exact case-sensitive Mythic event name. Omit for null conversions.
+- `/breakdown`: required `dimension=device` or `dimension=country`. Supports the same filters and pagination as other ranked reports.
+- `/brand`: required `brand_terms` (e.g. `acme,acme tools`). Send 1–20 literal substrings, each up to 200 characters. Any match is branded, case-insensitively. The report echoes the normalized, deduplicated terms. Supports dates and comparison, not dimension filters, since the residual is computed from property totals.
 
 ```bash
 curl -G 'https://mythic-analytics.gulp.workers.dev/client/v1/seo/overview' \
@@ -67,6 +73,10 @@ Example response:
     "range": { "from": "2026-11-01", "to": "2026-11-07" },
     "previous_range": { "from": "2026-10-25", "to": "2026-10-31" },
     "grain": "gsc_date",
+    "coverage": {
+      "current": { "first_date": "2026-11-01", "last_date": "2026-11-07", "days_covered": 7, "days_requested": 7, "partial": false },
+      "previous": { "first_date": "2026-10-26", "last_date": "2026-10-31", "days_covered": 6, "days_requested": 7, "partial": true }
+    },
     "metrics": { "clicks": 120, "impressions": 2000, "ctr": 0.06, "position": 8.2 },
     "previous": { "clicks": 98, "impressions": 1800, "ctr": 0.05444444444444444, "position": 9.1 },
     "cached": false
@@ -76,16 +86,18 @@ Example response:
 
 ### Response fields and availability
 
-- `not_connected`: no active connection; `property` and `synced_at` are null. `syncing`: configured but the necessary grain has not finished its first copy; `synced_at` is null. `ok`: an initial copy completed, even if it produced no rows. This is readiness, not a live Airbyte job state. Use `synced_at` to show freshness and [Airbyte](/airbyte-api/overview) to inspect failed or in-flight syncs. The status route requires all grains and returns the oldest of their latest successful copy times. A report checks only the grain it uses.
+- `not_connected`: no active connection. `pipeline_disabled`: enable the client pipeline and enroll this connection. `copy_disabled`: enable Tinybird copy on the client pipeline. `syncing`: the required grain has not finished its first copy. All have `synced_at: null`. `ok`: an initial copy completed, even if it produced no rows. A failed refresh does not publish any rows or advance `synced_at`. An empty completed refresh replaces older rows in its window. Use [Airbyte](/airbyte-api/overview) for live job state. `/status` returns the oldest of the latest successful copy times across all grains. Reports use only their required grains. `/brand` uses both property and query grains and returns the older of their latest successful times.
+- `coverage` is `{current, previous}`. Each period has `first_date`, `last_date`, `days_covered`, `days_requested`, and `partial`. Coverage counts distinct dates with published rows in the report grain, before dimension filters. Dates are null if there are no rows. The brand report measures property grain coverage. `coverage.previous` is null unless comparing. A partial period can still return metrics for observed days. Do not compare it to a full period without displaying the coverage.
 - `/overview`: `metrics` and `previous` are each `{clicks, impressions, ctr, position}` or null. A not-ready report returns null totals. The list and trend routes return `rows: []` when not ready.
 - `/trend`: `rows` has `{date, metrics, previous}`. `metrics` is a metrics object or null. When present, `previous` contains `{date, clicks, impressions, ctr, position}` with the actual previous date. Days with no observation in either period are omitted.
-- `/queries` and `/pages`: each row has `query` or `page`, the four metrics, and `previous` (a metrics object or null). `/landing-pages` adds `onsite` and `onsite_previous` to each page row. Each on-site object has `sessions`, `conversions`, `lcp_p75_ms`, `inp_p75_ms`, and `cls_p75`. `onsite_previous` is null unless `compare=true`. `conversion_event` is echoed at report level (null if unset).
+- `/queries`, `/pages`, and `/breakdown`: each row has `query`, `page`, or `value` respectively, the four metrics, and `previous` (a metrics object or null). `/breakdown` echoes `dimension` at report level. `/landing-pages` adds `match`, `onsite`, and `onsite_previous` to each page row. Each on-site object has `sessions`, `conversions`, `lcp_p75_ms`, `inp_p75_ms`, and `cls_p75`. `onsite_previous` is null without comparison or if there was no match in that period. `conversion_event` is echoed at report level (null if unset).
+- `/brand`: `branded`, `non_branded`, and `anonymized` each have `{metrics, previous}`, with metrics objects or null. Anonymized clicks and impressions are property totals minus visible query totals (including queries Google did not return), its CTR is computed from that difference, and its position is null. If the copied streams disagree, the difference can be negative rather than being silently clamped.
 - `previous_range` is null when not comparing. Missing observations are null, not a claim of zero activity. CTR is `clicks / impressions` (0–1). Position is weighted by impressions. Both are null with zero impressions.
-- Unfiltered overview and trend use Google's daily property totals. A single dimension uses the corresponding aggregate stream. Multi-dimension requests use the detailed stream. Google hides anonymized queries and may cap returned rows, so filtered totals and row sums need not equal a property total. The reports include finalized Google web search only, not paid search, rankings from external vendors, other search types, or backlinks.
+- Unfiltered overview and trend use Google's daily property totals. A single dimension uses its aggregate stream. Query-free combinations use property-by-country/device or page-by-country/device streams. Only reports involving queries use query-bearing streams. Google hides anonymized queries and may cap returned rows, so filtered totals and row sums need not equal a property total. Results cover finalized Google web search only.
 
 ### How the landing-page join works
 
-We match the full landing URL without its query string or fragment. Scheme, host, path case, and trailing slash must otherwise match. Multiple Search Console URL variants with the same stripped URL are combined on this route only. Redirect targets and aliases are not inferred.
+We match the full landing URL after removing the query string, fragment, and one trailing slash. Scheme, host, and path case must otherwise match. Multiple Search Console URL variants with the same normalized URL are combined on this route only. Redirect targets and aliases are not inferred. A page with no matching tracked landing session or Core Web Vitals observation in the current period returns `match: "none"` and `onsite: null`, not zero activity. A matched page returns `match: "matched"` and can legitimately have zero organic sessions.
 
 Sessions are classified as **Organic Search** by Mythic's session channel rules, which exclude paid clicks. Conversions count distinct events by event UUID in those sessions, during the same reporting window. Missing visits or selected events count as zero. Core Web Vitals are p75 for all measured visits to that URL, not just organic visits. LCP and INP use milliseconds and CLS is unitless. A missing vital is null. Google filters select the Google rows and pages, but do not filter the on-site metrics for those pages. Search clicks and tracked sessions measure different populations and will not reconcile one to one.
 

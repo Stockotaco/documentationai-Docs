@@ -183,9 +183,11 @@ A `number` shows one total, chosen by `config.metric`: `conversions` (default), 
 
 | `seo_overview` | `GET /client/v1/seo/overview` | `number`, `table` | SEO base parameters |
 | `seo_trend` | `GET /client/v1/seo/trend` | `line`, `table` | SEO base parameters |
-| `seo_queries` | `GET /client/v1/seo/queries` | `table`, `bar` | SEO base parameters, `sort`, `limit` |
-| `seo_pages` | `GET /client/v1/seo/pages` | `table`, `bar` | SEO base parameters, `sort`, `limit` |
-| `seo_landing_pages` | `GET /client/v1/seo/landing-pages` | `table`, `bar` | SEO base parameters, `sort`, `limit`, `conversion_event` |
+| `seo_queries` | `GET /client/v1/seo/queries` | `table`, `bar` | SEO base parameters, `sort`, `limit`, `offset`, `page_equals` |
+| `seo_pages` | `GET /client/v1/seo/pages` | `table`, `bar` | SEO base parameters, `sort`, `limit`, `offset`, `query_equals` |
+| `seo_landing_pages` | `GET /client/v1/seo/landing-pages` | `table`, `bar` | SEO base parameters, `sort`, `limit`, `offset`, `conversion_event` |
+| `seo_breakdown` | `GET /client/v1/seo/breakdown` | `table`, `bar` | SEO base parameters, required `dimension` (`device` or `country`), `sort`, `limit`, `offset` |
+| `seo_brand` | `GET /client/v1/seo/brand` | `number`, `table`, `bar` | `from`/`to` or `days`, `compare`, and required `brand_terms` (comma-separated string) |
 
 SEO base parameters are `from`, `to`, `days`, `compare`, `query_contains`, `page_contains`, `country`, and `device`. See the [SEO Reports API](/seo-api/overview#response-fields-and-availability) for the exact result shapes. An SEO panel's `result` is the corresponding route's `data` object. To run SEO panels with a scoped key, grant `insights:read` and `seo:read` (plus `sessions:read` and `events:read` for landing pages). A custom dashboard window replaces `from` and `to`; a preset replaces the dates with `days`.
 

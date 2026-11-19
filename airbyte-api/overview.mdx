@@ -187,7 +187,7 @@ Bing is the widest gap: fully OAuth-capable and still needs two inputs, because 
   **`preConsentFields` must be sent at initiation, not after.** The provider's login URL is built from them, so a `tenant_id` supplied later cannot retroactively change which tenant the user authenticated against. Send them in `source_config` on `POST /oauth/initiate` and Mythic forwards them to the provider.
 </Callout>
 
-For Google Search Console, use the default streams and a Mythic-managed destination. Omit `sync_frequency` to enroll in the client's pipeline automatically. See [SEO Reports](/seo-api/overview#connect-search-console) for the exact OAuth inputs and copy readiness.
+For Google Search Console, use the default streams and a Mythic-managed destination. The client pipeline must be enabled with Tinybird copy. Omit `streams`, `sync_frequency`, and `sync_hour_utc` to use that pipeline. Search Console disconnect verifies removal upstream and in Mythic. If it returns `disconnect_failed`, retry the same DELETE request. See [SEO Reports](/seo-api/overview#connect-search-console) for the exact OAuth inputs and copy readiness.
 
 ### One connection, several ad accounts
 
