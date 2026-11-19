@@ -748,7 +748,8 @@ paths:
             Rejected before anything is stored. The `code` field carries the
             reason: `missing_fields`, `unsupported_platform`, `no_oauth_support`,
             `missing_account_id`, `invalid_return_url`, `return_url_not_allowed`,
-            or `not_provisioned`.
+            or `not_provisioned`. Invalid Search Console inputs return `details.field`
+            with the rejected `source_config` path or `replace_connection_id`.
           content:
             application/json:
               schema:
@@ -790,6 +791,11 @@ paths:
         preserved.
 
 
+        If a Search Console replacement succeeds but cleanup fails, success also
+        includes `mythic_warning_code=disconnect_failed` and
+        `mythic_replaced_connection_id` (the old ID). Retry DELETE on the old ID only.
+
+
         `mythic_error_code` is drawn from a closed set you can switch on:
         `state_invalid` (expired, already used, or unreadable), `missing_secret_id`,
         `missing_account_id`, `not_configured`, `not_provisioned`,
@@ -801,8 +807,10 @@ paths:
         `account_not_accessible` (consent succeeded
         but the account named at initiation is not one that user can reach —
         fix the account id, not the consent), `connection_failed` (anything
-        else). Exception messages are never placed in the URL — they stay in
-        server logs.
+        else). Search Console replacements may return `invalid_replace_connection_id`
+        or `replacement_changed` if the connection or pipeline changed. With
+        `replacement_unconfirmed`, refresh the connection list before retrying.
+        Exception messages stay in server logs.
 
 
         Because `connection_failed` is a catch-all, a failed callback also
@@ -2279,6 +2287,10 @@ components:
           type: string
           description: "Platform key whose catalog entry has `supportsOauth: true`."
           example: meta_ads
+        replace_connection_id:
+          type: string
+          format: uuid
+          description: Current connection ID for the same client and agency. Supported only for google_search_console. The old connection stays active until the new connection is created and the pipeline switches to it.
         return_url:
           type: string
           description: >
@@ -2299,7 +2311,7 @@ components:
             dashed Google `customer_id` is fine. Required for `meta_ads`,
             `google_ads`, and `google_search_console`. For Search Console send
             `site_urls` (an exact property string or a single-item array) and
-            `start_date` (valid YYYY-MM-DD). Examples: `sc-domain:example.com` or
+            `start_date` (valid YYYY-MM-DD, no later than today). Examples: `sc-domain:example.com` or
             `https://example.com/`. Leave `data_state` unset or `final`. Use
             Mythic-managed BigQuery and an enabled client pipeline with Tinybird copy.
         display_name:

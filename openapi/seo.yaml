@@ -119,11 +119,19 @@ paths:
         - $ref: "#/components/parameters/Sort"
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/Publication"
         - $ref: "#/components/parameters/Format"
         - $ref: "#/components/parameters/PageEquals"
       responses:
         "200":
           description: Report, including empty results if Search Console is not ready.
+          headers:
+            X-SEO-Status:
+              description: Report status (CSV only).
+              schema: { type: string, enum: [not_connected, pipeline_disabled, copy_disabled, syncing, ok] }
+            X-SEO-Coverage-Partial:
+              description: Whether either requested period has partial coverage (CSV only).
+              schema: { type: boolean }
           content:
             application/json:
               schema:
@@ -140,6 +148,7 @@ paths:
         "401": { description: Missing or invalid API key. }
         "402": { description: The effective location plan does not include the required feature. }
         "403": { description: "Outside the key's roster or scopes, or HIPAA location." }
+        "409": { description: The publication changed. Restart pagination from offset zero without the old token. }
         "429": { description: Rate limited. }
         "502": { description: Could not read a required upstream service. }
         "503": { description: Analytics or privacy configuration unavailable. }
@@ -160,11 +169,19 @@ paths:
         - $ref: "#/components/parameters/Sort"
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/Publication"
         - $ref: "#/components/parameters/Format"
         - $ref: "#/components/parameters/QueryEquals"
       responses:
         "200":
           description: Report, including empty results if Search Console is not ready.
+          headers:
+            X-SEO-Status:
+              description: Report status (CSV only).
+              schema: { type: string, enum: [not_connected, pipeline_disabled, copy_disabled, syncing, ok] }
+            X-SEO-Coverage-Partial:
+              description: Whether either requested period has partial coverage (CSV only).
+              schema: { type: boolean }
           content:
             application/json:
               schema:
@@ -181,6 +198,7 @@ paths:
         "401": { description: Missing or invalid API key. }
         "402": { description: The effective location plan does not include the required feature. }
         "403": { description: "Outside the key's roster or scopes, or HIPAA location." }
+        "409": { description: The publication changed. Restart pagination from offset zero without the old token. }
         "429": { description: Rate limited. }
         "502": { description: Could not read a required upstream service. }
         "503": { description: Analytics or privacy configuration unavailable. }
@@ -201,11 +219,19 @@ paths:
         - $ref: "#/components/parameters/Sort"
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/Publication"
         - $ref: "#/components/parameters/Format"
         - $ref: "#/components/parameters/ConversionEvent"
       responses:
         "200":
           description: Report, including empty results if Search Console is not ready.
+          headers:
+            X-SEO-Status:
+              description: Report status (CSV only).
+              schema: { type: string, enum: [not_connected, pipeline_disabled, copy_disabled, syncing, ok] }
+            X-SEO-Coverage-Partial:
+              description: Whether either requested period has partial coverage (CSV only).
+              schema: { type: boolean }
           content:
             application/json:
               schema:
@@ -222,6 +248,7 @@ paths:
         "401": { description: Missing or invalid API key. }
         "402": { description: The effective location plan does not include the required feature. }
         "403": { description: "Outside the key's roster or scopes, or HIPAA location." }
+        "409": { description: The publication changed. Restart pagination from offset zero without the old token. }
         "429": { description: Rate limited. }
         "502": { description: Could not read a required upstream service. }
         "503": { description: Analytics or privacy configuration unavailable. }
@@ -242,11 +269,19 @@ paths:
         - $ref: "#/components/parameters/Sort"
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/Publication"
         - $ref: "#/components/parameters/Format"
         - $ref: "#/components/parameters/Dimension"
       responses:
         "200":
           description: Report, including empty results if Search Console is not ready.
+          headers:
+            X-SEO-Status:
+              description: Report status (CSV only).
+              schema: { type: string, enum: [not_connected, pipeline_disabled, copy_disabled, syncing, ok] }
+            X-SEO-Coverage-Partial:
+              description: Whether either requested period has partial coverage (CSV only).
+              schema: { type: boolean }
           content:
             application/json:
               schema:
@@ -263,6 +298,7 @@ paths:
         "401": { description: Missing or invalid API key. }
         "402": { description: The effective location plan does not include the required feature. }
         "403": { description: "Outside the key's roster or scopes, or HIPAA location." }
+        "409": { description: The publication changed. Restart pagination from offset zero without the old token. }
         "429": { description: Rate limited. }
         "502": { description: Could not read a required upstream service. }
         "503": { description: Analytics or privacy configuration unavailable. }
@@ -362,6 +398,11 @@ components:
       in: query
       description: Number of ranked rows to skip. Use next_offset from the previous response.
       schema: { type: integer, minimum: 0, maximum: 9007199254740991, default: 0 }
+    Publication:
+      name: publication
+      in: query
+      description: Token returned by the previous ranked response. Resend with the same report parameters when paging. Pins Search Console rows only, not onsite metrics.
+      schema: { type: string, pattern: '^[a-f0-9]{64}$' }
     Format:
       name: format
       in: query
@@ -442,8 +483,9 @@ components:
         partial: { type: boolean, description: Values are based on fewer days than requested. }
     Pagination:
       type: object
-      required: [total_rows, next_offset]
+      required: [total_rows, next_offset, publication]
       properties:
+        publication: { type: string, nullable: true, pattern: '^[a-f0-9]{64}$', description: Search Console publication token. Null when the report is not ready. }
         total_rows: { type: integer, minimum: 0, description: Number of current-period rows before pagination. }
         next_offset: { type: integer, nullable: true, minimum: 0, description: Null on the last or an out-of-range page. }
     Metrics:
@@ -521,9 +563,10 @@ components:
               items: { $ref: "#/components/schemas/QueryRow" }
     PageRow:
       type: object
-      required: [page, clicks, impressions, ctr, position, previous]
+      required: [page_normalized, page, clicks, impressions, ctr, position, previous]
       properties:
-        page: { type: string }
+        page: { type: string, description: Original Search Console URL. }
+        page_normalized: { type: string, description: "Join key after removing query string, fragment and one trailing slash. Different pages can share this key." }
         clicks: { type: integer, format: int64, minimum: 0 }
         impressions: { type: integer, format: int64, minimum: 0 }
         ctr: { type: number, nullable: true, description: "Clicks divided by impressions, not a percentage." }
@@ -541,9 +584,10 @@ components:
               items: { $ref: "#/components/schemas/PageRow" }
     LandingPageRow:
       type: object
-      required: [page, clicks, impressions, ctr, position, previous, match, onsite, onsite_previous]
+      required: [page_normalized, page, clicks, impressions, ctr, position, previous, match, onsite, onsite_previous]
       properties:
-        page: { type: string }
+        page: { type: string, description: Original Search Console URL. }
+        page_normalized: { type: string, description: "Join key after removing query string, fragment and one trailing slash. Different pages can share this key." }
         clicks: { type: integer, format: int64, minimum: 0 }
         impressions: { type: integer, format: int64, minimum: 0 }
         ctr: { type: number, nullable: true, description: "Clicks divided by impressions, not a percentage." }
@@ -587,8 +631,9 @@ components:
       allOf:
         - $ref: "#/components/schemas/Report"
         - type: object
-          required: [brand_terms, branded, non_branded, anonymized]
+          required: [brand_terms, branded, non_branded, anonymized, query_coverage]
           properties:
+            query_coverage: { $ref: '#/components/schemas/Coverage' }
             brand_terms:
               type: array
               items: { type: string }
@@ -609,10 +654,10 @@ components:
     Residual:
       type: object
       nullable: true
-      description: Property minus visible query totals. Includes Google omissions and can be negative if the copied streams disagree.
+      description: Traffic not in visible queries (anonymized or truncated by Google). Property minus visible query totals over dates published by both grains. Null when not comparable or either difference is negative.
       required: [clicks, impressions, ctr, position]
       properties:
-        clicks: { type: integer, format: int64 }
-        impressions: { type: integer, format: int64 }
+        clicks: { type: integer, format: int64, minimum: 0 }
+        impressions: { type: integer, format: int64, minimum: 0 }
         ctr: { type: number, nullable: true }
         position: { type: number, nullable: true, description: Always null for the residual. }
