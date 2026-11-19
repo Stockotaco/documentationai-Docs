@@ -142,8 +142,9 @@ paths:
                   data:
                     $ref: "#/components/schemas/Queries"
             text/csv:
-              schema: { type: string }
-              description: The requested page of rows with a header. Comparison columns are prefixed previous_ when compare is true.
+              schema:
+                type: string
+                description: The requested page of rows with a header. Comparison columns are prefixed previous_ when compare is true.
         "400": { description: Invalid parameters or missing location binding. }
         "401": { description: Missing or invalid API key. }
         "402": { description: The effective location plan does not include the required feature. }
@@ -192,8 +193,9 @@ paths:
                   data:
                     $ref: "#/components/schemas/Pages"
             text/csv:
-              schema: { type: string }
-              description: The requested page of rows with a header. Comparison columns are prefixed previous_ when compare is true.
+              schema:
+                type: string
+                description: The requested page of rows with a header. Comparison columns are prefixed previous_ when compare is true.
         "400": { description: Invalid parameters or missing location binding. }
         "401": { description: Missing or invalid API key. }
         "402": { description: The effective location plan does not include the required feature. }
@@ -242,8 +244,9 @@ paths:
                   data:
                     $ref: "#/components/schemas/LandingPages"
             text/csv:
-              schema: { type: string }
-              description: The requested page of rows with a header. Comparison columns are prefixed previous_ when compare is true.
+              schema:
+                type: string
+                description: The requested page of rows with a header. Comparison columns are prefixed previous_ when compare is true.
         "400": { description: Invalid parameters or missing location binding. }
         "401": { description: Missing or invalid API key. }
         "402": { description: The effective location plan does not include the required feature. }
@@ -292,8 +295,9 @@ paths:
                   data:
                     $ref: "#/components/schemas/Breakdown"
             text/csv:
-              schema: { type: string }
-              description: The requested page of rows with a header. Comparison columns are prefixed previous_ when compare is true.
+              schema:
+                type: string
+                description: The requested page of rows with a header. Comparison columns are prefixed previous_ when compare is true.
         "400": { description: Invalid parameters or missing location binding. }
         "401": { description: Missing or invalid API key. }
         "402": { description: The effective location plan does not include the required feature. }
