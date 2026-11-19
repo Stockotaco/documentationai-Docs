@@ -470,7 +470,10 @@ paths:
     get:
       summary: List connections
       operationId: listAirbyteConnections
-      description: List all connections owned by the calling agency, most recent first.
+      description: >
+        List all connections owned by the calling agency, most recent first.
+        Replaced Search Console connections awaiting deletion have
+        `status: superseded` and `cleanup_pending: true`.
       parameters:
         - name: platform
           in: query
@@ -480,11 +483,11 @@ paths:
             type: string
         - name: status
           in: query
-          description: Filter by connection status.
+          description: Filter by connection status. `inactive` excludes superseded rows.
           required: false
           schema:
             type: string
-            enum: ["active", "error", "paused"]
+            enum: [active, inactive, error, pending, superseded]
         - name: client_id
           in: query
           description: Filter by client (location) identifier.
@@ -1077,6 +1080,10 @@ paths:
         `schedule_changes.errors` with a top-level `warning`.
 
 
+        A concurrent pipeline update or a superseded connection ID returns
+        `409 pipeline_conflict`. Reload the pipeline and candidates before retrying.
+
+
         Omitted fields keep their stored value; a new pipeline starts
         disabled with `run_hour_utc` 2. `connection_ids` must be connections
         belonging to this client; otherwise `400 unknown_connections`. Deleting
@@ -1156,6 +1163,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: "`pipeline_conflict`: the pipeline or roster changed or a connection was superseded. Reload before saving again."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: "`save_failed` — the database write failed; schedules taken over were given back"
           content:
@@ -1174,6 +1187,7 @@ paths:
       operationId: listAirbytePipelineCandidates
       description: >
         This client's connections, each flagged `in_scope` and `suggested`.
+        Superseded Search Console connections are excluded.
 
 
         Discovery proposes; it never decides. Which connections belong to a
@@ -2397,8 +2411,11 @@ components:
           example: 123-456-7890
         status:
           type: string
-          enum: ["active", "error", "paused"]
+          enum: [active, inactive, error, pending, superseded]
           example: active
+        cleanup_pending:
+          type: boolean
+          description: Present on connection list items. True for a superseded connection that can be deleted by its old ID.
         sync_frequency:
           $ref: "#/components/schemas/SyncFrequency"
         sync_hour_utc:

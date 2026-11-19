@@ -481,6 +481,24 @@ components:
         days_covered: { type: integer, minimum: 0 }
         days_requested: { type: integer, minimum: 1 }
         partial: { type: boolean, description: Values are based on fewer days than requested. }
+    QueryCoverage:
+      type: object
+      required: [current, previous]
+      properties:
+        current: { $ref: '#/components/schemas/QueryPeriodCoverage' }
+        previous: { $ref: '#/components/schemas/QueryPeriodCoverage' }
+    QueryPeriodCoverage:
+      allOf:
+        - $ref: '#/components/schemas/PeriodCoverage'
+        - type: object
+          nullable: true
+          required: [unpaired_dates]
+          properties:
+            partial: { type: boolean, description: True when query row coverage is incomplete or there are unpaired dates. }
+            unpaired_dates:
+              type: array
+              description: Dates excluded from the brand split because only one grain published or the two latest publications do not share a known copy generation.
+              items: { type: string, format: date }
     Pagination:
       type: object
       required: [total_rows, next_offset, publication]
@@ -633,7 +651,7 @@ components:
         - type: object
           required: [brand_terms, branded, non_branded, anonymized, query_coverage]
           properties:
-            query_coverage: { $ref: '#/components/schemas/Coverage' }
+            query_coverage: { $ref: '#/components/schemas/QueryCoverage' }
             brand_terms:
               type: array
               items: { type: string }
@@ -654,7 +672,7 @@ components:
     Residual:
       type: object
       nullable: true
-      description: Traffic not in visible queries (anonymized or truncated by Google). Property minus visible query totals over dates published by both grains. Null when not comparable or either difference is negative.
+      description: Traffic not in visible queries (anonymized or truncated by Google). Property minus visible query totals over dates where both latest grain publications share the same copy generation. Null when not comparable or either difference is negative.
       required: [clicks, impressions, ctr, position]
       properties:
         clicks: { type: integer, format: int64, minimum: 0 }

@@ -26,7 +26,7 @@ All paths below are relative to `https://mythic-analytics.gulp.workers.dev/clien
 
 <Steps>
   <Step title="List the client's connections" titleType="h3">
-`GET /pipelines/{clientId}/candidates` returns the client's connections with `in_scope` (already in the pipeline) and `suggested` (currently active). MCP: `list_airbyte_pipeline_candidates`.
+`GET /pipelines/{clientId}/candidates` returns the client's connections with `in_scope` (already in the pipeline) and `suggested` (currently active). Superseded Search Console connections are not candidates. MCP: `list_airbyte_pipeline_candidates`.
 
 ```bash
 curl https://mythic-analytics.gulp.workers.dev/client/v1/airbyte/pipelines/538d4ced-447c-40b9-9afa-d220f9afcc84/candidates \
@@ -321,6 +321,7 @@ Errors use the standard envelope. `code` is stable; `details` carries the confli
 | `400` | `not_completed` / `no_webhook` | Redeliver needs a `succeeded` run and a `webhook_url`. |
 | `403` | | Writes need an agency key (`ak_`). |
 | `404` | `no_pipeline` / `run_not_found` / `client_not_found` | Nothing by that id for this agency. |
+| `409` | `pipeline_conflict` | The pipeline changed during the save or a connection was superseded. Reload the pipeline and candidates before saving again. |
 | `409` | `run_in_flight` | A run is running. Starting or retrying another would sync the same connections twice. |
 | `409` | `run_exists_today` | Today already has a finished run. |
 | `409` | `run_changed` | The five-minute tick updated the run during your request, or is still finishing work on it. Read it again and retry in a few minutes. |
