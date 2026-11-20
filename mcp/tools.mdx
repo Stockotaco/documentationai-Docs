@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 401 tools across
+  Every tool the Mythic MCP server exposes — 402 tools across
   40 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 401 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 402 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -245,6 +245,7 @@ Collections of insights arranged into dashboards.
 | `delete_dashboard`<br /><span style={{opacity: 0.7}}>Delete Dashboard</span> | `dashboards:write` | Permanently delete a dashboard and all its insight associations. | `DELETE /builder/dashboards/:id` |
 | `add_insight_to_dashboard`<br /><span style={{opacity: 0.7}}>Add Insight to Dashboard</span> | `dashboards:write` | Add an insight to a dashboard with responsive grid layout positions. | `POST /builder/dashboards/:id/insights` |
 | `remove_insight_from_dashboard`<br /><span style={{opacity: 0.7}}>Remove Insight from Dashboard</span> | `dashboards:write` | Remove an insight from a dashboard. | `DELETE /builder/dashboard-insights/:id` |
+| `update_dashboard_layout`<br /><span style={{opacity: 0.7}}>Update Dashboard Layout</span> | `dashboards:write` | Move and resize panels already on a dashboard. | `PATCH /builder/dashboard-insights/:id/layout` |
 
 ## Canvases
 
