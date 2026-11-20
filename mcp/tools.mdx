@@ -619,8 +619,8 @@ Agency-wide keys only — a key bound to one client cannot hold this scope.
 | --- | --- | --- | --- |
 | `list_knowledge_collections`<br /><span style={{opacity: 0.7}}>List Knowledge Collections</span> | `knowledge:read` | Private beta. | `GET /client/v1/knowledge/collections` |
 | `list_knowledge_documents`<br /><span style={{opacity: 0.7}}>List Knowledge Documents</span> | `knowledge:read` | Private beta. | `GET /client/v1/knowledge/collections/:collectionId/documents` |
-| `search_knowledge`<br /><span style={{opacity: 0.7}}>Search Knowledge</span> | `knowledge:read` | Private beta: return ranked lesson passages using hybrid, vector, or keyword search. | `POST /client/v1/knowledge/search` |
-| `chat_with_knowledge`<br /><span style={{opacity: 0.7}}>Chat With Knowledge</span> | `knowledge:read` | Private beta: answer a question with citations from expanded lesson passages, or abstain. | `POST /client/v1/knowledge/chat` |
+| `search_knowledge`<br /><span style={{opacity: 0.7}}>Search Knowledge</span> | `knowledge:read` | Private beta: return ranked lesson passages, with title and module promotion in hybrid mode. | `POST /client/v1/knowledge/search` |
+| `chat_with_knowledge`<br /><span style={{opacity: 0.7}}>Chat With Knowledge</span> | `knowledge:read` | Private beta: answer with citations from lesson passages, retrying once if citations are invalid. | `POST /client/v1/knowledge/chat` |
 | `create_knowledge_collection`<br /><span style={{opacity: 0.7}}>Create Knowledge Collection</span> | `knowledge:write` | Private beta. | `POST /client/v1/knowledge/collections` |
 | `delete_knowledge_collection`<br /><span style={{opacity: 0.7}}>Delete Knowledge Collection</span> | `knowledge:write` | Private beta. | `DELETE /client/v1/knowledge/collections/:collectionId` |
 | `upsert_knowledge_document`<br /><span style={{opacity: 0.7}}>Upsert Knowledge Document</span> | `knowledge:write` | Private beta. | `POST /client/v1/knowledge/collections/:collectionId/documents` |

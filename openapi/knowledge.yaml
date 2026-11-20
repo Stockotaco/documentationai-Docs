@@ -169,7 +169,7 @@ paths:
     post:
       operationId: searchKnowledge
       summary: Find ranked lesson passages in the requested scope
-      description: Hybrid blends weighted English full-text search and cosine ranks. Each ranked chunk expands to adjacent chunks in the same lesson. Overlapping windows merge within a 20,000 estimated text token budget.
+      description: Hybrid blends weighted English full-text search and cosine ranks and promotes matching lesson titles and modules. Each ranked chunk expands to adjacent chunks in the same lesson. Overlapping windows merge within a 20,000 estimated text token budget.
       requestBody:
         required: true
         content:
@@ -207,7 +207,7 @@ paths:
     post:
       operationId: chatWithKnowledge
       summary: Ask a question with source citations
-      description: A non-streaming answer. Retrieval uses the last user message. Expanded passages are grouped by lesson with course and module labels. History is not stored. Weak retrieval or missing verified citations results in an abstention.
+      description: A non-streaming answer. Retrieval uses the last user message. Expanded passages are grouped by lesson with course and module labels. History is not stored. Invalid citations trigger one retry, then abstention if the answer still lacks verified excerpts.
       requestBody:
         required: true
         content:
@@ -438,9 +438,10 @@ components:
       allOf:
         - $ref: '#/components/schemas/PassageChunk'
         - type: object
-          required: [score, keyword_rank, keyword_score, vector_rank, similarity]
+          required: [score, keyword_rank, keyword_score, vector_rank, similarity, title_boost]
           properties:
-            score: { type: number, description: Reciprocal rank score with constant 60. }
+            score: { type: number, description: Reciprocal rank score with constant 60 plus title_boost. }
+            title_boost: { type: number, minimum: 0, maximum: 0.021, description: Lesson title or module promotion. Zero outside hybrid mode. }
             keyword_rank: { type: integer, minimum: 1, nullable: true }
             keyword_score: { type: number, nullable: true }
             vector_rank: { type: integer, minimum: 1, nullable: true }
