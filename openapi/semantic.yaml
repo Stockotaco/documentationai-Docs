@@ -143,6 +143,7 @@ paths:
                     dimensions: [platform]
                     time_dimensions: [{ dimension: date, granularity: month, date_range: ["2026-09-01", "2026-10-31"] }]
                 show_sql: { type: boolean, description: "Include the generated SQL." }
+                user_phrase: { type: string, maxLength: 500, description: "The user's own words for the number, verbatim (e.g. `new customers`). Never changes the answer; recorded for the daily scan that drafts metric proposals (`GET /client/v1/metrics/proposals`)." }
       responses:
         "200": { $ref: "#/components/responses/ToolResult" }
         "400": { $ref: "#/components/responses/ToolError" }

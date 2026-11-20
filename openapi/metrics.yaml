@@ -35,6 +35,7 @@ paths:
           required: false
           description: Also list archived metrics.
           schema: { type: boolean, default: false }
+        - $ref: "#/components/parameters/UserPhrase"
       responses:
         "200":
           description: Metrics.
@@ -77,6 +78,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/LocationId"
         - $ref: "#/components/parameters/MetricId"
+        - $ref: "#/components/parameters/UserPhrase"
       responses:
         "200":
           description: The metric and its versions.
@@ -161,6 +163,7 @@ paths:
           required: false
           description: "Column to break the value down by (default: the metric's own breakdown). At most 100 rows, largest first."
           schema: { type: string, example: platform }
+        - $ref: "#/components/parameters/UserPhrase"
       responses:
         "200":
           description: The value.
@@ -216,6 +219,117 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+  /client/v1/metrics/proposals:
+    get:
+      summary: List metric term suggestions
+      operationId: listMetricTermSuggestions
+      description: >
+        Metric proposals the daily scan drafted from `user_phrase`: `new_metric`
+        proposals (a name, definition, semantic model and measure that exist in
+        the client's semantic layer, format, direction, the phrases as synonyms
+        and evidence) and `synonym` proposals that add phrases to an existing
+        metric. `not_yet_grouped` lists phrases the scan could not place yet.
+        Needs `metrics:read`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [pending, approved, dismissed, all], default: pending }
+      responses:
+        "200":
+          description: Proposals.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      proposals: { type: array, items: { $ref: "#/components/schemas/MetricProposal" } }
+                      not_yet_grouped:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            phrase: { type: string }
+                            count: { type: integer }
+                            last_seen: { type: string, format: date-time }
+                            confidence: { type: number, nullable: true }
+        "400": { $ref: "#/components/responses/InvalidInput" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /client/v1/metrics/proposals/{proposalId}/approve:
+    post:
+      summary: Approve a metric proposal
+      operationId: approveMetricProposal
+      description: >
+        A `new_metric` proposal creates the metric through the same validation
+        and pinning as `POST /client/v1/metrics`: it starts `proposed` until
+        approved, with every observed phrase as a synonym. `name` and
+        `definition` may be changed first; renaming keeps the drafted name as a
+        synonym. A `synonym` proposal adds its phrases to the existing metric's
+        synonyms, which does not clear its approval. Needs `metrics:write`.
+        409 `proposal_decided` when it was already approved or dismissed, 409
+        `metric_name_exists` on a name clash, 400 when the measure no longer
+        exists on the client's model.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/ProposalId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: string, maxLength: 200, description: "new_metric only." }
+                definition: { type: string, maxLength: 4000, description: "new_metric only." }
+      responses:
+        "200":
+          description: The decided proposal and the created or updated metric.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      proposal: { $ref: "#/components/schemas/MetricProposal" }
+                      metric: { $ref: "#/components/schemas/Metric" }
+                      synonyms_added: { type: array, items: { type: string }, description: "synonym proposals only." }
+        "400": { $ref: "#/components/responses/InvalidInput" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /client/v1/metrics/proposals/{proposalId}/dismiss:
+    post:
+      summary: Dismiss a metric proposal
+      operationId: dismissMetricProposal
+      description: "Dismisses the proposal. Its phrases stay recorded and grouped, so the scan does not propose them again. Needs `metrics:write`; 409 `proposal_decided` when already decided."
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/ProposalId"
+      responses:
+        "200":
+          description: The dismissed proposal.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      proposal: { $ref: "#/components/schemas/MetricProposal" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 components:
   securitySchemes:
     BearerAuth:
@@ -234,7 +348,45 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    ProposalId:
+      name: proposalId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    UserPhrase:
+      name: user_phrase
+      in: query
+      required: false
+      description: "The user's own words for the number, verbatim (e.g. `new sales`, `AOV`). Never changes the answer; recorded for the daily scan that drafts metric proposals."
+      schema: { type: string, maxLength: 500 }
   schemas:
+    MetricProposal:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [new_metric, synonym] }
+        status: { type: string, enum: [pending, approved, dismissed] }
+        name: { type: string, description: "new_metric only." }
+        definition: { type: string, nullable: true, description: "new_metric only." }
+        semantic:
+          type: object
+          description: "new_metric only: the model and measure, both present in the client's semantic layer when drafted."
+          properties:
+            model: { type: string }
+            measure: { type: string }
+        format: { type: string, enum: [number, currency, percentage] }
+        direction: { type: string, enum: [higher_is_better, lower_is_better] }
+        target_metric_id: { type: string, format: uuid, description: "synonym only." }
+        target_metric_name: { type: string, nullable: true, description: "synonym only." }
+        synonyms: { type: array, items: { type: string } }
+        evidence:
+          type: object
+          description: "`phrases` (phrase, count, first_seen, last_seen) and up to 5 semantic `queries` run with them."
+        confidence: { type: number, nullable: true }
+        metric_id: { type: string, format: uuid, nullable: true, description: "The metric an approved new_metric proposal created." }
+        decided_by: { type: string, nullable: true }
+        decided_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
     Semantic:
       type: object
       description: The measure behind the metric. `formula` is set by the server when the metric is saved.

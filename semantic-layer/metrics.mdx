@@ -23,6 +23,9 @@ Reading a metric's value runs its measure for a period. If someone has since cha
 | `archive_metric` | `POST /client/v1/metrics/{id}/archive` | Hides a metric the client no longer tracks. |
 | `unarchive_metric` | `POST /client/v1/metrics/{id}/unarchive` | Restores an archived metric. |
 | `approve_metric` | `POST /client/v1/metrics/{id}/approve` | Approves the current definition. Agency-wide keys only. |
+| `list_metric_term_suggestions` | `GET /client/v1/metrics/proposals` | Metric proposals drafted from the words people use. |
+| `approve_metric_proposal` | `POST /client/v1/metrics/proposals/{id}/approve` | Creates the proposed metric, or adds synonyms to an existing one. |
+| `dismiss_metric_proposal` | `POST /client/v1/metrics/proposals/{id}/dismiss` | Dismisses a proposal. |
 
 `semantic_overview` and `semantic_inspect` list the measures that back Metrics and tell the agent to answer with `get_metric_value`.
 
@@ -89,11 +92,29 @@ curl "https://mythic-analytics.gulp.workers.dev/client/v1/metrics/<id>/value?per
 
 `archive_metric` hides a metric the client no longer tracks: it leaves `list_metrics` (pass `include_archived=true` to see it) and the metric links on `semantic_overview` and `semantic_inspect`. It keeps its name, definition, approval and history, `get_metric` shows `archived`, `archived_at` and `archived_by`, and `get_metric_value` still answers, with `archived: true` and a note to say so. `unarchive_metric` restores it. Archiving is not a new version: it does not change what the number means.
 
+## Metric phrases and proposals
+
+`list_metrics`, `get_metric`, `get_metric_value` and `semantic_query` take an optional `user_phrase`: the user's own words for the number, verbatim (for example `AOV` or `new customers`). It never changes the answer. Mythic records it for the client so Metrics can be named the way people ask for them.
+
+Once a day, Mythic groups each client's new phrases on **your agency's own OpenRouter key** (the key set with `PUT /client/v1/replay-vision/keys`; a client's own OpenRouter key is used first). A client whose agency has no OpenRouter key is skipped, and its phrases wait. Each phrase is matched to:
+
+- **an existing metric.** If the wording differs from the metric's name and synonyms (`AOV` for "Average order value"), it joins a `synonym` proposal for that metric.
+- **an open proposal.** It is added to that proposal's synonyms and evidence.
+- **nothing defined yet.** Mythic drafts a `new_metric` proposal: a name, definition, format, direction and a model and measure from the client's semantic layer. A draft that names a measure the client does not have is dropped. A draft on a measure an existing metric already reports becomes a synonym of that metric instead.
+
+Nothing changes until someone decides:
+
+- `approve_metric_proposal` on a `new_metric` proposal creates the metric exactly like `create_metric`: the measure's formula is pinned, every observed phrase becomes a synonym, and the metric starts `proposed` until `approve_metric`. Pass `name` or `definition` to edit it first; a renamed proposal keeps the drafted name as a synonym.
+- `approve_metric_proposal` on a `synonym` proposal adds its phrases to the metric's synonyms. Synonyms do not clear approval.
+- `dismiss_metric_proposal` closes the proposal. Its phrases stay grouped, so they are not proposed again.
+
+A proposal can be decided once: a second decision gets **409 `proposal_decided`**.
+
 ## Authentication
 
 <ClientV1Auth />
 
-Scoped keys (`mcp_`) need `metrics:read` to read, `metrics:write` to create, update, archive and unarchive, and `metrics_approval:write` to approve. A location secret key (`sk_`) is read-only (**403 `insufficient_role`**). Approving needs an agency-wide key: a key bound to one client gets **403 `agency_key_required`**, so a client cannot sign off its own numbers. The location always comes from the key.
+Scoped keys (`mcp_`) need `metrics:read` to read (including `list_metric_term_suggestions`), `metrics:write` to create, update, archive, unarchive and approve or dismiss proposals, and `metrics_approval:write` to approve. A location secret key (`sk_`) is read-only (**403 `insufficient_role`**). Approving needs an agency-wide key: a key bound to one client gets **403 `agency_key_required`**, so a client cannot sign off its own numbers. The location always comes from the key.
 
 ## Plans
 
@@ -110,5 +131,6 @@ Metrics are part of the semantic layer, included in every paid plan. Without it 
 | 409 | `metric_drifted` | Approval refused: the measure changed since the metric was saved. |
 | 409 | `metric_archived` | Approval refused: the metric is archived. |
 | 409 | `metric_measure_missing` | The measure behind the metric no longer exists. |
+| 409 | `proposal_decided` | The proposal was already approved or dismissed. |
 | 429 | `rate_limited` | More than 60 requests a minute for one location. |
 | 502 / 503 | `semantic_unavailable` | The semantic layer failed or is not configured. |

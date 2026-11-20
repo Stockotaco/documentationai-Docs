@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 397 tools across
+  Every tool the Mythic MCP server exposes — 400 tools across
   40 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 397 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 400 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -179,10 +179,13 @@ Named KPIs backed by a semantic-layer measure with its formula pinned: list them
 | `list_metrics`<br /><span style={{opacity: 0.7}}>List Metrics</span> | `metrics:read` | List this client's Metrics: named KPIs, each backed by one semantic-layer measure, with their definition, approval status and whether the measure changed since the metric was saved (drift). | `GET /client/v1/metrics` |
 | `get_metric`<br /><span style={{opacity: 0.7}}>Get Metric</span> | `metrics:read` | One Metric with its pinned semantic definition, approval, archive state and version history (newest first). | `GET /client/v1/metrics/:metricId` |
 | `get_metric_value`<br /><span style={{opacity: 0.7}}>Get Metric Value</span> | `metrics:read` | Resolve a Metric's value for a period by running its pinned semantic measure, the shared versioned definition. | `GET /client/v1/metrics/:metricId/value` |
+| `list_metric_term_suggestions`<br /><span style={{opacity: 0.7}}>List Metric Term Suggestions</span> | `metrics:read` | Metric proposals drafted by the daily scan from the words people used when asking for numbers (user_phrase): new Metrics (name, definition, semantic model + measure, format, direction, the phrases as synonym… | `GET /client/v1/metrics/proposals` |
 | `create_metric`<br /><span style={{opacity: 0.7}}>Create Metric</span> | `metrics:write` | Create a Metric backed by a semantic-layer measure (find one with semantic_overview). | `POST /client/v1/metrics` |
 | `update_metric`<br /><span style={{opacity: 0.7}}>Update Metric</span> | `metrics:write` | Update a Metric. | `PATCH /client/v1/metrics/:metricId` |
 | `archive_metric`<br /><span style={{opacity: 0.7}}>Archive Metric</span> | `metrics:write` | Archive a Metric the client no longer tracks. | `POST /client/v1/metrics/:metricId/archive` |
 | `unarchive_metric`<br /><span style={{opacity: 0.7}}>Unarchive Metric</span> | `metrics:write` | Restore an archived Metric to list_metrics. | `POST /client/v1/metrics/:metricId/unarchive` |
+| `approve_metric_proposal`<br /><span style={{opacity: 0.7}}>Approve Metric Proposal</span> | `metrics:write` | Approve a metric proposal. | `POST /client/v1/metrics/proposals/:proposalId/approve` |
+| `dismiss_metric_proposal`<br /><span style={{opacity: 0.7}}>Dismiss Metric Proposal</span> | `metrics:write` | Dismiss a metric proposal. | `POST /client/v1/metrics/proposals/:proposalId/dismiss` |
 
 ## Metric approval
 
