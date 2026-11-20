@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 389 tools across
-  38 scope families — with the scope each one needs and the
+  Every tool the Mythic MCP server exposes — 395 tools across
+  40 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 389 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 395 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -169,6 +169,28 @@ Agency-wide keys only — a key bound to one client cannot hold this scope.
 | Tool | Scope | What it does | Proxies |
 | --- | --- | --- | --- |
 | `semantic_edit_model`<br /><span style={{opacity: 0.7}}>Edit Semantic Model</span> | `semantic_models:write` | Agency keys only. | `POST /client/v1/semantic/semantic_edit_model` |
+
+## Metrics
+
+Named KPIs backed by a semantic-layer measure with its formula pinned: list them, read their value for a period (with comparison and breakdown), and create or update proposed definitions. Needs the semantic layer plan feature.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_metrics`<br /><span style={{opacity: 0.7}}>List Metrics</span> | `metrics:read` | List this client's Metrics: named KPIs, each backed by one semantic-layer measure, with their definition, approval status and whether the measure changed since the metric was saved (drift). | `GET /client/v1/metrics` |
+| `get_metric`<br /><span style={{opacity: 0.7}}>Get Metric</span> | `metrics:read` | One Metric with its pinned semantic definition, approval and version history (newest first). | `GET /client/v1/metrics/:metricId` |
+| `get_metric_value`<br /><span style={{opacity: 0.7}}>Get Metric Value</span> | `metrics:read` | Resolve a Metric's value for a period by running its pinned semantic measure, the shared versioned definition. | `GET /client/v1/metrics/:metricId/value` |
+| `create_metric`<br /><span style={{opacity: 0.7}}>Create Metric</span> | `metrics:write` | Create a Metric backed by a semantic-layer measure (find one with semantic_overview). | `POST /client/v1/metrics` |
+| `update_metric`<br /><span style={{opacity: 0.7}}>Update Metric</span> | `metrics:write` | Update a Metric. | `PATCH /client/v1/metrics/:metricId` |
+
+## Metric approval
+
+Approve a client’s Metric as its canonical definition (approve_metric). Agency-wide keys only: a client-bound key cannot sign off its own numbers.
+
+Agency-wide keys only — a key bound to one client cannot hold this scope.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `approve_metric`<br /><span style={{opacity: 0.7}}>Approve Metric</span> | `metrics_approval:write` | Agency-wide keys only. | `POST /client/v1/metrics/:metricId/approve` |
 
 ## Heatmaps
 

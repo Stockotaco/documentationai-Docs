@@ -539,12 +539,20 @@
               {
                 "group": "Overview",
                 "icon": "file-text",
-                "pages": [{ "title": "Introduction", "path": "semantic-layer/overview", "icon": "file-text" }]
+                "pages": [
+                  { "title": "Introduction", "path": "semantic-layer/overview", "icon": "file-text" },
+                  { "title": "Metrics", "path": "semantic-layer/metrics", "icon": "target" }
+                ]
               },
               {
                 "group": "Semantic Layer",
                 "icon": "sigma",
                 "openapi": "openapi/semantic.yaml"
+              },
+              {
+                "group": "Metrics",
+                "icon": "target",
+                "openapi": "openapi/metrics.yaml"
               }
             ]
           },

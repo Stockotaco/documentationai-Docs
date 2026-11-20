@@ -1,0 +1,337 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Metrics
+  description: >
+    Approvable KPIs for one client, each backed by one semantic-layer measure
+    whose formula is pinned when the metric is saved. Reading a metric's value
+    runs that measure; if the measure has changed since, the answer still comes
+    back, with a `drift` warning and `approval_status: proposed`.
+
+
+    Accepts an agency key (`ak_`, bind a location with `location_id` or the
+    `X-Location-Id` header), a location secret key (`sk_`, reads only) or a
+    scoped key (`mcp_`) holding `metrics:read`, plus `metrics:write` to create
+    or update and `metrics_approval:write` to approve. Approving also needs an
+    agency-wide key. The location always comes from the key.
+
+
+    Part of the semantic layer: included in every paid plan; otherwise every
+    endpoint answers 403 `feature_not_in_plan`.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+paths:
+  /client/v1/metrics:
+    get:
+      summary: List metrics
+      operationId: listMetrics
+      description: "The client's metrics with their pinned definition, approval status and drift (the measure's current formula against the pinned one). `drift_note` is set when the semantic layer could not be reached to check drift."
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Metrics.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      metrics: { type: array, items: { $ref: "#/components/schemas/Metric" } }
+                      drift_note: { type: string }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      summary: Create a metric
+      operationId: createMetric
+      description: "Creates a proposed metric. The measure's current formula is read from the client's model and pinned; a `formula` in the request is refused. Names are unique per client, ignoring case (409 `metric_name_exists`)."
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/MetricInput"
+                - required: [name, semantic]
+      responses:
+        "201": { $ref: "#/components/responses/MetricResult" }
+        "400": { $ref: "#/components/responses/InvalidInput" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /client/v1/metrics/{metricId}:
+    get:
+      summary: Get a metric
+      operationId: getMetric
+      description: One metric with its drift and version history, newest first.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/MetricId"
+      responses:
+        "200":
+          description: The metric and its versions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/Metric"
+                      - type: object
+                        properties:
+                          versions:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                version: { type: integer }
+                                snapshot: { type: object, description: "name, definition, semantic, format, unit, direction, synonyms at that version." }
+                                created_by: { type: string }
+                                created_at: { type: string, format: date-time }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Update a metric
+      operationId: updateMetric
+      description: "Changes only the fields sent. A change to name, definition, semantic, format, unit or direction clears the approval (`unapproved: true`); synonyms do not. Sending `semantic` re-pins the measure's current formula, which is how a drifted metric is brought back in line."
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/MetricId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MetricInput" }
+      responses:
+        "200":
+          description: The updated metric.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/Metric"
+                      - type: object
+                        properties:
+                          changed_fields: { type: array, items: { type: string } }
+                          unapproved: { type: boolean }
+        "400": { $ref: "#/components/responses/InvalidInput" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /client/v1/metrics/{metricId}/value:
+    get:
+      summary: Get a metric's value
+      operationId: getMetricValue
+      description: >
+        Runs the metric's semantic measure for a period. The total is its own
+        query, never a sum of the breakdown rows. When the measure's formula
+        differs from the pinned one, the value uses the current formula and the
+        answer carries `drift` and `approval_status: proposed`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/MetricId"
+        - name: period
+          in: query
+          required: false
+          description: "`last_7d`, `last_30d` (complete days ending yesterday), `this_month`, `last_month` (default), a month `YYYY-MM`, or a range `YYYY-MM-DD..YYYY-MM-DD` (at most 1,096 days). Dates are UTC; a period that includes today is `partial`."
+          schema: { type: string, example: last_month }
+        - name: compare
+          in: query
+          required: false
+          description: "Also return the previous period: the previous month (the same days of it for a partial month), else the same number of days just before."
+          schema: { type: boolean }
+        - name: breakdown
+          in: query
+          required: false
+          description: "Column to break the value down by (default: the metric's own breakdown). At most 100 rows, largest first."
+          schema: { type: string, example: platform }
+      responses:
+        "200":
+          description: The value.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: "#/components/schemas/MetricValue" }
+        "400": { $ref: "#/components/responses/InvalidInput" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`metric_measure_missing`: the measure behind the metric no longer exists on the client's model."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /client/v1/metrics/{metricId}/approve:
+    post:
+      summary: Approve a metric
+      operationId: approveMetric
+      description: "Approves the metric's current definition. Agency-wide keys only (a key bound to one client gets 403 `agency_key_required`). Refused with 409 `metric_drifted` while the measure differs from the pinned formula."
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/MetricId"
+      responses:
+        "200": { $ref: "#/components/responses/MetricResult" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "`ak_`, `sk_` or `mcp_` key."
+  parameters:
+    LocationId:
+      name: X-Location-Id
+      in: header
+      required: false
+      description: Required with an agency key or an agency-wide `mcp_` key.
+      schema: { type: string }
+    MetricId:
+      name: metricId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    Semantic:
+      type: object
+      description: The measure behind the metric. `formula` is set by the server when the metric is saved.
+      properties:
+        model: { type: string, example: ad_spend_daily }
+        measure: { type: string, example: total_spend }
+        time_dimension: { type: string, example: date, description: "Default: the model's default time dimension." }
+        breakdown: { type: string, example: platform }
+        filters: { type: array, items: { type: string }, example: ["platform = 'meta_ads'"] }
+        formula: { type: string, readOnly: true, example: "spend:sum" }
+    MetricInput:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 200 }
+        definition: { type: string, nullable: true, maxLength: 4000 }
+        semantic:
+          type: object
+          required: [model, measure]
+          additionalProperties: false
+          properties:
+            model: { type: string }
+            measure: { type: string }
+            time_dimension: { type: string }
+            breakdown: { type: string }
+            filters: { type: array, items: { type: string }, maxItems: 20 }
+        format: { type: string, enum: [number, currency, percentage] }
+        unit: { type: string, nullable: true, maxLength: 40 }
+        direction: { type: string, enum: [higher_is_better, lower_is_better] }
+        synonyms: { type: array, items: { type: string }, maxItems: 20 }
+    Drift:
+      type: object
+      nullable: true
+      properties:
+        pinned_formula: { type: string }
+        current_formula: { type: string, nullable: true }
+        warning: { type: string }
+    Metric:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        definition: { type: string, nullable: true }
+        semantic: { $ref: "#/components/schemas/Semantic" }
+        format: { type: string }
+        unit: { type: string, nullable: true }
+        direction: { type: string }
+        synonyms: { type: array, items: { type: string } }
+        approval_status: { type: string, enum: [approved, proposed] }
+        approved_at: { type: string, format: date-time, nullable: true }
+        approved_by: { type: string, nullable: true }
+        drift: { $ref: "#/components/schemas/Drift" }
+        version: { type: integer, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    MetricValue:
+      type: object
+      properties:
+        metric: { type: object, description: "id, name, definition, format, unit, direction, synonyms." }
+        version: { type: integer, nullable: true }
+        approval_status: { type: string, enum: [approved, proposed] }
+        approval_note: { type: string }
+        drift: { $ref: "#/components/schemas/Drift" }
+        period:
+          type: object
+          properties:
+            label: { type: string, example: "2026-10" }
+            start: { type: string, format: date }
+            end: { type: string, format: date }
+            partial: { type: boolean }
+        value: { type: number, nullable: true }
+        note: { type: string, description: "Set when the period has no data or is partial." }
+        previous:
+          type: object
+          properties:
+            period: { type: object }
+            value: { type: number, nullable: true }
+        change: { type: number, nullable: true }
+        change_pct: { type: number, nullable: true, description: "A fraction: 0.25 is +25%." }
+        breakdown_by: { type: string }
+        breakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string, nullable: true }
+              value: { type: number, nullable: true }
+        breakdown_truncated: { type: boolean }
+        semantic: { type: object, description: "The model, measure and formula that ran." }
+        source: { type: string, enum: [semantic_measure] }
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+  responses:
+    MetricResult:
+      description: The metric.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success: { type: boolean }
+              data: { $ref: "#/components/schemas/Metric" }
+    InvalidInput:
+      description: "`invalid_input` or `invalid_id`, or `semantic_error` when the measure could not run."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: "`feature_not_in_plan`, `insufficient_role`, `insufficient_scope` or `agency_key_required`."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: "`not_found`: no metric with that id for this client."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: "`metric_name_exists` or `metric_drifted`."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

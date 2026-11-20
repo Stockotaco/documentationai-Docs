@@ -1,0 +1,107 @@
+---
+title: Metrics
+description: >-
+  Approvable KPIs backed by a semantic-layer measure, with the formula pinned
+  so a metric never silently changes definition.
+---
+
+import ClientV1Auth from "/snippets/client-v1-auth.mdx"
+
+## Overview
+
+A semantic-layer measure is a shared, named formula. A **Metric** is the governed layer on top: a name, a plain-language definition, a format and a direction, backed by exactly one measure. When a metric is saved, the measure's current formula is **pinned** into it. An agency-wide key then **approves** it as the client's canonical definition.
+
+Reading a metric's value runs its measure for a period. If someone has since changed the measure (for example with `semantic_edit_model`), the answer still comes back, computed with the current formula, but it carries a `drift` warning and `approval_status: "proposed"`. The metric never quietly reports a different definition under an approved label. Re-save the metric with `semantic` to pin the new formula, then approve it again.
+
+| Tool | HTTP | What it does |
+| --- | --- | --- |
+| `list_metrics` | `GET /client/v1/metrics` | The client's metrics, with approval and drift. |
+| `get_metric` | `GET /client/v1/metrics/{id}` | One metric and its version history. |
+| `get_metric_value` | `GET /client/v1/metrics/{id}/value` | The value for a period, optionally with the previous period and a breakdown. |
+| `create_metric` | `POST /client/v1/metrics` | A new, proposed metric on a measure. |
+| `update_metric` | `PATCH /client/v1/metrics/{id}` | Changes fields; a definition change clears approval. |
+| `approve_metric` | `POST /client/v1/metrics/{id}/approve` | Approves the current definition. Agency-wide keys only. |
+
+`semantic_overview` and `semantic_inspect` list the measures that back Metrics and tell the agent to answer with `get_metric_value`.
+
+## Create and approve
+
+```bash
+curl -X POST https://mythic-analytics.gulp.workers.dev/client/v1/metrics \
+  -H "Authorization: Bearer ak_..." -H "X-Location-Id: <location_id>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Ad spend","definition":"Total paid media spend across Meta and Google.",
+       "format":"currency","unit":"USD","synonyms":["spend"],
+       "semantic":{"model":"ad_spend_daily","measure":"total_spend","breakdown":"platform"}}'
+
+curl -X POST https://mythic-analytics.gulp.workers.dev/client/v1/metrics/<id>/approve \
+  -H "Authorization: Bearer ak_..." -H "X-Location-Id: <location_id>"
+```
+
+`semantic` takes `model`, `measure`, and optionally `time_dimension` (default: the model's), `breakdown` and fixed `filters`. The model and measure must exist for the client, and the formula always comes from the model; a `formula` in the request is refused.
+
+## Read a value
+
+```bash
+curl "https://mythic-analytics.gulp.workers.dev/client/v1/metrics/<id>/value?period=last_month&compare=true" \
+  -H "Authorization: Bearer ak_..." -H "X-Location-Id: <location_id>"
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "version": 1,
+    "approval_status": "approved",
+    "period": { "label": "2026-10", "start": "2026-10-01", "end": "2026-10-31", "partial": false },
+    "value": 405531.09,
+    "previous": { "period": { "label": "2026-09", "start": "2026-09-01", "end": "2026-09-30" }, "value": 46870.54 },
+    "change": 358660.55,
+    "change_pct": 7.65,
+    "breakdown_by": "platform",
+    "breakdown": [{ "label": "meta_ads", "value": 387053.82 }, { "label": "google_ads", "value": 18477.27 }],
+    "semantic": { "model": "ad_spend_daily", "measure": "total_spend", "formula": "spend:sum", "time_dimension": "date" },
+    "source": "semantic_measure"
+  }
+}
+```
+
+| `period` | Range (UTC) |
+| --- | --- |
+| `last_7d`, `last_30d` | The complete days ending yesterday |
+| `this_month` | The 1st through today (partial) |
+| `last_month` (default) | The previous calendar month |
+| `YYYY-MM` | That month; the current month is partial |
+| `YYYY-MM-DD..YYYY-MM-DD` | An explicit range, at most 1,096 days |
+
+`compare=true` adds the previous month (the same days of it when the month is partial) or the same number of days just before. `breakdown=<column>` overrides the metric's own breakdown; at most 100 rows come back, largest first. Never add the rows up: `value` is computed by its own query and is the only valid total.
+
+## Approval and versions
+
+- A new metric is `proposed`.
+- Changing `name`, `definition`, `semantic`, `format`, `unit` or `direction` clears the approval. Changing `synonyms` does not.
+- Every change to the definition is stored as a new version; `get_metric` returns them newest first. Approving is not a version.
+- `approve_metric` is refused with **409 `metric_drifted`** while the measure differs from the pinned formula.
+
+## Authentication
+
+<ClientV1Auth />
+
+Scoped keys (`mcp_`) need `metrics:read` to read, `metrics:write` to create and update, and `metrics_approval:write` to approve. A location secret key (`sk_`) is read-only (**403 `insufficient_role`**). Approving needs an agency-wide key: a key bound to one client gets **403 `agency_key_required`**, so a client cannot sign off its own numbers. The location always comes from the key.
+
+## Plans
+
+Metrics are part of the semantic layer, included in every paid plan. Without it every endpoint answers **403 `feature_not_in_plan`**; if the plan cannot be checked, **503 `entitlements_unavailable`**.
+
+## Errors
+
+| Status | Code | Meaning |
+| --- | --- | --- |
+| 400 | `invalid_input` | A bad field, period or breakdown, or a measure or column the client's model does not have. |
+| 400 | `semantic_error` | The measure could not run; the message says why. |
+| 404 | `not_found` | No metric with that id for this client. |
+| 409 | `metric_name_exists` | Another metric of this client has that name (ignoring case). |
+| 409 | `metric_drifted` | Approval refused: the measure changed since the metric was saved. |
+| 409 | `metric_measure_missing` | The measure behind the metric no longer exists. |
+| 429 | `rate_limited` | More than 60 requests a minute for one location. |
+| 502 / 503 | `semantic_unavailable` | The semantic layer failed or is not configured. |
