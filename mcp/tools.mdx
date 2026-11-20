@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 383 tools across
-  36 scope families — with the scope each one needs and the
+  Every tool the Mythic MCP server exposes — 389 tools across
+  38 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 383 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 389 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -147,6 +147,28 @@ Traffic from the client’s own MCP servers sent by @mythic-data/mcp: tool usage
 | `list_mcp_missing_capabilities`<br /><span style={{opacity: 0.7}}>List MCP Missing Capabilities</span> | `mcp_analytics:read` | Capabilities agents reported missing through the get_more_tools tool, grouped by normalized text, with reports, sessions, users, how often the agent was blocked, the tools it tried, and the latest goal. | `GET /client/v1/mcp-analytics/missing-capabilities` |
 | `get_mcp_setup_status`<br /><span style={{opacity: 0.7}}>Get MCP Setup Status</span> | `mcp_analytics:read` | Install status of @mythic-data/mcp for a client: its publishable key and ingest URL, whether ingestion is paused by the daily volume ceiling, first and last event, events in the last 24 hours, and the MCP se… | `GET /client/v1/mcp-analytics/setup` |
 | `recompute_mcp_intent_clusters`<br /><span style={{opacity: 0.7}}>Recompute MCP Intent Clusters</span> | `mcp_analytics:write` | Recompute a client's intent clusters within about 5 minutes instead of waiting for the daily run (the next cron tick runs it). | `POST /client/v1/mcp-analytics/intents/clusters/recompute` |
+
+## Semantic Layer
+
+Named measures, joins and notes over the client’s Mythic data (ad spend, Meta ad actions, sessions, events, CRM opportunities, ecommerce items): list and search models, inspect them, run semantic queries. Write saves notes. Editing models is semantic_models.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `semantic_overview`<br /><span style={{opacity: 0.7}}>Semantic Layer Overview</span> | `semantic_layer:read` | List this client's semantic-layer models (one per Mythic dataset: ad spend, Meta ad actions, sessions, events, CRM opportunities, ecommerce line items) with their descriptions and named measures. | `POST /client/v1/semantic/semantic_overview` |
+| `semantic_search`<br /><span style={{opacity: 0.7}}>Search Semantic Layer</span> | `semantic_layer:read` | Search the semantic layer: models, columns, named measures and saved notes (caveats tied to columns). | `POST /client/v1/semantic/semantic_search` |
+| `semantic_inspect`<br /><span style={{opacity: 0.7}}>Inspect Semantic Entity</span> | `semantic_layer:read` | Full detail of one semantic-layer entity: a model's columns, measures, joins and notes, or one column/measure with its definition and sample values. | `POST /client/v1/semantic/semantic_inspect` |
+| `semantic_query`<br /><span style={{opacity: 0.7}}>Run Semantic Query</span> | `semantic_layer:read` | Run a semantic query: &#123;source_model, measures, dimensions, filters, time_dimensions, order, limit&#125;. | `POST /client/v1/semantic/semantic_query` |
+| `semantic_save_note`<br /><span style={{opacity: 0.7}}>Save Semantic Note</span> | `semantic_layer:write` | Save a note on semantic-layer entities: a caveat or learning about a column, measure or model (e.g. | `POST /client/v1/semantic/semantic_save_note` |
+
+## Semantic Layer models
+
+Add or replace a client’s semantic-layer measures and joins (semantic_edit_model). Agency-wide keys only: a client-bound key cannot change how its numbers are defined.
+
+Agency-wide keys only — a key bound to one client cannot hold this scope.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `semantic_edit_model`<br /><span style={{opacity: 0.7}}>Edit Semantic Model</span> | `semantic_models:write` | Agency keys only. | `POST /client/v1/semantic/semantic_edit_model` |
 
 ## Heatmaps
 

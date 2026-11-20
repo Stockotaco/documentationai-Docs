@@ -1,0 +1,253 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Semantic Layer
+  description: >
+    Named measures, declared joins and notes over a client's Mythic data (ad
+    spend, Meta ad actions, sessions, events, CRM opportunities, ecommerce
+    items). Six tools; each is one POST with its arguments as the JSON body.
+
+
+    Accepts an agency key (`ak_`, bind a location with `location_id` or the
+    `X-Location-Id` header), a location secret key (`sk_`, read tools only) or
+    a scoped key (`mcp_`) holding `semantic_layer:read`, plus
+    `semantic_layer:write` for `semantic_save_note` and `semantic_models:write`
+    for `semantic_edit_model`, which also needs an agency-wide key. The location always comes from the key.
+
+
+    Included in every paid plan; otherwise every endpoint answers 403
+    `feature_not_in_plan`. Queries stop after 20 seconds and return at most
+    50,000 rows. Results over 30,000 characters are cut (`truncated: true`).
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+paths:
+  /client/v1/semantic:
+    get:
+      summary: List semantic tools
+      operationId: listSemanticTools
+      description: The tools this key may call, with their input schemas.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      responses:
+        "200":
+          description: Tools.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      tools:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            name: { type: string }
+                            description: { type: string }
+                            scope: { type: string, example: "semantic_layer:read" }
+                            input_schema: { type: object }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /client/v1/semantic/semantic_overview:
+    post:
+      summary: Overview of models and measures
+      operationId: semanticOverview
+      description: Lists the client's semantic-layer models with their descriptions and named measures. Call this first.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        "200": { $ref: "#/components/responses/ToolResult" }
+        "400": { $ref: "#/components/responses/ToolError" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /client/v1/semantic/semantic_search:
+    post:
+      summary: Search models, measures and notes
+      operationId: semanticSearch
+      description: "Finds the models, columns, named measures and saved notes for a question, or the notes saved on entity ids such as `tinybird.ad_spend_daily.total_spend`."
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                question: { type: string, description: "Free text: what you are looking for." }
+                entities: { type: array, items: { type: string }, description: "Canonical ids `<datasource>.<model>[.<column or measure>]`." }
+                max_results: { type: number, description: "Default 10." }
+      responses:
+        "200": { $ref: "#/components/responses/ToolResult" }
+        "400": { $ref: "#/components/responses/ToolError" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /client/v1/semantic/semantic_inspect:
+    post:
+      summary: Inspect one entity
+      operationId: semanticInspect
+      description: "Full detail of a model (columns, measures, joins, notes) or of one column or measure with its definition and sample values."
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reference, entity_type]
+              properties:
+                reference: { type: string, example: "ad_spend_daily" }
+                entity_type: { type: string, enum: [model, column, measure, datasource, memory] }
+      responses:
+        "200": { $ref: "#/components/responses/ToolResult" }
+        "400": { $ref: "#/components/responses/ToolError" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /client/v1/semantic/semantic_query:
+    post:
+      summary: Run a semantic query
+      operationId: semanticQuery
+      description: >
+        Runs `{source_model, measures, dimensions, filters, time_dimensions,
+        order, limit}`. Measures are named measures (`roas`) or aggregations
+        (`spend:sum`). Dimensions may follow joins (`campaign.campaign_name`).
+        `date_range` is `[start, end]`; `{start, end}` and `{from, to}` are
+        accepted. `order` entries may be `{column, direction}`, a bare name, or
+        `-name` for descending. Returns rows and warnings; capped at 20 rows
+        unless `limit` is set.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [query]
+              properties:
+                query:
+                  type: object
+                  example:
+                    source_model: ad_spend_daily
+                    measures: [total_spend, cpc]
+                    dimensions: [platform]
+                    time_dimensions: [{ dimension: date, granularity: month, date_range: ["2026-09-01", "2026-10-31"] }]
+                show_sql: { type: boolean, description: "Include the generated SQL." }
+      responses:
+        "200": { $ref: "#/components/responses/ToolResult" }
+        "400": { $ref: "#/components/responses/ToolError" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "504": { $ref: "#/components/responses/ToolError" }
+  /client/v1/semantic/semantic_save_note:
+    post:
+      summary: Save a note
+      operationId: semanticSaveNote
+      description: "Saves a caveat or learning on entities for this client. Needs an agency key or an `mcp_` key with `semantic_layer:write`."
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [note, entities]
+              properties:
+                note: { type: string }
+                entities: { type: array, items: { type: string }, minItems: 1 }
+      responses:
+        "200": { $ref: "#/components/responses/ToolResult" }
+        "400": { $ref: "#/components/responses/ToolError" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /client/v1/semantic/semantic_edit_model:
+    post:
+      summary: Edit a model for this client
+      operationId: semanticEditModel
+      description: >
+        Adds or replaces named measures and joins on a model, or sets its
+        description, for this client only. Matched by name; `remove` lists names
+        to delete. Agency-wide keys only (an agency key, or an `mcp_` key with
+        `semantic_models:write` not bound to one client).
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [model]
+              properties:
+                model: { type: string }
+                description: { type: string }
+                measures: { type: array, items: { type: object }, description: "[{name, formula, description}]" }
+                joins: { type: array, items: { type: object }, description: "[{name, target_model, join_pairs, cardinality}]" }
+                remove:
+                  type: object
+                  properties:
+                    measures: { type: array, items: { type: string } }
+                    joins: { type: array, items: { type: string } }
+      responses:
+        "200": { $ref: "#/components/responses/ToolResult" }
+        "400": { $ref: "#/components/responses/ToolError" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "`ak_`, `sk_` or `mcp_` key."
+  parameters:
+    LocationId:
+      name: X-Location-Id
+      in: header
+      required: false
+      description: Required with an agency key or an agency-wide `mcp_` key.
+      schema: { type: string }
+  schemas:
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+  responses:
+    ToolResult:
+      description: "The tool's result, or `result_text` with `truncated: true` past 30,000 characters."
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success: { type: boolean }
+              data:
+                type: object
+                properties:
+                  truncated: { type: boolean }
+                  result: { description: "The semantic layer's JSON answer." }
+                  result_text: { type: string }
+    ToolError:
+      description: "`invalid_arguments`, `semantic_error` (the reason from the semantic layer, including time and row limits) or `semantic_timeout`."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: "`feature_not_in_plan`, `insufficient_role`, `insufficient_scope` or `agency_key_required`."
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

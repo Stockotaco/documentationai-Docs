@@ -533,6 +533,22 @@
             ]
           },
           {
+            "tab": "Semantic Layer",
+            "icon": "sigma",
+            "groups": [
+              {
+                "group": "Overview",
+                "icon": "file-text",
+                "pages": [{ "title": "Introduction", "path": "semantic-layer/overview", "icon": "file-text" }]
+              },
+              {
+                "group": "Semantic Layer",
+                "icon": "sigma",
+                "openapi": "openapi/semantic.yaml"
+              }
+            ]
+          },
+          {
             "tab": "MCP Analytics",
             "icon": "bot",
             "groups": [

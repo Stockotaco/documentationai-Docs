@@ -1,0 +1,87 @@
+---
+title: Semantic Layer
+description: >-
+  Ask a client's Mythic data questions with shared, named measures: ad spend,
+  Meta ad conversions, sessions, events, CRM opportunities and ecommerce items.
+---
+
+import ClientV1Auth from "/snippets/client-v1-auth.mdx"
+
+## Overview
+
+The semantic layer turns a client's Mythic data into **models with named measures and declared joins**. An agent or integration asks for `total_spend` and `cpc` by `platform` and month, and the layer writes the query. Every client gets the same standard models, so `roas` means the same thing on every client. A client can add its own measures and notes on top without changing anyone else's.
+
+It is six tools, available over HTTP at `/client/v1/semantic` and as MCP tools on the Mythic MCP server:
+
+| Tool | What it does |
+| --- | --- |
+| `semantic_overview` | Lists the models and their named measures. Call it first. |
+| `semantic_search` | Finds the models, columns, measures and saved notes for a question or entity ids. |
+| `semantic_inspect` | Full detail of one model, column or measure, with sample values. |
+| `semantic_query` | Runs a query: `{source_model, measures, dimensions, filters, time_dimensions, order, limit}`. |
+| `semantic_save_note` | Saves a caveat on entities. It comes back in search and inspect for this client. |
+| `semantic_edit_model` | Adds or replaces named measures and joins on a model for this client. Agency-wide keys only. |
+
+## Standard models
+
+| Model | Data | Example measures |
+| --- | --- | --- |
+| `ad_spend_daily` | Meta and Google spend by platform, account, campaign and day | `total_spend`, `total_clicks`, `cpc`, `ctr`, `cpm` |
+| `ad_actions_ad_daily` | Meta delivery and Meta-reported conversions by ad and day; joins to the campaign | `total_purchases`, `roas`, `cost_per_lead`, `cost_per_registration` |
+| `client_sessions_mv` | Website sessions with entry attribution, device and geo | `sessions`, `visitors`, `bounce_rate`, `avg_session_duration_seconds` |
+| `events_wide_mv` | Every tracked event; joins to its session | `event_count`, `unique_users`, `pageview_count` |
+| `crm_opportunities_mv` | CRM opportunities, one row per opportunity, latest status and value | `opportunities`, `won_deals`, `total_won_value`, `win_rate` |
+| `commerce_items_mv` | Ecommerce line items; joins to the session | `revenue`, `orders`, `units_sold`, `avg_order_value` |
+
+Entity ids take the form `tinybird.<model>[.<column or measure>]`, for example `tinybird.ad_spend_daily.cpc`.
+
+## Base URL
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/semantic
+```
+
+`GET /client/v1/semantic` lists the tools the key may call with their input schemas. `POST /client/v1/semantic/<tool>` runs one tool with its arguments as the JSON body.
+
+```bash
+curl -X POST https://mythic-analytics.gulp.workers.dev/client/v1/semantic/semantic_query \
+  -H "Authorization: Bearer ak_..." -H "X-Location-Id: <location_id>" \
+  -H "Content-Type: application/json" \
+  -d '{"query":{"source_model":"ad_spend_daily","measures":["total_spend","cpc"],"dimensions":["platform"],
+       "time_dimensions":[{"dimension":"date","granularity":"month","date_range":["2026-09-01","2026-10-31"]}]}}'
+```
+
+A successful call answers `{"success": true, "data": {"truncated": false, "result": ...}}`. A result longer than 30,000 characters is cut and returned as `result_text` with `truncated: true`; narrow the query or set `limit`.
+
+## Authentication
+
+<ClientV1Auth />
+
+Scoped keys (`mcp_`) need `semantic_layer:read` for the four read tools, `semantic_layer:write` for `semantic_save_note`, and `semantic_models:write` for `semantic_edit_model`. A location secret key (`sk_`) is read-only: the write tools answer **403 `insufficient_role`**. `semantic_edit_model` needs an agency-wide key: a key bound to one client gets **403 `agency_key_required`**.
+
+The location always comes from the key, never from tool arguments. A query only reads that location's rows, plus the rows of locations merged into it.
+
+## Plans
+
+The semantic layer is included in every paid plan. Without it, or when no plan is assigned, every endpoint answers **403 `feature_not_in_plan`**. If the plan cannot be checked, endpoints answer **503 `entitlements_unavailable`**; retry.
+
+## Limits and errors
+
+| Status | Code | Meaning |
+| --- | --- | --- |
+| 400 | `invalid_arguments` | Unknown or missing tool arguments. |
+| 400 | `semantic_error` | The query was rejected: an unknown measure, a bad filter, or a limit below. The message says why. |
+| 429 | `rate_limited` | More than 60 requests a minute for one location. |
+| 502 | `semantic_unavailable` | The semantic layer service failed. |
+| 503 | `semantic_unavailable` | The semantic layer is not configured. |
+| 504 | `semantic_timeout` | No answer within 60 seconds. |
+
+A query stops after 20 seconds and may return at most 50,000 rows; past either limit it answers 400 `semantic_error` with the reason.
+
+## MCP tools
+
+The same six tools are on the Mythic MCP server with an extra optional `location_id` argument for agency keys. See [MCP tools](/mcp/tools).
+
+<Callout kind="info">
+Semantic-layer measures are shared definitions, not approved metrics. Report any warning a query returns when it affects the number.
+</Callout>
