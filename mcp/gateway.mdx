@@ -186,7 +186,7 @@ Every tool comes from a registered upstream server and requires the `<scope_pref
 
 ## Retired built-in tools
 
-The gateway previously implemented `list_insights`, `get_insight`, `create_insight`, `update_insight`, `delete_insight`, `list_dashboards`, `get_dashboard`, `create_dashboard`, `update_dashboard`, `delete_dashboard`, `add_insight_to_dashboard`, `remove_insight_from_dashboard`, `list_canvases`, and `get_canvas` itself. These names now return `-32601` with a message pointing at the [Settings Server](/mcp/settings-server), which serves them (and many more) with the same `mcp_` key.
+The gateway previously implemented `list_insights`, `get_insight`, `create_insight`, `update_insight`, `delete_insight`, `list_dashboards`, `get_dashboard`, `create_dashboard`, `update_dashboard`, `delete_dashboard`, `add_insight_to_dashboard`, `remove_insight_from_dashboard`, `list_canvases`, and `get_canvas` itself. These names now return `-32601` with a message pointing at the [Settings Server](/mcp/settings-server), which serves them (and many more) with the same `mcp_` key. `update_dashboard_layout`, added later, returns the same redirect.
 
 ## Error codes
 
