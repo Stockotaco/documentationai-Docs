@@ -27,9 +27,14 @@ paths:
     get:
       summary: List metrics
       operationId: listMetrics
-      description: "The client's metrics with their pinned definition, approval status and drift (the measure's current formula against the pinned one). `drift_note` is set when the semantic layer could not be reached to check drift."
+      description: "The client's metrics with their pinned definition, approval status and drift (the measure's current formula against the pinned one). Archived metrics are left out unless `include_archived=true`. `drift_note` is set when the semantic layer could not be reached to check drift."
       parameters:
         - $ref: "#/components/parameters/LocationId"
+        - name: include_archived
+          in: query
+          required: false
+          description: Also list archived metrics.
+          schema: { type: boolean, default: false }
       responses:
         "200":
           description: Metrics.
@@ -174,11 +179,35 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+  /client/v1/metrics/{metricId}/archive:
+    post:
+      summary: Archive a metric
+      operationId: archiveMetric
+      description: "Soft-archives the metric: it leaves `GET /client/v1/metrics` and the metric links on `semantic_overview`/`semantic_inspect`, keeps its name, definition, approval and history, still answers `/value` (with `archived: true` and a note) and cannot be approved until unarchived. Archiving an archived metric changes nothing. Needs `metrics:write`."
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/MetricId"
+      responses:
+        "200": { $ref: "#/components/responses/MetricResult" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /client/v1/metrics/{metricId}/unarchive:
+    post:
+      summary: Unarchive a metric
+      operationId: unarchiveMetric
+      description: Restores an archived metric to the list. Its definition and approval are unchanged. Needs `metrics:write`.
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+        - $ref: "#/components/parameters/MetricId"
+      responses:
+        "200": { $ref: "#/components/responses/MetricResult" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /client/v1/metrics/{metricId}/approve:
     post:
       summary: Approve a metric
       operationId: approveMetric
-      description: "Approves the metric's current definition. Agency-wide keys only (a key bound to one client gets 403 `agency_key_required`). Refused with 409 `metric_drifted` while the measure differs from the pinned formula."
+      description: "Approves the metric's current definition. Agency-wide keys only (a key bound to one client gets 403 `agency_key_required`). Refused with 409 `metric_drifted` while the measure differs from the pinned formula, and 409 `metric_archived` while the metric is archived."
       parameters:
         - $ref: "#/components/parameters/LocationId"
         - $ref: "#/components/parameters/MetricId"
@@ -257,6 +286,9 @@ components:
         approval_status: { type: string, enum: [approved, proposed] }
         approved_at: { type: string, format: date-time, nullable: true }
         approved_by: { type: string, nullable: true }
+        archived: { type: boolean }
+        archived_at: { type: string, format: date-time, nullable: true }
+        archived_by: { type: string, nullable: true }
         drift: { $ref: "#/components/schemas/Drift" }
         version: { type: integer, nullable: true }
         created_at: { type: string, format: date-time }
@@ -269,6 +301,8 @@ components:
         approval_status: { type: string, enum: [approved, proposed] }
         approval_note: { type: string }
         drift: { $ref: "#/components/schemas/Drift" }
+        archived: { type: boolean, description: "Present (true) when the metric is archived." }
+        archived_note: { type: string }
         period:
           type: object
           properties:
@@ -331,7 +365,7 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     Conflict:
-      description: "`metric_name_exists` or `metric_drifted`."
+      description: "`metric_name_exists`, `metric_drifted` or `metric_archived`."
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

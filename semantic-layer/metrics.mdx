@@ -20,6 +20,8 @@ Reading a metric's value runs its measure for a period. If someone has since cha
 | `get_metric_value` | `GET /client/v1/metrics/{id}/value` | The value for a period, optionally with the previous period and a breakdown. |
 | `create_metric` | `POST /client/v1/metrics` | A new, proposed metric on a measure. |
 | `update_metric` | `PATCH /client/v1/metrics/{id}` | Changes fields; a definition change clears approval. |
+| `archive_metric` | `POST /client/v1/metrics/{id}/archive` | Hides a metric the client no longer tracks. |
+| `unarchive_metric` | `POST /client/v1/metrics/{id}/unarchive` | Restores an archived metric. |
 | `approve_metric` | `POST /client/v1/metrics/{id}/approve` | Approves the current definition. Agency-wide keys only. |
 
 `semantic_overview` and `semantic_inspect` list the measures that back Metrics and tell the agent to answer with `get_metric_value`.
@@ -81,13 +83,17 @@ curl "https://mythic-analytics.gulp.workers.dev/client/v1/metrics/<id>/value?per
 - A new metric is `proposed`.
 - Changing `name`, `definition`, `semantic`, `format`, `unit` or `direction` clears the approval. Changing `synonyms` does not.
 - Every change to the definition is stored as a new version; `get_metric` returns them newest first. Approving is not a version.
-- `approve_metric` is refused with **409 `metric_drifted`** while the measure differs from the pinned formula.
+- `approve_metric` is refused with **409 `metric_drifted`** while the measure differs from the pinned formula, and **409 `metric_archived`** while the metric is archived.
+
+## Archive
+
+`archive_metric` hides a metric the client no longer tracks: it leaves `list_metrics` (pass `include_archived=true` to see it) and the metric links on `semantic_overview` and `semantic_inspect`. It keeps its name, definition, approval and history, `get_metric` shows `archived`, `archived_at` and `archived_by`, and `get_metric_value` still answers, with `archived: true` and a note to say so. `unarchive_metric` restores it. Archiving is not a new version: it does not change what the number means.
 
 ## Authentication
 
 <ClientV1Auth />
 
-Scoped keys (`mcp_`) need `metrics:read` to read, `metrics:write` to create and update, and `metrics_approval:write` to approve. A location secret key (`sk_`) is read-only (**403 `insufficient_role`**). Approving needs an agency-wide key: a key bound to one client gets **403 `agency_key_required`**, so a client cannot sign off its own numbers. The location always comes from the key.
+Scoped keys (`mcp_`) need `metrics:read` to read, `metrics:write` to create, update, archive and unarchive, and `metrics_approval:write` to approve. A location secret key (`sk_`) is read-only (**403 `insufficient_role`**). Approving needs an agency-wide key: a key bound to one client gets **403 `agency_key_required`**, so a client cannot sign off its own numbers. The location always comes from the key.
 
 ## Plans
 
@@ -102,6 +108,7 @@ Metrics are part of the semantic layer, included in every paid plan. Without it 
 | 404 | `not_found` | No metric with that id for this client. |
 | 409 | `metric_name_exists` | Another metric of this client has that name (ignoring case). |
 | 409 | `metric_drifted` | Approval refused: the measure changed since the metric was saved. |
+| 409 | `metric_archived` | Approval refused: the metric is archived. |
 | 409 | `metric_measure_missing` | The measure behind the metric no longer exists. |
 | 429 | `rate_limited` | More than 60 requests a minute for one location. |
 | 502 / 503 | `semantic_unavailable` | The semantic layer failed or is not configured. |
