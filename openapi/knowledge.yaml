@@ -168,8 +168,8 @@ paths:
   /client/v1/knowledge/search:
     post:
       operationId: searchKnowledge
-      summary: Find relevant chunks in the requested scope
-      description: Exact cosine ranking within a single embedding space. Across embedding spaces scores are merged without calibration.
+      summary: Find ranked lesson passages in the requested scope
+      description: Hybrid blends weighted English full-text search and cosine ranks. Each ranked chunk expands to adjacent chunks in the same lesson. Overlapping windows merge within a 20,000 estimated text token budget.
       requestBody:
         required: true
         content:
@@ -181,10 +181,11 @@ paths:
                   required: [query]
                   properties:
                     query: { type: string, minLength: 1, maxLength: 4000 }
-                    k: { type: integer, minimum: 1, maximum: 20, default: 8 }
+                    mode: { $ref: '#/components/schemas/RetrievalMode' }
+                    k: { type: integer, minimum: 1, maximum: 20, default: 8, description: Maximum ranked hits before passage expansion. }
       responses:
         '200':
-          description: Ranked matching chunks, or an empty array
+          description: Ranked expanded passages, or an empty array
           content:
             application/json:
               schema:
@@ -192,7 +193,7 @@ paths:
                   - $ref: '#/components/schemas/Success'
                   - type: object
                     properties:
-                      data: { type: array, items: { $ref: '#/components/schemas/Match' } }
+                      data: { type: array, items: { $ref: '#/components/schemas/Passage' } }
         '400': { $ref: '#/components/responses/Invalid' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '402': { $ref: '#/components/responses/Beta' }
@@ -206,7 +207,7 @@ paths:
     post:
       operationId: chatWithKnowledge
       summary: Ask a question with source citations
-      description: A non-streaming answer. Retrieval uses the last user message. History is not stored. Weak retrieval or missing verified citations results in an abstention.
+      description: A non-streaming answer. Retrieval uses the last user message. Expanded passages are grouped by lesson with course and module labels. History is not stored. Weak retrieval or missing verified citations results in an abstention.
       requestBody:
         required: true
         content:
@@ -217,6 +218,7 @@ paths:
                 - type: object
                   required: [messages]
                   properties:
+                    mode: { $ref: '#/components/schemas/RetrievalMode' }
                     model: { type: string, nullable: true, maxLength: 120, description: Optional model compatible with an agency key. }
                     messages:
                       type: array
@@ -407,6 +409,11 @@ components:
         scope: { type: string, enum: [all, collection, document], default: all }
         collection_id: { type: string, format: uuid }
         document_id: { type: string, format: uuid }
+    RetrievalMode:
+      type: string
+      enum: [hybrid, vector, keyword]
+      default: hybrid
+      description: Hybrid fuses full-text and cosine ranks. Vector uses cosine only. Keyword uses English full-text only and skips the embedding call.
     ChunkReference:
       type: object
       required: [chunk_id, collection_title, document_title]
@@ -421,15 +428,33 @@ components:
           required: [excerpt]
           properties:
             excerpt: { type: string, maxLength: 240 }
+    PassageChunk:
+      type: object
+      required: [chunk_id, ordinal]
+      properties:
+        chunk_id: { type: string, format: uuid }
+        ordinal: { type: integer, minimum: 0 }
     Match:
       allOf:
-        - $ref: '#/components/schemas/ChunkReference'
+        - $ref: '#/components/schemas/PassageChunk'
         - type: object
-          required: [collection_id, document_id, module, ordinal, content, similarity]
+          required: [score, keyword_rank, keyword_score, vector_rank, similarity]
           properties:
-            collection_id: { type: string, format: uuid }
-            document_id: { type: string, format: uuid }
-            module: { type: string, nullable: true }
-            ordinal: { type: integer, minimum: 0 }
-            content: { type: string }
-            similarity: { type: number, description: Cosine similarity. }
+            score: { type: number, description: Reciprocal rank score with constant 60. }
+            keyword_rank: { type: integer, minimum: 1, nullable: true }
+            keyword_score: { type: number, nullable: true }
+            vector_rank: { type: integer, minimum: 1, nullable: true }
+            similarity: { type: number, nullable: true, description: Cosine similarity when the vector leg contributed. }
+    Passage:
+      type: object
+      required: [collection_id, collection_title, document_id, document_title, module, content, token_estimate, chunks, matches]
+      properties:
+        collection_id: { type: string, format: uuid }
+        collection_title: { type: string }
+        document_id: { type: string, format: uuid }
+        document_title: { type: string }
+        module: { type: string, nullable: true }
+        content: { type: string, description: Passage with contributing chunks in document order and repeated overlap removed. }
+        token_estimate: { type: integer, minimum: 1, description: Conservative source estimate before overlap removal. }
+        chunks: { type: array, items: { $ref: '#/components/schemas/PassageChunk' } }
+        matches: { type: array, items: { $ref: '#/components/schemas/Match' } }
