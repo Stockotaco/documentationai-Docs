@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 375 tools across
-  35 scope families — with the scope each one needs and the
+  Every tool the Mythic MCP server exposes — 383 tools across
+  36 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 375 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 383 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -608,6 +608,23 @@ Agency-wide keys only — a key bound to one client cannot hold this scope.
 | `forget_scout_memory`<br /><span style={{opacity: 0.7}}>Forget Scout Memory</span> | `scouts:write` | Delete one memory entry by key (for example a noise: entry that hides something that now matters). | `DELETE /client/v1/scouts/:id/memory/:key` |
 | `add_scout_note`<br /><span style={{opacity: 0.7}}>Add Scout Note</span> | `scouts:write` | Steer a scout with a short note (max 500 characters, at most 20 active per scout), for example "ignore /docs pages" or "Black Friday sale runs Nov 25-30". | `POST /client/v1/scouts/:id/notes` |
 | `delete_scout_note`<br /><span style={{opacity: 0.7}}>Delete Scout Note</span> | `scouts:write` | Delete one steering note from a scout. | `DELETE /client/v1/scouts/:id/notes/:noteId` |
+
+## Knowledge (private beta)
+
+Agency-private document collections, similarity search, and chat with citations using agency model keys.
+
+Agency-wide keys only — a key bound to one client cannot hold this scope.
+
+| Tool | Scope | What it does | Proxies |
+| --- | --- | --- | --- |
+| `list_knowledge_collections`<br /><span style={{opacity: 0.7}}>List Knowledge Collections</span> | `knowledge:read` | Private beta. | `GET /client/v1/knowledge/collections` |
+| `list_knowledge_documents`<br /><span style={{opacity: 0.7}}>List Knowledge Documents</span> | `knowledge:read` | Private beta. | `GET /client/v1/knowledge/collections/:collectionId/documents` |
+| `search_knowledge`<br /><span style={{opacity: 0.7}}>Search Knowledge</span> | `knowledge:read` | Private beta. | `POST /client/v1/knowledge/search` |
+| `chat_with_knowledge`<br /><span style={{opacity: 0.7}}>Chat With Knowledge</span> | `knowledge:read` | Private beta. | `POST /client/v1/knowledge/chat` |
+| `create_knowledge_collection`<br /><span style={{opacity: 0.7}}>Create Knowledge Collection</span> | `knowledge:write` | Private beta. | `POST /client/v1/knowledge/collections` |
+| `delete_knowledge_collection`<br /><span style={{opacity: 0.7}}>Delete Knowledge Collection</span> | `knowledge:write` | Private beta. | `DELETE /client/v1/knowledge/collections/:collectionId` |
+| `upsert_knowledge_document`<br /><span style={{opacity: 0.7}}>Upsert Knowledge Document</span> | `knowledge:write` | Private beta. | `POST /client/v1/knowledge/collections/:collectionId/documents` |
+| `delete_knowledge_document`<br /><span style={{opacity: 0.7}}>Delete Knowledge Document</span> | `knowledge:write` | Private beta. | `DELETE /client/v1/knowledge/collections/:collectionId/documents/:documentId` |
 
 ## Alerts
 

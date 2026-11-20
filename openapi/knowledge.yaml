@@ -1,0 +1,435 @@
+openapi: 3.0.3
+info:
+  title: Knowledge API (private beta)
+  version: 1.0.0
+  description: >
+    Invite-only agency document collections, vector retrieval, and chat. No plan
+    grants access automatically. Use an ak_ or an agency-wide mcp_ key with
+    knowledge:read for lists, search, and chat, or knowledge:write for writes.
+    Provider requests use agency-wide Replay Vision model keys. Uploaded text,
+    queries, and relevant chat context are sent to the corresponding providers,
+    which set their own retention and charges. There is no Mythic-funded fallback.
+servers:
+  - url: https://mythic-analytics.gulp.workers.dev
+security:
+  - BearerAuth: []
+paths:
+  /client/v1/knowledge/collections:
+    get:
+      operationId: listKnowledgeCollections
+      summary: List collections
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Collections sorted by position and slug
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - type: object
+                            properties:
+                              items: { type: array, items: { $ref: '#/components/schemas/Collection' } }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '402': { $ref: '#/components/responses/Beta' }
+        '403': { $ref: '#/components/responses/Scope' }
+        '429': { $ref: '#/components/responses/RateLimit' }
+    post:
+      operationId: createKnowledgeCollection
+      summary: Create a collection
+      description: Pins the embedding provider, model, and dimension for the lifetime of the collection. Requires an agency-wide key for that model provider.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CollectionInput' }
+      responses:
+        '201':
+          description: Created collection
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Collection' }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '402': { $ref: '#/components/responses/Beta' }
+        '403': { $ref: '#/components/responses/Scope' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimit' }
+  /client/v1/knowledge/collections/{collectionId}:
+    parameters:
+      - $ref: '#/components/parameters/CollectionId'
+    delete:
+      operationId: deleteKnowledgeCollection
+      summary: Delete a collection and all of its documents and chunks
+      responses:
+        '200': { $ref: '#/components/responses/Deleted' }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '402': { $ref: '#/components/responses/Beta' }
+        '403': { $ref: '#/components/responses/Scope' }
+        '404': { $ref: '#/components/responses/Missing' }
+        '429': { $ref: '#/components/responses/RateLimit' }
+  /client/v1/knowledge/collections/{collectionId}/documents:
+    parameters:
+      - $ref: '#/components/parameters/CollectionId'
+    get:
+      operationId: listKnowledgeDocuments
+      summary: List metadata for documents in a collection
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Documents sorted by position and slug
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/Page'
+                          - type: object
+                            properties:
+                              items: { type: array, items: { $ref: '#/components/schemas/Document' } }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '402': { $ref: '#/components/responses/Beta' }
+        '403': { $ref: '#/components/responses/Scope' }
+        '404': { $ref: '#/components/responses/Missing' }
+        '429': { $ref: '#/components/responses/RateLimit' }
+    post:
+      operationId: upsertKnowledgeDocument
+      summary: Create or replace a document by its collection and slug
+      description: Identical cleaned text is a no-op, including for metadata. Changed text replaces all chunks atomically after the new embeddings are ready.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DocumentInput' }
+      responses:
+        '200':
+          description: Created, replaced, or unchanged document
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [document, changed]
+                        properties:
+                          document: { $ref: '#/components/schemas/Document' }
+                          changed: { type: boolean }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '402': { $ref: '#/components/responses/Beta' }
+        '403': { $ref: '#/components/responses/Scope' }
+        '404': { $ref: '#/components/responses/Missing' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '429': { $ref: '#/components/responses/RateLimit' }
+        '502': { $ref: '#/components/responses/Provider' }
+  /client/v1/knowledge/collections/{collectionId}/documents/{documentId}:
+    parameters:
+      - $ref: '#/components/parameters/CollectionId'
+      - name: documentId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      operationId: deleteKnowledgeDocument
+      summary: Delete a document and its chunks
+      responses:
+        '200': { $ref: '#/components/responses/Deleted' }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '402': { $ref: '#/components/responses/Beta' }
+        '403': { $ref: '#/components/responses/Scope' }
+        '404': { $ref: '#/components/responses/Missing' }
+        '429': { $ref: '#/components/responses/RateLimit' }
+  /client/v1/knowledge/search:
+    post:
+      operationId: searchKnowledge
+      summary: Find relevant chunks in the requested scope
+      description: Exact cosine ranking within a single embedding space. Across embedding spaces scores are merged without calibration.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Scope'
+                - type: object
+                  required: [query]
+                  properties:
+                    query: { type: string, minLength: 1, maxLength: 4000 }
+                    k: { type: integer, minimum: 1, maximum: 20, default: 8 }
+      responses:
+        '200':
+          description: Ranked matching chunks, or an empty array
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/Match' } }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '402': { $ref: '#/components/responses/Beta' }
+        '403': { $ref: '#/components/responses/Scope' }
+        '404': { $ref: '#/components/responses/Missing' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '429': { $ref: '#/components/responses/RateLimit' }
+        '502': { $ref: '#/components/responses/Provider' }
+  /client/v1/knowledge/chat:
+    post:
+      operationId: chatWithKnowledge
+      summary: Ask a question with source citations
+      description: A non-streaming answer. Retrieval uses the last user message. History is not stored. Weak retrieval or missing verified citations results in an abstention.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Scope'
+                - type: object
+                  required: [messages]
+                  properties:
+                    model: { type: string, nullable: true, maxLength: 120, description: Optional model compatible with an agency key. }
+                    messages:
+                      type: array
+                      minItems: 1
+                      maxItems: 12
+                      description: The last message must have role user.
+                      items:
+                        type: object
+                        required: [role, content]
+                        properties:
+                          role: { type: string, enum: [user, assistant] }
+                          content: { type: string, minLength: 1, maxLength: 4000 }
+      responses:
+        '200':
+          description: Grounded answer and citations, or an abstention
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [answer, citations]
+                        properties:
+                          answer: { type: string, example: Not in the material. }
+                          citations: { type: array, maxItems: 6, items: { $ref: '#/components/schemas/Citation' } }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '402': { $ref: '#/components/responses/Beta' }
+        '403': { $ref: '#/components/responses/Scope' }
+        '404': { $ref: '#/components/responses/Missing' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '422':
+          description: The specified model does not fit an agency key provider.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '429': { $ref: '#/components/responses/RateLimit' }
+        '502': { $ref: '#/components/responses/Provider' }
+components:
+  securitySchemes:
+    BearerAuth: { type: http, scheme: bearer }
+  parameters:
+    CollectionId:
+      name: collectionId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 100 }
+    Offset:
+      name: offset
+      in: query
+      description: Use next_offset from the previous page.
+      schema: { type: integer, minimum: 0, default: 0 }
+  responses:
+    Invalid:
+      description: Invalid request fields, JSON, or scope.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unauthorized:
+      description: Missing or invalid bearer key.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Beta:
+      description: The agency is not enrolled in the private beta.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Scope:
+      description: The key is not agency-wide or does not have the required scope.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Missing:
+      description: The requested collection or document was not found in the agency and scope.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Conflict:
+      description: Duplicate collection slug or an unavailable required model key or embedding space.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    TooLarge:
+      description: Request body exceeds 1.1 MB or document exceeds 100 chunks.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    RateLimit:
+      description: The API or model provider rate limited the request.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Provider:
+      description: The agency's model provider could not complete the call or returned invalid vectors.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Deleted:
+      description: Deleted collection or document UUID
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/Success'
+              - type: object
+                properties:
+                  data:
+                    type: object
+                    required: [deleted]
+                    properties:
+                      deleted: { type: string, format: uuid }
+  schemas:
+    Success:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+    Error:
+      type: object
+      required: [success, error]
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+    Page:
+      type: object
+      required: [items, next_offset]
+      properties:
+        next_offset: { type: integer, nullable: true, description: Null on the final page. }
+    Metadata:
+      type: object
+      required: [slug, title]
+      properties:
+        slug: { type: string, minLength: 1, maxLength: 160, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$' }
+        title: { type: string, minLength: 1, maxLength: 240 }
+        position: { type: integer, minimum: 0, maximum: 1000000, default: 0 }
+    Provider:
+      type: string
+      enum: [openrouter, gemini, cloudflare]
+    CollectionInput:
+      allOf:
+        - $ref: '#/components/schemas/Metadata'
+        - type: object
+          properties:
+            description: { type: string, nullable: true, maxLength: 4000 }
+            embed_provider:
+              allOf:
+                - $ref: '#/components/schemas/Provider'
+              description: Omit to pin the default agency key's provider.
+    TimestampsAndIds:
+      type: object
+      required: [id, agency_id, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        agency_id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Collection:
+      allOf:
+        - $ref: '#/components/schemas/CollectionInput'
+        - $ref: '#/components/schemas/TimestampsAndIds'
+        - type: object
+          required: [description, embed_provider, embed_model, embed_dims, position]
+          properties:
+            embed_model: { type: string }
+            embed_dims: { type: integer, enum: [768, 1024, 1536] }
+    DocumentFields:
+      allOf:
+        - $ref: '#/components/schemas/Metadata'
+        - type: object
+          properties:
+            module: { type: string, nullable: true, maxLength: 240 }
+            source_ref: { type: string, nullable: true, maxLength: 2000 }
+    DocumentInput:
+      allOf:
+        - $ref: '#/components/schemas/DocumentFields'
+        - type: object
+          required: [text]
+          properties:
+            text: { type: string, minLength: 1, maxLength: 180000, description: Plain text with at most 100 chunks after splitting. }
+    Document:
+      allOf:
+        - $ref: '#/components/schemas/DocumentFields'
+        - $ref: '#/components/schemas/TimestampsAndIds'
+        - type: object
+          required: [collection_id, module, source_ref, content_sha, word_count, position]
+          properties:
+            collection_id: { type: string, format: uuid }
+            content_sha: { type: string, pattern: '^[0-9a-f]{64}$' }
+            word_count: { type: integer, minimum: 1 }
+    Scope:
+      type: object
+      description: For all omit both IDs. For collection pass only collection_id. For document pass document_id and optionally its collection_id.
+      properties:
+        scope: { type: string, enum: [all, collection, document], default: all }
+        collection_id: { type: string, format: uuid }
+        document_id: { type: string, format: uuid }
+    ChunkReference:
+      type: object
+      required: [chunk_id, collection_title, document_title]
+      properties:
+        chunk_id: { type: string, format: uuid }
+        collection_title: { type: string }
+        document_title: { type: string }
+    Citation:
+      allOf:
+        - $ref: '#/components/schemas/ChunkReference'
+        - type: object
+          required: [excerpt]
+          properties:
+            excerpt: { type: string, maxLength: 240 }
+    Match:
+      allOf:
+        - $ref: '#/components/schemas/ChunkReference'
+        - type: object
+          required: [collection_id, document_id, module, ordinal, content, similarity]
+          properties:
+            collection_id: { type: string, format: uuid }
+            document_id: { type: string, format: uuid }
+            module: { type: string, nullable: true }
+            ordinal: { type: integer, minimum: 0 }
+            content: { type: string }
+            similarity: { type: number, description: Cosine similarity. }

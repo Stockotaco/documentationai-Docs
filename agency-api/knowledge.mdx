@@ -1,0 +1,69 @@
+---
+title: Knowledge (private beta)
+description: Agency-private document collections, scoped search, and chat with source citations.
+---
+
+<Callout kind="info">
+  Knowledge is an invite-only private beta. It is not included in any plan, including unrestricted plans.
+</Callout>
+
+Knowledge stores agency-owned text in **collections**, each made up of **documents**. A handbook can be a collection and each chapter a document. Mythic splits uploaded text into overlapping chunks and indexes them for retrieval.
+
+## Base URL and authentication
+
+```text
+https://mythic-analytics.gulp.workers.dev/client/v1/knowledge
+```
+
+Send `Authorization: Bearer <key>` from a server. Use an agency key (`ak_`) or an agency-wide MCP key (`mcp_`). Search, chat, and list require `knowledge:read`; create, upsert, and delete require `knowledge:write`, which also grants read. Client-bound keys are not accepted. The per-agency API limit is 120 requests per minute, in addition to per-key limits. There is no browser CORS support.
+
+## Collections and documents
+
+| Method and path relative to the base URL | What it does |
+| --- | --- |
+| `GET /collections` | List collections ordered by position and slug |
+| `POST /collections` | Create a collection with a pinned embedding provider |
+| `DELETE /collections/{collectionId}` | Permanently delete the collection, documents, and chunks |
+| `GET /collections/{collectionId}/documents` | List document metadata ordered by position and slug |
+| `POST /collections/{collectionId}/documents` | Create or replace a document by its slug |
+| `DELETE /collections/{collectionId}/documents/{documentId}` | Permanently delete one document and all its chunks |
+| `POST /search` | Rank matching chunks within a scope |
+| `POST /chat` | Answer a question with citations within a scope |
+
+List responses return `data.items` and `data.next_offset`. Use `?limit=100&offset=0` to start. `next_offset: null` marks the final page. IDs outside the agency or requested collection return `404 not_found`.
+
+Create a collection with `title` and a unique lowercase hyphenated `slug`. Optional fields are `description`, `position` (default 0), and `embed_provider`. Omit the provider to use the agency's default model-key provider. Creation returns `201` with collection metadata, including `embed_provider`, `embed_model`, and `embed_dims`. A duplicate slug returns `409 collection_slug_exists`.
+
+Upsert a document with `title`, `slug`, and plain `text`. Optional fields are `module`, `position` (default 0), and `source_ref`, for example the source URL. The slug is unique within the collection. The API accepts up to 180,000 text characters and 100 chunks per document. Audio-marker-only lines such as `[BLANK_AUDIO]` are removed before indexing.
+
+The response is `data: { document, changed }`. Identical cleaned text is a no-op. It returns `changed: false` without changing the metadata, chunk IDs, or embeddings, even if the new request supplies different metadata. Changed text entirely replaces the chunks in one transaction. If embedding or storage fails, the prior version stays visible. Document lists return metadata, not the indexed text.
+
+## Search and chat scope
+
+| `scope` | Pass |
+| --- | --- |
+| `all` (default) | No IDs |
+| `collection` | `collection_id` |
+| `document` | `document_id`, optionally `collection_id` to check its parent |
+
+Search accepts `query` and optional `k` (default 8, range 1 to 20). Results include the chunk text as `content`, `chunk_id`, `ordinal`, collection and document IDs and titles, `module`, and cosine `similarity`. Rankings are exact within one embedding space. An all-collections query across different providers embeds once per space and merges by cosine score, which is not calibrated across providers. Empty scopes return an empty array without calling a model.
+
+Chat accepts 1 to 12 `messages` with `role` (`user` or `assistant`) and `content` (up to 4,000 characters per message), ending with a user message. The last message drives retrieval, so make follow-up questions self-contained. The model receives conversation history and eligible source chunks from the requested scope. A response has `data.answer` and `data.citations`. Each citation contains `document_title`, `collection_title`, `chunk_id`, and a short `excerpt` copied from the chunk. If retrieval is weak or the answer cannot be backed by verified source excerpts, the answer is `Not in the material.` with an empty citations array. Chat does not store history or stream responses.
+
+## Your model keys
+
+Set an agency-wide key with `PUT /client/v1/replay-vision/keys` before creating collections or using models. Client-level key overrides are not used. A collection pins one model and dimension for its lifetime:
+
+| Provider | Embedding model | Dimensions |
+| --- | --- | ---: |
+| `openrouter` | `openai/text-embedding-3-small` | 1536 |
+| `gemini` | `gemini-embedding-001` | 768 |
+| `cloudflare` | `@cf/baai/bge-m3` | 1024 |
+
+Chat uses the agency's default key and the same model defaults as [Scouts](/agency-api/scouts). Pass `model` to choose a compatible model on one of the agency's stored providers. Cloudflare chat supports Workers AI `@cf/` models, not Gemini models through AI Gateway. A missing or unreadable required key returns `409`; there is no Mythic-funded fallback.
+
+Uploaded text and retrieval queries go to the embedding provider. In chat, supplied messages and relevant excerpts go to the chat provider, which can differ from the embedding provider. Your provider's retention and usage charges apply. Only upload material you have permission to send to those providers.
+
+## MCP
+
+The same operations are available in the [MCP tool reference](/mcp/tools#knowledge-private-beta). The worker applies the same beta grant, agency boundary, and caller scopes to MCP requests.
