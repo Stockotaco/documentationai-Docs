@@ -5,14 +5,16 @@ info:
   description: >
     Named measures, declared joins and notes over a client's Mythic data (ad
     spend, Meta ad actions, sessions, events, CRM opportunities, ecommerce
-    items). Six tools; each is one POST with its arguments as the JSON body.
+    items), and the client's own BigQuery dataset once connected. Seven tools;
+    each is one POST with its arguments as the JSON body.
 
 
     Accepts an agency key (`ak_`, bind a location with `location_id` or the
     `X-Location-Id` header), a location secret key (`sk_`, read tools only) or
     a scoped key (`mcp_`) holding `semantic_layer:read`, plus
     `semantic_layer:write` for `semantic_save_note` and `semantic_models:write`
-    for `semantic_edit_model`, which also needs an agency-wide key. The location always comes from the key.
+    for `semantic_edit_model` and `semantic_connect_bigquery`, which also need
+    an agency-wide key. The location always comes from the key.
 
 
     Included in every paid plan; otherwise every endpoint answers 403
@@ -204,6 +206,91 @@ paths:
         "200": { $ref: "#/components/responses/ToolResult" }
         "400": { $ref: "#/components/responses/ToolError" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /client/v1/semantic/semantic_connect_bigquery:
+    post:
+      summary: Connect the client's BigQuery dataset
+      operationId: semanticConnectBigquery
+      description: >
+        Gives the client its own read-only service account (dataViewer on
+        `client_<location id>` only, jobUser on its project), waits for the
+        access to take effect, then models every table not modelled yet as
+        this client's own models in datasource `bigquery`. Idempotent: call
+        again to model new tables, or after making the grants a `pending`
+        answer lists. Every BigQuery query is capped at 10 GiB billed.
+        Agency-wide keys only (an agency key, or an `mcp_` key with
+        `semantic_models:write` not bound to one client).
+      parameters:
+        - $ref: "#/components/parameters/LocationId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                warehouse:
+                  type: string
+                  enum: [mythic, agency]
+                  default: mythic
+                  description: "`mythic`: Mythic's warehouse. `agency`: the agency's own BigQuery configured for Airbyte."
+                include_tables: { type: array, items: { type: string }, description: Model only these tables. }
+      responses:
+        "200":
+          description: Connected; the models this call created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      status: { type: string, enum: [active] }
+                      project: { type: string, example: mythic-data }
+                      dataset: { type: string, example: client_4356e54e_fe0d_401b_ba5b_778c8baacd51 }
+                      service_account: { type: string }
+                      warehouse: { type: string, enum: [mythic, agency] }
+                      created: { type: array, items: { type: string } }
+                      skipped_existing: { type: array, items: { type: string } }
+        "202":
+          description: Not usable yet. Either Google is still applying the new account's access (call again in a minute or two), or `grants` lists the roles the agency must grant in its own project first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      status: { type: string, enum: [pending] }
+                      project: { type: string }
+                      dataset: { type: string }
+                      service_account: { type: string }
+                      warehouse: { type: string, enum: [mythic, agency] }
+                      grants:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            role: { type: string, example: roles/bigquery.dataViewer }
+                            resource: { type: string }
+                            member: { type: string }
+                      message: { type: string }
+        "400": { $ref: "#/components/responses/ToolError" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: "`no_agency_warehouse` or `bigquery_dataset_missing`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: "`bigquery_unconfigured`: BigQuery for the semantic layer is not configured."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 components:
   securitySchemes:
     BearerAuth:

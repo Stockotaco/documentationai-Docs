@@ -1,14 +1,14 @@
 ---
 title: Tool Reference
 description: >-
-  Every tool the Mythic MCP server exposes — 400 tools across
+  Every tool the Mythic MCP server exposes — 401 tools across
   40 scope families — with the scope each one needs and the
   API route it proxies.
 ---
 
 ## About this reference
 
-All 400 tools the [Settings Server](/mcp/settings-server) registers, grouped
+All 401 tools the [Settings Server](/mcp/settings-server) registers, grouped
 by the scope family that grants them. Each tool is a thin proxy over the
 [HTTP API](/api-reference/overview): the **Proxies** column names the route it
 calls, so anything you can do here you can also do over HTTP, and both answer
@@ -162,13 +162,14 @@ Named measures, joins and notes over the client’s Mythic data (ad spend, Meta 
 
 ## Semantic Layer models
 
-Add or replace a client’s semantic-layer measures and joins (semantic_edit_model). Agency-wide keys only: a client-bound key cannot change how its numbers are defined.
+Add or replace a client’s semantic-layer measures and joins (semantic_edit_model), and connect the client’s BigQuery dataset to the semantic layer (semantic_connect_bigquery). Agency-wide keys only: a client-bound key cannot change how its numbers are defined.
 
 Agency-wide keys only — a key bound to one client cannot hold this scope.
 
 | Tool | Scope | What it does | Proxies |
 | --- | --- | --- | --- |
 | `semantic_edit_model`<br /><span style={{opacity: 0.7}}>Edit Semantic Model</span> | `semantic_models:write` | Agency keys only. | `POST /client/v1/semantic/semantic_edit_model` |
+| `semantic_connect_bigquery`<br /><span style={{opacity: 0.7}}>Connect Client BigQuery to Semantic Layer</span> | `semantic_models:write` | Agency keys only. | `POST /client/v1/semantic/semantic_connect_bigquery` |
 
 ## Metrics
 

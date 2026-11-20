@@ -11,7 +11,7 @@ import ClientV1Auth from "/snippets/client-v1-auth.mdx"
 
 The semantic layer turns a client's Mythic data into **models with named measures and declared joins**. An agent or integration asks for `total_spend` and `cpc` by `platform` and month, and the layer writes the query. Every client gets the same standard models, so `roas` means the same thing on every client. A client can add its own measures and notes on top without changing anyone else's.
 
-It is six tools, available over HTTP at `/client/v1/semantic` and as MCP tools on the Mythic MCP server:
+It is seven tools, available over HTTP at `/client/v1/semantic` and as MCP tools on the Mythic MCP server:
 
 | Tool | What it does |
 | --- | --- |
@@ -21,6 +21,7 @@ It is six tools, available over HTTP at `/client/v1/semantic` and as MCP tools o
 | `semantic_query` | Runs a query: `{source_model, measures, dimensions, filters, time_dimensions, order, limit}`. |
 | `semantic_save_note` | Saves a caveat on entities. It comes back in search and inspect for this client. |
 | `semantic_edit_model` | Adds or replaces named measures and joins on a model for this client. Agency-wide keys only. |
+| `semantic_connect_bigquery` | Connects the client's BigQuery dataset and models its tables for this client. Agency-wide keys only. |
 
 ## Standard models
 
@@ -34,6 +35,32 @@ It is six tools, available over HTTP at `/client/v1/semantic` and as MCP tools o
 | `commerce_items_mv` | Ecommerce line items; joins to the session | `revenue`, `orders`, `units_sold`, `avg_order_value` |
 
 Entity ids take the form `tinybird.<model>[.<column or measure>]`, for example `tinybird.ad_spend_daily.cpc`.
+
+## BigQuery models
+
+A client's BigQuery dataset, `client_<location id>` with the Airbyte ad tables and the export views, can be modelled too. Call `semantic_connect_bigquery` once with an agency-wide key. It models every table not modelled yet as this client's own models, in datasource `bigquery` (entity ids `bigquery.<model>[.<column or measure>]`). Call it again to model tables added later. Existing models, and the measures you added to them, are never overwritten.
+
+**Isolation.** Each client gets its own read-only Google service account. It can read only this client's dataset (`roles/bigquery.dataViewer` on that dataset) and run jobs in its project (`roles/bigquery.jobUser`). BigQuery itself refuses every other dataset with 403, including when listing datasets or reading table schemas. Mythic stores no key for it: each request uses a 15-minute token.
+
+**Cost.** Every BigQuery query is capped at 10 GiB billed. BigQuery refuses a query over the cap before it runs, and the call answers 400 `semantic_error` saying so. The 20-second and 50,000-row limits apply too. Queries run and bill in the project that holds the dataset.
+
+| `warehouse` | Where the dataset is | What to do |
+| --- | --- | --- |
+| `mythic` (default) | Mythic's warehouse | Nothing. The account and its access are set up for you. |
+| `agency` | The agency's own BigQuery, as configured for Airbyte | Mythic grants the two roles with the agency's Airbyte credential where it can. Anything it cannot grant comes back as `grants`. Make those grants in Google Cloud, then call again. |
+
+The first call can answer **202** with `status: "pending"` while Google applies the new account's access, which takes a minute or two. Call again. The answer is **200** with `status: "active"` and the models it created.
+
+```json
+POST /client/v1/semantic/semantic_connect_bigquery
+{ "warehouse": "mythic" }
+
+200 { "success": true, "data": { "status": "active", "project": "mythic-data",
+  "dataset": "client_4356e54e_...", "service_account": "slr-4356e54e...@mythic-data.iam.gserviceaccount.com",
+  "warehouse": "mythic", "created": ["attribution_default", "events", "sessions"], "skipped_existing": [] } }
+```
+
+Metrics work over BigQuery measures the same way: pin `bigquery.<model>.<measure>`.
 
 ## Base URL
 
@@ -70,6 +97,9 @@ The semantic layer is included in every paid plan. Without it, or when no plan i
 | Status | Code | Meaning |
 | --- | --- | --- |
 | 400 | `invalid_arguments` | Unknown or missing tool arguments. |
+| 409 | `no_agency_warehouse` | `warehouse: "agency"`, but the agency has no BigQuery of its own configured. |
+| 409 | `bigquery_dataset_missing` | The client's dataset does not exist yet in Mythic's warehouse. Connect a source or provision the export first. |
+| 503 | `bigquery_unconfigured` | BigQuery for the semantic layer is not configured. |
 | 400 | `semantic_error` | The query was rejected: an unknown measure, a bad filter, or a limit below. The message says why. |
 | 429 | `rate_limited` | More than 60 requests a minute for one location. |
 | 502 | `semantic_unavailable` | The semantic layer service failed. |
@@ -80,7 +110,7 @@ A query stops after 20 seconds and may return at most 50,000 rows; past either l
 
 ## MCP tools
 
-The same six tools are on the Mythic MCP server with an extra optional `location_id` argument for agency keys. See [MCP tools](/mcp/tools).
+The same seven tools are on the Mythic MCP server with an extra optional `location_id` argument for agency keys. See [MCP tools](/mcp/tools).
 
 <Callout kind="info">
 Semantic-layer measures are shared definitions, not approved Metrics. Report any warning a query returns when it affects the number. For a governed, approvable number, back a [Metric](/semantic-layer/metrics) with the measure; `semantic_overview` and `semantic_inspect` name the Metrics a measure backs.
