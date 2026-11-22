@@ -563,6 +563,11 @@ paths:
       summary: SI Desk nudge stats for the last 30 UTC dates
       operationId: getNudgeStats
       description: Requires events:read. Returns aggregate counts per nudge in the authenticated location; no visitor or session identifiers.
+      parameters:
+        - name: daily
+          in: query
+          description: Set to 1 to include daily counts and the first UTC date.
+          schema: { type: string, enum: ['1'] }
       responses:
         '200':
           description: Nudge counts for today and the previous 29 UTC dates.
@@ -574,6 +579,7 @@ paths:
                 properties:
                   success: { type: boolean }
                   days: { type: integer, enum: [30] }
+                  date_from: { type: string, format: date, description: First UTC date (with daily=1). }
                   data:
                     type: array
                     items:
@@ -584,6 +590,15 @@ paths:
                         impressions: { type: integer, minimum: 0 }
                         clicks: { type: integer, minimum: 0 }
                         conversation_starts: { type: integer, minimum: 0 }
+                        daily:
+                          type: array
+                          maxItems: 30
+                          description: With daily=1, tuples of day offset (0–29), impressions, clicks and conversation starts. Missing offsets mean zero activity.
+                          items:
+                            type: array
+                            minItems: 4
+                            maxItems: 4
+                            items: { type: integer, minimum: 0 }
         '403':
           description: The key cannot read events in this location.
         '502':
