@@ -71,9 +71,9 @@ The event routes are location-scoped. The `/export` route is agency-wide and req
 
 ## Saved segments for server integrations
 
-Use a location-scoped `mcp_` key with `people:read`, or an existing Data API read credential. Both endpoints require the Data API plan feature and are blocked for HIPAA-mode locations.
+Use a location-scoped `mcp_` key with `people:read`, or an existing Data API read credential. Both endpoints require the Data API plan feature and are blocked for HIPAA-mode locations. They return an error if the location's privacy mode cannot be verified.
 
-- `GET /segments` returns `{ "data": [{ "id": "…", "name": "VIP" }] }`. It lists only this location's saved segments, ordered by name, with no definitions or members. It returns an error rather than a partial catalog if the location has more than 1,000 segments.
+- `GET /segments` returns `{ "data": [{ "id": "…", "name": "VIP" }] }`. It lists only this location's saved segments, ordered by ID, with no definitions or members. If the catalog cannot be loaded, the API returns an error rather than a partial list.
 - `POST /segments/membership` takes `{ "userId": "account-42", "segmentIds": ["9bbdb766-525a-448e-a1af-d87e411f79c6"] }` (1–8 saved segment UUIDs) and returns `{ "data": { "membership": { "9bbdb766-525a-448e-a1af-d87e411f79c6": true } } }`.
 
 The caller must verify the subject on its server before calling Mythic. Pass the signed account subject only if it is the exact value sent to Mythic as the `user_id` for this location. Never forward a browser-selected ID, assume a browser/distinct ID is an account ID, or fall back to email. Mythic authorizes the API key and matches only the location's exact `user_id` identity, not an email, browser ID, or substring.

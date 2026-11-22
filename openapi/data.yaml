@@ -20,14 +20,14 @@ paths:
       operationId: listSavedSegmentCatalog
       description: >
         Lists only the IDs and names of saved segments in the authenticated
-        location, ordered by name. No definitions or members are returned.
+        location, ordered by ID. No definitions or members are returned.
         Scoped keys require `people:read`. Requires the Data API plan feature.
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
       responses:
         "200":
-          description: Saved segment catalog (up to 1,000 segments)
+          description: Saved segment catalog
           content:
             application/json:
               schema:
@@ -36,7 +36,6 @@ paths:
                 properties:
                   data:
                     type: array
-                    maxItems: 1000
                     items:
                       type: object
                       required: [id, name]
@@ -54,7 +53,7 @@ paths:
         "429":
           $ref: "#/components/responses/RateLimited"
         "503":
-          description: The catalog is unavailable or exceeds 1,000 segments
+          description: The catalog is unavailable or the location privacy mode cannot be verified
           content:
             application/json:
               schema:
@@ -129,6 +128,12 @@ paths:
           description: Unsupported request content encoding
         "429":
           description: Rate limit exceeded, including 30 membership lookups per location per 10 seconds
+        "503":
+          description: The location privacy mode cannot be verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /properties:
     get:
       summary: Property discovery
