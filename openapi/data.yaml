@@ -69,8 +69,9 @@ paths:
         supply a browser-selected value or fall back to an email or distinct ID.
         Scoped keys require `people:read`. Requires the Data API plan feature.
         Event-based segments require a published membership run less than 15
-        minutes old; the request never refreshes or builds a run. Act only on
-        `true`; missing, stale or unavailable answers are not eligible.
+        minutes old. A missing or stale run returns null; after resolving a
+        person, the request can queue one refresh in the background. It never
+        waits for that work or serves stale eligibility. Act only on `true`.
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
