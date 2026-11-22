@@ -558,6 +558,39 @@ paths:
           $ref: "#/components/responses/UpstreamError"
         "503":
           $ref: "#/components/responses/NotConfigured"
+  /nudges/stats:
+    get:
+      summary: SI Desk nudge stats for the last 30 UTC dates
+      operationId: getNudgeStats
+      description: Requires events:read. Returns aggregate counts per nudge in the authenticated location; no visitor or session identifiers.
+      responses:
+        '200':
+          description: Nudge counts for today and the previous 29 UTC dates.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, days, data]
+                properties:
+                  success: { type: boolean }
+                  days: { type: integer, enum: [30] }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [nudge_id, impressions, clicks, conversation_starts]
+                      properties:
+                        nudge_id: { type: string, format: uuid }
+                        impressions: { type: integer, minimum: 0 }
+                        clicks: { type: integer, minimum: 0 }
+                        conversation_starts: { type: integer, minimum: 0 }
+        '403':
+          description: The key cannot read events in this location.
+        '502':
+          description: Analytics query failed.
+        '503':
+          description: Analytics is not configured or the report is too large.
+
   /pages/daily:
     get:
       summary: Daily traffic for one page

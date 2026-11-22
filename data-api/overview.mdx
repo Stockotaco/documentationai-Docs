@@ -69,6 +69,12 @@ The event routes are location-scoped. The `/export` route is agency-wide and req
   </Card>
 </Columns>
 
+## SI Desk nudge stats
+
+`GET /nudges/stats` requires `events:read` and returns `{ "success": true, "days": 30, "data": [...] }` for the key’s active location. Each row has `nudge_id`, `impressions`, `clicks` and `conversation_starts` for today and the preceding 29 UTC dates. An empty `data` array means no captured nudge events in that window.
+
+Counts use the SI Desk widget events `support_nudge_impression`, `support_nudge_click`, and `support_nudge_conversation_started`, grouped by their `nudge_id` property. Ingestion redelivery of the same event is counted once. No visitor or session IDs are returned. Booking-button clicks do not count confirmed bookings. Requests do not accept a date range; a report with more than 1,000 nudge IDs returns an error rather than partial totals.
+
 ## Saved segments for server integrations
 
 Use a location-scoped `mcp_` key with `people:read`, or an existing Data API read credential. Both endpoints require the Data API plan feature and are blocked for HIPAA-mode locations. They return an error if the location's privacy mode cannot be verified.
