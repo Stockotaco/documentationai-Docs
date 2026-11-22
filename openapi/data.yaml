@@ -70,8 +70,10 @@ paths:
         Scoped keys require `people:read`. Requires the Data API plan feature.
         Event-based segments require a published membership run less than 15
         minutes old. A missing or stale run returns null; after resolving a
-        person, the request can queue one refresh in the background. It never
-        waits for that work or serves stale eligibility. Act only on `true`.
+        person, the request can queue one refresh in the background. A
+        refresh exceeding that time budget is deferred to an existing Worker
+        cron job. The request never waits for that work or serves stale
+        eligibility. Act only on `true`.
       parameters:
         - $ref: "#/components/parameters/LocationIdHeader"
         - $ref: "#/components/parameters/LocationIdQuery"
