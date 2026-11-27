@@ -1,6 +1,15 @@
-# CLAUDE.md
+# CLAUDE.md — ARCHIVED REPOSITORY (DO NOT EDIT FOR LIVE DOCS)
 
-The public docs site for Mythic Analytics, published at documentation.ai. MDX pages plus `openapi/*.yaml` specs, navigation in `documentation.json`. Content is grounded in the source repo at `../mythic-analytics` (`workers/src/*`, `sdk/src`) — when the two disagree, the source is right and the page is stale.
+> **STOP — Documentation.AI is retired for Mythic Analytics.**
+> - **Live public guides** are authored and published in the **Mythic Help Center on SI Desk** (`https://sidesk.co/help-center/mythic`).
+> - **OpenAPI 3.0 specs** are now versioned directly inside `../mythic-analytics/openapi/` (enforced in CI by `scripts/openapi.check.mjs`) and synced to SI Desk via `node scripts/sidesk-docs.mjs sync-openapi`.
+> - Load `../mythic-analytics/.agents/skills/sidesk-docs/SKILL.md` for the active workflow. Do **not** edit `.mdx` or `openapi/*.yaml` files here expecting public docs to update.
+
+---
+
+*(Historical Documentation.AI notes retained below for archive reference only.)*
+
+The legacy docs site for Mythic Analytics, previously published at documentation.ai. MDX pages plus `openapi/*.yaml` specs, navigation in `documentation.json`. Content is grounded in the source repo at `../mythic-analytics` (`workers/src/*`, `sdk/src`) — when the two disagree, the source is right and the page is stale.
 
 **This repo is live.** There is no CI and no staging: what lands on `main` is what the site publishes, and the site validates at publish time. A bad page is discovered by the site rejecting it, after the push. So run the checks before committing.
 
