@@ -28,10 +28,10 @@ Key capabilities:
 
 <Steps>
   <Step title="Paste the loader snippet" icon="download" titleType="p">
-    Drop this into `<head>`, as high as possible. It starts the remote-config request immediately, preloads the SDK core so it downloads in parallel with the loader rather than one round trip behind it, installs the error listeners, stubs `window.mythic`, and calls `init` — one tag, nothing else to add.
+    Drop this into `<head>`, as high as possible. It preloads the SDK core in parallel with the async loader, stubs `window.mythic`, and queues `init`. The snippet loads assets only; the SDK checks collection permission before requesting tracking configuration or starting collectors.
 
     ```html
-    <script>!function(){var u="https://api.adberserk.com/decide?key=pk_your_publishable_key&v=2",r=fetch(u,{cache:"default"});r.catch(function(){});window.__mythicCfgPrefetch={url:u,response:r};var l=document.createElement("link");l.rel="modulepreload";l.href="https://api.adberserk.com/cdn/core/mythic.mjs";(document.head||document.body).appendChild(l);var b=window.__mythicErr=window.__mythicErr||{q:[],sink:null};if(!b.on){b.on=1;var p=function(x){b.sink?b.sink(x):b.q.length<50&&b.q.push(x)};window.addEventListener("error",function(v){p({k:0,m:v.message,f:v.filename,l:v.lineno,c:v.colno,e:v.error})},!0);window.addEventListener("unhandledrejection",function(v){p({k:1,r:v.reason})},!0)}var e=[];window.mythic={init:function(t,n){return e.push(["init",t,n]),window.mythic},q:e};["capture","pageview","identify","alias","reset","opt_in","opt_out","flush","debug","getDistinctId","getSessionId","getDeviceId","isBot","getConfig","set","set_once","unset","get_property","get_super_properties","clear_super_properties","getPageContext","getExperimentAssignments","refreshConfig","grantConsent","revokeConsent"].forEach(function(t){window.mythic[t]=function(){return e.push([t].concat(Array.prototype.slice.call(arguments))),window.mythic}});var t=document.createElement("script");t.type="text/javascript";t.async=!0;t.src="https://api.adberserk.com/cdn/m.js";(document.head||document.body).appendChild(t)}();
+    <script>!function(){var l=document.createElement("link");l.rel="modulepreload";l.href="https://api.adberserk.com/cdn/core/mythic.mjs";(document.head||document.body).appendChild(l);var e=[];window.mythic={init:function(t,n){return e.push(["init",t,n]),window.mythic},q:e};["capture","pageview","identify","alias","reset","opt_in","opt_out","flush","debug","getDistinctId","getSessionId","getDeviceId","isBot","getConfig","set","set_once","unset","get_property","get_super_properties","clear_super_properties","getPageContext","getExperimentAssignments","refreshConfig","grantConsent","revokeConsent"].forEach(function(t){window.mythic[t]=function(){return e.push([t].concat(Array.prototype.slice.call(arguments))),window.mythic}});var t=document.createElement("script");t.type="text/javascript";t.async=!0;t.src="https://api.adberserk.com/cdn/m.js";(document.head||document.body).appendChild(t)}();
 mythic.init("pk_your_publishable_key", {api_host: "https://api.adberserk.com"});</script>
     ```
 
@@ -40,29 +40,24 @@ mythic.init("pk_your_publishable_key", {api_host: "https://api.adberserk.com"});
     </Callout>
 
     <Callout kind="warning">
-      **Place the snippet high in `<head>`, before any tag manager.** It installs
-      its uncaught-error / unhandled-rejection listeners synchronously the moment
-      it runs, so errors thrown *before* it executes can't be captured. If you
-      inject it **through** Google Tag Manager (or load it after GTM), GTM's own
-      initialization errors fire before the listeners exist and won't appear in
-      error tracking.
+      **Place the snippet high in `<head>`** to start loading the SDK early.
+      The SDK attaches error listeners only after collection is permitted and the
+      error tracker has loaded. Earlier errors, including tag-manager startup
+      errors that occur before then, are not buffered.
     </Callout>
 
     <Callout kind="note">
-      **Running the snippet more than once is safe.** If a tag manager fires it
-      on every event, or it is pasted twice, the first install keeps the
-      global: later runs point `window.mythic` back at it and replay anything
-      queued on their stub. Each extra run can still send one more remote-config
-      request, so trigger the snippet once per page load (in Cloudflare Zaraz,
-      add an `Event Name` equals `Pageview` rule).
+      **Install once per page.** If the snippet runs again, the first install
+      keeps the global. Configure the tag manager to load the snippet once per
+      page (in Cloudflare Zaraz, use an `Event Name` equals `Pageview` rule).
     </Callout>
   </Step>
 
   <Step title="Track events" icon="code" titleType="p">
     ```html
     <script>
-      // Methods can be called on window.mythic right away — calls made
-      // before the core finishes loading are queued and replayed.
+      // Send this once collection is permitted. The stub queues calls
+      // made during startup, but calls blocked by consent are not replayed.
       window.mythic.capture("Signup started", { plan: "pro" });
     </script>
     ```
@@ -70,18 +65,18 @@ mythic.init("pk_your_publishable_key", {api_host: "https://api.adberserk.com"});
 </Steps>
 
 <Callout kind="info">
-  With the CDN loader, the global is `window.mythic` (lowercase). It exposes pre-init stubs for every public method, so you can call `window.mythic.capture(...)`, `window.mythic.identify(...)`, etc. before initialization completes — those calls are queued and replayed once the core loads.
+  The CDN loader uses `window.mythic` (lowercase). The install snippet queues calls such as `capture(...)` and `identify(...)` during startup. The SDK runs queued tracking calls only when collection is permitted; it does not save blocked calls for a later grant.
 </Callout>
 
 <Callout kind="tip">
-  A bare `<script src="https://api.adberserk.com/cdn/m.js"></script>` followed by `window.mythic.init(...)` also works, but it can't capture errors thrown before the core finishes loading. Use the snippet above unless you have a reason not to.
+  A bare `<script src="https://api.adberserk.com/cdn/m.js"></script>` followed by `window.mythic.init(...)` also works. The full snippet also preloads the SDK core in parallel with the loader.
 </Callout>
 
 ## Initialize the SDK
 
 ### `init(key, config?)`
 
-Initialize Mythic. The CDN global exposes `window.mythic.init(...)`, which loads the SDK core, applies your config, and wires up the queued method stubs so calls made before init completes are replayed.
+`window.mythic.init(...)` applies your config and checks collection permission before starting tracking. With `requireConsent: true`, call `grantConsent()` after your consent manager allows analytics. With `autoConsentMode` enabled, the SDK can start when Google Consent Mode grants analytics storage. `loaded` indicates the SDK is ready, not that collection is permitted.
 
 <ParamField body="key" param-type="string" required="true" show-location="false" deprecated="false">
   Publishable project key starting with `pk_`.

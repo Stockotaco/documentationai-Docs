@@ -249,7 +249,7 @@ paths:
                       global_name: { type: string, example: mythic }
                       script_snippet:
                         type: string
-                        description: The full `<script>` block to install.
+                        description: The full `<script>` block to install. It preloads SDK assets and queues initialization; tracking starts only after the SDK checks collection permission.
         "400": { $ref: "#/components/responses/LocationRequired" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
