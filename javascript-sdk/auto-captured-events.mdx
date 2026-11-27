@@ -27,12 +27,12 @@ These fire only when their feature is enabled (most are on by default — see th
 | Event | Description | Config |
 |-------|-------------|--------|
 | `form_submitted` | Form submission with extracted, mapped fields | `auto_form_identify` |
-| `input_captured` | Email detected in an input field | `auto_input_capture` |
+| `input_captured` | Validated email or phone captured from an input field on `blur`, `change`, or submit (also stitches contact fields via `$set`) | `auto_input_capture` |
 | `appointment_booked` / `calendly_booked` / `acuity_booked` | Booking API call detected | `auto_booking_listener` |
 | `survey_completed` / `typeform_submitted` / `surveymonkey_completed` | Survey submission detected | `auto_survey_tracking` |
 | Custom `event_name` | Fired per matched endpoint in `network_endpoints` | `auto_network_intercept` |
 | `$web_vital_lcp`, `$web_vital_cls`, `$web_vital_inp`, … | One event per Core Web Vital metric | `web_vitals` |
-| `$cross_domain_linked` | Session adopted from a cross-domain link | `cross_domain_tracking` |
+| `$cross_domain_linked` | Session and source `distinct_id` adopted from a cross-domain link (paired with `$create_alias` when `distinct_id` differs) | `cross_domain_tracking` |
 | `$heatmap` | Batch of click positions and scroll depths. Clicks carry a structural element descriptor (tag, stable id, classes, sibling position, link path; never text) | `capture_heatmaps` |
 | `$experiment_viewed` | A third-party A/B tool (Convert.com, PostHog, Mida) bucketed this visitor — once per session per assignment, with `experiment_id`, `variation_id`, `variation_name` / `experiment_name` where known, `first_exposure`, and the tool's own visitor id (`convert_visitor_id`, `posthog_distinct_id` or `mida_visitor_id`) | `capture_experiments` |
 

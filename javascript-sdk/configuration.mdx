@@ -191,11 +191,15 @@ The full set of options you can pass to `init(key, config)`.
 ### Advanced auto-tracking
 
 <ParamField body="auto_form_identify" param-type="boolean" required="false" show-location="false" deprecated="false">
-  Automatically identify users from email fields on form submission. Default: `true`.
+  Automatically identify users from email fields (and stitch phone-only submissions via `$set`) on form submission. Default: `true`.
 </ParamField>
 
 <ParamField body="auto_input_capture" param-type="boolean" required="false" show-location="false" deprecated="false">
-  Capture email addresses as they are typed into input fields. Default: `true`.
+  Capture validated email addresses and phone numbers from input fields on `blur`, `change`, or form submission (never mid-keystroke), attaching them to the person profile via `$set` so multi-step or abandoned forms stitch cleanly without premature partial-string merges. Default: `true`.
+</ParamField>
+
+<ParamField body="auto_ghl_identify" param-type="boolean" required="false" show-location="false" deprecated="false">
+  Identify visitors from embedded GoHighLevel / LeadConnector calendar and form widgets (via GHL's `_ud` sticky-contact handoff) and forward active session UTMs and fresh click IDs (`gclid`, `fbclid`, `gbraid`, `wbraid`) onto outbound GHL widget links and raw widget iframes. Default: `true`. Force-disabled in HIPAA mode.
 </ParamField>
 
 <ParamField body="auto_booking_listener" param-type="boolean" required="false" show-location="false" deprecated="false">
@@ -355,7 +359,7 @@ The full set of options you can pass to `init(key, config)`.
 ### Cross-domain tracking
 
 <ParamField body="cross_domain_tracking" param-type="boolean|object" required="false" show-location="false" deprecated="false">
-  Track users across domains by decorating links with session IDs. Opt-in only. Default: `false`. Pass `{ enabled: true, domains: ['app.example.com', 'docs.example.com'] }`.
+  Track users across domains by decorating links and cross-domain forms with the active session ID, source `distinct_id`, and missing session UTMs/click IDs. On arrival, the destination domain adopts the session, emits `$cross_domain_linked`, and aliases the source `distinct_id` (`$create_alias`) so cross-domain journeys merge onto one canonical person. Opt-in only. Default: `false`. Pass `{ enabled: true, domains: ['app.example.com', 'docs.example.com'] }`.
 </ParamField>
 
 ### Rate limiting

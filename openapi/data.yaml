@@ -2737,7 +2737,10 @@ components:
           type: string
           enum: [device, person]
           description: >-
-            Funnel (default `device`) and paths (default `person`). `device` counts the raw distinct_id; `person` resolves
+            Funnel (default `device` on pure browser funnels, or `person`
+            automatically when steps mix browser and CRM/server events; pass
+            `grain: "device"` explicitly to override) and paths (default
+            `person`). `device` counts the raw distinct_id; `person` resolves
             each id to its canonical person first, so a journey across devices —
             or a step that is a server/CRM event keyed by a contact id — links
             instead of breaking. Slower (it joins the identity map for the
